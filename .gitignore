@@ -21,8 +21,11 @@ coverage.xml
 *.sqlite
 *.sqlite3
 
-# Large/intermediate extraction artifacts (gold lives in tests/data/, kept)
-/data/
+# Large/intermediate extraction artifacts (gold lives in tests/data/, kept).
+# Ignore /data/ contents but keep the curated registry CSVs (data/companies/),
+# which are version-controlled and verified by the registry-verify CI workflow.
+/data/*
+!/data/companies/
 
 # Env
 .env

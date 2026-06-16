@@ -1,0 +1,6 @@
+# One company per line; optional ",domain" after a comma. Blank lines and # comments ignored.
+# Used by scripts/harvest_tokens.py to brute-force path-based ATS board tokens.
+Notion, notion.so
+Vercel, vercel.com
+Brex, brex.com
+Figma, figma.com

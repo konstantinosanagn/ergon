@@ -44,9 +44,9 @@ These hit Greenhouse / Lever / Ashby / Workday / SmartRecruiters APIs directly r
 | Project | Stack | License | Free? | How it sources jobs |
 |---|---|---|---|---|
 | **[kalil0321/ats-scrapers](https://github.com/kalil0321/ats-scrapers)** ("jobhive") | — | MIT | Yes | Claims ~47 ATS platforms scraped directly (Greenhouse, Lever, Ashby, Workday). Most direct conceptual competitor found. |
-| **[Babak-hasani/company-career-scraper](https://github.com/Babak-hasani/company-career-scraper)** | Python | Free | Yes | Queries Greenhouse/Lever/Ashby/SmartRecruiters APIs directly. "No browser, $0 cost." Closest to jobspine's free-only philosophy. |
-| [YvetteZheng0812/ats-job-scraper](https://github.com/YvetteZheng0812/ats-job-scraper) | Python | Free | Yes | 7 ATS (Ashby, Greenhouse, Lever, SmartRecruiters, Workable, Rippling, Workday) + SerpAPI company discovery. |
-| [stevencc92/food-industry-job-scraper](https://github.com/stevencc92/food-industry-job-scraper) | Python | Free | Yes | Pipeline monitoring 5 ATS platforms to surface jobs "before they reach aggregators." |
+| **[Babak-hasani/company-career-scraper](https://github.com/Babak-hasani/company-career-scraper)** | Python | Free* | Yes (APIs) | **4** ATS (GH, Lever, Ashby, SmartRecruiters — *no Workday*). Public no-auth JSON. *Standout:* keyless **brute-force token discovery** from a company name. *Caveat:* main scraper **requires Google Sheets + service-account creds**; serial `requests`, no retries. See §9. |
+| [YvetteZheng0812/ats-job-scraper](https://github.com/YvetteZheng0812/ats-job-scraper) | Python | **Partial** | APIs free; discovery paid | **7** ATS incl. Workday + **Rippling** (`__NEXT_DATA__`). **SerpAPI discovery is not reliably free** (~147 searches/run > 100/mo free tier → ~$25/mo). Threaded, retries. Personal CLI, not an SDK. See §9. |
+| [stevencc92/food-industry-job-scraper](https://github.com/stevencc92/food-industry-job-scraper) | Python | Scraper free; **agent paid** | Partial | **5** ATS, **~64 hardcoded** companies (no discovery). **Broken pagination** (Workday cap 20, SmartRecruiters cap 100). "Food" is cosmetic (analytics-role keywords). `agent.py` needs a **paid Anthropic key**. See §9. |
 | [Ramcharan747/careerscout](https://github.com/Ramcharan747/careerscout) | Go + Rust | Free | Yes | Ambitious: "maps every company's hiring infra," detects 17 ATS platforms across 5.5M+ domains, extracts job APIs at scale. Most infrastructure-grade discovery project found. |
 | [Moo4president/Web-Scraper](https://github.com/Moo4president/Web-Scraper) | Python / Playwright | Free | Yes | Multi-ATS (Workday, Greenhouse, Lever…) into a consistent format; pagination + dedup. |
 | [ghiarishi/job-scraper](https://github.com/ghiarishi/job-scraper) | — | Free | Yes | ATS-endpoint scraper. |
@@ -209,9 +209,45 @@ Read at the source level on 2026-06-16 (jobhive @ `b45c12a` 2026-05-30; careersc
 2. **crt.sh is unreliable.** Frequent `502`s, rate-limiting, and truncated responses — it was fully down for part of our testing. Not a dependable production source.
 3. **Path-based ATSes aren't enumerable at all.** Greenhouse/Lever/Ashby/SmartRecruiters/Workable — where **jobspine's bulk coverage lives** — put the token in a URL *path*, not a subdomain, so crt.sh can't see them regardless.
 
-**Status & recommendation:** the harvester is kept (correct, tested, graceful under failure; genuinely useful for Workday-class per-tenant-cert ATSes *when crt.sh is up*), but it is **not** the path to closing the coverage gap. The evidence points to **jobhive's curated-CSV + CI-verify model** (idea #1 above) as the real high-leverage move: it is reliable, covers the path-based ATSes that matter most, and reuses the live-verification gate we already have. crt.sh is at best a minor supplement.
+**Status & recommendation:** the harvester is kept (correct, tested, graceful under failure; genuinely useful for Workday-class per-tenant-cert ATSes *when crt.sh is up*), but it is **not** the path to closing the coverage gap. Two reliable, keyless alternatives beat it:
+1. **jobhive's curated-CSV + CI-verify model** (§7 idea #1) — reliable, covers the path-based ATSes that matter most, reuses our live-verification gate.
+2. **Brute-force token-variation discovery** (discovered in §9 below, in `company-career-scraper`) — given a company *name*, generate slug variants and probe the ATS endpoints directly. **Free, no keys, and it works precisely for the path-based ATSes (GH/Lever/Ashby) crt.sh cannot enumerate.** This is the strongest match to jobspine's free-only philosophy and is the recommended next discovery experiment.
 
 **Artifacts:** `scripts/harvest_crtsh.py` · `tests/test_harvest_crtsh.py` · hardened `scripts/build_registry.py`.
+
+---
+
+## 9. Code-level reads: three ATS-direct personal tools (verified 2026-06-16)
+
+Cloned and read at the source level (not from README blurbs). **All three are single-commit personal tools, not SDKs** — none is a library competitor to jobspine, but each has one idea worth noting.
+
+| | company-career-scraper | ats-job-scraper | food-industry-job-scraper |
+|---|---|---|---|
+| ATS count | **4** (GH, Lever, Ashby, SmartRecruiters) | **7** (+ Workday, **Rippling**, Workable) | **5** (GH, Lever, Ashby, SmartRecruiters, Workday) |
+| Fetch | Public no-auth JSON | Public JSON + Rippling `__NEXT_DATA__` scrape | Public JSON + Workday HTML for descriptions |
+| Discovery | **Brute-force token guessing** from company name (keyless) | **SerpAPI** Google search (paid at full scale) | **None** — ~64 hardcoded companies |
+| Company source | **Google Sheets (required)** | Discovery cache / `--add-slug` | Static Python lists |
+| Concurrency | None (serial `requests`, 1s sleeps) | ThreadPoolExecutor per-ATS + retries | None (serial, no retries) |
+| Pagination | SmartRecruiters offset loop; others single-call | Proper offset loops incl. Workday/Rippling | **Broken** (Workday cap 20, SR cap 100) |
+| Schema | 7 flat fields, no salary/level | `JobListing` dataclass, no salary/level | 9 flat fields, no salary/level |
+| Enrichment | Deterministic keyword + Germany location gate | Deterministic scoring (title/tech/location weights) | Deterministic title-keyword; optional **paid LLM** (`agent.py`) |
+| LOC / tests | ~1,460 / **0** | ~2,010 / **0** | ~2,160 / 11 (config-only, no network) |
+| License | MIT | MIT | **none committed** |
+| Truly free? | APIs yes; **needs Google creds** | APIs yes; **discovery ~$25/mo** | scraper yes; **agent needs Anthropic key** |
+
+### Per-tool notes
+
+- **company-career-scraper** — closest in *spirit* to jobspine (free, no-auth, API-direct), but operationally heavier (Google Sheets + service-account JSON mandatory, serial, no retries, detector logic duplicated across two files with divergent Ashby field names). **Its `generate_token_variations()` is the valuable artifact:** ~15 deterministic slug candidates (case folds, hyphenation, corporate-suffix stripping, CamelCase) probed against each ATS and validated by `job_count >= 1`.
+- **ats-job-scraper** — the best-engineered of the three (threaded, retries/backoff, jittered politeness). Mirrors jobspine's exact **Workday `tenant|wdN|site` triple-token** scheme — independent convergence on the same design. Adds **Rippling** (jobspine lacks it) via `__NEXT_DATA__` extraction. Gated on **paid SerpAPI** for discovery; `apply_assistant.py` is a static HTML dashboard + tiny Flask tracker (no LLM, despite the name).
+- **food-industry-job-scraper** — weakest engineering (serial, no retries, **broken pagination** that silently truncates results). The repo name is misleading: the role filter targets **analytics jobs**, and "food" is a non-functional company tag. Worth noting only for its **SQLite cross-run new-job detection** (`load_seen_jobs()` / `INSERT OR IGNORE`) and a clean **paid-LLM fit-scoring** bolt-on (`agent.py`, Claude Sonnet, ~$2.50/300 jobs).
+
+### What jobspine should take from this batch
+
+1. **Brute-force token-variation discovery (highest leverage).** It's the keyless, free discovery method that works for the path-based ATSes crt.sh can't reach. A jobspine `scripts/harvest_tokens.py` could take a company-name list (or domains), generate variants, probe GH/Lever/Ashby/SmartRecruiters concurrently via the existing `AsyncFetcher`, and emit `candidates.json` for `build_registry.py` to verify — same propose/verify seam as the crt.sh harvester, but far higher yield.
+2. **Rippling** is a small, well-scoped provider gap (one more `BaseProvider`, `__NEXT_DATA__` JSON extraction).
+3. **Convergent validation:** two independent projects landed on jobspine's Workday triple-token approach — confidence that the hard part is modeled correctly.
+
+**Net:** none of these three threatens jobspine as a library — they're personal scripts with no packaging, no tests of substance, no concurrency story (except ats-job-scraper's threads), thin schemas, and paid/credentialed dependencies. The one durable takeaway is the **brute-force token discovery technique.**
 
 ---
 

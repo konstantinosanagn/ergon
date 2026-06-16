@@ -1,0 +1,25 @@
+name: Registry Verify
+
+# When a PR touches the curated company CSVs, flatten them into candidates and verify every
+# NEW company live through jobspine's own providers (build_registry --dry-run). The dry-run
+# prints verified/dead counts and never writes seed.json — this is a verification gate only.
+on:
+  pull_request:
+    paths:
+      - "data/companies/**"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Ingest curated CSVs -> candidates
+        run: python scripts/ingest_companies_csv.py --out candidates_csv.json
+      - name: Verify candidates live (dry-run, never writes seed.json)
+        run: python scripts/build_registry.py candidates_csv.json --dry-run
