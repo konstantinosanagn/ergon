@@ -1,0 +1,157 @@
+{
+  "totalCount": 95217,
+  "offset": 0,
+  "limit": 3,
+  "jobs": [
+    {
+      "title": "Remote Java Architect",
+      "excerpt": "overviewWe are looking to hire an experienced Java Architect to join our team for a dynamic e-commerce project.",
+      "companyName": "Nymphis Technologies",
+      "companySlug": "nymphis-technologies",
+      "companyLogo": "",
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Australia",
+        "Canada",
+        "Germany",
+        "India",
+        "Netherlands",
+        "United Kingdom",
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        -4,
+        -3.5,
+        0,
+        1,
+        5.5,
+        8,
+        8.75,
+        9,
+        9.5,
+        10,
+        10.5,
+        14
+      ],
+      "categories": [
+        "Java-Architect",
+        "Software-Architecture",
+        "Java-Development",
+        "Backend-Development",
+        "Senior-Java-Architect",
+        "Senior-Remote-Architect",
+        "Remote-Systems-Architect",
+        "Remote-Solutions-Architect",
+        "Ecommerce"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<h3>overview</h3><p>We are looking to hire an experienced Java Architect to join our team for a dynamic e-commerce project.<br>You will work in a multicultural, flexible and agile team following scrum",
+      "pubDate": 1781591469,
+      "expiryDate": 1786775468,
+      "applicationLink": "https://himalayas.app/companies/nymphis-technologies/jobs/remote-java-architect-9079704681",
+      "guid": "https://himalayas.app/companies/nymphis-technologies/jobs/remote-java-architect-9079704681"
+    },
+    {
+      "title": "Principal Platform Software Engineer",
+      "excerpt": "Spectra Platform team at Oracle is building a cloud-native platform for the Fusion Applications that operates at a large scale in a broadly distributed multi-tenant SaaS cloud environment.",
+      "companyName": "Oracle",
+      "companySlug": "oracle",
+      "companyLogo": "https://cdn-images.himalayas.app/rvubq29f0yjjt7n46a5q6zyeu6tb",
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        14
+      ],
+      "categories": [
+        "Platform-Engineering",
+        "Cloud-Engineering",
+        "Software-Engineering",
+        "DevOps-Engineering",
+        "Product-Development",
+        "Principal-Platform-Engineer",
+        "Software-Platform-Engineer",
+        "Senior-Platform-Engineer",
+        "Principal-Software-Engineer",
+        "Platform-Engineer",
+        "Software-Engineer"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<p>Spectra Platform team at <a href=\"https://himalayas.app/companies/oracle\">Oracle</a> is building a cloud-native platform for the Fusion Applications that operates at a large scale in a broadly dist",
+      "pubDate": 1781589585,
+      "expiryDate": 1786773584,
+      "applicationLink": "https://himalayas.app/companies/oracle/jobs/principal-platform-software-engineer",
+      "guid": "https://himalayas.app/companies/oracle/jobs/principal-platform-software-engineer"
+    },
+    {
+      "title": "Senior Backend Engineer (Elixir)",
+      "excerpt": "About RemoteRemote is solving modern organizations\u2019 biggest challenge \u2013 navigating global employment compliantly with ease.",
+      "companyName": "Remote",
+      "companySlug": "remote",
+      "companyLogo": "https://cdn-images.himalayas.app/02y7tpdl1w6yjl8jb3ytnakxcf33",
+      "employmentType": "Full Time",
+      "minSalary": 53300,
+      "maxSalary": 119850,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": "USD",
+      "locationRestrictions": [
+        "Germany"
+      ],
+      "timezoneRestrictions": [
+        1
+      ],
+      "categories": [
+        "Backend-Engineering",
+        "Elixir-Development",
+        "Software-Engineering",
+        "Systems-Engineering",
+        "Backend-Software-Engineering",
+        "Senior-Elixir-Engineer",
+        "Senior-Elixir-Developer",
+        "Senior-Backend-Engineer",
+        "Senior-Backend-Software-Engineer",
+        "Sr.-Backend-Software-Engineer"
+      ],
+      "parentCategories": [],
+      "description": "<div class=\"content-intro\"><h3><strong>About <a href=\"https://himalayas.app/companies/remote\">Remote</a></strong></h3><div><a href=\"https://himalayas.app/companies/remote\">Remote</a> is solving modern",
+      "pubDate": 1781589519,
+      "expiryDate": 1786773518,
+      "applicationLink": "https://himalayas.app/companies/remote/jobs/senior-backend-engineer-elixir-7339256917",
+      "guid": "https://himalayas.app/companies/remote/jobs/senior-backend-engineer-elixir-7339256917"
+    }
+  ]
+}

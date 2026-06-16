@@ -1,0 +1,72 @@
+{
+  "00-warning": "Remotive main domain moved to remotive.com ! Please make your API calls on remotive.com/api/remote-jobs instead of remotive.io now ;) Legacy endpoint remotive.io/api/remote-jobs will be terminated in June 2022. Thank you!",
+  "0-legal-notice": "Legal warning - Hey, thanks for using Remotive's API, we appreciate it! Please note that API documentation and access is granted so that developers can share our jobs further. Please do not submit Remotive jobs to third Party websites, including but not limited to: Jooble, Neuvoo, Google Jobs, LinkedIn Jobs. Please link back to the URL found on Remotive AND mention Remotive as a source in order to Remotive to get traffic from your listing. If you don't do that, we'll terminate your API access, sorry! Jobs displayed are delayed by 24 hours, the goal being that jobs are attributed to Remotive on various platforms. Displaying our jobs in order to collect signups/email addresses to show a listing constitutes a breach of our terms of services. We offer a private, paid-for API, please email us at hello(at)remotive(dot)io for more information (starting budget is $5k/mo). Please find out terms of services on https://remotive.com/api-documentation. Please note that there is absolutely no need to request Remotive Job data too frequently. Typically, you only need to GET Remotive job data through this API a couple of times a day (we advise max. 4 times a day). Our data is not changing much faster than that anyway. Note that excessive requests will be blocked. Many thanks (Rodolphe & the Remotive team!)",
+  "job-count": 31,
+  "total-job-count": 31,
+  "jobs": [
+    {
+      "id": 2090881,
+      "url": "https://remotive.com/remote-jobs/artificial-intelligence/business-transformation-lead-2090881",
+      "title": "Business Transformation Lead",
+      "company_name": "Expion Health",
+      "company_logo": "https://remotive.com/job/2090881/logo",
+      "category": "Artificial Intelligence",
+      "tags": [
+        "api",
+        "AI/ML",
+        "automation",
+        "healthcare",
+        "spark",
+        "startup",
+        "infrastructure",
+        "insurance"
+      ],
+      "job_type": "full_time",
+      "publication_date": "2026-06-12T21:30:58",
+      "candidate_required_location": "USA",
+      "salary": "$175k - $225k",
+      "description": "<p><strong>Title</strong>: Business Transformation Lead</p>\n<p><strong>Location</strong>: Fully Remote</p>\n<p><strong>Reports To</strong>: President, Service &amp; Growth</p>\n<p>\u00a0</p>\n<p>Expion Health",
+      "company_logo_url": "https://remotive.com/job/2090881/logo"
+    },
+    {
+      "id": 2090989,
+      "url": "https://remotive.com/remote-jobs/medical/assistant-account-payable-2090989",
+      "title": "Assistant Account Payable",
+      "company_name": "The Obesity Society",
+      "company_logo": "https://remotive.com/job/2090989/logo",
+      "category": "Medical",
+      "tags": [
+        "accounting",
+        "excel",
+        "data entry",
+        "outlook"
+      ],
+      "job_type": "full_time",
+      "publication_date": "2026-06-12T11:34:10",
+      "candidate_required_location": "USA",
+      "salary": "",
+      "description": "<p><strong><span class=\"OOyDTc\" style=\"line-height: 22px; color: #474747;\">This role may require you to be on site at times - please check with the employer first.</span></strong></p>\n<p>\u00a0</p>\n<p><spa",
+      "company_logo_url": "https://remotive.com/job/2090989/logo"
+    },
+    {
+      "id": 2090983,
+      "url": "https://remotive.com/remote-jobs/software-development/head-of-engineering-2090983",
+      "title": "Head of Engineering",
+      "company_name": "Lemon.io",
+      "company_logo": "https://remotive.com/job/2090983/logo",
+      "category": "Software Development",
+      "tags": [
+        "AI/ML",
+        "startup",
+        "marketplace",
+        "fundraising"
+      ],
+      "job_type": "full_time",
+      "publication_date": "2026-06-12T09:35:12",
+      "candidate_required_location": "LATAM, Europe, Central America",
+      "salary": "",
+      "description": "<p style=\"border-style: none; outline: 0px; padding: 0px; vertical-align: baseline; margin-block-end: 0px; color: #48413f;\"><span style=\"border-style: none; margin: 0px; outline: 0px; padding: 0px; ve",
+      "company_logo_url": "https://remotive.com/job/2090983/logo"
+    }
+  ]
+}

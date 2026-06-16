@@ -1,0 +1,112 @@
+{
+  "offers": [
+    {
+      "id": 2631774,
+      "position": 591,
+      "title": "Account Executive France",
+      "careers_url": "https://jobs.channable.com/o/account-executive-france-2028",
+      "careers_apply_url": "https://jobs.channable.com/o/account-executive-france-2028/c/new",
+      "location": "Utrecht, Utrecht, Netherlands",
+      "city": "Utrecht",
+      "state_name": "Utrecht",
+      "state_code": "UT",
+      "country": "Netherlands",
+      "country_code": "NL",
+      "department": "Sales",
+      "description": "<p><span style=\"color:#000000\">You are the core driver of Channable’s growth in your region. Alongside your team members in the French market, you are developing and closing new bu",
+      "created_at": "2026-06-08 09:42:35 UTC",
+      "published_at": "2026-06-08 13:03:54 UTC",
+      "updated_at": "2026-06-09 09:38:11 UTC",
+      "employment_type_code": "fulltime_fixed_term",
+      "remote": false,
+      "on_site": false,
+      "hybrid": true,
+      "salary": {
+        "max": "6152",
+        "min": "5253",
+        "period": "month",
+        "currency": "EUR"
+      },
+      "company_name": "Channable",
+      "slug": "account-executive-france-2028",
+      "locations": [
+        {
+          "id": 64463,
+          "name": "Utrecht",
+          "state": "Utrecht",
+          "country": "Netherlands",
+          "city": "Utrecht",
+          "translations": {
+            "en": {
+              "name": "Utrecht",
+              "city": "Utrecht",
+              "postal_code": "3512 HL",
+              "street": "Kromme Nieuwegracht 66",
+              "note": null
+            }
+          },
+          "country_code": "NL",
+          "state_code": "UT",
+          "postal_code": "3512 HL",
+          "street": "Kromme Nieuwegracht 66",
+          "note": null
+        }
+      ],
+      "status": "published"
+    },
+    {
+      "id": 2622523,
+      "position": 590,
+      "title": "AI Engineer",
+      "careers_url": "https://jobs.channable.com/o/ai-engineer",
+      "careers_apply_url": "https://jobs.channable.com/o/ai-engineer/c/new",
+      "location": "Utrecht, Utrecht, Netherlands",
+      "city": "Utrecht",
+      "state_name": "Utrecht",
+      "state_code": "UT",
+      "country": "Netherlands",
+      "country_code": "NL",
+      "department": "Engineering",
+      "description": "<h4><strong><span style=\"color:#000000\">Your job: </span></strong></h4><p><span style=\"color:#000000\">In this position, you will join our AI team!</span></p><p><span style=\"color:#",
+      "created_at": "2026-06-01 09:52:38 UTC",
+      "published_at": "2026-06-02 10:10:41 UTC",
+      "updated_at": "2026-06-15 07:01:11 UTC",
+      "employment_type_code": "fulltime_permanent",
+      "remote": false,
+      "on_site": false,
+      "hybrid": true,
+      "salary": {
+        "max": "7000",
+        "min": "5000",
+        "period": "month",
+        "currency": "EUR"
+      },
+      "company_name": "Channable",
+      "slug": "ai-engineer",
+      "locations": [
+        {
+          "id": 64463,
+          "name": "Utrecht",
+          "state": "Utrecht",
+          "country": "Netherlands",
+          "city": "Utrecht",
+          "translations": {
+            "en": {
+              "name": "Utrecht",
+              "city": "Utrecht",
+              "postal_code": "3512 HL",
+              "street": "Kromme Nieuwegracht 66",
+              "note": null
+            }
+          },
+          "country_code": "NL",
+          "state_code": "UT",
+          "postal_code": "3512 HL",
+          "street": "Kromme Nieuwegracht 66",
+          "note": null
+        }
+      ],
+      "status": "published"
+    }
+  ]
+}

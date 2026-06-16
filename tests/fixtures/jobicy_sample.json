@@ -1,0 +1,71 @@
+{
+  "apiVersion": "2.2.13",
+  "jobCount": 3,
+  "jobs": [
+    {
+      "id": 146869,
+      "url": "https://jobicy.com/jobs/146869-clinical-sales-specialist-electrophysiology-laa-st-louis-mo",
+      "jobSlug": "146869-clinical-sales-specialist-electrophysiology-laa-st-louis-mo",
+      "jobTitle": "Clinical Sales Specialist, Electrophysiology \u2013 LAA (St. Louis, MO)",
+      "companyName": "Abbott",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/82599f72-221-1.jpeg",
+      "jobIndustry": [
+        "Sales"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "USA",
+      "jobLevel": "Midweight",
+      "jobExcerpt": "Abbott is a global healthcare leader that helps people live more fully at all stages of life. Our portfolio of life-changing technologies spans the spectrum of healthcare, with leading businesses...",
+      "jobDescription": "<p>Abbott is a global healthcare leader that helps people live more fully at all stages of life. Our portfolio of life-changing technologies spans the spectrum of healthcare, with leading businesses a",
+      "pubDate": "2026-06-16T04:19:59+00:00",
+      "salaryMin": 78000,
+      "salaryMax": 156000,
+      "salaryCurrency": "USD",
+      "salaryPeriod": "yearly"
+    },
+    {
+      "id": 146868,
+      "url": "https://jobicy.com/jobs/146868-district-sales-manager-nashville-region",
+      "jobSlug": "146868-district-sales-manager-nashville-region",
+      "jobTitle": "District Sales Manager \u2014 Nashville Region",
+      "companyName": "Abbott",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/82599f72-221-1.jpeg",
+      "jobIndustry": [
+        "Sales"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "USA",
+      "jobLevel": "Midweight",
+      "jobExcerpt": "Abbott is a global healthcare leader that helps people live more fully at all stages of life. Our portfolio of life-changing technologies spans the spectrum of healthcare, with leading businesses...",
+      "jobDescription": "<p>Abbott is a global healthcare leader that helps people live more fully at all stages of life. Our portfolio of life-changing technologies spans the spectrum of healthcare, with leading businesses a",
+      "pubDate": "2026-06-16T04:19:58+00:00",
+      "salaryMin": 113300,
+      "salaryMax": 226700,
+      "salaryCurrency": "USD",
+      "salaryPeriod": "yearly"
+    },
+    {
+      "id": 146865,
+      "url": "https://jobicy.com/jobs/146865-operations-manager-sales-region-4",
+      "jobSlug": "146865-operations-manager-sales-region-4",
+      "jobTitle": "Operations \u2013 Manager, Sales Region 4",
+      "companyName": "Porsche Cars GB Ltd",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2026/06/b39929f6-221.webp",
+      "jobIndustry": [
+        "Product &amp; Operations"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "UK",
+      "jobLevel": "Senior",
+      "jobExcerpt": "As a Regional Sales Manager you will Lead and optimise Porsche Centres (PCs) sales performance within a region by developing and executing strategic business plans. Support and challenge Centres to...",
+      "jobDescription": "<p>As a Regional Sales Manager you will Lead and optimise Porsche Centres (PCs) sales performance within a region by developing and executing strategic business plans. Support and challenge Centres to",
+      "pubDate": "2026-06-16T04:19:56+00:00"
+    }
+  ]
+}

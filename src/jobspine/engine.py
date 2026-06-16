@@ -28,7 +28,14 @@ from .registry.store import SeedRegistry
 __all__ = ["run_search"]
 
 # Providers that are not per-company boards (no token; one call returns many companies).
-AGGREGATOR_PROVIDERS = {"remoteok"}
+AGGREGATOR_PROVIDERS = {
+    "remoteok",
+    "remotive",
+    "arbeitnow",
+    "jobicy",
+    "himalayas",
+    "themuse",
+}
 
 
 def _is_aggregator(name: str) -> bool:

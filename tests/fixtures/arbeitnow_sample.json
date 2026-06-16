@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "slug": "marketing-operations-manager-100-remote-cologne-332231",
+      "company_name": "Schulz Digital GmbH",
+      "title": "Marketing Operations Manager (m/w/d) | 100 % Remote",
+      "description": "<p>Hey, wir sind Schulz Digital GmbH und helfen Industrie- und Handwerksbetrieben im DACH-Raum dabei Auftr\u00e4ge &#x26; Mitarbeiter zu finden, sowie Prozesse zu digitalisieren und KI wirklich sinnvoll ei",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/jobs/companies/schulz-digital-gmbh/marketing-operations-manager-100-remote-cologne-332231",
+      "tags": [
+        "Remote",
+        "Marketing Manager"
+      ],
+      "job_types": [
+        "full time"
+      ],
+      "location": "Cologne",
+      "created_at": 1781589630
+    },
+    {
+      "slug": "steuerberater-in-oftersheim-auf-wunsch-mit-partnerperspektive-gesucht-mindestens-90000eur-185530",
+      "company_name": "Taxtalente.de",
+      "title": "Steuerberater (m/w/d) in Oftersheim, auf Wunsch mit Partnerperspektive, gesucht - mindestens 90.000\u20ac",
+      "description": "<p>TaxTalente ist die Nr. 1 Job-Matching Plattform f\u00fcr Jobsuchende in der Steuerberatung.</p>\n<p>Sie suchen eine positive berufliche Ver\u00e4nderung? Sie m\u00f6chten den n\u00e4chsten Schritt in Ihrer Karriere geh",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/taxtalentede/steuerberater-in-oftersheim-auf-wunsch-mit-partnerperspektive-gesucht-mindestens-90000eur-185530",
+      "tags": [
+        "Directors",
+        "Chief Executives"
+      ],
+      "job_types": [],
+      "location": "Oftersheim",
+      "created_at": 1781591433
+    }
+  ],
+  "links": {
+    "first": "...page=1",
+    "last": null,
+    "prev": null,
+    "next": "https://www.arbeitnow.com/api/job-board-api?page=2"
+  },
+  "meta": {}
+}

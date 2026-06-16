@@ -33,7 +33,22 @@ __all__ = [
 ]
 
 # Names of first-party provider modules under jobspine.providers to import on startup.
-_BUILTIN_MODULES = ("greenhouse", "lever", "ashby", "workday", "remoteok")
+_BUILTIN_MODULES = (
+    "greenhouse",
+    "lever",
+    "ashby",
+    "workday",
+    "remoteok",
+    "smartrecruiters",
+    "workable",
+    "recruitee",
+    "personio",
+    "remotive",
+    "arbeitnow",
+    "jobicy",
+    "himalayas",
+    "themuse",
+)
 
 _ENTRYPOINT_GROUP = "jobspine.providers"
 
