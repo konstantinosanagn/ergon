@@ -44,6 +44,25 @@ jobspine resolve acme.com          # detect the ATS + token a company uses
 jobspine sources                   # provider health check
 ```
 
+## MCP server
+
+Expose jobspine to Claude and other MCP clients:
+
+```bash
+pip install 'jobspine[mcp]'
+jobspine-mcp          # stdio transport
+```
+
+Tools: `search_jobs`, `resolve_company`, `list_sources`. Example Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "jobspine": { "command": "jobspine-mcp" }
+  }
+}
+```
+
 ## Why jobspine
 
 The OSS landscape splits into unreliable aggregator scrapers and fragmented ATS readers with

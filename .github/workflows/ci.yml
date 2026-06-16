@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install
-        run: uv pip install --system -e ".[dev,pandas,polars]"
+        run: uv pip install --system -e ".[dev,pandas,polars,mcp]"
       - name: Lint
         run: ruff check src tests
       - name: Format check
