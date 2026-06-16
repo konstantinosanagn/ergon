@@ -1,3405 +1,5821 @@
 {
   "_meta": {
     "description": "Company -> sector classification (NAICS-informed, best-effort).",
-    "version": 1,
-    "updated": "2026-06-16"
+    "updated": "2026-06-16",
+    "version": 1
   },
   "companies": {
+    "1000heads": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
     "100ms": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "100x": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "10alabs": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "10beauty": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "10xgenomics": {
-      "sector": "Biotech/Pharma",
-      "domain": "10xgenomics.com"
+      "domain": "10xgenomics.com",
+      "sector": "Biotech/Pharma"
+    },
+    "12build": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "12go": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "12twenty": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "143studiosinc": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "15five": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "1800contacts": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "1800gotjunk": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "1915-south-ashley": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "1global": {
+      "domain": null,
+      "sector": "Telecom"
+    },
+    "1huddle": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "1inch": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
+    },
+    "1komma5grad": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "1kosmos": {
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "1nce": {
+      "domain": null,
+      "sector": "Telecom"
     },
     "1password": {
-      "sector": "Cybersecurity",
-      "domain": "1password.com"
+      "domain": "1password.com",
+      "sector": "Cybersecurity"
+    },
+    "1stopbedrooms": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "1x": {
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "2070health": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "21hhs": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "21shares": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "2bc11c2c7us": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "2brains": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "2k": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "2modern": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "2os": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "2u": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
+    },
+    "3-oaks-gaming": {
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "315": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "315logisticsllc": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "31stunion": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "360dialog-gmbh": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "360learning": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "360volt-gmbh": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "3cloud": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "3dayblindssales": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "3e": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "3hpartners": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "3m": {
-      "sector": "Manufacturing/Industrial",
-      "domain": "3m.com"
+      "domain": "3m.com",
+      "sector": "Manufacturing/Industrial"
     },
     "3mgroofing": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "3pillarglobal": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "3redpartners": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "3sbusinesscorporationinc1": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "3sightservicesltd": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "4front": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "4screen": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "5280": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "5280highschool": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "540": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "5minlab": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "5wpr": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "60decibelsinc": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "60secondstonapoli": {
+      "domain": null,
+      "sector": "Food/Beverage"
     },
     "66degrees": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "6sense": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "7nxt-gmbh": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "7play": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "7shifts": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "8451": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "86repairs": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "8advisory": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "8amgolf": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "8thlightrebuild": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "8tree": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "8vc": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "90seconds": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "9estrhandymanservices": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "9thwayinsignia": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "a16z": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "a16zcryptoteam": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "a24": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "a3c41b8b71eff8c4": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "a4g": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "aardvark-studios": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "abacus": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "abacusinsights": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "abakaai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "abarca": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "abbott": {
-      "sector": "Healthcare",
-      "domain": "abbott.com"
+      "domain": "abbott.com",
+      "sector": "Healthcare"
+    },
+    "abbvie": {
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "abbyy": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "abc": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "abcellera": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "abclegalservices": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "abelsontaylor": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "abercrombieandfitchco": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "abl": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "able": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "ableserve": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "abnormalsecurity": {
-      "sector": "Cybersecurity",
-      "domain": "abnormalsecurity.com"
+      "domain": "abnormalsecurity.com",
+      "sector": "Cybersecurity"
+    },
+    "aboutobjects": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "aboutyougmbh": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "abovelending": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "abracadabra": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "abridge": {
-      "sector": "Healthcare",
-      "domain": "abridge.com"
+      "domain": "abridge.com",
+      "sector": "Healthcare"
+    },
+    "abriogmbh": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "absherconstruction": {
-      "sector": "Manufacturing/Industrial",
-      "domain": null
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "absolicsinc": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "absurdventures": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "abtaba": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "abuserefugeorg": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "aca-gmbh": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "acaciavpp": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "academyofdigitalindustries": {
+      "domain": null,
+      "sector": "Education"
     },
     "acadiapharmaceuticals": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
+    },
+    "acadoro": {
+      "domain": null,
+      "sector": "Education"
     },
     "accela": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "acceldata": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "accelecom": {
+      "domain": null,
+      "sector": "Telecom"
     },
     "accelerationpartners": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "accellearning": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "accellor": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "accelschools": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "accenture": {
-      "sector": "Consulting/Services",
-      "domain": "accenture.com"
+      "domain": "accenture.com",
+      "sector": "Consulting/Services"
     },
     "accenturefederalservices": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "accessibe": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "accesso": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "accesssoftek": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "accesssystemsadminsales": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "accesssystemsserviceops": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "accionlabs2": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "accorcorpo": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "accordion": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "accounto-ag": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "accountsiq": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "accrue": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "accso": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "accuweather": {
-      "sector": "Media/Entertainment",
-      "domain": "accuweather.com"
+      "domain": "accuweather.com",
+      "sector": "Media/Entertainment"
     },
     "acds": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "aceofperformance": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "achieve1": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "achievementfirstnetworksupportcareers": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "achievers": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "achmeainnovationhub": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "acigroup": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "acilearning": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
+    },
+    "ackeeblockchain": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "ackermanngroup": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "aclu": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "acluinternships": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "acme": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "acmefreight": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "acog": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "acommerce": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "acomo": {
+      "domain": null,
+      "sector": "Food/Beverage"
     },
     "acord": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "acp": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "acplastics": {
-      "sector": "Manufacturing/Industrial",
-      "domain": null
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "acquia": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "acrisureinnovation": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "acryldata": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "act": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "actblue": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "actian": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "action": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "actionlife": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "activation": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "activecampaign": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "activetheory": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "acto": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "actpowerservices": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "acturis": {
+      "domain": null,
+      "sector": "Insurance"
     },
     "acuitymd": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "acumatica": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "acumen": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "acumentechnology": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "acurussolutions": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "ada": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "ada18": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "adahealth": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "adamevenyc": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "adamsmithinternational1": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "adaptivefinancialconsulting": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "adasiaholdings": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "adcouncil": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "add": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "addatainitiative": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "addepar1": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "addepto": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "additionwealth": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "adelphi": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "adelphirealworld": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "adelphiresearch": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "adequate": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "adesa": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "adesso1": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "adfinternational": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "adg555": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "adglobe": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "adidevelopments": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "adirafinance": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "adjarabet": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "adjust": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "adlook": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "admi": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "admindagency": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "administrative": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "admios": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "adn": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "adobe": {
-      "sector": "Software/SaaS",
-      "domain": "adobe.com"
+      "domain": "adobe.com",
+      "sector": "Software/SaaS"
+    },
+    "adobe1": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "adora": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "ads": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "adswerveinc": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "advancedmd": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "advancedspace": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "advancedtechnologyservices": {
-      "sector": "Manufacturing/Industrial",
-      "domain": null
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "advancis": {
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "advancy": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "advantmed": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "adventure-marketing": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "adventus": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "advocate": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "advocateconstruction": {
-      "sector": "Manufacturing/Industrial",
-      "domain": null
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "advoscale": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "advotics": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "adyen": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "adzuna-2": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "aec": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "aechelontechnology": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "aecom2": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "aegisventures": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "aegworldwide": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "aeratechnology": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aerispartners.com": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "aero": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "aerodesignworksgmbh": {
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "aerones": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "aerospike": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "aerostrat": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "aerotekcommercialstaffing": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "aerovect": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "aestudio": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "aetherflux": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "aethoshotels": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "aeu": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "aevexaerospace": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "aevoloop": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "afam": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "afero": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "affideaireland": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "affidearomania": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "affinidi": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "affinipay1": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "affinity": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "affirm": {
-      "sector": "Fintech",
-      "domain": "affirm.com"
+      "domain": "affirm.com",
+      "sector": "Fintech"
     },
     "afresh": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "african-safari-group": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "afry": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "afscareersmarketplace": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "afsenergy": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "aftership": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "afw": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "ag1": {
-      "sector": "Food/Beverage",
-      "domain": null
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "aga": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "agaseurope": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "agatesoftware": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "agcp": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "agebold": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "agecareers": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "agenciesforsale": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "agency": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "agencywithin": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "agentis-capital": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "agero": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "aggio": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "agicap": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "agile-defense": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "agilelogisticsllc2": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "agilisys": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "agilityrobotics": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "agilize": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "agiloft": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "agilysys": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "agoda": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "agodasandbox": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "agora-thinktanks": {
+      "domain": null,
+      "sector": "Government/Public"
     },
     "agr": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "agtechnologies1": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "agtonomy": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "agwestfarmcredit": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "aha": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "ahead": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "ahead-gmbh": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "ahi": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "ahrcnyc1": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "ahrefsjobs": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "ahschc": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "ai-intern-to-the-ceo": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "aiaf": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "aidigital": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aiedu": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
+    },
+    "aif": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "aifi": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aift": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "aig": {
-      "sector": "Insurance",
-      "domain": "aig.com"
+      "domain": "aig.com",
+      "sector": "Insurance"
+    },
+    "aihr": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "aikidosecurity": {
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "ailylabs": {
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "aimconsulting": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "aimeleondore": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "aimplas": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "aionbank": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "aipconnect": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "air-tek": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "airalo": {
-      "sector": "Telecom",
-      "domain": null
+      "domain": null,
+      "sector": "Telecom"
     },
     "airbnb": {
-      "sector": "Travel/Hospitality",
-      "domain": "airbnb.com"
+      "domain": "airbnb.com",
+      "sector": "Travel/Hospitality"
     },
     "aircall": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "aircapture": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "airdna": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "aireko": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "airia": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "airlabinc": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "airnewzealand": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "airnorth": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "airrack": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "airsculpt": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "airship": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "airslate": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "airspace": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "airspace-intelligence": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "airtable": {
-      "sector": "Software/SaaS",
-      "domain": "airtable.com"
+      "domain": "airtable.com",
+      "sector": "Software/SaaS"
     },
     "airtm": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "airtrunk": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "airwave": {
-      "sector": "Telecom",
-      "domain": null
+      "domain": null,
+      "sector": "Telecom"
     },
     "aisafety": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aiserajobs": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aisi": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aisle_and_abroad": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "aisquared": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "aivan-oy": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "aiven36": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "ajaib": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "ajax": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "ajbell1": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "ajccanada": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "ajnainfotech": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "ajua": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "akabrands": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "akademikernasakassa": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "akanewmedia": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "akersystems": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "akidolabs": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "akko": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "akoya": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "akqa": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "akuity": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "akunacapital": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
+    },
+    "akur8": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "al-warren-oil-company-inc": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "alamarbiosciences": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "alan": {
-      "sector": "Insurance",
-      "domain": "alan.com"
+      "domain": "alan.com",
+      "sector": "Insurance"
     },
     "alarmcom": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alayacare": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "albaberlin": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "albedo": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "albireo-energy": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "alchemer": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "alchemy": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "aldar": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "aldistores": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "alector": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "aledade": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "aleno": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "aleph": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alertmedia": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alertus": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alethea": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "alewijnse": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "alfredbeneschco": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "algaecal": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "algol-consulting": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "algolia": {
-      "sector": "Software/SaaS",
-      "domain": "algolia.com"
+      "domain": "algolia.com",
+      "sector": "Software/SaaS"
     },
     "algoquant": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "alice-bob": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "alifsemi": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "align": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "align46": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "aligned": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "alimentiv-2": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "alixpartners": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alku": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "all.health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "all4cloud": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "allcareers": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "allcaretherapies": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "allegiantair": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "allegisglobalsolutions": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "allego": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "allen-shariff-corporation": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "allencontrolsystems": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "allenintegratedsolutions": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "allgaeubatterie": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "allgeier-inovar-gmbh": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alliancedefendingfreedom": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "allied": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "alliedbeverage": {
-      "sector": "Food/Beverage",
-      "domain": null
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "alliedfeatherdown": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "alliedreit": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "allieduniversal2": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "allinc": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "allium": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "alloy": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "alloy-partners": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "allredi": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "allright": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "allshoretalent": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "allstate": {
-      "sector": "Insurance",
-      "domain": "allstate.com"
+      "domain": "allstate.com",
+      "sector": "Insurance"
     },
     "alltrails": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "allunity": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "alluxio": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "allwebleads": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "allybehaviorcenters": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "allyourbi": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alma": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "alma31": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "almanac-hotels": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "almavivadebelgique": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alom": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "alooba": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "aloyoga": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "alpaca": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "alphabeinsightinc": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alphafmc": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alphafmcroles": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alphafmcrolesearlycareers": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alphagrepsecurities": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "alphalion": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "alphasense": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "alphasenseindia": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "alphasights": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alphasightsresumedrop": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "alphataraxia": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "alpineinternships": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "alpineinvestors": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "alpinestars": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "alsgroup": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "also": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "also-2": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "alt": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "altagramgroup": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "altamirafreelance": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "altaml": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "altanaai": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "alten": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "altentechnologyusa": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "alteos": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "altisource": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "altitudelogisticsservicesllc": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "altoslabs": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
+    },
+    "altronixcorp": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "altruist": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "altscore": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "altura": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "alu": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "alumniventures": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "alveole": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "alvys": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "alxafrica": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
+    },
+    "amalitech": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "amanotes": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "amarbank": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
+    },
+    "amazon": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "amberelectric": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "ambifox": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "amdtschoolofcreativity": {
+      "domain": null,
+      "sector": "Education"
     },
     "americantall": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "americantitleserviceagency": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "americanveterinarygroup": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "ameriprise": {
-      "sector": "Banking/Finance",
-      "domain": "ameriprise.com"
+      "domain": "ameriprise.com",
+      "sector": "Banking/Finance"
     },
     "amgen": {
-      "sector": "Biotech/Pharma",
-      "domain": "amgen.com"
+      "domain": "amgen.com",
+      "sector": "Biotech/Pharma"
     },
     "amityfdn": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "ammobia": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "ampd-energy": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "ampdenergy": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "ampere": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "ampleinsightinc": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "amplitude": {
-      "sector": "Software/SaaS",
-      "domain": "amplitude.com"
+      "domain": "amplitude.com",
+      "sector": "Software/SaaS"
+    },
+    "amrefhealthafrica4": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "amsilk": {
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "amtengineering": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "amx": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "ana-corp": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "anagramsecurity": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "analogfolk": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "analysysmason1": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "analyticpartners": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "anavationllc": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "anavia": {
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "anchorage": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "andela": {
-      "sector": "Consulting/Services",
-      "domain": "andela.com"
+      "domain": "andela.com",
+      "sector": "Consulting/Services"
     },
     "andersencorp": {
-      "sector": "Manufacturing/Industrial",
-      "domain": null
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "anduril": {
-      "sector": "Aerospace/Defense",
-      "domain": "anduril.com"
+      "domain": "anduril.com",
+      "sector": "Aerospace/Defense"
+    },
+    "ane": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "anexinet1": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "angela": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "angellist": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "anglian-dental-1": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "angloamericandebeersgroup": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "anima": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "animocabrands": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
+    },
+    "anjariumbiosciences": {
+      "domain": null,
+      "sector": "Biotech/Pharma"
+    },
+    "annikinc": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "anomali": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "anomaly": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "anotherco": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "ans": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "ansatzcapital": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
+    },
+    "antares-consulting-1": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "antenna": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "anterior": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "anthony-gold-solicitors": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "anthro": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "anthropic": {
-      "sector": "AI/ML",
-      "domain": "anthropic.com"
+      "domain": "anthropic.com",
+      "sector": "AI/ML"
+    },
+    "anton": {
+      "domain": null,
+      "sector": "Education"
     },
     "anybotics": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "anyroad": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "anyscale": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "anything": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "anza-xyz": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "aofl": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "aogarciaagency": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "aoslogisticsllc": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "apcoholdings": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "aperturehealth": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "apex": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "apex-ai": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "apexaba": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "apexcareerservices": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "apexcleanenergy": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "apexinformatics": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "apm": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "apogempersonnelltd": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "apollo-private-wealth": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "apolloagriculture": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "apolloresearch": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "appen": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "appen-2": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "appfollow": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "applaudostudios": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "applepiecapital": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "appletreedental": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "applovin": {
-      "sector": "Software/SaaS",
-      "domain": "applovin.com"
+      "domain": "applovin.com",
+      "sector": "Software/SaaS"
+    },
+    "applusidiada1": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "applydigital": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "appnation": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "appsamurai": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "apresnail": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "apron": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "apryl": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "aqemia.com": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "aquabyte": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "aquaria": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "arable": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "arbitalhealth": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "arbitrumfoundation": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "arcadia": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "arcadiascience": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
+    },
+    "archirodongroup": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "architrave": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "architus": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "arconsis": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "arcsite": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "arcteam": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "arcteryx.com": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "arctorians": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "ares": {
+      "domain": null,
+      "sector": "Banking/Finance"
+    },
+    "arethia": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "arhs": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "ariadne": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "aristanetworks": {
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "aristinauab": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "arktura-bv-1": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "arku-maschinenbau-gmbh": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "armis": {
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "arondite": {
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "arootah": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "aroundhome": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "arraylabs.io": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "arrivelogistics": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "arsenalbio": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "arsiem": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "artbio": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "artera": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "artera-2": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "arua": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "arvana": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "arx": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "aryza": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "asana": {
-      "sector": "Software/SaaS",
-      "domain": "asana.com"
+      "domain": "asana.com",
+      "sector": "Software/SaaS"
     },
     "asapp-2": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "asew": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "asg": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "ashoka": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "askfavor": {
-      "sector": "Food/Beverage",
-      "domain": null
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "askitconsulting": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "askui-gmbh": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "aslconsulting": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "asos": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "ass": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "assent": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "assist-rx": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "assist-world": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "associated-students-inc": {
+      "domain": null,
+      "sector": "Education"
     },
     "assort-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "assystem": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "astera": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "astormueller-ag": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "astrazeneca": {
-      "sector": "Biotech/Pharma",
-      "domain": "astrazeneca.com"
+      "domain": "astrazeneca.com",
+      "sector": "Biotech/Pharma"
     },
     "astronomer": {
-      "sector": "Software/SaaS",
-      "domain": "astronomer.io"
+      "domain": "astronomer.io",
+      "sector": "Software/SaaS"
+    },
+    "asuresoftware": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "ataccama": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "atavistik-bio": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
+    },
+    "atc": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "athenapsych": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "atheneum": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "athereon": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "athletetoathlete": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "athos": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "ati-inc": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "atialtd": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "atibusinessgroup": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "atipik-sa": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "atlantica-agrcola-s-a": {
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "atlantis": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "atlas": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "atletica": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "atmosera": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "atomcomputing": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "atomi": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "atomic-semi": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "atpco1": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "atrevia": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "atriagroupllc": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "att": {
-      "sector": "Telecom",
-      "domain": "att.com"
+      "domain": "att.com",
+      "sector": "Telecom"
     },
     "attentive": {
-      "sector": "Software/SaaS",
-      "domain": "attentive.com"
+      "domain": "attentive.com",
+      "sector": "Software/SaaS"
     },
     "auctor": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "audaciasolutions": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "audibene": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "audiostack": {
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "augenblick-rheinland": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "augsburguniversity-minneapolismn": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "aumlogistiksllc": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "aumovio": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "aureol-global-connections": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "aurora": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "auroradairies": {
+      "domain": null,
+      "sector": "Food/Beverage"
     },
     "australianethical": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "authentic8": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "authenticbrandsgroup": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "authilde": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "auto1": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "autocraft-solutions-group": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "autodesk": {
-      "sector": "Software/SaaS",
-      "domain": "autodesk.com"
+      "domain": "autodesk.com",
+      "sector": "Software/SaaS"
     },
     "autofi": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "autohaus-royal": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "automation-consultants-ltd": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "automatiq": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "autonomous": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "autoroboto": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "auvaria": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "auw": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "auxmoney-gmbh": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "ava1": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "avalanchestudios": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "avalerehealth": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "avaloq1": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "avan": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "avance": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "avante": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "avantgarde": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "avantialaw": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "aventon": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "avenuesrecovery": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "avero": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "avertium": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "averydennison": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "avian": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "avidly-design-bu": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "aviladental": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "avimedical": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "aviso": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "aviyatech": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "avow": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "awsi": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "axiado": {
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "axonivy": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "axur": {
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "ayra": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "azeus-convene": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "azul": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "baan-dek": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "babblecloud": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "backerkit": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bacr": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "badge-group": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "badgermapping": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "baechlein": {
+      "domain": null,
+      "sector": "Food/Beverage"
     },
     "balbix": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "balltec": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "bamko": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "bananajobs": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "bandwidth": {
-      "sector": "Telecom",
-      "domain": "bandwidth.com"
+      "domain": "bandwidth.com",
+      "sector": "Telecom"
+    },
+    "bankofchinaluxembourg": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "bannerbank": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
+    },
+    "banxware": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "baqend": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "barkbackllc": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "barth": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "base-power": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "baselane": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "baseten": {
-      "sector": "AI/ML",
-      "domain": "baseten.co"
+      "domain": "baseten.co",
+      "sector": "AI/ML"
     },
     "basis": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "basis-research-institute": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "bazaarvoice": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bbb": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bbe": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bbl-brockdorff-rgmbh-1": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bbz": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "bcforward3": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bcmm": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bctechpro": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bds": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "beaglesystems": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "beautybarrage": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "beaverprocess": {
-      "sector": "Manufacturing/Industrial",
-      "domain": null
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "becanex": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "beckley-clinical": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
+    },
+    "become-1-gmbh": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bectondickinson2": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "bedrockenergy": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "bedrop": {
+      "domain": null,
+      "sector": "Food/Beverage"
     },
     "bee-talents": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "beedie": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "bees-bears-gmbh": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "beghouconsulting": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "behaviorcaretherapy": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "belkins": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "bellese": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "bellotalabs": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "bellwetheram-2": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "belvederetrading": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "benchling": {
-      "sector": "Biotech/Pharma",
-      "domain": "benchling.com"
+      "domain": "benchling.com",
+      "sector": "Biotech/Pharma"
+    },
+    "benefit-bueroservice": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bentley": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "bentoboxent": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "berdin": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bergauer-ag": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "bertram": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "besix": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "bespokepost": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "besserzuhause": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "bestbuy2": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "bet3651": {
+      "domain": null,
+      "sector": "Gaming"
     },
     "betr": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "betsol": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "betterdoc": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "betterlifepartners": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "betterment": {
-      "sector": "Fintech",
-      "domain": "betterment.com"
+      "domain": "betterment.com",
+      "sector": "Fintech"
+    },
+    "betty": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "bevel": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "beweglichmacher": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "beyond-imaging": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "beyondbankaustralia": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "beyondcloudconsulting": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "beyondmenu": {
-      "sector": "Food/Beverage",
-      "domain": null
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "beyondtrust": {
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "bezahlexperten": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "bfsaul": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "bfsaulhotels": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "bglobaltech": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bhft": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "bhg-inc": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "bhhc": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "bhu": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "bhvr": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "bib": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "bigblue": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "biggie": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "bigtincan": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bik": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bikeleasing": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "bilue": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "binance": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "bioagilytix": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "biocatch": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "biointellisense": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "birch": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "bis": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "bisnow": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "bison-polymers-gmbh": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "bital": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bitcap": {
+      "domain": null,
+      "sector": "Crypto/Web3"
+    },
+    "biteam": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "bitwarden": {
-      "sector": "Cybersecurity",
-      "domain": "bitwarden.com"
+      "domain": "bitwarden.com",
+      "sector": "Cybersecurity"
     },
     "bizaway": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "bkd": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bkta": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bkvibro": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "blablacar": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "blackapplesolutionsltd1": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "blackbird-labs": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "blackbirdinteractive": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "blackrock": {
-      "sector": "Banking/Finance",
-      "domain": "blackrock.com"
+      "domain": "blackrock.com",
+      "sector": "Banking/Finance"
+    },
+    "blackroll": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "blaum": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "blend360": {
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "blickfeld": {
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "blinqlabs": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "blissway": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "blockhouse": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "blockrise": {
+      "domain": null,
+      "sector": "Crypto/Web3"
+    },
+    "bloom": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bls": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "blu": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "blue-marine-foundation": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "blueally": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bluecardinalinc": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bluecode": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "blueocean-technologies-gmbh": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "blueoptima": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bluescope": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "blueskyinnovators": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bmk": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "boardwise": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "bodensteiner-gruppe": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "boeing": {
-      "sector": "Aerospace/Defense",
-      "domain": "boeing.com"
+      "domain": "boeing.com",
+      "sector": "Aerospace/Defense"
+    },
+    "bommaritoperformancesystems": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "bonify": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "bookerdimaio": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "booming-games": {
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "boost-group": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bosch-homecomfort": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "boschgroup": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "boskalis": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "botz": {
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "brabners": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "brain-co": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "brainlab": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "brainproducts": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "brainwonders": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "brakesplus": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "brandung": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "brave": {
-      "sector": "Software/SaaS",
-      "domain": "brave.com"
+      "domain": "brave.com",
+      "sector": "Software/SaaS"
     },
     "braze": {
-      "sector": "Software/SaaS",
-      "domain": "braze.com"
+      "domain": "braze.com",
+      "sector": "Software/SaaS"
     },
     "bree": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "brellium": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "bremer-gewuerzhandel4": {
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "brett-wilson-llp": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "brex": {
-      "sector": "Fintech",
-      "domain": "brex.com"
+      "domain": "brex.com",
+      "sector": "Fintech"
+    },
+    "bridgeu1": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "brightcapital": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "brightmachines": {
-      "sector": "Manufacturing/Industrial",
-      "domain": "brightmachines.com"
+      "domain": "brightmachines.com",
+      "sector": "Manufacturing/Industrial"
+    },
+    "brightmetro": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "brightspeed": {
+      "domain": null,
+      "sector": "Telecom"
+    },
+    "bringleexcellence": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "bringliesel": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "bristollabs": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "broadcom": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "broadcom.com"
+      "domain": "broadcom.com",
+      "sector": "Semiconductors/Hardware"
+    },
+    "broadpointfederalinc": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "brooklyn-fitboxing": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "brumaire": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "brunathelabel": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "brunner-blum-gmbh": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "brycetech": {
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "bryck": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "btranz": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "btv": {
+      "domain": null,
+      "sector": "Banking/Finance"
+    },
+    "buchinternationalhospital": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "buecherbuechse": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "buerklin-gmbh-co-kg": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "buff": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "buildarocket": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "buildhollywood": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "buildingminds": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "bullfinch": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "bunch": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "bund": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "burnettsearch": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "burnmanufacturing": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "buschgroup": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "businesswire": {
-      "sector": "Media/Entertainment",
-      "domain": "businesswire.com"
+      "domain": "businesswire.com",
+      "sector": "Media/Entertainment"
+    },
+    "buspatrol": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "bust": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "buycycle": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "c1-green-chemicals-ag": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "cabify": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "cadac-group": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "cadoganclinic": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "caely": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "cafico-international": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "calendly": {
-      "sector": "Software/SaaS",
-      "domain": "calendly.com"
+      "domain": "calendly.com",
+      "sector": "Software/SaaS"
+    },
+    "californiaiso": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "callminer": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "calm": {
-      "sector": "Healthcare",
-      "domain": "calm.com"
+      "domain": "calm.com",
+      "sector": "Healthcare"
+    },
+    "calvarychurch": {
+      "domain": null,
+      "sector": "Government/Public"
     },
     "canarytechnologies": {
-      "sector": "Travel/Hospitality",
-      "domain": "canarytechnologies.com"
+      "domain": "canarytechnologies.com",
+      "sector": "Travel/Hospitality"
+    },
+    "canva": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "cape": {
-      "sector": "Telecom",
-      "domain": null
+      "domain": null,
+      "sector": "Telecom"
     },
     "capitalone": {
-      "sector": "Banking/Finance",
-      "domain": "capitalone.com"
+      "domain": "capitalone.com",
+      "sector": "Banking/Finance"
+    },
+    "capitalshipping": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "captechconsulting": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "caravelo": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "caredxinc": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "careerteam": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "carilionclinic": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "carousellgroup": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "cars24": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "carta": {
-      "sector": "Fintech",
-      "domain": "carta.com"
+      "domain": "carta.com",
+      "sector": "Fintech"
     },
     "cartesia": {
-      "sector": "AI/ML",
-      "domain": "cartesia.ai"
+      "domain": "cartesia.ai",
+      "sector": "AI/ML"
+    },
+    "catasyshealth": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "cdprojektred": {
+      "domain": null,
+      "sector": "Gaming"
     },
     "centerfield": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "centmlogisticsllc": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "cermaticom": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "cfmontreal": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "cglife": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "charge-robotics": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "chathamfinancial": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "chime": {
-      "sector": "Fintech",
-      "domain": "chime.com"
+      "domain": "chime.com",
+      "sector": "Fintech"
+    },
+    "cielo2": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "cieloprojects": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "cigna": {
-      "sector": "Healthcare",
-      "domain": "cigna.com"
+      "domain": "cigna.com",
+      "sector": "Healthcare"
+    },
+    "cima2": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "cint": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "circleci": {
-      "sector": "Software/SaaS",
-      "domain": "circleci.com"
+      "domain": "circleci.com",
+      "sector": "Software/SaaS"
+    },
+    "cirrusassetmanagement": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "cisco": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "cisco.com"
+      "domain": "cisco.com",
+      "sector": "Semiconductors/Hardware"
     },
     "citi": {
-      "sector": "Banking/Finance",
-      "domain": "citi.com"
+      "domain": "citi.com",
+      "sector": "Banking/Finance"
     },
     "citizen-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "citrusgloballtd": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "cityandcountyofsanfrancisco1": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "cityofamericus": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "cityofcampbellriver": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "cityofphiladelphia": {
+      "domain": null,
+      "sector": "Government/Public"
+    },
+    "cityofstirling": {
+      "domain": null,
+      "sector": "Government/Public"
     },
     "civilgrid": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "claraanalytics": {
+      "domain": null,
+      "sector": "Insurance"
     },
     "clay": {
-      "sector": "Software/SaaS",
-      "domain": "clay.com"
+      "domain": "clay.com",
+      "sector": "Software/SaaS"
+    },
+    "cleanchoiceenergy": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "clearsource": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "clearview1": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "clerky": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "clickhouse": {
-      "sector": "Software/SaaS",
-      "domain": "clickhouse.com"
+      "domain": "clickhouse.com",
+      "sector": "Software/SaaS"
+    },
+    "clientengagementacademy": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "climatemakersinc": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "clipboard-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "close": {
-      "sector": "Software/SaaS",
-      "domain": "close.com"
+      "domain": "close.com",
+      "sector": "Software/SaaS"
+    },
+    "cloudfactory": {
+      "domain": null,
+      "sector": "AI/ML"
     },
     "cloudflare": {
-      "sector": "Cybersecurity",
-      "domain": "cloudflare.com"
+      "domain": "cloudflare.com",
+      "sector": "Cybersecurity"
+    },
+    "cloudmoyo": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "cloudnexacom": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "cluely": {
-      "sector": "AI/ML",
-      "domain": "cluely.com"
+      "domain": "cluely.com",
+      "sector": "AI/ML"
     },
     "cockroachlabs": {
-      "sector": "Software/SaaS",
-      "domain": "cockroachlabs.com"
+      "domain": "cockroachlabs.com",
+      "sector": "Software/SaaS"
+    },
+    "codeage": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "codersdatallc": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "coface": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "coffmanengineersinc": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "cogentdatasolutionsllc": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "cohere": {
-      "sector": "AI/ML",
-      "domain": "cohere.com"
+      "domain": "cohere.com",
+      "sector": "AI/ML"
+    },
+    "coheretechnology": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "cohesity": {
-      "sector": "Cybersecurity",
-      "domain": "cohesity.com"
+      "domain": "cohesity.com",
+      "sector": "Cybersecurity"
     },
     "coinbase": {
-      "sector": "Crypto/Web3",
-      "domain": "coinbase.com"
+      "domain": "coinbase.com",
+      "sector": "Crypto/Web3"
+    },
+    "coinjar": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "coinmarketcap": {
-      "sector": "Crypto/Web3",
-      "domain": "coinmarketcap.com"
+      "domain": "coinmarketcap.com",
+      "sector": "Crypto/Web3"
+    },
+    "colafeminalogisticsllc": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "collabera2": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "collaborative-robotics": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "comcast": {
-      "sector": "Telecom",
-      "domain": "comcast.com"
+      "domain": "comcast.com",
+      "sector": "Telecom"
+    },
+    "comcastcareercenter": {
+      "domain": null,
+      "sector": "Telecom"
+    },
+    "comoto": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "compa": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "computerfutures3": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "comtechllc2": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "confidential25": {
+      "domain": null,
+      "sector": "Other"
     },
     "confluent": {
-      "sector": "Software/SaaS",
-      "domain": "confluent.io"
+      "domain": "confluent.io",
+      "sector": "Software/SaaS"
     },
     "contentful": {
-      "sector": "Software/SaaS",
-      "domain": "contentful.com"
+      "domain": "contentful.com",
+      "sector": "Software/SaaS"
     },
     "context": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "continue": {
-      "sector": "AI/ML",
-      "domain": "continue.dev"
+      "domain": "continue.dev",
+      "sector": "AI/ML"
     },
     "coursera": {
-      "sector": "Education",
-      "domain": "coursera.org"
+      "domain": "coursera.org",
+      "sector": "Education"
     },
     "coverdash": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "creatify-lab": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "cribl": {
-      "sector": "Software/SaaS",
-      "domain": "cribl.io"
+      "domain": "cribl.io",
+      "sector": "Software/SaaS"
     },
     "crowdstrike": {
-      "sector": "Cybersecurity",
-      "domain": "crowdstrike.com"
+      "domain": "crowdstrike.com",
+      "sector": "Cybersecurity"
     },
     "crunchyroll": {
-      "sector": "Media/Entertainment",
-      "domain": "crunchyroll.com"
+      "domain": "crunchyroll.com",
+      "sector": "Media/Entertainment"
     },
     "crusoe": {
-      "sector": "Energy/Climate",
-      "domain": "crusoe.ai"
+      "domain": "crusoe.ai",
+      "sector": "Energy/Climate"
     },
     "crypto": {
-      "sector": "Crypto/Web3",
-      "domain": "crypto.com"
+      "domain": "crypto.com",
+      "sector": "Crypto/Web3"
     },
     "cursor": {
-      "sector": "AI/ML",
-      "domain": "cursor.com"
+      "domain": "cursor.com",
+      "sector": "AI/ML"
     },
     "customerio": {
-      "sector": "Software/SaaS",
-      "domain": "customer.io"
+      "domain": "customer.io",
+      "sector": "Software/SaaS"
     },
     "d-matrix": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "danaher": {
-      "sector": "Healthcare",
-      "domain": "danaher.com"
+      "domain": "danaher.com",
+      "sector": "Healthcare"
     },
     "dandy": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "dashlane": {
-      "sector": "Cybersecurity",
-      "domain": "dashlane.com"
+      "domain": "dashlane.com",
+      "sector": "Cybersecurity"
     },
     "databricks": {
-      "sector": "AI/ML",
-      "domain": "databricks.com"
+      "domain": "databricks.com",
+      "sector": "AI/ML"
     },
     "datadog": {
-      "sector": "Software/SaaS",
-      "domain": "datadoghq.com"
+      "domain": "datadoghq.com",
+      "sector": "Software/SaaS"
     },
     "datologyai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "delinea": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "deliveroo": {
-      "sector": "Food/Beverage",
-      "domain": "deliveroo.co.uk"
+      "domain": "deliveroo.co.uk",
+      "sector": "Food/Beverage"
     },
     "discord": {
-      "sector": "Media/Entertainment",
-      "domain": "discord.com"
+      "domain": "discord.com",
+      "sector": "Media/Entertainment"
     },
     "disney": {
-      "sector": "Media/Entertainment",
-      "domain": "disney.com"
+      "domain": "disney.com",
+      "sector": "Media/Entertainment"
     },
     "distyl-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "ditto-ai": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "dropbox": {
-      "sector": "Software/SaaS",
-      "domain": "dropbox.com"
+      "domain": "dropbox.com",
+      "sector": "Software/SaaS"
     },
     "dryft": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "duolingo": {
-      "sector": "Education",
-      "domain": "duolingo.com"
+      "domain": "duolingo.com",
+      "sector": "Education"
     },
     "dust": {
-      "sector": "AI/ML",
-      "domain": "dust.tt"
+      "domain": "dust.tt",
+      "sector": "AI/ML"
     },
     "dyna-robotics": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "educative": {
-      "sector": "Education",
-      "domain": "educative.io"
+      "domain": "educative.io",
+      "sector": "Education"
     },
     "eigen-labs": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "eight-sleep": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "eightsleep": {
-      "sector": "Consumer/Lifestyle",
-      "domain": "eightsleep.com"
+      "domain": "eightsleep.com",
+      "sector": "Consumer/Lifestyle"
     },
     "elastic": {
-      "sector": "Software/SaaS",
-      "domain": "elastic.co"
+      "domain": "elastic.co",
+      "sector": "Software/SaaS"
     },
     "elevenlabs": {
-      "sector": "AI/ML",
-      "domain": "elevenlabs.io"
+      "domain": "elevenlabs.io",
+      "sector": "AI/ML"
     },
     "eli-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "elicit": {
-      "sector": "AI/ML",
-      "domain": "elicit.com"
+      "domain": "elicit.com",
+      "sector": "AI/ML"
     },
     "ellipsis-labs": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "eloquent-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "ema": {
-      "sector": "AI/ML",
-      "domain": "ema.co"
+      "domain": "ema.co",
+      "sector": "AI/ML"
     },
     "encord": {
-      "sector": "AI/ML",
-      "domain": "encord.com"
+      "domain": "encord.com",
+      "sector": "AI/ML"
     },
     "epicgames": {
-      "sector": "Gaming",
-      "domain": "epicgames.com"
+      "domain": "epicgames.com",
+      "sector": "Gaming"
     },
     "epifi": {
-      "sector": "Fintech",
-      "domain": "fi.money"
+      "domain": "fi.money",
+      "sector": "Fintech"
     },
     "equip-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "etched": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "etched.com"
+      "domain": "etched.com",
+      "sector": "Semiconductors/Hardware"
     },
     "etched-ai": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "etched-ai-2": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "ether-fi": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "exa": {
-      "sector": "AI/ML",
-      "domain": "exa.ai"
+      "domain": "exa.ai",
+      "sector": "AI/ML"
     },
     "exa-labs": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "extremenetworks": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "extremenetworks.com"
+      "domain": "extremenetworks.com",
+      "sector": "Semiconductors/Hardware"
     },
     "eyebot": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "eyewatchsecuritygroupbv": {
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "faculty": {
-      "sector": "AI/ML",
-      "domain": "faculty.ai"
+      "domain": "faculty.ai",
+      "sector": "AI/ML"
     },
     "faculty-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "faire": {
-      "sector": "E-commerce/Retail",
-      "domain": "faire.com"
+      "domain": "faire.com",
+      "sector": "E-commerce/Retail"
+    },
+    "faktionbv1": {
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "famly": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "farsight": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
+    },
+    "fashioncloudgmbh": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "fastly": {
-      "sector": "Software/SaaS",
-      "domain": "fastly.com"
+      "domain": "fastly.com",
+      "sector": "Software/SaaS"
+    },
+    "fastned": {
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "fedex": {
-      "sector": "Logistics/SupplyChain",
-      "domain": "fedex.com"
+      "domain": "fedex.com",
+      "sector": "Logistics/SupplyChain"
+    },
+    "ferillis": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "ferpalinfrastructure": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "fieldbuddy": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "figma": {
-      "sector": "Software/SaaS",
-      "domain": "figma.com"
+      "domain": "figma.com",
+      "sector": "Software/SaaS"
+    },
+    "finoverse": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "fivetran": {
-      "sector": "Software/SaaS",
-      "domain": "fivetran.com"
+      "domain": "fivetran.com",
+      "sector": "Software/SaaS"
+    },
+    "fixico": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "flexitgo": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "flexport": {
-      "sector": "Logistics/SupplyChain",
-      "domain": "flexport.com"
+      "domain": "flexport.com",
+      "sector": "Logistics/SupplyChain"
+    },
+    "flinn": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "flock-safety": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "flosports": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "focusentertainment": {
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "foleon": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "fonteynenburg": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "foodji": {
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "formofoodsgmbh": {
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "fortius": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "forwardearth": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "foxelligroup": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "framestore": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "franzzielgmbh": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "freshminds": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "frisbii": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "frontierautoparts": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "fullcreative": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "fullstory": {
-      "sector": "Software/SaaS",
-      "domain": "fullstory.com"
+      "domain": "fullstory.com",
+      "sector": "Software/SaaS"
+    },
+    "fumo": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "fundamentalhospitality": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "fundwell": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "funex": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "funxtion": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "futurewhiz": {
+      "domain": null,
+      "sector": "Education"
     },
     "g2": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "gain": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "gallaghereurope": {
+      "domain": null,
+      "sector": "Insurance"
     },
     "gamechanger": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "garnerhealth": {
-      "sector": "Healthcare",
-      "domain": "garnerhealth.com"
+      "domain": "garnerhealth.com",
+      "sector": "Healthcare"
     },
     "gecko-robotics": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "geissgruppe": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "gemcorehealth": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "gevgroupltd": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "giga-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "gilead": {
-      "sector": "Biotech/Pharma",
-      "domain": "gilead.com"
+      "domain": "gilead.com",
+      "sector": "Biotech/Pharma"
     },
     "gimlet-labs": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "ginkgobioworks": {
-      "sector": "Biotech/Pharma",
-      "domain": "ginkgobioworks.com"
+      "domain": "ginkgobioworks.com",
+      "sector": "Biotech/Pharma"
+    },
+    "ginmon": {
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "giovanniranadeutschlandgmbh": {
+      "domain": null,
+      "sector": "Food/Beverage"
     },
     "gitlab": {
-      "sector": "Software/SaaS",
-      "domain": "gitlab.com"
+      "domain": "gitlab.com",
+      "sector": "Software/SaaS"
+    },
+    "glassix": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "glide": {
-      "sector": "Software/SaaS",
-      "domain": "glideapps.com"
+      "domain": "glideapps.com",
+      "sector": "Software/SaaS"
     },
     "glimpse-engineering": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "glossier": {
-      "sector": "Consumer/Lifestyle",
-      "domain": "glossier.com"
+      "domain": "glossier.com",
+      "sector": "Consumer/Lifestyle"
     },
     "golinks": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "goodship": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "gorgias": {
-      "sector": "Software/SaaS",
-      "domain": "gorgias.com"
+      "domain": "gorgias.com",
+      "sector": "Software/SaaS"
     },
     "grafanalabs": {
-      "sector": "Software/SaaS",
-      "domain": "grafana.com"
+      "domain": "grafana.com",
+      "sector": "Software/SaaS"
     },
     "great-question": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "gsk": {
-      "sector": "Biotech/Pharma",
-      "domain": "gsk.com"
+      "domain": "gsk.com",
+      "sector": "Biotech/Pharma"
     },
     "guidepoint": {
-      "sector": "Consulting/Services",
-      "domain": "guidepoint.com"
+      "domain": "guidepoint.com",
+      "sector": "Consulting/Services"
     },
     "gumloop": {
-      "sector": "AI/ML",
-      "domain": "gumloop.com"
+      "domain": "gumloop.com",
+      "sector": "AI/ML"
     },
     "gusto": {
-      "sector": "Software/SaaS",
-      "domain": "gusto.com"
+      "domain": "gusto.com",
+      "sector": "Software/SaaS"
+    },
+    "h2r": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "h3x-technologies": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "hackerone": {
-      "sector": "Cybersecurity",
-      "domain": "hackerone.com"
+      "domain": "hackerone.com",
+      "sector": "Cybersecurity"
     },
     "hadrian": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "hamelin": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "hamma": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "handshake": {
-      "sector": "Software/SaaS",
-      "domain": "joinhandshake.com"
+      "domain": "joinhandshake.com",
+      "sector": "Software/SaaS"
+    },
+    "happeo": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "hardrockdigital": {
+      "domain": null,
+      "sector": "Gaming"
     },
     "harvey": {
-      "sector": "AI/ML",
-      "domain": "harvey.ai"
+      "domain": "harvey.ai",
+      "sector": "AI/ML"
+    },
+    "hauptstadtfloss": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "hawk-eye-innovations": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "hayden-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "hcompany": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "healthcarerecruiting": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "heidelbergmaterialsbenelux": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "heidi-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "helloprint": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "helpag": {
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "helpscout": {
-      "sector": "Software/SaaS",
-      "domain": "helpscout.com"
+      "domain": "helpscout.com",
+      "sector": "Software/SaaS"
     },
     "heron-data": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "heron-power": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "heyharper": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "hginternational": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "higharc": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "highspiritshospitality": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "hike2": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "hippocratic-ai": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "hittechmultin": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "hmp": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "holded": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "holepunch": {
+      "domain": null,
+      "sector": "Crypto/Web3"
+    },
+    "holzlandbecker": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "homebase": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "hometouch": {
+      "domain": null,
+      "sector": "Healthcare"
     },
     "homevision": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "hostaway": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "hotelchamp": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "hoteldrachten": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "hotelgilze": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "hotelhildesheim": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
+    },
+    "hoteltwentyseven": {
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "hp": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "hp.com"
+      "domain": "hp.com",
+      "sector": "Semiconductors/Hardware"
+    },
+    "huaweicanada": {
+      "domain": null,
+      "sector": "Telecom"
+    },
+    "hubertvesterautogroup": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "hudsonmanpower": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "human": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "humana": {
-      "sector": "Healthcare",
-      "domain": "humana.com"
+      "domain": "humana.com",
+      "sector": "Healthcare"
+    },
+    "humhome": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "huntress": {
-      "sector": "Cybersecurity",
-      "domain": "huntress.com"
+      "domain": "huntress.com",
+      "sector": "Cybersecurity"
+    },
+    "huuuge": {
+      "domain": null,
+      "sector": "Gaming"
+    },
+    "hvg": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "hyble": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "hybrid": {
+      "domain": null,
+      "sector": "Media/Entertainment"
+    },
+    "hygraph": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "ia-collaborative": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "ichoosr": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "idegogroup": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "ideogram": {
-      "sector": "AI/ML",
-      "domain": "ideogram.ai"
+      "domain": "ideogram.ai",
+      "sector": "AI/ML"
+    },
+    "igh": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "iliabeauty": {
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
+    },
+    "illinoisenergywindowsandsidinginc": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "illumina": {
-      "sector": "Biotech/Pharma",
-      "domain": "illumina.com"
+      "domain": "illumina.com",
+      "sector": "Biotech/Pharma"
     },
     "illumio": {
-      "sector": "Cybersecurity",
-      "domain": "illumio.com"
+      "domain": "illumio.com",
+      "sector": "Cybersecurity"
+    },
+    "imnoo": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "imprint": {
-      "sector": "Fintech",
-      "domain": "imprint.co"
+      "domain": "imprint.co",
+      "sector": "Fintech"
     },
     "incident": {
-      "sector": "Software/SaaS",
-      "domain": "incident.io"
+      "domain": "incident.io",
+      "sector": "Software/SaaS"
     },
     "insitro": {
-      "sector": "Biotech/Pharma",
-      "domain": "insitro.com"
+      "domain": "insitro.com",
+      "sector": "Biotech/Pharma"
     },
     "instacart": {
-      "sector": "E-commerce/Retail",
-      "domain": "instacart.com"
+      "domain": "instacart.com",
+      "sector": "E-commerce/Retail"
     },
     "intel": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "intel.com"
+      "domain": "intel.com",
+      "sector": "Semiconductors/Hardware"
     },
     "intercom": {
-      "sector": "Software/SaaS",
-      "domain": "intercom.com"
+      "domain": "intercom.com",
+      "sector": "Software/SaaS"
     },
     "internship": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "ironclad": {
-      "sector": "Software/SaaS",
-      "domain": "ironcladapp.com"
+      "domain": "ironcladapp.com",
+      "sector": "Software/SaaS"
     },
     "iterable": {
-      "sector": "Software/SaaS",
-      "domain": "iterable.com"
+      "domain": "iterable.com",
+      "sector": "Software/SaaS"
     },
     "iwoca": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "juniper-square": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "justworks": {
-      "sector": "Software/SaaS",
-      "domain": "justworks.com"
+      "domain": "justworks.com",
+      "sector": "Software/SaaS"
     },
     "kayak": {
-      "sector": "Travel/Hospitality",
-      "domain": "kayak.com"
+      "domain": "kayak.com",
+      "sector": "Travel/Hospitality"
     },
     "keyrock": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "kira": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "kla": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "kla.com"
+      "domain": "kla.com",
+      "sector": "Semiconductors/Hardware"
     },
     "klaviyo": {
-      "sector": "Software/SaaS",
-      "domain": "klaviyo.com"
+      "domain": "klaviyo.com",
+      "sector": "Software/SaaS"
     },
     "kognitos": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "koho": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "kong": {
-      "sector": "Software/SaaS",
-      "domain": "konghq.com"
+      "domain": "konghq.com",
+      "sector": "Software/SaaS"
     },
     "labelbox": {
-      "sector": "AI/ML",
-      "domain": "labelbox.com"
+      "domain": "labelbox.com",
+      "sector": "AI/ML"
     },
     "lambda": {
-      "sector": "AI/ML",
-      "domain": "lambdalabs.com"
+      "domain": "lambdalabs.com",
+      "sector": "AI/ML"
     },
     "lambda-2": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "launchdarkly": {
-      "sector": "Software/SaaS",
-      "domain": "launchdarkly.com"
+      "domain": "launchdarkly.com",
+      "sector": "Software/SaaS"
     },
     "leavitt-group": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "leland": {
-      "sector": "Education",
-      "domain": null
+      "domain": null,
+      "sector": "Education"
     },
     "lemonade": {
-      "sector": "Insurance",
-      "domain": "lemonade.com"
+      "domain": "lemonade.com",
+      "sector": "Insurance"
     },
     "lightspark": {
-      "sector": "Crypto/Web3",
-      "domain": "lightspark.com"
+      "domain": "lightspark.com",
+      "sector": "Crypto/Web3"
     },
     "linear": {
-      "sector": "Software/SaaS",
-      "domain": "linear.app"
+      "domain": "linear.app",
+      "sector": "Software/SaaS"
     },
     "liquid-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "lydian": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "lyft": {
-      "sector": "Automotive/Mobility",
-      "domain": "lyft.com"
+      "domain": "lyft.com",
+      "sector": "Automotive/Mobility"
     },
     "lynk": {
-      "sector": "Telecom",
-      "domain": null
+      "domain": null,
+      "sector": "Telecom"
     },
     "m13": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "mach9": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "magical": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "mariana-minerals": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "marqeta": {
-      "sector": "Fintech",
-      "domain": "marqeta.com"
+      "domain": "marqeta.com",
+      "sector": "Fintech"
     },
     "marvell": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "marvell.com"
+      "domain": "marvell.com",
+      "sector": "Semiconductors/Hardware"
     },
     "mastercard": {
-      "sector": "Fintech",
-      "domain": "mastercard.com"
+      "domain": "mastercard.com",
+      "sector": "Fintech"
     },
     "masterclass": {
-      "sector": "Education",
-      "domain": "masterclass.com"
+      "domain": "masterclass.com",
+      "sector": "Education"
     },
     "matterworks": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "maybern": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "mechanize": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "medra": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "medtronic": {
-      "sector": "Healthcare",
-      "domain": "medtronic.com"
+      "domain": "medtronic.com",
+      "sector": "Healthcare"
     },
     "melotech": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "menlo-security": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "mercor": {
-      "sector": "AI/ML",
-      "domain": "mercor.com"
+      "domain": "mercor.com",
+      "sector": "AI/ML"
     },
     "mercury": {
-      "sector": "Fintech",
-      "domain": "mercury.com"
+      "domain": "mercury.com",
+      "sector": "Fintech"
     },
     "meshy": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "micron": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "micron.com"
+      "domain": "micron.com",
+      "sector": "Semiconductors/Hardware"
     },
     "mixpanel": {
-      "sector": "Software/SaaS",
-      "domain": "mixpanel.com"
+      "domain": "mixpanel.com",
+      "sector": "Software/SaaS"
     },
     "modernhealth": {
-      "sector": "Healthcare",
-      "domain": "modernhealth.com"
+      "domain": "modernhealth.com",
+      "sector": "Healthcare"
     },
     "monarch-money": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "mongodb": {
-      "sector": "Software/SaaS",
-      "domain": "mongodb.com"
+      "domain": "mongodb.com",
+      "sector": "Software/SaaS"
     },
     "mozilla": {
-      "sector": "Software/SaaS",
-      "domain": "mozilla.org"
+      "domain": "mozilla.org",
+      "sector": "Software/SaaS"
     },
     "mubi": {
-      "sector": "Media/Entertainment",
-      "domain": null
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "n1": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "nasdaq": {
-      "sector": "Banking/Finance",
-      "domain": "nasdaq.com"
+      "domain": "nasdaq.com",
+      "sector": "Banking/Finance"
     },
     "nash": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "neon-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "netic": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "netlify": {
-      "sector": "Software/SaaS",
-      "domain": "netlify.com"
+      "domain": "netlify.com",
+      "sector": "Software/SaaS"
     },
     "new-lantern": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "newfront-insurance": {
-      "sector": "Insurance",
-      "domain": null
+      "domain": null,
+      "sector": "Insurance"
     },
     "northwood-space": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "notion": {
-      "sector": "Software/SaaS",
-      "domain": "notion.so"
+      "domain": "notion.so",
+      "sector": "Software/SaaS"
     },
     "novartis": {
-      "sector": "Biotech/Pharma",
-      "domain": "novartis.com"
+      "domain": "novartis.com",
+      "sector": "Biotech/Pharma"
     },
     "nubank": {
-      "sector": "Fintech",
-      "domain": "nubank.com.br"
+      "domain": "nubank.com.br",
+      "sector": "Fintech"
     },
     "nuclear-promise-x": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "nuro": {
-      "sector": "Automotive/Mobility",
-      "domain": "nuro.ai"
+      "domain": "nuro.ai",
+      "sector": "Automotive/Mobility"
     },
     "nvidia": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "nvidia.com"
+      "domain": "nvidia.com",
+      "sector": "Semiconductors/Hardware"
     },
     "nxp": {
-      "sector": "Semiconductors/Hardware",
-      "domain": "nxp.com"
+      "domain": "nxp.com",
+      "sector": "Semiconductors/Hardware"
     },
     "obvious": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "okta": {
-      "sector": "Cybersecurity",
-      "domain": "okta.com"
+      "domain": "okta.com",
+      "sector": "Cybersecurity"
     },
     "one-brief": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "onemedical": {
-      "sector": "Healthcare",
-      "domain": "onemedical.com"
+      "domain": "onemedical.com",
+      "sector": "Healthcare"
     },
     "ontic": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "openai": {
-      "sector": "AI/ML",
-      "domain": "openai.com"
+      "domain": "openai.com",
+      "sector": "AI/ML"
     },
     "opengov": {
-      "sector": "Government/Public",
-      "domain": null
+      "domain": null,
+      "sector": "Government/Public"
     },
     "opusclip": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "oscar": {
-      "sector": "Healthcare",
-      "domain": "hioscar.com"
+      "domain": "hioscar.com",
+      "sector": "Healthcare"
     },
     "osmo": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "oura": {
-      "sector": "Healthcare",
-      "domain": "ouraring.com"
+      "domain": "ouraring.com",
+      "sector": "Healthcare"
     },
     "output-biosciences": {
-      "sector": "Biotech/Pharma",
-      "domain": null
+      "domain": null,
+      "sector": "Biotech/Pharma"
     },
     "overview-energy": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "palantir": {
-      "sector": "AI/ML",
-      "domain": "palantir.com"
+      "domain": "palantir.com",
+      "sector": "AI/ML"
     },
     "parallel-web-systems": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "parspec": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "patreon": {
-      "sector": "Media/Entertainment",
-      "domain": "patreon.com"
+      "domain": "patreon.com",
+      "sector": "Media/Entertainment"
     },
     "paypal": {
-      "sector": "Fintech",
-      "domain": "paypal.com"
+      "domain": "paypal.com",
+      "sector": "Fintech"
     },
     "pebl": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "peloton": {
-      "sector": "Consumer/Lifestyle",
-      "domain": "onepeloton.com"
+      "domain": "onepeloton.com",
+      "sector": "Consumer/Lifestyle"
     },
     "perchwell": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "permitflow": {
-      "sector": "RealEstate/PropTech",
-      "domain": null
+      "domain": null,
+      "sector": "RealEstate/PropTech"
     },
     "perplexity": {
-      "sector": "AI/ML",
-      "domain": "perplexity.ai"
+      "domain": "perplexity.ai",
+      "sector": "AI/ML"
     },
     "perplexity-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "persona": {
-      "sector": "Software/SaaS",
-      "domain": "withpersona.com"
+      "domain": "withpersona.com",
+      "sector": "Software/SaaS"
     },
     "pfizer": {
-      "sector": "Biotech/Pharma",
-      "domain": "pfizer.com"
+      "domain": "pfizer.com",
+      "sector": "Biotech/Pharma"
     },
     "phia": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "phil": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "philips": {
-      "sector": "Healthcare",
-      "domain": "philips.com"
+      "domain": "philips.com",
+      "sector": "Healthcare"
     },
     "physical-intelligence": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "pinterest": {
-      "sector": "Media/Entertainment",
-      "domain": "pinterest.com"
+      "domain": "pinterest.com",
+      "sector": "Media/Entertainment"
     },
     "plaid": {
-      "sector": "Fintech",
-      "domain": "plaid.com"
+      "domain": "plaid.com",
+      "sector": "Fintech"
     },
     "planetscale": {
-      "sector": "Software/SaaS",
-      "domain": "planetscale.com"
+      "domain": "planetscale.com",
+      "sector": "Software/SaaS"
     },
     "polymarket": {
-      "sector": "Crypto/Web3",
-      "domain": "polymarket.com"
+      "domain": "polymarket.com",
+      "sector": "Crypto/Web3"
     },
     "poshmark": {
-      "sector": "E-commerce/Retail",
-      "domain": null
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "posthog": {
-      "sector": "Software/SaaS",
-      "domain": "posthog.com"
+      "domain": "posthog.com",
+      "sector": "Software/SaaS"
     },
     "postman": {
-      "sector": "Software/SaaS",
-      "domain": "postman.com"
+      "domain": "postman.com",
+      "sector": "Software/SaaS"
     },
     "prior-labs": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "promise": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "proofpoint": {
-      "sector": "Cybersecurity",
-      "domain": "proofpoint.com"
+      "domain": "proofpoint.com",
+      "sector": "Cybersecurity"
     },
     "protegrity": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "proton": {
-      "sector": "Cybersecurity",
-      "domain": "proton.me"
+      "domain": "proton.me",
+      "sector": "Cybersecurity"
     },
     "proxima": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "prudential": {
-      "sector": "Insurance",
-      "domain": "prudential.com"
+      "domain": "prudential.com",
+      "sector": "Insurance"
     },
     "pulley": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "pwc": {
-      "sector": "Consulting/Services",
-      "domain": "pwc.com"
+      "domain": "pwc.com",
+      "sector": "Consulting/Services"
     },
     "pylon": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "qualys": {
-      "sector": "Cybersecurity",
-      "domain": "qualys.com"
+      "domain": "qualys.com",
+      "sector": "Cybersecurity"
     },
     "quora": {
-      "sector": "Media/Entertainment",
-      "domain": "quora.com"
+      "domain": "quora.com",
+      "sector": "Media/Entertainment"
     },
     "ramp": {
-      "sector": "Fintech",
-      "domain": "ramp.com"
+      "domain": "ramp.com",
+      "sector": "Fintech"
     },
     "reacher": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "reality-defender": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "reddit": {
-      "sector": "Media/Entertainment",
-      "domain": "reddit.com"
+      "domain": "reddit.com",
+      "sector": "Media/Entertainment"
     },
     "reevo": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "reflect-orbital": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "regeneron": {
-      "sector": "Biotech/Pharma",
-      "domain": "regeneron.com"
+      "domain": "regeneron.com",
+      "sector": "Biotech/Pharma"
     },
     "regent": {
-      "sector": "Automotive/Mobility",
-      "domain": null
+      "domain": null,
+      "sector": "Automotive/Mobility"
     },
     "relay-financial": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "relay-technologies": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "remote": {
-      "sector": "Software/SaaS",
-      "domain": "remote.com"
+      "domain": "remote.com",
+      "sector": "Software/SaaS"
     },
     "replit": {
-      "sector": "Software/SaaS",
-      "domain": "replit.com"
+      "domain": "replit.com",
+      "sector": "Software/SaaS"
     },
     "revenuecat": {
-      "sector": "Software/SaaS",
-      "domain": "revenuecat.com"
+      "domain": "revenuecat.com",
+      "sector": "Software/SaaS"
     },
     "riotgames": {
-      "sector": "Gaming",
-      "domain": "riotgames.com"
+      "domain": "riotgames.com",
+      "sector": "Gaming"
     },
     "robinhood": {
-      "sector": "Fintech",
-      "domain": "robinhood.com"
+      "domain": "robinhood.com",
+      "sector": "Fintech"
     },
     "roblox": {
-      "sector": "Gaming",
-      "domain": "roblox.com"
+      "domain": "roblox.com",
+      "sector": "Gaming"
     },
     "roche": {
-      "sector": "Biotech/Pharma",
-      "domain": "roche.com"
+      "domain": "roche.com",
+      "sector": "Biotech/Pharma"
     },
     "rocket-science-group": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "root-access": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "rtl": {
+      "domain": null,
+      "sector": "Media/Entertainment"
     },
     "rula": {
-      "sector": "Healthcare",
-      "domain": "rula.com"
+      "domain": "rula.com",
+      "sector": "Healthcare"
     },
     "rundoo": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "sahl": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "salesforce": {
-      "sector": "Software/SaaS",
-      "domain": "salesforce.com"
+      "domain": "salesforce.com",
+      "sector": "Software/SaaS"
+    },
+    "salzburgglobalseminar": {
+      "domain": null,
+      "sector": "Education"
     },
     "samsara": {
-      "sector": "Software/SaaS",
-      "domain": "samsara.com"
+      "domain": "samsara.com",
+      "sector": "Software/SaaS"
     },
     "sandboxaq": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "sanity": {
-      "sector": "Software/SaaS",
-      "domain": "sanity.io"
+      "domain": "sanity.io",
+      "sector": "Software/SaaS"
     },
     "sanofi": {
-      "sector": "Biotech/Pharma",
-      "domain": "sanofi.com"
+      "domain": "sanofi.com",
+      "sector": "Biotech/Pharma"
     },
     "savvy": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "scientech-research": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
+    },
+    "scioteq": {
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "scopely": {
-      "sector": "Gaming",
-      "domain": "scopely.com"
+      "domain": "scopely.com",
+      "sector": "Gaming"
     },
     "scribe": {
-      "sector": "Software/SaaS",
-      "domain": "scribehow.com"
+      "domain": "scribehow.com",
+      "sector": "Software/SaaS"
+    },
+    "scrumsdotcom": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "scrumventures": {
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "second-dinner": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "sendbird": {
-      "sector": "Software/SaaS",
-      "domain": "sendbird.com"
+      "domain": "sendbird.com",
+      "sector": "Software/SaaS"
     },
     "sentra": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "sentry": {
-      "sector": "Software/SaaS",
-      "domain": "sentry.io"
+      "domain": "sentry.io",
+      "sector": "Software/SaaS"
+    },
+    "sequra": {
+      "domain": null,
+      "sector": "Fintech"
     },
     "sereact": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "serval": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "sevensons": {
+      "domain": null,
+      "sector": "Food/Beverage"
+    },
+    "sgbsmitgroup": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "sharecompanygroup": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "shiftsmart": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "shipitmultimodallogistics": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "shippingtechnology": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "shopwareag": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
+    },
+    "shypple": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
+    },
+    "sidelineswap": {
+      "domain": null,
+      "sector": "E-commerce/Retail"
     },
     "sierra": {
-      "sector": "AI/ML",
-      "domain": "sierra.ai"
+      "domain": "sierra.ai",
+      "sector": "AI/ML"
     },
     "sieve": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "sigmacomputing": {
-      "sector": "Software/SaaS",
-      "domain": "sigmacomputing.com"
+      "domain": "sigmacomputing.com",
+      "sector": "Software/SaaS"
+    },
+    "signode": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
     },
     "similarweb": {
-      "sector": "Software/SaaS",
-      "domain": "similarweb.com"
+      "domain": "similarweb.com",
+      "sector": "Software/SaaS"
     },
     "simular": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "sioux": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "siwaresystems": {
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
+    },
+    "skfberlin": {
+      "domain": null,
+      "sector": "Manufacturing/Industrial"
+    },
+    "skinvision1": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "skipr": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "skkarriere": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "skydio": {
-      "sector": "Aerospace/Defense",
-      "domain": "skydio.com"
+      "domain": "skydio.com",
+      "sector": "Aerospace/Defense"
+    },
+    "skygeo": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "skytree": {
+      "domain": null,
+      "sector": "Energy/Climate"
+    },
+    "smarthr": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "smedleygroup": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "snapp": {
+      "domain": null,
+      "sector": "Automotive/Mobility"
+    },
+    "snappet": {
+      "domain": null,
+      "sector": "Education"
+    },
+    "snapsoft": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "snowflake": {
-      "sector": "Software/SaaS",
-      "domain": "snowflake.com"
+      "domain": "snowflake.com",
+      "sector": "Software/SaaS"
     },
     "socket": {
-      "sector": "Cybersecurity",
-      "domain": "socket.dev"
+      "domain": "socket.dev",
+      "sector": "Cybersecurity"
     },
     "socure": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "sofi": {
-      "sector": "Fintech",
-      "domain": "sofi.com"
+      "domain": "sofi.com",
+      "sector": "Fintech"
+    },
+    "softgames": {
+      "domain": null,
+      "sector": "Gaming"
     },
     "solace-health": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "solidroad": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
+    },
+    "solidstake": {
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "solink": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "solva": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
+    },
+    "somniosoftware": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "span": {
-      "sector": "Energy/Climate",
-      "domain": "span.io"
+      "domain": "span.io",
+      "sector": "Energy/Climate"
+    },
+    "sparcareers": {
+      "domain": null,
+      "sector": "Consulting/Services"
+    },
+    "spectrumam": {
+      "domain": null,
+      "sector": "RealEstate/PropTech"
+    },
+    "speedlinehub": {
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "spotify": {
-      "sector": "Media/Entertainment",
-      "domain": "spotify.com"
+      "domain": "spotify.com",
+      "sector": "Media/Entertainment"
+    },
+    "spotlab": {
+      "domain": null,
+      "sector": "Healthcare"
+    },
+    "spro": {
+      "domain": null,
+      "sector": "Software/SaaS"
+    },
+    "sqe": {
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "squarespace": {
-      "sector": "Software/SaaS",
-      "domain": "squarespace.com"
+      "domain": "squarespace.com",
+      "sector": "Software/SaaS"
+    },
+    "sspcs": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "standard-bots": {
-      "sector": "Semiconductors/Hardware",
-      "domain": null
+      "domain": null,
+      "sector": "Semiconductors/Hardware"
     },
     "starpath-robotics": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
+    },
+    "starr": {
+      "domain": null,
+      "sector": "Insurance"
+    },
+    "stbingenieure": {
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "stripe": {
-      "sector": "Fintech",
-      "domain": "stripe.com"
+      "domain": "stripe.com",
+      "sector": "Fintech"
     },
     "stryker": {
-      "sector": "Healthcare",
-      "domain": "stryker.com"
+      "domain": "stryker.com",
+      "sector": "Healthcare"
     },
     "stytch": {
-      "sector": "Software/SaaS",
-      "domain": "stytch.com"
+      "domain": "stytch.com",
+      "sector": "Software/SaaS"
     },
     "sumologic": {
-      "sector": "Software/SaaS",
-      "domain": "sumologic.com"
+      "domain": "sumologic.com",
+      "sector": "Software/SaaS"
     },
     "supabase": {
-      "sector": "Software/SaaS",
-      "domain": "supabase.com"
+      "domain": "supabase.com",
+      "sector": "Software/SaaS"
     },
     "super": {
-      "sector": "Travel/Hospitality",
-      "domain": null
+      "domain": null,
+      "sector": "Travel/Hospitality"
     },
     "taara": {
-      "sector": "Telecom",
-      "domain": null
+      "domain": null,
+      "sector": "Telecom"
     },
     "tailscale": {
-      "sector": "Cybersecurity",
-      "domain": "tailscale.com"
+      "domain": "tailscale.com",
+      "sector": "Cybersecurity"
     },
     "talos": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "tandem-pv": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "target": {
-      "sector": "E-commerce/Retail",
-      "domain": "target.com"
+      "domain": "target.com",
+      "sector": "E-commerce/Retail"
     },
     "tavily": {
-      "sector": "AI/ML",
-      "domain": "tavily.com"
+      "domain": "tavily.com",
+      "sector": "AI/ML"
     },
     "tenex-ai": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "tensorwave": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "tessera-labs": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "the-exploration-company": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "the-job-sauce": {
-      "sector": "Consulting/Services",
-      "domain": null
+      "domain": null,
+      "sector": "Consulting/Services"
     },
     "the-voleon-group": {
-      "sector": "Banking/Finance",
-      "domain": null
+      "domain": null,
+      "sector": "Banking/Finance"
     },
     "tilde-research": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "tldraw": {
-      "sector": "Software/SaaS",
-      "domain": "tldraw.com"
+      "domain": "tldraw.com",
+      "sector": "Software/SaaS"
     },
     "toast": {
-      "sector": "Software/SaaS",
-      "domain": "toasttab.com"
+      "domain": "toasttab.com",
+      "sector": "Software/SaaS"
     },
     "tonal": {
-      "sector": "Consumer/Lifestyle",
-      "domain": null
+      "domain": null,
+      "sector": "Consumer/Lifestyle"
     },
     "tools-for-humanity": {
-      "sector": "Crypto/Web3",
-      "domain": null
+      "domain": null,
+      "sector": "Crypto/Web3"
     },
     "treefera": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "triumph": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "turion-space": {
-      "sector": "Aerospace/Defense",
-      "domain": null
+      "domain": null,
+      "sector": "Aerospace/Defense"
     },
     "twilio": {
-      "sector": "Software/SaaS",
-      "domain": "twilio.com"
+      "domain": "twilio.com",
+      "sector": "Software/SaaS"
     },
     "twitch": {
-      "sector": "Media/Entertainment",
-      "domain": "twitch.tv"
+      "domain": "twitch.tv",
+      "sector": "Media/Entertainment"
     },
     "udemy": {
-      "sector": "Education",
-      "domain": "udemy.com"
+      "domain": "udemy.com",
+      "sector": "Education"
     },
     "uipath": {
-      "sector": "Software/SaaS",
-      "domain": "uipath.com"
+      "domain": "uipath.com",
+      "sector": "Software/SaaS"
     },
     "uncountable": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "unilever": {
-      "sector": "Consumer/Lifestyle",
-      "domain": "unilever.com"
+      "domain": "unilever.com",
+      "sector": "Consumer/Lifestyle"
     },
     "unlikely-ai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "unwrap": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "upstart": {
-      "sector": "Fintech",
-      "domain": "upstart.com"
+      "domain": "upstart.com",
+      "sector": "Fintech"
     },
     "upvest": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "vanguard": {
-      "sector": "Banking/Finance",
-      "domain": "vanguard.com"
+      "domain": "vanguard.com",
+      "sector": "Banking/Finance"
     },
     "vanta": {
-      "sector": "Cybersecurity",
-      "domain": "vanta.com"
+      "domain": "vanta.com",
+      "sector": "Cybersecurity"
     },
     "vantage": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "vendelux": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "vercel": {
-      "sector": "Software/SaaS",
-      "domain": "vercel.com"
+      "domain": "vercel.com",
+      "sector": "Software/SaaS"
     },
     "virtu": {
-      "sector": "Banking/Finance",
-      "domain": "virtu.com"
+      "domain": "virtu.com",
+      "sector": "Banking/Finance"
     },
     "visa": {
-      "sector": "Fintech",
-      "domain": "visa.com"
+      "domain": "visa.com",
+      "sector": "Fintech"
     },
     "vital-lyfe": {
-      "sector": "Healthcare",
-      "domain": null
+      "domain": null,
+      "sector": "Healthcare"
     },
     "voldex": {
-      "sector": "Gaming",
-      "domain": null
+      "domain": null,
+      "sector": "Gaming"
     },
     "vonage": {
-      "sector": "Telecom",
-      "domain": "vonage.com"
+      "domain": "vonage.com",
+      "sector": "Telecom"
     },
     "walrus": {
-      "sector": "Other",
-      "domain": null
+      "domain": null,
+      "sector": "Other"
     },
     "wealth-com": {
-      "sector": "Fintech",
-      "domain": null
+      "domain": null,
+      "sector": "Fintech"
     },
     "wealthsimple": {
-      "sector": "Fintech",
-      "domain": "wealthsimple.com"
+      "domain": "wealthsimple.com",
+      "sector": "Fintech"
     },
     "weave": {
-      "sector": "Software/SaaS",
-      "domain": null
+      "domain": null,
+      "sector": "Software/SaaS"
     },
     "webai": {
-      "sector": "AI/ML",
-      "domain": null
+      "domain": null,
+      "sector": "AI/ML"
     },
     "webflow": {
-      "sector": "Software/SaaS",
-      "domain": "webflow.com"
+      "domain": "webflow.com",
+      "sector": "Software/SaaS"
     },
     "windborne-systems": {
-      "sector": "Energy/Climate",
-      "domain": null
+      "domain": null,
+      "sector": "Energy/Climate"
     },
     "witness-ai": {
-      "sector": "Cybersecurity",
-      "domain": null
+      "domain": null,
+      "sector": "Cybersecurity"
     },
     "workday": {
-      "sector": "Software/SaaS",
-      "domain": "workday.com"
+      "domain": "workday.com",
+      "sector": "Software/SaaS"
     },
     "worldly": {
-      "sector": "Logistics/SupplyChain",
-      "domain": null
+      "domain": null,
+      "sector": "Logistics/SupplyChain"
     },
     "zapier": {
-      "sector": "Software/SaaS",
-      "domain": "zapier.com"
+      "domain": "zapier.com",
+      "sector": "Software/SaaS"
     },
     "zello": {
-      "sector": "Telecom",
-      "domain": null
+      "domain": null,
+      "sector": "Telecom"
     },
     "zendesk": {
-      "sector": "Software/SaaS",
-      "domain": "zendesk.com"
+      "domain": "zendesk.com",
+      "sector": "Software/SaaS"
     },
     "zip": {
-      "sector": "Software/SaaS",
-      "domain": "ziphq.com"
+      "domain": "ziphq.com",
+      "sector": "Software/SaaS"
     }
   }
 }
