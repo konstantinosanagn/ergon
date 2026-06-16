@@ -34,12 +34,14 @@ def test_gold_set_is_present_and_sized(report: dict) -> None:
 # Thresholds locked to the 500-row consensus baseline (runs/2026-06-16-gold-500/), a margin
 # below measured. The earlier 162-row numbers were optimistic on level/sector.
 def test_level_quality(report: dict) -> None:
-    assert report["level_accuracy"] >= 0.83
-    assert report["level_macro_f1"] >= 0.80
+    # Error-pattern fixes (IC-vs-people manager, associate, dev-rep, locale) lifted 0.87->0.95.
+    assert report["level_accuracy"] >= 0.92
+    assert report["level_macro_f1"] >= 0.90
 
 
 def test_sector_quality(report: dict) -> None:
-    assert report["sector_accuracy"] >= 0.76
+    # Corrected misclassified companies in sectors.json: 0.80 -> 0.95.
+    assert report["sector_accuracy"] >= 0.92
 
 
 def test_city_quality(report: dict) -> None:

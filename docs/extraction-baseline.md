@@ -5,8 +5,8 @@ The 162-row numbers below were optimistic on level/sector. The **500-posting 3-v
 
 | field | F1/acc (500) | positives |
 |---|---|---|
-| level | 0.872 acc / 0.859 F1 | 500 |
-| sector | 0.802 | 500 |
+| level | 0.954 acc / 0.925 F1 | 500 |
+| sector | 0.952 | 500 |
 | country | 0.926 | 457 |
 | city | 0.940 | 331 |
 | comp | 0.957 F1 (val 0.962) | 157 |
