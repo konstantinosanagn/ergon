@@ -26,7 +26,18 @@ from jobspine.providers.base import get_provider, load_builtins  # noqa: E402
 SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
 CANDIDATES = ROOT / "scripts" / "candidates.json"
 
-ATS_PRIORITY = {"greenhouse": 0, "lever": 1, "ashby": 2, "workday": 3}
+# Lower = preferred when the same company verifies on multiple ATSes. Unknown ATSes sort last
+# (via .get(..., 99)) so a new provider/candidate type can never KeyError this sweep.
+ATS_PRIORITY = {
+    "greenhouse": 0,
+    "lever": 1,
+    "ashby": 2,
+    "workday": 3,
+    "smartrecruiters": 4,
+    "workable": 5,
+    "recruitee": 6,
+    "personio": 7,
+}
 
 
 def token_for(entry: dict) -> str:
@@ -83,9 +94,9 @@ async def main() -> None:
     for entry, count, token in verified:
         key = entry["company"]
         cur = best.get(key)
-        if cur is None or (count, -ATS_PRIORITY[entry["ats"]]) > (
+        if cur is None or (count, -ATS_PRIORITY.get(entry["ats"], 99)) > (
             cur[1],
-            -ATS_PRIORITY[cur[0]["ats"]],
+            -ATS_PRIORITY.get(cur[0]["ats"], 99),
         ):
             best[key] = (entry, count, token)
 

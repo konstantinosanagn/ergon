@@ -140,6 +140,81 @@ Free job-board / aggregator APIs commonly integrated:
 
 ---
 
+## 7. Deep dive: jobspine vs. jobhive vs. careerscout (code-level)
+
+Read at the source level on 2026-06-16 (jobhive @ `b45c12a` 2026-05-30; careerscout @ its single commit 2026-03-14). All three chase the same goal — live ATS jobs without paying — but sit at three points on the **curate ↔ discover** and **library ↔ infrastructure** axes.
+
+| | **jobspine** (ours) | **jobhive** (`kalil0321/ats-scrapers`) | **careerscout** (`Ramcharan747`) |
+|---|---|---|---|
+| Stack | Python, async (httpx/anyio) | Python, async + browser fallbacks | Go core + Rust replay + Python ML + C eBPF |
+| License | MIT | MIT | MIT |
+| Shape | Installable SDK, **live fetch at call time** | SDK **+ batch pipeline** publishing a dataset to R2/CDN | Distributed crawl **infrastructure** (Kafka/Postgres/Fargate) |
+| Discovery | Curated `seed.json` (**~1,400** companies) + offline resolver + dormant HTML-signature probe | Curated CSVs (**~88,000** tenants, 26 ATSes) maintained by PRs | Automated: Majestic Million + crt.sh + Common Crawl → probe |
+| ATS-direct scrapers | **8** (GH, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee, Personio) | ~26 multi-tenant ATS + 7 big-tech + 4 govt + ~11 boards (**49 modules**) | **15** probers + dynamic XHR shape classifier |
+| Fetch method | Public JSON/XML APIs only — **no browser, no auth, no keys** | Public APIs + **stealth browser** (Tesla/Meta) + TLS-impersonation | Headless Chrome to *discover* endpoints, then **raw HTTP replay** |
+| Freshness | **Live at query time** | Snapshot dataset (as fresh as last pipeline run) | Scheduled re-fetch (+6h) / replay loop |
+| Dedup | Cross-source, company-blocked, rapidfuzz ≥90, **provenance union** | 5-pass, rapidfuzz ≥90, ATS-priority survivor | DB upsert on `(source_id, external_id)` |
+| Enrichment | Deterministic: level, comp, yoe, sector, geo gazetteer | Deterministic, narrow (remote-from-title, salary regex); LLM deferred | regex + optional **Gemini Flash** schema auto-detect |
+| Maturity | v0.1, active, **working MCP server** | Active, **51 test files**, real published dataset | **Single commit**, no data, eBPF/ML/normalise **stubbed** |
+
+### The core difference is the answer to "which boards do I query?"
+
+- **jobspine — curate small, fetch live.** ~1,400 hand-picked companies, resolved offline, fetched fresh every call. Best *freshness* + *simplicity*; smallest *universe*.
+- **jobhive — curate big, batch-publish.** ~88k tenant CSVs grown by PRs, scraped on a schedule, published as Parquet/CSV behind a CDN. The library **downloads a snapshot** — it does *not* fetch live. Best *coverage*; data is as fresh as the last run.
+- **careerscout — discover automatically.** No curated lists: harvests domains from Common Crawl + certificate transparency + Majestic Million, then *probes* to detect ATS. Most *ambitious*, but a design/portfolio repo (single commit, marquee eBPF/ML features stubbed, "5.5M" unverifiable; actual = 15 probers, 0 committed data).
+
+### Where each wins
+
+**jobspine's genuine edges over both:**
+1. **Truly live** — jobhive serves a snapshot; we fetch at query time. For "jobs open *right now*," we win.
+2. **Cleanest consumption** — typed SDK + CLI + **working MCP server** with per-source health. jobhive has no MCP; careerscout has no client surface.
+3. **Best enrichment** — our level/comp/yoe/sector/geo extractors dwarf jobhive's two rules and careerscout's regex.
+4. **Cross-source merge with provenance union** — collapsing a Greenhouse posting + a RemoteOK re-list into one job, both sources attributed. Neither competitor does this.
+5. **No browser, no proxies, no keys** — lowest operational burden; trivially embeddable.
+
+**Where jobspine is behind (honestly):**
+1. **Coverage: ~1,400 vs ~88,000 companies.** The gap that matters.
+2. **No automated discovery wired in.** `aresolve()` (HTML-signature probe) exists but the engine never calls it; today growth = hand-editing `seed.json`.
+3. **No bot-defense story.** Clean public APIs only. Workday-at-scale, Tesla, Meta, Akamai-fronted boards are walls jobhive solved with stealth browsers and careerscout with eBPF/replay.
+
+### Three ideas worth borrowing (concept, not code — they're Go/pipeline-shaped)
+
+1. **From jobhive — curated-CSV-as-data + CI publish.** One CSV per ATS, PRs add tenants, a GitHub Action verifies + publishes. This is how they reached 88k without a crawler, and it is the **highest-leverage, lowest-risk** way to grow `seed.json`. Optionally publish a snapshot dataset alongside the live SDK (best of both).
+2. **From careerscout — the discover-once / replay-cheap split.** Browsers only (re)capture auth tokens; everything else is replayed as raw HTTP, and a 401/403 marks the record stale to trigger re-discovery. Validates wiring our dormant `aresolve()` into a periodic *registry-enrichment* job feeding the cheap live path.
+3. **From careerscout — response-shape classification.** Score an endpoint by the *shape* of its JSON (job-list vs single-job vs paginated) + ATS-vocabulary field matching. Useful if we ever add generic/unknown-ATS detection.
+
+**Positioning:** we don't compete with careerscout (an unoperated experiment). We compete with **jobhive**, on **freshness + clean SDK/MCP + enrichment (we win) vs. raw coverage (they win)**. The move is to close coverage with their CSV model while keeping our live-fetch + provenance-merge + deterministic-enrichment advantages.
+
+---
+
+## 8. Experiment: crt.sh certificate-transparency harvester (negative result)
+
+**Hypothesis (from careerscout's README):** querying crt.sh for `%.{ats-domain}` enumerates company tenants for free, a cheap way to auto-grow the registry. We built it and measured it. **Verdict: crt.sh is a weak source for jobspine's providers — not the gap-closer it appeared to be.**
+
+**What we built** (`scripts/harvest_crtsh.py`, 8 passing unit tests in `tests/test_harvest_crtsh.py`):
+- Queries crt.sh JSON for **subdomain-tenant** ATSes only (Recruitee, Personio, Workday), where the tenant is in the cert host name. Pure, tested extraction (`parse_crtsh_hosts`, `extract_tenants`, `extract_workday_site`) + infra-subdomain blocklist + all-numeric rejection.
+- For Workday, discovers the required `site` path segment by reading the careers-root page's embedded `/wday/cxs/{tenant}/{site}/` reference (precise, not brute-force).
+- **Proposes only** — emits a `candidates.json` consumed by the existing `build_registry.py`, which *verifies every candidate live* through jobspine's own providers before merging. (We also hardened `build_registry.py`'s ATS-priority map to `.get(..., 99)` so new ATS types can't `KeyError` the sweep.)
+
+**What we measured (2026-06-16):**
+
+| ATS | crt.sh hosts | Tenant candidates | **Verified live** | Why |
+|---|---:|---:|---:|---|
+| Recruitee | 66 | 19 | **0** | crt.sh surfaces Recruitee's *own* infra subdomains (`landing`, `metabase`, `s3`, `tagging-server`…); real customer boards hide behind a **wildcard cert** (`*.recruitee.com`) and never appear in CT logs. |
+| Personio | 1 | 0 | **0** | Single wildcard cert (`*.jobs.personio.de`) — zero per-tenant certs to enumerate. |
+| Workday | 98 (degraded) | 4 | — | Best theoretical case (per-tenant certs), but crt.sh was **502-ing** during testing and never returned a full result set. |
+
+**Three concrete reasons crt.sh underdelivers here:**
+1. **Wildcard certs hide tenants.** Many SaaS ATSes serve all customers under one `*.domain` cert, so individual tenants are invisible to certificate transparency. Confirmed for Recruitee and Personio.
+2. **crt.sh is unreliable.** Frequent `502`s, rate-limiting, and truncated responses — it was fully down for part of our testing. Not a dependable production source.
+3. **Path-based ATSes aren't enumerable at all.** Greenhouse/Lever/Ashby/SmartRecruiters/Workable — where **jobspine's bulk coverage lives** — put the token in a URL *path*, not a subdomain, so crt.sh can't see them regardless.
+
+**Status & recommendation:** the harvester is kept (correct, tested, graceful under failure; genuinely useful for Workday-class per-tenant-cert ATSes *when crt.sh is up*), but it is **not** the path to closing the coverage gap. The evidence points to **jobhive's curated-CSV + CI-verify model** (idea #1 above) as the real high-leverage move: it is reliable, covers the path-based ATSes that matter most, and reuses the live-verification gate we already have. crt.sh is at best a minor supplement.
+
+**Artifacts:** `scripts/harvest_crtsh.py` · `tests/test_harvest_crtsh.py` · hardened `scripts/build_registry.py`.
+
+---
+
 ## Sources
 
 Primary sources verified during research:

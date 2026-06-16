@@ -32,6 +32,59 @@ DEFAULT_HEADERS = {
 
 _RETRYABLE_STATUS = {500, 502, 503, 504}
 
+# Hosts whose subdomains are INDEPENDENT backends -> rate-limit per full host, not per domain.
+# (Workday tenants live in separate data centers; collapsing them would serialize multi-tenant
+# searches.)
+_PER_TENANT_HOSTS = ("myworkdayjobs.com",)
+# Shared backends with stricter limits than the default — (max_rate, period_seconds).
+# These always win over the constructor's per_host_rate.
+_DOMAIN_RATE_OVERRIDES: dict[str, tuple[float, float]] = {
+    "recruitee.com": (2.0, 1.0),
+    "personio.de": (3.0, 1.0),
+}
+# Two-level public suffixes, so the registrable domain is computed correctly.
+_TWO_LEVEL_TLDS = {
+    "co.uk",
+    "org.uk",
+    "ac.uk",
+    "com.au",
+    "net.au",
+    "org.au",
+    "co.nz",
+    "co.jp",
+    "co.in",
+    "com.br",
+    "com.mx",
+    "com.sg",
+    "com.hk",
+    "co.za",
+    "com.tr",
+    "co.il",
+    "com.cn",
+}
+
+
+def _rate_key(host: str) -> str:
+    """Key for per-host rate limiting + circuit breaking.
+
+    Collapses subdomains to the registrable domain so shared backends (every
+    ``*.recruitee.com`` / ``*.jobs.personio.de``) throttle together rather than each subdomain
+    getting its own quota and hammering the shared backend into 429s. Per-tenant hosts
+    (Workday) stay keyed on the full host.
+    """
+    host = host.split("@")[-1].split(":")[0].lower()
+    if not host:
+        return host
+    if any(host == h or host.endswith("." + h) for h in _PER_TENANT_HOSTS):
+        return host
+    parts = host.split(".")
+    if len(parts) <= 2:
+        return host
+    last2 = ".".join(parts[-2:])
+    if last2 in _TWO_LEVEL_TLDS and len(parts) >= 3:
+        return ".".join(parts[-3:])
+    return last2
+
 
 def _retry_after_seconds(resp: httpx.Response) -> float | None:
     value = resp.headers.get("Retry-After")
@@ -112,18 +165,22 @@ class AsyncFetcher:
                 pass
         return httpx.AsyncClient(**kwargs)
 
-    def _host_limiter(self, host: str) -> AsyncLimiter:
-        limiter = self._host_limiters.get(host)
+    def _host_limiter(self, key: str) -> AsyncLimiter:
+        limiter = self._host_limiters.get(key)
         if limiter is None:
-            limiter = AsyncLimiter(self._per_host_rate, self._per_host_period)
-            self._host_limiters[host] = limiter
+            rate, period = _DOMAIN_RATE_OVERRIDES.get(
+                key, (self._per_host_rate, self._per_host_period)
+            )
+            limiter = AsyncLimiter(rate, period)
+            self._host_limiters[key] = limiter
         return limiter
 
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         host = urlsplit(url).netloc
-        breaker = self._breakers[host]
-        breaker.check(host)
-        async with self._limiter, self._host_limiter(host):
+        key = _rate_key(host)  # registrable domain (shared backends throttle together)
+        breaker = self._breakers[key]
+        breaker.check(key)
+        async with self._limiter, self._host_limiter(key):
             return await self._request_with_retries(method, url, host, breaker, **kwargs)
 
     async def _request_with_retries(
