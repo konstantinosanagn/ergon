@@ -6,7 +6,16 @@ import pytest
 
 from jobspine.registry.store import SeedRegistry
 
-SUPPORTED_ATS = {"greenhouse", "lever", "ashby", "workday"}
+SUPPORTED_ATS = {
+    "greenhouse",
+    "lever",
+    "ashby",
+    "workday",
+    "smartrecruiters",
+    "workable",
+    "recruitee",
+    "personio",
+}
 
 
 @pytest.fixture(scope="module")
@@ -62,6 +71,9 @@ def test_resolver_resolves_known_seed_domains(registry: SeedRegistry) -> None:
         assert res.token
 
 
-def test_distribution_across_all_four_ats(registry: SeedRegistry) -> None:
+def test_distribution_across_ats(registry: SeedRegistry) -> None:
     seen = {entry["ats"] for entry in registry.all().values()}
-    assert seen >= SUPPORTED_ATS
+    # every ATS present in the registry must be a supported provider
+    assert seen <= SUPPORTED_ATS
+    # the four original ATS must all be represented
+    assert seen >= {"greenhouse", "lever", "ashby", "workday"}
