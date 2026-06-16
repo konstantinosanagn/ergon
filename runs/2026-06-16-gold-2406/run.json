@@ -1,0 +1,15 @@
+{
+  "run_id": "wf_d2892da5-5bb",
+  "task_id": "w82ks3uu7",
+  "label": "gold-2406",
+  "status": "running",
+  "launched": "2026-06-16",
+  "labeler_model": "sonnet",
+  "votes_per_posting": 3,
+  "judge_agents": 234,
+  "corpus_size": 2406,
+  "total_judgments": 7218,
+  "assignments_dir": "data/judge2/ (3-cover; gitignored, large)",
+  "transcript_dir": "/Users/kanagn/.claude/projects/-Users-kanagn-Desktop-job-researcher/8fbeb529-d079-4960-b266-02ea76c13fb3/subagents/workflows/wf_d2892da5-5bb",
+  "note": "finalize with: .venv/bin/python scripts/finalize_run.py --run-id wf_d2892da5-5bb --label gold-2406 --model sonnet"
+}
