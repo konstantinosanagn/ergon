@@ -63,14 +63,33 @@ def search(
     keywords: str = typer.Argument(..., help="search keywords"),
     location: str | None = typer.Option(None, "--location", "-l"),
     remote: bool = typer.Option(False, "--remote"),
+    level: str | None = typer.Option(None, "--level", help="intern/senior/staff/manager/..."),
+    sector: str | None = typer.Option(None, "--sector", help='e.g. "Fintech", "AI/ML"'),
+    country: str | None = typer.Option(None, "--country"),
+    salary_min: float | None = typer.Option(None, "--salary-min"),
+    salary_max: float | None = typer.Option(None, "--salary-max"),
     limit: int | None = typer.Option(None, "--limit", "-n"),
     as_json: bool = typer.Option(False, "--json", help="emit JSON instead of a table"),
 ) -> None:
     """Search jobs across all sources."""
+    from .models import JobLevel
     from .sync import search as run_search
 
     try:
-        result = run_search(keywords, location=location, remote=remote or None, limit=limit)
+        result = run_search(
+            keywords,
+            location=location,
+            remote=remote or None,
+            level=JobLevel(level) if level else None,
+            sector=sector,
+            country=country,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            limit=limit,
+        )
+    except ValueError as exc:
+        err_console.print(f"[red]invalid level:[/] {exc}")
+        raise typer.Exit(code=1) from exc
     except (JobSpineError, NotImplementedError, ImportError) as exc:
         err_console.print(f"[red]search failed:[/] {exc}")
         raise typer.Exit(code=1) from exc
@@ -82,10 +101,14 @@ def search(
         table.add_column("company", style="cyan")
         table.add_column("title")
         table.add_column("location")
+        table.add_column("level", style="magenta")
+        table.add_column("sector", style="green")
         table.add_column("source", style="dim")
         for job in result.jobs:
             loc = job.locations[0].as_text() if job.locations else ""
-            table.add_row(job.company, job.title, loc, job.source)
+            table.add_row(
+                job.company, job.title, loc, job.level.value, job.sector or "", job.source
+            )
         console.print(table)
         for h in result.failed_sources:
             err_console.print(f"[yellow]source {h.source} failed:[/] {h.error}")

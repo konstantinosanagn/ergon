@@ -8,8 +8,8 @@ import respx
 
 from jobspine import JobPosting, Location, RemoteType, Salary, SearchQuery
 from jobspine.dedup import deduplicate
+from jobspine.engine import run_search
 from jobspine.http import AsyncFetcher
-from jobspine.search import run_search
 
 pytestmark = pytest.mark.anyio
 

@@ -12,6 +12,7 @@ from .exceptions import (
 )
 from .models import (
     EmploymentType,
+    JobLevel,
     JobPosting,
     Location,
     Provenance,
@@ -45,6 +46,7 @@ __all__ = [
     "SourceHealth",
     "RemoteType",
     "EmploymentType",
+    "JobLevel",
     # exceptions
     "JobSpineError",
     "ProviderError",

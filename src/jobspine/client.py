@@ -41,7 +41,7 @@ class AsyncJobSpine:
         self._fetcher = fetcher or AsyncFetcher(concurrency=concurrency, cache=cache)
 
     async def search(self, query: SearchQuery) -> SearchResult:
-        from .search import run_search  # lazy: implemented in Phase 2
+        from .engine import run_search  # lazy import avoids the search-name collision
 
         result: SearchResult = await run_search(query, self._fetcher)
         return result

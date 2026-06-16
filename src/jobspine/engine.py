@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 import anyio
 
 from .dedup import deduplicate
+from .enrich import enrich_in_place, load_sector_index
 from .http import AsyncFetcher
 from .models import JobPosting, SearchQuery, SearchResult, SourceHealth
 from .observability import build_health
@@ -95,6 +96,7 @@ async def run_search(query: SearchQuery, fetcher: AsyncFetcher) -> SearchResult:
     load_plugins()
 
     targets = _plan_targets(query)
+    sectors = load_sector_index()
     results: dict[int, list[JobPosting]] = {}
     stats: dict[str, _ProviderStat] = {}
 
@@ -117,6 +119,11 @@ async def run_search(query: SearchQuery, fetcher: AsyncFetcher) -> SearchResult:
                     continue
                 if target.domain and not job.company_domain:
                     job.company_domain = target.domain
+                enrich_in_place(job)
+                if job.sector is None:
+                    job.sector = sectors.get(
+                        key=target.label, domain=target.domain or job.company_domain
+                    )
                 if query.matches(job):
                     jobs.append(job)
             results[index] = jobs

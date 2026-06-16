@@ -20,7 +20,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .client import AsyncJobSpine
-from .models import JobPosting, SearchQuery
+from .models import JobLevel, JobPosting, SearchQuery
 from .providers.base import iter_providers, load_builtins, load_plugins
 from .registry.resolver import resolve
 from .registry.store import SeedRegistry
@@ -42,6 +42,8 @@ def _job_to_dict(job: JobPosting) -> dict[str, Any]:
         "title": job.title,
         "location": job.locations[0].as_text() if job.locations else None,
         "remote": job.remote.value,
+        "level": job.level.value,
+        "sector": job.sector,
         "employment_type": job.employment_type.value,
         "salary": salary,
         "apply_url": job.apply_url,
@@ -58,6 +60,12 @@ async def search_jobs(
     remote: bool | None = None,
     companies: list[str] | None = None,
     sources: list[str] | None = None,
+    level: str | None = None,
+    sector: str | None = None,
+    country: str | None = None,
+    city: str | None = None,
+    salary_min: float | None = None,
+    salary_max: float | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
     """Search jobs across company ATS feeds and aggregators, returning canonical postings.
@@ -69,6 +77,11 @@ async def search_jobs(
         companies: company domains or careers URLs to target (e.g. ["stripe.com"]). Omit to
             search the entire bundled registry (broader but slower).
         sources: restrict to provider names: greenhouse, lever, ashby, workday, remoteok.
+        level: seniority filter — intern/entry/junior/mid/senior/staff/principal/lead/manager/
+            director/executive (inferred from title).
+        sector: industry filter, e.g. "Fintech", "AI/ML", "Healthcare" (NAICS-informed).
+        country / city: structured location filter.
+        salary_min / salary_max: compensation range (jobs without salary data are kept).
         limit: max postings to return after dedup (default 20).
 
     Returns a dict with `count`, `jobs` (compact), and per-source `health`.
@@ -79,6 +92,12 @@ async def search_jobs(
         remote=remote,
         companies=companies,
         sources=sources,
+        level=JobLevel(level) if level else None,
+        sector=sector,
+        country=country,
+        city=city,
+        salary_min=salary_min,
+        salary_max=salary_max,
         limit=limit,
     )
     async with AsyncJobSpine() as js:

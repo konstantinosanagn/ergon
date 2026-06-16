@@ -7,8 +7,8 @@ import pytest
 import respx
 
 from jobspine import SearchQuery
+from jobspine.engine import run_search
 from jobspine.http import AsyncFetcher
-from jobspine.search import run_search
 
 pytestmark = pytest.mark.anyio
 
@@ -106,6 +106,22 @@ async def test_keyword_filter_applies_clientside() -> None:
         async with AsyncFetcher(per_host_rate=100) as fetcher:
             result2 = await run_search(query2, fetcher)
         assert len(result2.jobs) == 0
+
+
+def test_public_search_stays_callable_after_use() -> None:
+    """Regression: the `search` function export must not be shadowed by the engine module
+    after the first call (they used to collide as `jobspine.search`)."""
+    import jobspine
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(url__startswith="https://boards-api.greenhouse.io/v1/boards/stripe/jobs").mock(
+            return_value=httpx.Response(200, json=_greenhouse_payload())
+        )
+        jobspine.search(companies=["stripe.com"], limit=1)
+        assert callable(jobspine.search)
+        # Second call would raise "'module' object is not callable" under the old bug.
+        result = jobspine.search(companies=["stripe.com"], limit=1)
+    assert len(result) >= 0
 
 
 async def test_sources_filter_restricts_providers() -> None:

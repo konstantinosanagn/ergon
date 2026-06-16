@@ -18,6 +18,7 @@ __all__ = [
     "RemoteType",
     "EmploymentType",
     "SalaryInterval",
+    "JobLevel",
     "Location",
     "Salary",
     "RawJob",
@@ -53,6 +54,23 @@ class SalaryInterval(str, Enum):
     WEEK = "week"
     DAY = "day"
     HOUR = "hour"
+
+
+class JobLevel(str, Enum):
+    """Seniority ladder, inferred from the job title during enrichment."""
+
+    INTERN = "intern"
+    ENTRY = "entry"
+    JUNIOR = "junior"
+    MID = "mid"
+    SENIOR = "senior"
+    STAFF = "staff"
+    PRINCIPAL = "principal"
+    LEAD = "lead"
+    MANAGER = "manager"
+    DIRECTOR = "director"
+    EXECUTIVE = "executive"
+    UNKNOWN = "unknown"
 
 
 def _utcnow() -> datetime:
@@ -120,7 +138,9 @@ class JobPosting(BaseModel):
     locations: list[Location] = Field(default_factory=list)
     remote: RemoteType = RemoteType.UNKNOWN
     employment_type: EmploymentType = EmploymentType.UNKNOWN
+    level: JobLevel = JobLevel.UNKNOWN
     department: str | None = None
+    sector: str | None = None
     salary: Salary | None = None
     apply_url: str | None = None
     posted_at: datetime | None = None
@@ -174,6 +194,49 @@ class SearchQuery(BaseModel):
     limit: int | None = None
     companies: list[str] | None = None
     sources: list[str] | None = None
+    # advanced filters (applied after enrichment)
+    level: JobLevel | None = None
+    country: str | None = None
+    city: str | None = None
+    sector: str | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    salary_currency: str | None = None
+    include_unknown_salary: bool = True
+
+    def _salary_ok(self, job: JobPosting) -> bool:
+        if self.salary_min is None and self.salary_max is None:
+            return True
+        s = job.salary
+        if s is None or (s.min_amount is None and s.max_amount is None):
+            return self.include_unknown_salary
+        if (
+            self.salary_currency
+            and s.currency
+            and s.currency.upper() != self.salary_currency.upper()
+        ):
+            return False
+        job_lo = s.min_amount if s.min_amount is not None else s.max_amount
+        job_hi = s.max_amount if s.max_amount is not None else s.min_amount
+        if job_lo is None or job_hi is None:  # unreachable given the guard above
+            return self.include_unknown_salary
+        want_lo = self.salary_min if self.salary_min is not None else float("-inf")
+        want_hi = self.salary_max if self.salary_max is not None else float("inf")
+        # keep when the job's range overlaps the requested range
+        return not (job_hi < want_lo or job_lo > want_hi)
+
+    def _geo_ok(self, job: JobPosting) -> bool:
+        for field, value in (("country", self.country), ("city", self.city)):
+            if not value:
+                continue
+            needle = value.lower()
+            hit = any(
+                (getattr(loc, field) or "").lower() == needle or needle in (loc.raw or "").lower()
+                for loc in job.locations
+            )
+            if not hit:
+                return False
+        return True
 
     def matches(self, job: JobPosting) -> bool:
         if self.keywords:
@@ -203,6 +266,18 @@ class SearchQuery(BaseModel):
             self.employment_type,
             EmploymentType.UNKNOWN,
         ):
+            return False
+
+        if self.level is not None and job.level != self.level:
+            return False
+
+        if self.sector and self.sector.lower() not in (job.sector or "").lower():
+            return False
+
+        if not self._geo_ok(job):
+            return False
+
+        if not self._salary_ok(job):
             return False
 
         return not (
