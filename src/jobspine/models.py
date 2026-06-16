@@ -142,6 +142,8 @@ class JobPosting(BaseModel):
     department: str | None = None
     sector: str | None = None
     salary: Salary | None = None
+    years_experience_min: int | None = None
+    years_experience_max: int | None = None
     apply_url: str | None = None
     posted_at: datetime | None = None
     updated_at: datetime | None = None
@@ -203,6 +205,24 @@ class SearchQuery(BaseModel):
     salary_max: float | None = None
     salary_currency: str | None = None
     include_unknown_salary: bool = True
+    min_years: int | None = None
+    max_years: int | None = None
+    include_unknown_years: bool = True
+
+    def _years_ok(self, job: JobPosting) -> bool:
+        if self.min_years is None and self.max_years is None:
+            return True
+        jmin = job.years_experience_min
+        jmax = job.years_experience_max
+        if jmin is None and jmax is None:
+            return self.include_unknown_years
+        job_lo = jmin if jmin is not None else jmax
+        job_hi = jmax if jmax is not None else jmin
+        if job_lo is None or job_hi is None:  # unreachable given the guard
+            return self.include_unknown_years
+        want_lo = self.min_years if self.min_years is not None else float("-inf")
+        want_hi = self.max_years if self.max_years is not None else float("inf")
+        return not (job_hi < want_lo or job_lo > want_hi)
 
     def _salary_ok(self, job: JobPosting) -> bool:
         if self.salary_min is None and self.salary_max is None:
@@ -278,6 +298,9 @@ class SearchQuery(BaseModel):
             return False
 
         if not self._salary_ok(job):
+            return False
+
+        if not self._years_ok(job):
             return False
 
         return not (

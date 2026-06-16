@@ -81,8 +81,7 @@ def test_enrich_in_place_sets_level_and_geo() -> None:
 
 
 def _job(**kw: object) -> JobPosting:
-    base = dict(source="s", source_job_id="1", company="Acme", title="Engineer")
-    base.update(kw)
+    base = {"source": "s", "source_job_id": "1", "company": "Acme", "title": "Engineer", **kw}
     return JobPosting.create(**base)  # type: ignore[arg-type]
 
 
