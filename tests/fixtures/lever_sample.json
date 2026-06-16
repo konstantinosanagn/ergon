@@ -1,0 +1,48 @@
+[
+  {
+    "categories": {
+      "commitment": "Permanent",
+      "department": "Finance",
+      "location": "New York, NY",
+      "team": "Accounting",
+      "allLocations": [
+        "New York, NY"
+      ]
+    },
+    "createdAt": 1778529611285,
+    "descriptionPlain": "You\u2019ll join Spotify\u2019s Finance team, supporting our Procure-to-Pay (PTP) operations across North America. This team plays a key role in ensuring our financial processes run smoothly at scale\u2014partnering",
+    "description": "<div>You\u2019ll join Spotify\u2019s Finance team, supporting our Procure-to-Pay (PTP) operations across North America. This team plays a key role in ensuring our financial processes run smoothly at scale\u2014partn",
+    "id": "88499546-e9f7-4403-87a5-240050bd7c5b",
+    "text": "Accounts Payable Analyst",
+    "country": "US",
+    "workplaceType": "hybrid",
+    "hostedUrl": "https://jobs.lever.co/spotify/88499546-e9f7-4403-87a5-240050bd7c5b",
+    "applyUrl": "https://jobs.lever.co/spotify/88499546-e9f7-4403-87a5-240050bd7c5b/apply",
+    "salaryRange": {
+      "min": 66189,
+      "max": 94556,
+      "currency": "USD",
+      "interval": "per-year-salary"
+    }
+  },
+  {
+    "categories": {
+      "commitment": "Permanent",
+      "department": "Advertising",
+      "location": "London",
+      "team": "Advertising Sales - Emerging and Scaled Sales",
+      "allLocations": [
+        "London"
+      ]
+    },
+    "createdAt": 1781109739214,
+    "descriptionPlain": "",
+    "description": "<div>\n<p>Support what you love. For us and millions of users across the globe, that\u2019s Spotify. Join the Advertiser Solutions team and you\u2019ll build the relationships that help grow our business in exis",
+    "id": "66acb66f-de37-4d95-a353-874db92838ef",
+    "text": "Advertiser Solutions Vendor Lead - Programmatic and Direct Support",
+    "country": "GB",
+    "workplaceType": "hybrid",
+    "hostedUrl": "https://jobs.lever.co/spotify/66acb66f-de37-4d95-a353-874db92838ef",
+    "applyUrl": "https://jobs.lever.co/spotify/66acb66f-de37-4d95-a353-874db92838ef/apply"
+  }
+]

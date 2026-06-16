@@ -1,0 +1,37 @@
+{
+  "total": 2000,
+  "jobPostings": [
+    {
+      "title": "Developer Relations Manager, Healthcare Robotics",
+      "externalPath": "/job/US-CA-Santa-Clara/Developer-Relations-Manager--Physical-AI-Healthcare_JR2018805",
+      "locationsText": "US, CA, Santa Clara",
+      "postedOn": "Posted Today",
+      "bulletFields": [
+        "JR2018805"
+      ]
+    },
+    {
+      "title": "Engagement Tech Lead, Developer Relations - AI Agents",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Developer-Relations-Manager---AgentOps_JR2014797",
+      "locationsText": "US, CA, Santa Clara",
+      "postedOn": "Posted Today",
+      "bulletFields": [
+        "JR2014797"
+      ]
+    }
+  ],
+  "facets": [
+    {
+      "facetParameter": "jobFamilyGroup",
+      "descriptor": "Job Category",
+      "values": [
+        {
+          "descriptor": "Engineering",
+          "id": "0c40f6bd1d8f10ae43ffaefd46dc7e78",
+          "count": 1771
+        }
+      ]
+    }
+  ],
+  "userAuthenticated": false
+}

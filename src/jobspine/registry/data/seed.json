@@ -1,14 +1,81 @@
 {
   "_meta": {
-    "description": "Curated company -> ATS -> token seed registry. Populated in Phase 1 (agent D).",
-    "version": 0,
+    "description": "Curated company -> ATS -> token seed registry for offline auto-discovery.",
+    "version": 1,
+    "updated": "2026-06-15",
     "schema": {
       "company_key": {
-        "ats": "greenhouse|lever|ashby|workday|...",
-        "token": "board token / slug / tenant",
+        "ats": "greenhouse|lever|ashby|workday",
+        "token": "board token / slug / tenant (workday: '{tenant}|wd{N}|{site}')",
         "domain": "company.com"
       }
     }
   },
-  "companies": {}
+  "companies": {
+    "stripe": {
+      "ats": "greenhouse",
+      "token": "stripe",
+      "domain": "stripe.com"
+    },
+    "airbnb": {
+      "ats": "greenhouse",
+      "token": "airbnb",
+      "domain": "airbnb.com"
+    },
+    "coinbase": {
+      "ats": "greenhouse",
+      "token": "coinbase",
+      "domain": "coinbase.com"
+    },
+    "databricks": {
+      "ats": "greenhouse",
+      "token": "databricks",
+      "domain": "databricks.com"
+    },
+    "discord": {
+      "ats": "greenhouse",
+      "token": "discord",
+      "domain": "discord.com"
+    },
+    "brex": {
+      "ats": "greenhouse",
+      "token": "brex",
+      "domain": "brex.com"
+    },
+    "spotify": {
+      "ats": "lever",
+      "token": "spotify",
+      "domain": "spotify.com"
+    },
+    "palantir": {
+      "ats": "lever",
+      "token": "palantir",
+      "domain": "palantir.com"
+    },
+    "ramp": {
+      "ats": "ashby",
+      "token": "ramp",
+      "domain": "ramp.com"
+    },
+    "openai": {
+      "ats": "ashby",
+      "token": "openai",
+      "domain": "openai.com"
+    },
+    "linear": {
+      "ats": "ashby",
+      "token": "linear",
+      "domain": "linear.app"
+    },
+    "nvidia": {
+      "ats": "workday",
+      "token": "nvidia|wd5|NVIDIAExternalCareerSite",
+      "domain": "nvidia.com"
+    },
+    "salesforce": {
+      "ats": "workday",
+      "token": "salesforce|wd12|External_Career_Site",
+      "domain": "salesforce.com"
+    }
+  }
 }
