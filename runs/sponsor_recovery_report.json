@@ -150,12 +150,10 @@
   },
   {
     "sponsor": "tata consultancy services",
-    "filings": 9675,
     "ats": "workable",
     "token": "csrn",
-    "board_company": "",
     "accept": false,
-    "reason": "dead (no jobs)"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "tata consultancy services",
@@ -229,30 +227,24 @@
   },
   {
     "sponsor": "infosys",
-    "filings": 8203,
     "ats": "workable",
     "token": "infosys-consulting-europe",
-    "board_company": "Infosys Consulting - Europe",
     "accept": false,
-    "reason": "board company 'Infosys Consulting - Europe' not sponsor 'infosys'"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "infosys",
-    "filings": 8203,
     "ats": "workable",
     "token": "infosysbrasil",
-    "board_company": "",
     "accept": false,
-    "reason": "dead (no jobs)"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "infosys",
-    "filings": 8203,
     "ats": "workable",
     "token": "infosys-singaporeand-australia",
-    "board_company": "Infosys Singapore & Australia",
     "accept": false,
-    "reason": "board company 'Infosys Singapore & Australia' not sponsor 'infosys'"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "jpmorgan chase and",
@@ -328,12 +320,10 @@
   },
   {
     "sponsor": "tesla",
-    "filings": 4063,
     "ats": "workable",
     "token": "tesla-labs",
-    "board_company": "Tesla Laboratories. Inc.",
     "accept": false,
-    "reason": "board company 'Tesla Laboratories. Inc.' not sponsor 'tesla'"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "tesla",
@@ -461,6 +451,13 @@
     "sponsor": "ltimindtree",
     "ats": "lever",
     "token": "4sightsupplychain",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "ltimindtree",
+    "ats": "workday",
+    "token": "uniphore|wd503|Vice-President--GSI-Partnerships_JR100984",
     "accept": false,
     "reason": "fetch error HTTPStatusError"
   },
@@ -599,12 +596,10 @@
   },
   {
     "sponsor": "goldman sachs and",
-    "filings": 1865,
     "ats": "workable",
     "token": "evisit",
-    "board_company": "eVisit",
     "accept": false,
-    "reason": "board company 'eVisit' not sponsor 'goldmansachsand'"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "goldman sachs and",
@@ -678,12 +673,10 @@
   },
   {
     "sponsor": "tech mahindra americas",
-    "filings": 1614,
     "ats": "workable",
     "token": "veda-software-solutions",
-    "board_company": "",
     "accept": false,
-    "reason": "dead (no jobs)"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "tech mahindra americas",
@@ -705,12 +698,10 @@
   },
   {
     "sponsor": "tech mahindra americas",
-    "filings": 1614,
     "ats": "workable",
     "token": "target-group",
-    "board_company": "Target",
     "accept": false,
-    "reason": "board company 'Target' not sponsor 'techmahindraamericas'"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "bytedance",
@@ -750,12 +741,10 @@
   },
   {
     "sponsor": "ford motor",
-    "filings": 1332,
     "ats": "workable",
     "token": "avis-ford",
-    "board_company": "",
     "accept": false,
-    "reason": "dead (no jobs)"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "ford motor",
@@ -1210,6 +1199,33 @@
     "sponsor": "l and t technology services",
     "filings": 974,
     "ats": "workday",
+    "token": "jll|wd1|jllcareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'jll' != sponsor 'landttechnologyservices'"
+  },
+  {
+    "sponsor": "l and t technology services",
+    "filings": 974,
+    "ats": "workday",
+    "token": "3m|wd1|Search",
+    "board_company": "",
+    "accept": false,
+    "reason": "token '3m' too short"
+  },
+  {
+    "sponsor": "l and t technology services",
+    "filings": 974,
+    "ats": "smartrecruiters",
+    "token": "wise",
+    "board_company": "Wise",
+    "accept": false,
+    "reason": "board company 'Wise' not sponsor 'landttechnologyservices'"
+  },
+  {
+    "sponsor": "l and t technology services",
+    "filings": 974,
+    "ats": "workday",
     "token": "intel|wd1|External",
     "board_company": "",
     "accept": false,
@@ -1223,31 +1239,6 @@
     "board_company": "",
     "accept": false,
     "reason": "token 'rb' too short"
-  },
-  {
-    "sponsor": "l and t technology services",
-    "ats": "workday",
-    "token": "carrier|wd5|Embedded-Firmware-Engineer_30199194",
-    "accept": false,
-    "reason": "fetch error HTTPStatusError"
-  },
-  {
-    "sponsor": "l and t technology services",
-    "filings": 974,
-    "ats": "workday",
-    "token": "tamus|wd1|TAMU_External",
-    "board_company": "",
-    "accept": false,
-    "reason": "tenant 'tamus' != sponsor 'landttechnologyservices'"
-  },
-  {
-    "sponsor": "l and t technology services",
-    "filings": 974,
-    "ats": "workday",
-    "token": "evonik|wd3|external_careers",
-    "board_company": "",
-    "accept": false,
-    "reason": "tenant 'evonik' != sponsor 'landttechnologyservices'"
   },
   {
     "sponsor": "bank of america n a",
@@ -1278,15 +1269,6 @@
   },
   {
     "sponsor": "goldman sachs services",
-    "filings": 972,
-    "ats": "lever",
-    "token": "gettyimages",
-    "board_company": "Gettyimages",
-    "accept": false,
-    "reason": "board company 'Gettyimages' not sponsor 'goldmansachsservices'"
-  },
-  {
-    "sponsor": "goldman sachs services",
     "ats": "workday",
     "token": "rfcuny|wd108|Lead-Faculty_JR2353",
     "accept": false,
@@ -1304,11 +1286,20 @@
   {
     "sponsor": "goldman sachs services",
     "filings": 972,
-    "ats": "workable",
-    "token": "evisit",
-    "board_company": "eVisit",
+    "ats": "workday",
+    "token": "db|wd3|DBWebsite",
+    "board_company": "",
     "accept": false,
-    "reason": "board company 'eVisit' not sponsor 'goldmansachsservices'"
+    "reason": "token 'db' too short"
+  },
+  {
+    "sponsor": "goldman sachs services",
+    "filings": 972,
+    "ats": "lever",
+    "token": "gettyimages",
+    "board_company": "Gettyimages",
+    "accept": false,
+    "reason": "board company 'Gettyimages' not sponsor 'goldmansachsservices'"
   },
   {
     "sponsor": "wells fargo bank n a",
@@ -1464,12 +1455,10 @@
   },
   {
     "sponsor": "virtusa",
-    "filings": 903,
     "ats": "workable",
     "token": "virtusa-polaris",
-    "board_company": "",
     "accept": false,
-    "reason": "dead (no jobs)"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "virtusa",
@@ -1733,12 +1722,10 @@
   },
   {
     "sponsor": "lucid usa",
-    "filings": 757,
     "ats": "workable",
     "token": "lucidnz",
-    "board_company": "",
     "accept": false,
-    "reason": "dead (no jobs)"
+    "reason": "fetch error RateLimitError"
   },
   {
     "sponsor": "lucid usa",
@@ -1764,5 +1751,791 @@
     "token": "chrobinson|wd5|phoenix-az-united-states-of-america",
     "accept": false,
     "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "t mobile usa",
+    "filings": 754,
+    "ats": "workday",
+    "token": "sec|wd3|Samsung_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'sec' != sponsor 'tmobileusa'"
+  },
+  {
+    "sponsor": "t mobile usa",
+    "filings": 754,
+    "ats": "workday",
+    "token": "2020companies|wd1|External_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant '2020companies' != sponsor 'tmobileusa'"
+  },
+  {
+    "sponsor": "t mobile usa",
+    "filings": 754,
+    "ats": "workday",
+    "token": "warnerbros|wd5|global",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'warnerbros' != sponsor 'tmobileusa'"
+  },
+  {
+    "sponsor": "fis management services",
+    "filings": 749,
+    "ats": "workday",
+    "token": "fis|wd5|SearchJobs",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'fis' exact-matches sponsor"
+  },
+  {
+    "sponsor": "hewlett packard enterprise",
+    "filings": 739,
+    "ats": "smartrecruiters",
+    "token": "HewlettPackardEnterprise3",
+    "board_company": "Hewlett Packard Enterprise",
+    "accept": true,
+    "reason": "board company 'Hewlett Packard Enterprise' matches sponsor"
+  },
+  {
+    "sponsor": "hewlett packard enterprise",
+    "filings": 739,
+    "ats": "workday",
+    "token": "hpe|wd5|jobsathpe",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'hpe' != sponsor 'hewlettpackardenterprise'"
+  },
+  {
+    "sponsor": "hewlett packard enterprise",
+    "filings": 739,
+    "ats": "workday",
+    "token": "hpe|wd5|ACJobSite",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'hpe' != sponsor 'hewlettpackardenterprise'"
+  },
+  {
+    "sponsor": "hewlett packard enterprise",
+    "filings": 739,
+    "ats": "workday",
+    "token": "hpe|wd5|Jobsathpe",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'hpe' != sponsor 'hewlettpackardenterprise'"
+  },
+  {
+    "sponsor": "johns hopkins university",
+    "filings": 705,
+    "ats": "workday",
+    "token": "ghc|wd1|grad_sba_careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ghc' != sponsor 'johnshopkinsuniversity'"
+  },
+  {
+    "sponsor": "johns hopkins university",
+    "filings": 705,
+    "ats": "workday",
+    "token": "ghc|wd1|kaplan_teach",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ghc' != sponsor 'johnshopkinsuniversity'"
+  },
+  {
+    "sponsor": "johns hopkins university",
+    "filings": 705,
+    "ats": "workday",
+    "token": "vwr|wd1|avantorJobs",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'vwr' != sponsor 'johnshopkinsuniversity'"
+  },
+  {
+    "sponsor": "johns hopkins university",
+    "ats": "workable",
+    "token": "stsci",
+    "accept": false,
+    "reason": "fetch error RateLimitError"
+  },
+  {
+    "sponsor": "trustees of university of pennsylvania",
+    "filings": 704,
+    "ats": "workday",
+    "token": "upenn|wd1|careers-at-penn",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'upenn' != sponsor 'trusteesofuniversityofpennsylvania'"
+  },
+  {
+    "sponsor": "trustees of university of pennsylvania",
+    "filings": 704,
+    "ats": "workday",
+    "token": "upenn|wd1|PSOM",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'upenn' != sponsor 'trusteesofuniversityofpennsylvania'"
+  },
+  {
+    "sponsor": "doordash",
+    "filings": 695,
+    "ats": "greenhouse",
+    "token": "doordashusa",
+    "board_company": "DoorDash USA",
+    "accept": true,
+    "reason": "board company 'DoorDash USA' matches sponsor"
+  },
+  {
+    "sponsor": "eli lilly and",
+    "ats": "workday",
+    "token": "lilly|wd5|lly",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "eli lilly and",
+    "ats": "workday",
+    "token": "lilly|wd5|LLY",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "eli lilly and",
+    "ats": "workday",
+    "token": "lilly|wd5|CMP",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "visa u s a",
+    "filings": 685,
+    "ats": "smartrecruiters",
+    "token": "visa",
+    "board_company": "Visa",
+    "accept": true,
+    "reason": "board company 'Visa' matches sponsor"
+  },
+  {
+    "sponsor": "visa u s a",
+    "filings": 685,
+    "ats": "smartrecruiters",
+    "token": "Visa",
+    "board_company": "Visa",
+    "accept": true,
+    "reason": "board company 'Visa' matches sponsor"
+  },
+  {
+    "sponsor": "visa u s a",
+    "ats": "workday",
+    "token": "visa|wd5|Product-Manager_REF082108W",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "visa u s a",
+    "filings": 685,
+    "ats": "workday",
+    "token": "visa|wd5|Visa_Early_Careers",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'visa' exact-matches sponsor"
+  },
+  {
+    "sponsor": "bloomberg l p",
+    "filings": 682,
+    "ats": "workday",
+    "token": "bloomberg|wd1|Bloombergindustrygroup_External_Career_Site",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'bloomberg' exact-matches sponsor"
+  },
+  {
+    "sponsor": "bloomberg l p",
+    "ats": "workable",
+    "token": "fuku",
+    "accept": false,
+    "reason": "fetch error RateLimitError"
+  },
+  {
+    "sponsor": "washington university",
+    "filings": 673,
+    "ats": "workday",
+    "token": "wsu|wd5|WSU_Jobs",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'wsu' != sponsor 'washingtonuniversity'"
+  },
+  {
+    "sponsor": "washington university",
+    "filings": 673,
+    "ats": "workday",
+    "token": "uw|wd5|UWHires",
+    "board_company": "",
+    "accept": false,
+    "reason": "token 'uw' too short"
+  },
+  {
+    "sponsor": "washington university",
+    "filings": 673,
+    "ats": "workday",
+    "token": "ghc|wd1|GRAD_SBA_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ghc' != sponsor 'washingtonuniversity'"
+  },
+  {
+    "sponsor": "washington university",
+    "filings": 673,
+    "ats": "workday",
+    "token": "wustl|wd1|External",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'wustl' != sponsor 'washingtonuniversity'"
+  },
+  {
+    "sponsor": "persistent systems",
+    "filings": 662,
+    "ats": "workday",
+    "token": "cloudimperiumgames|wd503|CIG_Global_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'cloudimperiumgames' != sponsor 'persistentsystems'"
+  },
+  {
+    "sponsor": "persistent systems",
+    "filings": 662,
+    "ats": "workday",
+    "token": "redriver|wd5|redrivercareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'redriver' != sponsor 'persistentsystems'"
+  },
+  {
+    "sponsor": "persistent systems",
+    "filings": 662,
+    "ats": "workday",
+    "token": "generac|wd5|External",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'generac' != sponsor 'persistentsystems'"
+  },
+  {
+    "sponsor": "persistent systems",
+    "filings": 662,
+    "ats": "workday",
+    "token": "pru|wd5|PGIM_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'pru' != sponsor 'persistentsystems'"
+  },
+  {
+    "sponsor": "adp technology services",
+    "filings": 640,
+    "ats": "workday",
+    "token": "tapestry|wd108|Tapestry_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'tapestry' != sponsor 'adptechnologyservices'"
+  },
+  {
+    "sponsor": "adp technology services",
+    "filings": 640,
+    "ats": "workday",
+    "token": "geico|wd1|External",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'geico' != sponsor 'adptechnologyservices'"
+  },
+  {
+    "sponsor": "adp technology services",
+    "filings": 640,
+    "ats": "workday",
+    "token": "modivcare|wd1|careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'modivcare' != sponsor 'adptechnologyservices'"
+  },
+  {
+    "sponsor": "adp technology services",
+    "ats": "workday",
+    "token": "r1rcm|wd1|Senior-Payroll-Administrator_R260000003236",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "adp technology services",
+    "filings": 640,
+    "ats": "workday",
+    "token": "livenation|wd503|LNExternalSite",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'livenation' != sponsor 'adptechnologyservices'"
+  },
+  {
+    "sponsor": "cigna evernorth services",
+    "filings": 630,
+    "ats": "workday",
+    "token": "cigna|wd5|cignacareers",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'cigna' exact-matches sponsor"
+  },
+  {
+    "sponsor": "government employee insurance geico",
+    "filings": 628,
+    "ats": "workday",
+    "token": "geico|wd1|External",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'geico' != sponsor 'governmentemployeeinsurancegeico'"
+  },
+  {
+    "sponsor": "emory university",
+    "filings": 616,
+    "ats": "workday",
+    "token": "choa|wd12|externalcareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'choa' != sponsor 'emoryuniversity'"
+  },
+  {
+    "sponsor": "emory university",
+    "filings": 616,
+    "ats": "workday",
+    "token": "sluhn|wd1|student_opportunities",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'sluhn' != sponsor 'emoryuniversity'"
+  },
+  {
+    "sponsor": "emory university",
+    "filings": 616,
+    "ats": "workday",
+    "token": "ghc|wd1|Kaplan_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ghc' != sponsor 'emoryuniversity'"
+  },
+  {
+    "sponsor": "capital one national association",
+    "filings": 597,
+    "ats": "workday",
+    "token": "capitalone|wd12|Capital_One",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'capitalone' cleanly prefixes sponsor 'capitalonenationalassociation'"
+  },
+  {
+    "sponsor": "innova solutions",
+    "filings": 589,
+    "ats": "smartrecruiters",
+    "token": "InnovaSolutions2",
+    "board_company": "innova solutions",
+    "accept": true,
+    "reason": "board company 'innova solutions' matches sponsor"
+  },
+  {
+    "sponsor": "innova solutions",
+    "filings": 589,
+    "ats": "workday",
+    "token": "probegroup|wd3|Innovior_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'probegroup' != sponsor 'innovasolutions'"
+  },
+  {
+    "sponsor": "innova solutions",
+    "filings": 589,
+    "ats": "workday",
+    "token": "ich|wd1|Innovacare",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ich' != sponsor 'innovasolutions'"
+  },
+  {
+    "sponsor": "innova solutions",
+    "filings": 589,
+    "ats": "workday",
+    "token": "lplfinancial|wd1|BD_Partners",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'lplfinancial' != sponsor 'innovasolutions'"
+  },
+  {
+    "sponsor": "innova solutions",
+    "filings": 589,
+    "ats": "workday",
+    "token": "ag|wd3|Airbus",
+    "board_company": "",
+    "accept": false,
+    "reason": "token 'ag' too short"
+  },
+  {
+    "sponsor": "columbia university",
+    "filings": 587,
+    "ats": "smartrecruiters",
+    "token": "ColumbiaUniversity1",
+    "board_company": "Columbia University",
+    "accept": true,
+    "reason": "board company 'Columbia University' matches sponsor"
+  },
+  {
+    "sponsor": "columbia university",
+    "filings": 587,
+    "ats": "workday",
+    "token": "barnard|wd1|Staff",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'barnard' != sponsor 'columbiauniversity'"
+  },
+  {
+    "sponsor": "columbia university",
+    "filings": 587,
+    "ats": "workday",
+    "token": "intervarsity|wd1|intervarsitychristianfellowshipcareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'intervarsity' != sponsor 'columbiauniversity'"
+  },
+  {
+    "sponsor": "mathworks",
+    "filings": 581,
+    "ats": "workday",
+    "token": "astemo|wd102|Global_Career_Site",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'astemo' != sponsor 'mathworks'"
+  },
+  {
+    "sponsor": "mathworks",
+    "filings": 581,
+    "ats": "workday",
+    "token": "leonardocompany|wd3|LeonardoCareerSite",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'leonardocompany' != sponsor 'mathworks'"
+  },
+  {
+    "sponsor": "mathworks",
+    "filings": 581,
+    "ats": "workday",
+    "token": "fluenceenergy|wd12|fluenceenergy-jobs",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'fluenceenergy' != sponsor 'mathworks'"
+  },
+  {
+    "sponsor": "mathworks",
+    "filings": 581,
+    "ats": "workday",
+    "token": "faithtechnologies|wd1|FTI",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'faithtechnologies' != sponsor 'mathworks'"
+  },
+  {
+    "sponsor": "mathworks",
+    "filings": 581,
+    "ats": "workday",
+    "token": "generalmotors|wd5|Careers_GM",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'generalmotors' != sponsor 'mathworks'"
+  },
+  {
+    "sponsor": "ubs business solutions us",
+    "filings": 574,
+    "ats": "workday",
+    "token": "accenture|wd103|AccentureCareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'accenture' != sponsor 'ubsbusinesssolutionsus'"
+  },
+  {
+    "sponsor": "ubs business solutions us",
+    "filings": 574,
+    "ats": "workday",
+    "token": "archgroup|wd1|careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'archgroup' != sponsor 'ubsbusinesssolutionsus'"
+  },
+  {
+    "sponsor": "ubs business solutions us",
+    "filings": 574,
+    "ats": "workday",
+    "token": "ubc|wd10|ubcstaffjobs",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ubc' != sponsor 'ubsbusinesssolutionsus'"
+  },
+  {
+    "sponsor": "ubs business solutions us",
+    "filings": 574,
+    "ats": "workday",
+    "token": "nb|wd1|NBCareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "token 'nb' too short"
+  },
+  {
+    "sponsor": "university of florida",
+    "filings": 572,
+    "ats": "workday",
+    "token": "unf|wd5|unfjobs",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'unf' != sponsor 'universityofflorida'"
+  },
+  {
+    "sponsor": "university of florida",
+    "filings": 572,
+    "ats": "workday",
+    "token": "fgcu|wd5|eaglejobs",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'fgcu' != sponsor 'universityofflorida'"
+  },
+  {
+    "sponsor": "university of florida",
+    "filings": 572,
+    "ats": "workday",
+    "token": "umiami|wd1|UMCareerStaff",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'umiami' != sponsor 'universityofflorida'"
+  },
+  {
+    "sponsor": "fiserv solutions",
+    "filings": 565,
+    "ats": "workday",
+    "token": "fiserv|wd5|EXT",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'fiserv' exact-matches sponsor"
+  },
+  {
+    "sponsor": "sap america",
+    "filings": 560,
+    "ats": "workday",
+    "token": "ssrmining|wd108|SSR_Mining_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ssrmining' != sponsor 'sapamerica'"
+  },
+  {
+    "sponsor": "sap america",
+    "filings": 560,
+    "ats": "workday",
+    "token": "illumina|wd1|illumina-careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'illumina' != sponsor 'sapamerica'"
+  },
+  {
+    "sponsor": "sap america",
+    "filings": 560,
+    "ats": "workday",
+    "token": "aquaamerica|wd5|Essential_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'aquaamerica' != sponsor 'sapamerica'"
+  },
+  {
+    "sponsor": "sap america",
+    "filings": 560,
+    "ats": "workday",
+    "token": "zekelman|wd12|Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'zekelman' != sponsor 'sapamerica'"
+  },
+  {
+    "sponsor": "sap america",
+    "ats": "workday",
+    "token": "jj|wd5|IT-Manager-SAP-Finance_R-082353-1",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "caremark",
+    "filings": 554,
+    "ats": "workday",
+    "token": "cvshealth|wd1|CVS_Health_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'cvshealth' != sponsor 'caremark'"
+  },
+  {
+    "sponsor": "lowe s companies",
+    "filings": 552,
+    "ats": "workday",
+    "token": "generac|wd5|External",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'generac' != sponsor 'lowescompanies'"
+  },
+  {
+    "sponsor": "lowe s companies",
+    "filings": 552,
+    "ats": "workday",
+    "token": "lowes|wd5|LWS_External_CS",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'lowes' cleanly prefixes sponsor 'lowescompanies'"
+  },
+  {
+    "sponsor": "lowe s companies",
+    "filings": 552,
+    "ats": "workday",
+    "token": "husqvarnagroup|wd3|External_Career_Site",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'husqvarnagroup' != sponsor 'lowescompanies'"
+  },
+  {
+    "sponsor": "lowe s companies",
+    "filings": 552,
+    "ats": "workday",
+    "token": "cabinetworksgroup|wd1|cabinetworksgroupcareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'cabinetworksgroup' != sponsor 'lowescompanies'"
+  },
+  {
+    "sponsor": "lowe s companies",
+    "ats": "workday",
+    "token": "ufpi|wd503|Lowes-Account-Manager---Edge_R20161",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "st jude children s research hospital",
+    "filings": 541,
+    "ats": "workday",
+    "token": "stjude|wd1|nonpubliccareersite",
+    "board_company": "",
+    "accept": true,
+    "reason": "tenant 'stjude' cleanly prefixes sponsor 'stjudechildrensresearchhospital'"
+  },
+  {
+    "sponsor": "st jude children s research hospital",
+    "ats": "workday",
+    "token": "stjude|wd1|Staff-Physician-Hospitalist_JR5698-1",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "st jude children s research hospital",
+    "filings": 541,
+    "ats": "workday",
+    "token": "alsacstjude|wd1|careersalsacstjude",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'alsacstjude' != sponsor 'stjudechildrensresearchhospital'"
+  },
+  {
+    "sponsor": "st jude children s research hospital",
+    "ats": "workday",
+    "token": "stjude|wd1|Patient-Care-Associate_JR7096",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "st jude children s research hospital",
+    "ats": "workday",
+    "token": "stjude|wd1|login",
+    "accept": false,
+    "reason": "fetch error HTTPStatusError"
+  },
+  {
+    "sponsor": "goldman sachs bank usa",
+    "filings": 539,
+    "ats": "workday",
+    "token": "ghr|wd1|Lateral-US",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'ghr' != sponsor 'goldmansachsbankusa'"
+  },
+  {
+    "sponsor": "goldman sachs bank usa",
+    "filings": 539,
+    "ats": "lever",
+    "token": "anchorage",
+    "board_company": "Anchorage",
+    "accept": false,
+    "reason": "board company 'Anchorage' not sponsor 'goldmansachsbankusa'"
+  },
+  {
+    "sponsor": "goldman sachs bank usa",
+    "filings": 539,
+    "ats": "workday",
+    "token": "db|wd3|DBWebsite",
+    "board_company": "",
+    "accept": false,
+    "reason": "token 'db' too short"
+  },
+  {
+    "sponsor": "goldman sachs bank usa",
+    "filings": 539,
+    "ats": "ashby",
+    "token": "casca",
+    "board_company": "casca",
+    "accept": false,
+    "reason": "board company 'casca' not sponsor 'goldmansachsbankusa'"
+  },
+  {
+    "sponsor": "v soft consulting group",
+    "filings": 537,
+    "ats": "workday",
+    "token": "db|wd3|DBWebsite",
+    "board_company": "",
+    "accept": false,
+    "reason": "token 'db' too short"
+  },
+  {
+    "sponsor": "v soft consulting group",
+    "filings": 537,
+    "ats": "smartrecruiters",
+    "token": "Experian",
+    "board_company": "Experian",
+    "accept": false,
+    "reason": "board company 'Experian' not sponsor 'vsoftconsultinggroup'"
+  },
+  {
+    "sponsor": "v soft consulting group",
+    "filings": 537,
+    "ats": "workday",
+    "token": "shell|wd3|ShellCareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'shell' != sponsor 'vsoftconsultinggroup'"
+  },
+  {
+    "sponsor": "v soft consulting group",
+    "filings": 537,
+    "ats": "workday",
+    "token": "barrywehmiller|wd1|bwcareers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'barrywehmiller' != sponsor 'vsoftconsultinggroup'"
+  },
+  {
+    "sponsor": "v soft consulting group",
+    "filings": 537,
+    "ats": "workday",
+    "token": "iress|wd3|IRESS_EXTERNAL",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'iress' != sponsor 'vsoftconsultinggroup'"
+  },
+  {
+    "sponsor": "cvs shared services resources",
+    "filings": 536,
+    "ats": "workday",
+    "token": "cvshealth|wd1|CVS_Health_Careers",
+    "board_company": "",
+    "accept": false,
+    "reason": "tenant 'cvshealth' != sponsor 'cvssharedservicesresources'"
   }
 ]

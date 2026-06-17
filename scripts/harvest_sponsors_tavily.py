@@ -242,8 +242,12 @@ async def main() -> None:
     print(f"unique new sponsor boards: {len(accepted)}  by_ats={by_ats}")
     out_path.write_text(json.dumps(accepted, indent=2, ensure_ascii=False) + "\n")
     REPORT.write_text(json.dumps(log, indent=2, ensure_ascii=False) + "\n")
-    print(f"wrote {out_path.relative_to(ROOT)}  (+ decision log {REPORT.relative_to(ROOT)})")
-    print(f"\nnext: .venv/bin/python scripts/build_registry.py {out_path.relative_to(ROOT)} --dry-run")
+    try:
+        shown = out_path.relative_to(ROOT)
+    except ValueError:
+        shown = out_path
+    print(f"wrote {shown}  (+ decision log {REPORT.relative_to(ROOT)})")
+    print(f"\nnext: .venv/bin/python scripts/build_registry.py {shown} --dry-run")
 
 
 if __name__ == "__main__":
