@@ -89,13 +89,28 @@ async def main() -> None:
 
     query = SearchQuery()
     results: dict[int, tuple[str, bool, str | None]] = {}
+    total = len(keys)
+    prog = {"done": 0, "live": 0}
+
+    def tick(is_live: bool) -> None:
+        prog["done"] += 1
+        prog["live"] += int(is_live)
+        d = prog["done"]
+        step = max(100, total // 50)  # ~2% increments
+        if d % step == 0 or d == total:
+            pct = 100 * d // total if total else 100
+            print(f"  verifying {d}/{total} ({pct}%)  live={prog['live']} "
+                  f"dead={d - prog['live']}", flush=True)
+
     async with (
         AsyncFetcher(concurrency=16, per_host_rate=8, timeout=30.0) as fetcher,
         anyio.create_task_group() as tg,
     ):
         for idx, key in enumerate(keys):
             async def run(idx: int = idx, key: str = key) -> None:
-                results[idx] = await verify_one(key, companies[key], fetcher, query)
+                res = await verify_one(key, companies[key], fetcher, query)
+                results[idx] = res
+                tick(res[1])
 
             tg.start_soon(run)
 

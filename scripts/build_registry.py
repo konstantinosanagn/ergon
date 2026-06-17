@@ -95,6 +95,21 @@ async def main() -> None:
     query = SearchQuery()
     results: dict[int, tuple[dict, int, str, str | None]] = {}
 
+    total = len(candidates)
+    prog = {"done": 0, "live": 0}
+
+    def tick(is_live: bool) -> None:
+        prog["done"] += 1
+        prog["live"] += int(is_live)
+        d = prog["done"]
+        # Stream progress every ~2% (min 100) so long sweeps aren't a silent black box.
+        step = max(100, total // 50)
+        if d % step == 0 or d == total:
+            pct = 100 * d // total if total else 100
+            print(f"  verifying {d}/{total} ({pct}%)  live={prog['live']} "
+                  f"dead={d - prog['live']}", flush=True)
+
+    print(f"verifying {total} candidates ...", flush=True)
     async with (
         AsyncFetcher(concurrency=12, per_host_rate=8, timeout=30.0) as fetcher,
         anyio.create_task_group() as tg,
@@ -102,7 +117,9 @@ async def main() -> None:
         for i, entry in enumerate(candidates):
 
             async def run(i: int = i, entry: dict = entry) -> None:
-                results[i] = await verify_one(entry, fetcher, query)
+                res = await verify_one(entry, fetcher, query)
+                results[i] = res
+                tick(res[1] > 0)
 
             tg.start_soon(run)
 
