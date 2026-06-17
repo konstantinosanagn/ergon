@@ -7,7 +7,8 @@ resolve a company's ATS, and list sources — as native tools.
 
 | Tool | What it does |
 |---|---|
-| `search_jobs` | Unified, deduped, relevance-ranked search across all 22 sources. Accepts `keywords`, `location`, `remote`, `companies`, `sources`, `level`, `sector`, `country`, `city`, `salary_min/max`, `semantic`, `limit`. Returns compact jobs each with a relevance `score`, plus per-source `health`. |
+| `search_jobs` | Unified, deduped, relevance-ranked search across all 22 sources. Accepts `keywords`, `location`, `remote`, `companies`, `sources`, `level`, `sector`, `country`, `city`, `salary_min/max`, `visa_sponsor`, `semantic`, `limit`. Returns compact jobs each with a relevance `score` and `visa_sponsor`/`visa_last_filed`, plus per-source `health`. |
+| `list_h1b_sponsors` | Browse employers known to sponsor H-1B visas (US DoL LCA data), ranked by filing volume, with the most-recent filing date. Covers far more employers than we can fetch jobs for. |
 | `resolve_company` | Detect which ATS a domain/careers URL uses and its board token. |
 | `list_sources` | List registered providers + the bundled registry size. |
 
