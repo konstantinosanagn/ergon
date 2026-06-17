@@ -49,6 +49,7 @@ _BUILTIN_MODULES = (
     "join",
     "rippling",
     "pinpoint",
+    "eightfold",
     "remotive",
     "arbeitnow",
     "jobicy",

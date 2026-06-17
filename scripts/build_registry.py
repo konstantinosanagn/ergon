@@ -63,6 +63,7 @@ ATS_PRIORITY = {
     "join": 11,
     "rippling": 12,
     "pinpoint": 13,
+    "eightfold": 14,
 }
 
 

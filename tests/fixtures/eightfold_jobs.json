@@ -1,0 +1,84 @@
+{
+  "domain": "fcx.com",
+  "count": 256,
+  "positions": [
+    {
+      "id": 42478672,
+      "name": "Manager Engineering - Electrical",
+      "posting_name": "Manager Engineering - Electrical",
+      "location": "New Orleans, LA USA 70112",
+      "locations": [
+        "New Orleans, LA USA 70112"
+      ],
+      "hot": 0,
+      "department": "Engineering Services",
+      "business_unit": "005",
+      "t_update": 1781711697,
+      "t_create": 1781660892,
+      "ats_job_id": "144860",
+      "display_job_id": "144860",
+      "type": "ATS",
+      "id_locale": "144860-en_US",
+      "job_description": "",
+      "locale": "en_US",
+      "stars": 0.0,
+      "medallionProgram": null,
+      "location_flexibility": null,
+      "work_location_option": "onsite",
+      "canonicalPositionUrl": "https://talent.fmjobs.com/careers/job/42478672",
+      "isPrivate": false
+    },
+    {
+      "id": 42477103,
+      "name": "Chief Biodiversity and Wildlife",
+      "posting_name": "Chief Biodiversity and Wildlife",
+      "location": "Phoenix, AZ USA 85040",
+      "locations": [
+        "Phoenix, AZ USA 85040"
+      ],
+      "hot": 0,
+      "department": "Environmental",
+      "business_unit": "001",
+      "t_update": 1781711702,
+      "t_create": 1781649802,
+      "ats_job_id": "144857",
+      "display_job_id": "144857",
+      "type": "ATS",
+      "id_locale": "144857-en_US",
+      "job_description": "",
+      "locale": "en_US",
+      "stars": 0.0,
+      "medallionProgram": null,
+      "location_flexibility": null,
+      "work_location_option": "onsite",
+      "canonicalPositionUrl": "https://talent.fmjobs.com/careers/job/42477103",
+      "isPrivate": false
+    },
+    {
+      "id": 42475929,
+      "name": "CLP Operator Trainee - Hydromet",
+      "posting_name": "CLP Operator Trainee - Hydromet",
+      "location": "Bagdad, AZ USA 86321",
+      "locations": [
+        "Bagdad, AZ USA 86321"
+      ],
+      "hot": 0,
+      "department": "Operations",
+      "business_unit": "006",
+      "t_update": 1781652928,
+      "t_create": 1781642911,
+      "ats_job_id": "144856",
+      "display_job_id": "144856",
+      "type": "ATS",
+      "id_locale": "144856-en_US",
+      "job_description": "",
+      "locale": "en_US",
+      "stars": 0.0,
+      "medallionProgram": null,
+      "location_flexibility": null,
+      "work_location_option": "onsite",
+      "canonicalPositionUrl": "https://talent.fmjobs.com/careers/job/42475929",
+      "isPrivate": false
+    }
+  ]
+}

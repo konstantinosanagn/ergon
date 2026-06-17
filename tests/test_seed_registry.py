@@ -21,6 +21,7 @@ SUPPORTED_ATS = {
     "join",
     "rippling",
     "pinpoint",
+    "eightfold",
 }
 
 

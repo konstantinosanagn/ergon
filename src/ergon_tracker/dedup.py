@@ -42,6 +42,7 @@ _ATS_PROVIDERS = frozenset(
         "join",
         "rippling",
         "pinpoint",
+        "eightfold",
     }
 )
 _AGGREGATORS = frozenset(
