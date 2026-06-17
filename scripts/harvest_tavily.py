@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -65,6 +66,22 @@ DEFAULT_QUERIES = [
     # Other / seniority
     "research scientist", "business analyst", "project manager", "customer support",
     "community manager", "internship", "new grad", "director", "vice president",
+]
+
+# Orthogonal query dimensions (engaged with --variants): a role term returns the most
+# *prominent* boards for that role; pairing it with an industry or location surfaces a different
+# slice of companies, which is how we widen past the 20-results-per-query cap.
+INDUSTRY_QUERIES = [
+    "fintech", "healthcare", "biotech", "pharma", "gaming", "crypto", "web3", "cybersecurity",
+    "robotics", "climate tech", "clean energy", "ecommerce", "logistics", "supply chain",
+    "edtech", "legal tech", "real estate tech", "insurtech", "manufacturing", "media",
+    "advertising", "consulting", "hardware", "semiconductor", "aerospace", "defense",
+    "automotive", "agriculture", "hospitality", "telecom", "ai startup", "developer tools",
+]
+LOCATION_QUERIES = [
+    "San Francisco", "New York", "London", "Berlin", "Austin", "Seattle", "Boston", "Toronto",
+    "Amsterdam", "Paris", "remote", "Bangalore", "Singapore", "Tel Aviv", "Dublin", "Munich",
+    "Stockholm", "Sydney", "Chicago", "Los Angeles", "Denver", "Miami", "Vancouver", "Tokyo",
 ]
 
 
@@ -131,6 +148,7 @@ def harvest(atses: list[str], queries: list[str], key: str, recent: bool) -> lis
             tokens: list[str] = []
             for q in queries:
                 tokens.extend(tokens_from_results(source, search(client, source, q, key, recent)))
+                time.sleep(0.2)  # light pacing to stay under Tavily's secondary rate limit
             uniq = list(dict.fromkeys(tokens))  # de-dupe, keep order
             new = [t for t in uniq if t not in seed_keys and t not in global_seen]
             for t in new:
@@ -145,6 +163,7 @@ def main() -> None:
     out_path = DEFAULT_OUT
     max_queries: int | None = None
     recent = False
+    variants = False
     atses: list[str] = []
     i = 0
     while i < len(args):
@@ -155,6 +174,8 @@ def main() -> None:
             max_queries = int(args[i + 1]); i += 2
         elif a == "--recent":
             recent = True; i += 1
+        elif a == "--variants":
+            variants = True; i += 1
         elif a.startswith("--"):
             print(f"unknown flag: {a}"); return
         else:
@@ -170,7 +191,11 @@ def main() -> None:
     if unknown:
         print(f"unknown ATS(es): {unknown}; known: {sorted(CONFIGS)}")
         return
-    queries = DEFAULT_QUERIES[:max_queries] if max_queries else DEFAULT_QUERIES
+    queries = list(DEFAULT_QUERIES)
+    if variants:
+        queries += INDUSTRY_QUERIES + LOCATION_QUERIES
+    if max_queries:
+        queries = queries[:max_queries]
 
     print(f"harvesting Tavily search for {atses} x {len(queries)} queries (recent={recent})")
     candidates = harvest(atses, queries, key, recent)
