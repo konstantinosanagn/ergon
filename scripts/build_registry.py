@@ -64,6 +64,7 @@ ATS_PRIORITY = {
     "rippling": 12,
     "pinpoint": 13,
     "eightfold": 14,
+    "successfactors": 15,
 }
 
 

@@ -43,6 +43,7 @@ _ATS_PROVIDERS = frozenset(
         "rippling",
         "pinpoint",
         "eightfold",
+        "successfactors",
     }
 )
 _AGGREGATORS = frozenset(

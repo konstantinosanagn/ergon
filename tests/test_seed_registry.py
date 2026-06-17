@@ -22,6 +22,7 @@ SUPPORTED_ATS = {
     "rippling",
     "pinpoint",
     "eightfold",
+    "successfactors",
 }
 
 

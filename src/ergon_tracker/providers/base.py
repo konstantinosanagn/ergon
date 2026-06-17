@@ -50,6 +50,7 @@ _BUILTIN_MODULES = (
     "rippling",
     "pinpoint",
     "eightfold",
+    "successfactors",
     "remotive",
     "arbeitnow",
     "jobicy",
