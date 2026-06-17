@@ -99,7 +99,11 @@ async def main() -> None:
     cand_path = Path(paths[0]) if paths else CANDIDATES
     load_builtins()
     candidates: list[dict] = json.loads(cand_path.read_text())
-    query = SearchQuery()
+    # Verification only needs to confirm a board returns >=1 job — fetching every page (up to a
+    # provider's MAX_PAGES) just to gate-check is pure waste and lets one huge board stall the
+    # whole sweep. Cap to the first page; the dedup tiebreaker only needs a live signal, not an
+    # exact count.
+    query = SearchQuery(limit=5)
     results: dict[int, tuple[dict, int, str, str | None]] = {}
 
     total = len(candidates)
