@@ -66,6 +66,7 @@ ATS_PRIORITY = {
     "eightfold": 14,
     "successfactors": 15,
     "oracle": 16,
+    "taleo": 17,
 }
 
 

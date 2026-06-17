@@ -45,6 +45,7 @@ _ATS_PROVIDERS = frozenset(
         "eightfold",
         "successfactors",
         "oracle",
+        "taleo",
     }
 )
 _AGGREGATORS = frozenset(

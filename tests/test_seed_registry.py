@@ -24,6 +24,7 @@ SUPPORTED_ATS = {
     "eightfold",
     "successfactors",
     "oracle",
+    "taleo",
 }
 
 

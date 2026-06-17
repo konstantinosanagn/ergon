@@ -1,0 +1,265 @@
+"""Oracle Taleo (Enterprise faceted-search) job-board provider.
+
+Taleo is Oracle's *legacy* recruiting product (distinct from the modern Oracle Recruiting
+Cloud handled by ``oracle.py``). Modern faceted-search Taleo career sites expose a PUBLIC,
+unauthenticated JSON search endpoint that the SPA itself consumes — no token, no cookie, no
+CSRF, no browser. The one non-obvious requirement is a ``tz`` request header (without it the
+endpoint returns HTTP 500)::
+
+    POST https://{host}/careersection/rest/jobboard/searchjobs?lang=en&portal={portal}
+        Content-Type: application/json
+        tz: GMT-05:00
+        Body: {"fieldData":{"fields":{},"valid":true}, ... ,"pageNo":1}
+
+``{host}`` is ``{tenant}.taleo.net``. Two ids are needed: ``{cs}`` (career-section CODE — numeric
+like ``2`` or alpha like ``ex``) and ``{portal}`` (a 9-digit number embedded in the career-section
+HTML). When the token carries only the host we discover both: GET the ``jobsearch.ftl`` page for a
+handful of candidate ``cs`` codes until a large HTML page returns, then regex ``portal=(\\d+)``.
+
+The response carries a tenant-configured, **self-describing** ``column`` array per requisition:
+``linkedColumn`` indexes the title, ``locationsColumns`` indexes a JSON-encoded location string
+(e.g. ``'["TX-Richmond"]'``), and the remaining (last) column is a free-text posting date. Stable
+ids are ``jobId`` (→ ``jobdetail.ftl?job=``) and ``contestNo`` (the public req number).
+
+Token shape: ``"{host}|{cs}|{portal}"`` (e.g. ``"drhorton.taleo.net|2|101430233"``). A bare
+``"{host}"`` token — or one with a missing ``cs``/``portal`` — triggers discovery at fetch time.
+
+The full description lives on the ``jobdetail.ftl`` HTML page (no JSON-LD), which we don't fetch in
+bulk, so ``description_text``/``description_html`` are ``None`` here. Never invented.
+"""
+
+from __future__ import annotations
+
+import json as _json
+import re
+from datetime import datetime, timezone
+from math import ceil
+from typing import TYPE_CHECKING, Any
+
+from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
+from .base import BaseProvider, register
+
+if TYPE_CHECKING:
+    from ..http import AsyncFetcher
+
+__all__ = ["TaleoProvider"]
+
+_SEARCH = "https://{host}/careersection/rest/jobboard/searchjobs?lang=en&portal={portal}"
+_PAGE = "https://{host}/careersection/{cs}/jobsearch.ftl?lang=en"
+_DETAIL = "https://{host}/careersection/{cs}/jobdetail.ftl?job={jid}&lang=en"
+
+# Recognise a Taleo career URL/host. Tenant slug, sometimes prefixed ``tas-``.
+_HOST_RE = re.compile(r"([a-z0-9-]+\.taleo\.net)", re.IGNORECASE)
+# Career-section code from a ``/careersection/{cs}/`` path segment.
+_CS_RE = re.compile(r"/careersection/([a-z0-9_]+)/", re.IGNORECASE)
+# 9-digit portal id embedded in the career-section HTML.
+_PORTAL_RE = re.compile(r"portal=(\d+)")
+
+# Candidate career-section codes probed during discovery (cheapest-first).
+_CS_CANDIDATES = ("1", "2", "5", "ex", "external", "cb_external")
+# A real career section returns a large HTML page; stubs are ~1.5KB.
+_CS_MIN_LEN = 10_000
+
+# The mandatory tz header (any valid GMT offset works; without it the API 500s).
+_HEADERS = {"tz": "GMT-05:00", "Content-Type": "application/json"}
+
+# Empty-selection search body = "all jobs". ``fieldData`` MUST be an object, not an array.
+_BODY: dict[str, Any] = {
+    "fieldData": {"fields": {}, "valid": True},
+    "filterSelectionParam": {"searchFilterSelections": []},
+    "sortingSelection": {"sortBySelectionParam": "3", "ascendingSortingOrder": "false"},
+    "advancedSearchFiltersSelectionParam": {"searchFilterSelections": []},
+    "pageNo": 1,
+}
+
+# Free-text posting-date formats seen in the trailing column (best-effort).
+_DATE_FORMATS = ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d")
+
+
+def _parse_date(value: Any) -> datetime | None:
+    """Parse a free-text posting date (e.g. ``"Jun 17, 2026"``) to UTC, else None."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _decode_location(value: Any) -> str | None:
+    """Decode a location cell — a JSON-encoded string array like ``'["TX-Richmond"]'``.
+
+    Falls back to the raw string if it isn't valid JSON; None when empty/unusable.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        decoded = _json.loads(value)
+    except ValueError:
+        return value.strip() or None
+    if isinstance(decoded, list):
+        parts = [str(p).strip() for p in decoded if str(p).strip()]
+        return ", ".join(parts) or None
+    text = str(decoded).strip()
+    return text or None
+
+
+@register("taleo")
+class TaleoProvider(BaseProvider):
+    name = "taleo"
+
+    PAGE_SIZE = 25  # server default; pagingData.pageSize is authoritative when present
+    MAX_PAGES = 200  # bound full pulls (= ~5000 jobs)
+
+    @classmethod
+    def matches(cls, url_or_host: str) -> str | None:
+        """Recognise a Taleo career URL/host -> ``"{host}|{cs}|"`` (portal discovered at fetch).
+
+        ``cs`` is taken from the URL path when present; the portal is never in the URL, so it's
+        left empty and resolved during ``fetch``. Non-Taleo URLs -> None.
+        """
+        host_m = _HOST_RE.search(url_or_host)
+        if not host_m:
+            return None
+        host = host_m.group(1).lower()
+        cs_m = _CS_RE.search(url_or_host)
+        cs = cs_m.group(1) if cs_m else ""
+        return f"{host}|{cs}|"
+
+    @staticmethod
+    def _split(token: str) -> tuple[str, str, str]:
+        """Parse ``"{host}|{cs}|{portal}"`` (cs/portal optional) -> (host, cs, portal)."""
+        parts = (token or "").split("|")
+        host = parts[0].strip().lower() if parts else ""
+        cs = parts[1].strip() if len(parts) > 1 else ""
+        portal = parts[2].strip() if len(parts) > 2 else ""
+        return host, cs, portal
+
+    async def _discover(self, host: str, cs: str, fetcher: AsyncFetcher) -> tuple[str, str] | None:
+        """Resolve ``(cs, portal)`` for a host by probing career-section pages.
+
+        Honours a caller-supplied ``cs`` (tried first), otherwise probes ``_CS_CANDIDATES``.
+        Returns the first ``(cs, portal)`` whose page is large and yields a ``portal=`` match.
+        """
+        candidates = [cs] if cs else []
+        candidates += [c for c in _CS_CANDIDATES if c != cs]
+        for candidate in candidates:
+            try:
+                html = await fetcher.get_text(_PAGE.format(host=host, cs=candidate))
+            except Exception:
+                continue
+            if len(html) < _CS_MIN_LEN:
+                continue
+            m = _PORTAL_RE.search(html)
+            if m:
+                return candidate, m.group(1)
+        return None
+
+    async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
+        host, cs, portal = self._split(token)
+        if not host:
+            return []
+        if not (cs and portal):
+            resolved = await self._discover(host, cs, fetcher)
+            if resolved is None:
+                return []
+            cs, portal = resolved
+
+        url = _SEARCH.format(host=host, portal=portal)
+        limit = query.limit
+        raws: list[RawJob] = []
+        total: int | None = None
+        page_size = self.PAGE_SIZE
+
+        for page in range(1, self.MAX_PAGES + 1):
+            body = dict(_BODY, pageNo=page)
+            try:
+                data = await fetcher.post_json(url, json=body, headers=_HEADERS)
+            except Exception:
+                break  # network/HTTP failure — stop gracefully
+
+            if not isinstance(data, dict) or data.get("careerSectionUnAvailable") is True:
+                break
+            batch = data.get("requisitionList")
+            if not isinstance(batch, list) or not batch:
+                break
+
+            paging = data.get("pagingData")
+            if isinstance(paging, dict):
+                if isinstance(paging.get("pageSize"), int) and paging["pageSize"] > 0:
+                    page_size = paging["pageSize"]
+                if total is None and isinstance(paging.get("totalCount"), int):
+                    total = paging["totalCount"]
+
+            for req in batch:
+                if isinstance(req, dict):
+                    raws.append(self._to_raw(req, host, cs))
+                    if limit is not None and len(raws) >= limit:
+                        return raws[:limit]
+
+            last_page = ceil(total / page_size) if total else page
+            if page >= last_page:
+                break
+        return raws
+
+    def _to_raw(self, req: dict[str, Any], host: str, cs: str) -> RawJob:
+        jid = str(req.get("jobId") or "")
+        url = _DETAIL.format(host=host, cs=cs, jid=jid) if jid else None
+        return RawJob(
+            source=self.name,
+            source_job_id=jid or str(req.get("contestNo") or ""),
+            company=host.split(".")[0],
+            token=f"{host}|{cs}|",
+            url=url,
+            payload=req,
+        )
+
+    def normalize(self, raw: RawJob) -> JobPosting:
+        p = raw.payload
+        column = p.get("column")
+        if not isinstance(column, list):
+            column = []
+
+        def _cell(idx: Any) -> Any:
+            return column[idx] if isinstance(idx, int) and 0 <= idx < len(column) else None
+
+        title = str(_cell(p.get("linkedColumn")) or "").strip()
+
+        loc_idxs = p.get("locationsColumns")
+        loc_label: str | None = None
+        if isinstance(loc_idxs, list) and loc_idxs:
+            loc_label = _decode_location(_cell(loc_idxs[0]))
+
+        locations: list[Location] = []
+        if loc_label:
+            locations.append(Location(raw=loc_label, is_remote="remote" in loc_label.lower()))
+
+        remote = RemoteType.UNKNOWN
+        if any(loc.is_remote for loc in locations):
+            remote = RemoteType.REMOTE
+
+        # Posting date = the trailing (last) free-text column.
+        posted_at = _parse_date(column[-1]) if column else None
+
+        return JobPosting.create(
+            source=self.name,
+            source_job_id=raw.source_job_id,
+            company=raw.company,
+            title=title,
+            fetched_at=raw.fetched_at,
+            apply_url=raw.url,
+            locations=locations,
+            remote=remote,
+            department=None,
+            salary=None,
+            posted_at=posted_at,
+            updated_at=None,
+            description_html=None,  # full text only on jobdetail.ftl (not fetched in bulk)
+            description_text=None,
+            raw=raw.payload,
+        )
