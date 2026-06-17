@@ -53,6 +53,7 @@ def _job_to_dict(job: JobPosting) -> dict[str, Any]:
         "found_on": [p.source for p in job.provenance],
         "score": round(job.score, 4) if job.score is not None else None,
         "visa_sponsor": job.visa_sponsor,
+        "visa_last_filed": job.visa_last_filed,
     }
 
 

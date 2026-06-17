@@ -155,6 +155,9 @@ class JobPosting(BaseModel):
     # H-1B visa-sponsor signal: True if the employer appears in DoL LCA certified-filing data.
     # None = unknown (absence is NOT proof a company doesn't sponsor — the data is historical).
     visa_sponsor: bool | None = None
+    # Most-recent certified H-1B filing date (ISO 'YYYY-MM-DD') for this employer, when known —
+    # lets a user judge whether a sponsor has gone quiet since then.
+    visa_last_filed: str | None = None
 
     @classmethod
     def create(

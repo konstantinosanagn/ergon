@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter
 from collections.abc import Iterable, Iterator
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +33,8 @@ OUT = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "h1b_sponsors.json"
 # Header names vary slightly across fiscal years; match case-insensitively against these.
 _EMPLOYER_COLS = ("EMPLOYER_NAME", "EMPLOYER_BUSINESS_DBA", "EMPLOYER_LEGAL_BUSINESS_NAME")
 _STATUS_COLS = ("CASE_STATUS",)
+# Filing-recency columns, in preference order (so users can spot sponsors that have gone quiet).
+_DATE_COLS = ("DECISION_DATE", "RECEIVED_DATE", "CASE_SUBMITTED")
 # Only certified LCAs count as demonstrated sponsorship ("Certified", "Certified - Withdrawn").
 _CERTIFIED_PREFIX = "certified"
 
@@ -45,9 +47,26 @@ def _pick(row: dict[str, object], candidates: tuple[str, ...]) -> object | None:
     return None
 
 
-def sponsors_from_rows(rows: Iterable[dict[str, object]]) -> dict[str, int]:
-    """Pure: rows (header->value dicts) -> {normalized_employer_name: certified_filing_count}."""
-    counts: Counter[str] = Counter()
+def _to_iso(value: object) -> str | None:
+    """Normalize an LCA date cell (datetime/date or string) to an ISO 'YYYY-MM-DD' string."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str) and value.strip():
+        s = value.strip()
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(s, fmt).date().isoformat()
+            except ValueError:
+                continue
+        return s[:10] if s[:4].isdigit() else None  # already ISO-ish
+    return None
+
+
+def sponsors_from_rows(rows: Iterable[dict[str, object]]) -> dict[str, dict[str, object]]:
+    """Pure: rows -> {normalized_employer: {"n": certified_count, "last": latest_filing_iso}}."""
+    out: dict[str, dict[str, object]] = {}
     for row in rows:
         status = _pick(row, _STATUS_COLS)
         if not isinstance(status, str) or not status.strip().lower().startswith(_CERTIFIED_PREFIX):
@@ -56,9 +75,14 @@ def sponsors_from_rows(rows: Iterable[dict[str, object]]) -> dict[str, int]:
         if not isinstance(employer, str) or not employer.strip():
             continue
         key = normalize_company(employer)
-        if key:
-            counts[key] += 1
-    return dict(counts)
+        if not key:
+            continue
+        rec = out.setdefault(key, {"n": 0, "last": None})
+        rec["n"] = int(rec["n"]) + 1  # type: ignore[arg-type]
+        iso = _to_iso(_pick(row, _DATE_COLS))
+        if iso and (rec["last"] is None or iso > str(rec["last"])):
+            rec["last"] = iso  # keep the most recent filing date (ISO sorts lexicographically)
+    return out
 
 
 def read_xlsx_rows(path: Path) -> Iterator[dict[str, object]]:
@@ -82,7 +106,7 @@ def main(paths: list[str]) -> None:
         print("\nUsage: python scripts/build_h1b_sponsors.py <LCA_Disclosure_*.xlsx> [more ...]")
         raise SystemExit(2)
 
-    total: Counter[str] = Counter()
+    total: dict[str, dict[str, object]] = {}
     for p in paths:
         path = Path(p).expanduser()
         if not path.exists():
@@ -90,14 +114,18 @@ def main(paths: list[str]) -> None:
             continue
         print(f"  reading {path.name} ...")
         part = sponsors_from_rows(read_xlsx_rows(path))
-        for name, n in part.items():
-            total[name] += n
+        for name, rec in part.items():
+            agg = total.setdefault(name, {"n": 0, "last": None})
+            agg["n"] = int(agg["n"]) + int(rec["n"])  # type: ignore[arg-type]
+            last = rec["last"]
+            if last and (agg["last"] is None or str(last) > str(agg["last"])):
+                agg["last"] = last
         print(f"    +{len(part):,} employers (running total {len(total):,})")
 
     payload = {
         "source": "US DoL OFLC LCA disclosure data (certified filings)",
         "count": len(total),
-        # name -> certified filing count; membership is what extract/visa.py needs.
+        # name -> {"n": certified filing count, "last": most-recent filing date (ISO)}.
         "sponsors": dict(sorted(total.items())),
     }
     OUT.write_text(json.dumps(payload), encoding="utf-8")

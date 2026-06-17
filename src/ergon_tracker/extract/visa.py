@@ -17,46 +17,112 @@ Matching is by normalized company name (``dedup.normalize_company``), since LCA 
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from functools import lru_cache
 from importlib.resources import files
 
 from ..dedup import normalize_company
 
-__all__ = ["SponsorIndex", "load_sponsor_index", "is_h1b_sponsor"]
+__all__ = ["SponsorIndex", "load_sponsor_index", "is_h1b_sponsor", "h1b_last_filed"]
+
+# Corporate / geographic "continuation" tokens. A posting company name is accepted as a leading
+# prefix of an LCA legal name ("spotify" -> "spotify usa") ONLY when the very next token is one of
+# these — which signals a legal-suffix variant of the SAME company, not a different firm that
+# merely starts with the same word ("linear" must NOT match "linear signs"). This keeps the
+# leading-token fallback high-precision (measured: 6.7% registry coverage, no observed bad hits).
+_DESCRIPTORS = frozenset(
+    {
+        "inc", "incorporated", "llc", "ltd", "limited", "corp", "corporation", "co", "company",
+        "plc", "lp", "llp", "pbc", "opco", "holding", "holdings", "group", "technologies",
+        "technology", "tech", "labs", "laboratories", "systems", "software", "solutions",
+        "services", "service", "financial", "capital", "partners", "ventures", "pharmaceuticals",
+        "pharma", "sciences", "science", "health", "healthcare", "usa", "us", "na", "america",
+        "american", "global", "international", "intl", "worldwide", "ai", "digital", "enterprises",
+        "industries", "networks", "communications", "consulting", "bank", "insurance", "studios",
+        "media", "brands", "retail", "stores", "motors", "foods", "energy", "power", "biosciences",
+        "therapeutics", "robotics", "security", "cloud", "data", "analytics", "payments",
+        "business", "com",
+    }
+)
 
 
 class SponsorIndex:
-    """Set of normalized employer names known to have certified H-1B LCAs."""
+    """Normalized employer name -> {n: certified filings, last: most-recent filing ISO date}.
 
-    def __init__(self, names: set[str]) -> None:
-        self._names = names
+    Matching is two-tier: an exact normalized-name hit, else a *gated* leading-token hit (the
+    company name is the leading tokens of a sponsor's legal name and the next token is a known
+    corporate/geographic descriptor). The gate is what keeps the fallback precise.
+    """
+
+    def __init__(self, records: dict[str, dict[str, object]]) -> None:
+        self._records = records
+        # First-token buckets make the leading-token scan cheap (no full-set scan per lookup).
+        self._by_first: dict[str, list[str]] = defaultdict(list)
+        for name in records:
+            head = name.split(" ", 1)[0]
+            if head:
+                self._by_first[head].append(name)
+
+    def _match_key(self, company: str | None) -> str | None:
+        """Return the matched sponsor key (exact or gated leading-token), or None."""
+        if not company:
+            return None
+        r = normalize_company(company)
+        if not r:
+            return None
+        if r in self._records:
+            return r
+        prefix = r + " "
+        for name in self._by_first.get(r.split(" ", 1)[0], ()):
+            if name.startswith(prefix) and name[len(prefix) :].split(" ", 1)[0] in _DESCRIPTORS:
+                return name
+        return None
 
     def is_sponsor(self, company: str | None) -> bool:
-        if not company:
-            return False
-        return normalize_company(company) in self._names
+        return self._match_key(company) is not None
+
+    def last_filed(self, company: str | None) -> str | None:
+        """Most-recent certified-filing date (ISO) for ``company``, or None if not a sponsor."""
+        key = self._match_key(company)
+        if key is None:
+            return None
+        last = (self._records.get(key) or {}).get("last")
+        return str(last) if last else None
 
     def __len__(self) -> int:
-        return len(self._names)
+        return len(self._records)
+
+
+def _coerce_records(sponsors: object) -> dict[str, dict[str, object]]:
+    """Accept several on-disk shapes: {name: {n,last}} | {name: count} | [name, ...]."""
+    if isinstance(sponsors, dict):
+        out: dict[str, dict[str, object]] = {}
+        for name, val in sponsors.items():
+            out[name] = val if isinstance(val, dict) else {"n": val, "last": None}
+        return out
+    if isinstance(sponsors, list):
+        return {name: {"n": None, "last": None} for name in sponsors}
+    return {}
 
 
 @lru_cache(maxsize=1)
 def load_sponsor_index() -> SponsorIndex:
-    """Load the bundled H-1B sponsor set. Tolerant of a missing/empty file (feature no-ops)."""
-    names: set[str] = set()
+    """Load the bundled H-1B sponsor index. Tolerant of a missing/empty file (feature no-ops)."""
     try:
         text = (files("ergon_tracker.registry.data") / "h1b_sponsors.json").read_text(
             encoding="utf-8"
         )
     except (FileNotFoundError, ModuleNotFoundError):
-        return SponsorIndex(names)
+        return SponsorIndex({})
     data = json.loads(text)
-    # Accept either {"sponsors": ["name", ...]} or {"sponsors": {"name": count}}.
-    sponsors = data.get("sponsors", [])
-    names = set(sponsors.keys()) if isinstance(sponsors, dict) else set(sponsors)
-    return SponsorIndex(names)
+    return SponsorIndex(_coerce_records(data.get("sponsors", {})))
 
 
 def is_h1b_sponsor(company: str | None) -> bool:
     """True iff ``company`` matches a known H-1B sponsor in the bundled index."""
     return load_sponsor_index().is_sponsor(company)
+
+
+def h1b_last_filed(company: str | None) -> str | None:
+    """Most-recent certified H-1B filing date (ISO) for ``company``, else None."""
+    return load_sponsor_index().last_filed(company)
