@@ -35,7 +35,7 @@ def load_sector_index() -> SectorIndex:
     by_key: dict[str, str] = {}
     by_domain: dict[str, str] = {}
     try:
-        text = (files("jobspine.registry.data") / "sectors.json").read_text(encoding="utf-8")
+        text = (files("ergon_tracker.registry.data") / "sectors.json").read_text(encoding="utf-8")
     except (FileNotFoundError, ModuleNotFoundError):
         return SectorIndex(by_key, by_domain)
     data = json.loads(text)

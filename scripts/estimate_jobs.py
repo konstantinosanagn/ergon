@@ -20,11 +20,11 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jobspine.http import AsyncFetcher  # noqa: E402
-from jobspine.models import SearchQuery  # noqa: E402
-from jobspine.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.models import SearchQuery  # noqa: E402
+from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
 
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
 AGGREGATORS = {"remoteok", "remotive", "arbeitnow", "jobicy", "himalayas", "themuse"}
 SAMPLE_PER_ATS = 25
 

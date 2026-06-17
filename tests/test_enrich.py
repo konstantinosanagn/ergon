@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from jobspine import (
+from ergon_tracker import (
     JobLevel,
     JobPosting,
     Location,
@@ -12,7 +12,7 @@ from jobspine import (
     Salary,
     SearchQuery,
 )
-from jobspine.enrich import enrich_in_place, infer_level, load_sector_index, normalize_geo
+from ergon_tracker.enrich import enrich_in_place, infer_level, load_sector_index, normalize_geo
 
 
 @pytest.mark.parametrize(

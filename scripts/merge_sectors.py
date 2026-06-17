@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from classify_sectors import classify as slug_classify  # noqa: E402
 
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
-SECTORS = ROOT / "src" / "jobspine" / "registry" / "data" / "sectors.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
+SECTORS = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "sectors.json"
 
 
 def _load(name: str) -> dict[str, str]:

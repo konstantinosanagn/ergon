@@ -9,9 +9,9 @@ import httpx
 import pytest
 import respx
 
-from jobspine.http import AsyncFetcher
-from jobspine.models import RawJob, RemoteType, SearchQuery
-from jobspine.providers.workday import WorkdayProvider
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import RawJob, RemoteType, SearchQuery
+from ergon_tracker.providers.workday import WorkdayProvider
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

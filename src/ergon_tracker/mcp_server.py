@@ -1,15 +1,15 @@
-"""jobspine MCP server — exposes the SDK as Model Context Protocol tools.
+"""ergon_tracker MCP server — exposes the SDK as Model Context Protocol tools.
 
-Run it (after ``pip install 'jobspine[mcp]'``)::
+Run it (after ``pip install 'ergon_tracker[mcp]'``)::
 
-    jobspine-mcp            # stdio transport (for Claude Desktop / MCP clients)
+    ergon_tracker-mcp            # stdio transport (for Claude Desktop / MCP clients)
 
 Tools:
 - ``search_jobs``     — unified search across ATS feeds + aggregators
 - ``resolve_company`` — detect which ATS a company/URL uses + its board token
 - ``list_sources``    — registered providers + registry size
 
-The tools are thin adapters over the existing ``jobspine`` API. ``search_jobs`` returns a
+The tools are thin adapters over the existing ``ergon_tracker`` API. ``search_jobs`` returns a
 compact view of each posting (no raw payload / HTML) to keep tool responses small.
 """
 
@@ -25,7 +25,7 @@ from .providers.base import iter_providers, load_builtins, load_plugins
 from .registry.resolver import resolve
 from .registry.store import SeedRegistry
 
-mcp = FastMCP("jobspine")
+mcp = FastMCP("ergon-tracker")
 
 
 def _job_to_dict(job: JobPosting) -> dict[str, Any]:

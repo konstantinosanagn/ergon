@@ -1,0 +1,16 @@
+[
+  {
+    "uuid": "3c36e9c8-1bee-45a2-94fe-09f10ccbe10f",
+    "name": "Senior Sales Executive",
+    "department": {"id": "Pulse", "label": "Pulse"},
+    "url": "https://ats.rippling.com/11fs-group-ltd/jobs/3c36e9c8-1bee-45a2-94fe-09f10ccbe10f",
+    "workLocation": {"label": "London, United Kingdom", "id": "London, United Kingdom"}
+  },
+  {
+    "uuid": "480c597a-867b-4f9f-b7e4-693b27cc6e9a",
+    "name": "Director, Strategic Solutions",
+    "department": {"id": "Business Development", "label": "Business Development"},
+    "url": "https://ats.rippling.com/11fs-group-ltd/jobs/480c597a-867b-4f9f-b7e4-693b27cc6e9a",
+    "workLocation": {"label": "Remote (United States)", "id": "Remote (United States)"}
+  }
+]

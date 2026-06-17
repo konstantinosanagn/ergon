@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from jobspine import (
+from ergon_tracker import (
     EmploymentType,
     JobPosting,
     Location,
@@ -15,8 +15,8 @@ from jobspine import (
     SearchQuery,
     SearchResult,
 )
-from jobspine.http import AsyncFetcher
-from jobspine.models import make_job_id
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import make_job_id
 
 pytestmark = pytest.mark.anyio
 

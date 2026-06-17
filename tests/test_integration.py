@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-from jobspine import SearchQuery
-from jobspine.engine import run_search
-from jobspine.http import AsyncFetcher
+from ergon_tracker import SearchQuery
+from ergon_tracker.engine import run_search
+from ergon_tracker.http import AsyncFetcher
 
 pytestmark = pytest.mark.anyio
 
@@ -110,17 +110,17 @@ async def test_keyword_filter_applies_clientside() -> None:
 
 def test_public_search_stays_callable_after_use() -> None:
     """Regression: the `search` function export must not be shadowed by the engine module
-    after the first call (they used to collide as `jobspine.search`)."""
-    import jobspine
+    after the first call (they used to collide as `ergon_tracker.search`)."""
+    import ergon_tracker
 
     with respx.mock(assert_all_called=False) as mock:
         mock.get(url__startswith="https://boards-api.greenhouse.io/v1/boards/stripe/jobs").mock(
             return_value=httpx.Response(200, json=_greenhouse_payload())
         )
-        jobspine.search(companies=["stripe.com"], limit=1)
-        assert callable(jobspine.search)
+        ergon_tracker.search(companies=["stripe.com"], limit=1)
+        assert callable(ergon_tracker.search)
         # Second call would raise "'module' object is not callable" under the old bug.
-        result = jobspine.search(companies=["stripe.com"], limit=1)
+        result = ergon_tracker.search(companies=["stripe.com"], limit=1)
     assert len(result) >= 0
 
 

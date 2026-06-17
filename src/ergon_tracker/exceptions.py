@@ -1,4 +1,4 @@
-"""Exception hierarchy for jobspine (FROZEN CONTRACT)."""
+"""Exception hierarchy for ergon_tracker (FROZEN CONTRACT)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ __all__ = [
 
 
 class JobSpineError(Exception):
-    """Base class for all jobspine errors."""
+    """Base class for all ergon_tracker errors."""
 
 
 class ProviderError(JobSpineError):

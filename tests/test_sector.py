@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from jobspine.extract.base import ExtractInput
-from jobspine.extract.sector import SectorExtractor, load_sector_index
+from ergon_tracker.extract.base import ExtractInput
+from ergon_tracker.extract.sector import SectorExtractor, load_sector_index
 
 
 @pytest.fixture(scope="module")

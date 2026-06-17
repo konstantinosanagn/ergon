@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jobspine.http import _rate_key
+from ergon_tracker.http import _rate_key
 
 
 def test_shared_backend_subdomains_collapse() -> None:

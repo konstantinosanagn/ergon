@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from jobspine import JobPosting, Location, RemoteType, Salary
-from jobspine.dedup import deduplicate, normalize_company, normalize_title
+from ergon_tracker import JobPosting, Location, RemoteType, Salary
+from ergon_tracker.dedup import deduplicate, normalize_company, normalize_title
 
 
 def test_exact_id_duplicate_collapses() -> None:

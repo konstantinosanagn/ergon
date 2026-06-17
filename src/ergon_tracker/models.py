@@ -1,4 +1,4 @@
-"""Canonical data models for jobspine — the FROZEN CONTRACT all providers normalize to.
+"""Canonical data models for ergon_tracker — the FROZEN CONTRACT all providers normalize to.
 
 Every provider produces ``RawJob`` from its source, then maps it into a ``JobPosting``.
 Missing fields are ``None`` (or an ``UNKNOWN`` enum) — never invented.
@@ -341,14 +341,14 @@ class SearchResult(BaseModel):
         try:
             import pandas as pd
         except ImportError as exc:  # pragma: no cover - optional extra
-            raise ImportError("DataFrame export needs: pip install 'jobspine[pandas]'") from exc
+            raise ImportError("DataFrame export needs: pip install 'ergon_tracker[pandas]'") from exc
         return pd.DataFrame(self.to_dicts())
 
     def to_polars(self) -> Any:  # optional dep, dynamic return type
         try:
             import polars as pl
         except ImportError as exc:  # pragma: no cover - optional extra
-            raise ImportError("DataFrame export needs: pip install 'jobspine[polars]'") from exc
+            raise ImportError("DataFrame export needs: pip install 'ergon_tracker[polars]'") from exc
         return pl.DataFrame(self.to_dicts())
 
     @property

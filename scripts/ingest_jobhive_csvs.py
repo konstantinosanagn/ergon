@@ -3,11 +3,11 @@
 jobhive (github kalil0321/ats-scrapers, MIT) maintains one CSV per ATS under
 ``ats-companies/{ats}.csv`` with columns ``name,slug,url`` — tens of thousands of real,
 already-discovered tenants. Their slugs are *facts* (company name + public ATS slug), so we
-don't brute-force-guess anything: we map each row directly to jobspine's candidate schema and
+don't brute-force-guess anything: we map each row directly to ergon_tracker's candidate schema and
 let the EXISTING ``scripts/build_registry.py`` verify each board is live before merging. Their
 data proposes; our verify gate disposes (and drops the stale ones, e.g. dead boards).
 
-Only the 8 ATSes jobspine has providers for are ingested (their other ~18 — join.com,
+Only the 8 ATSes ergon_tracker has providers for are ingested (their other ~18 — join.com,
 bamboohr, jazzhr, icims, teamtailor, … — need providers built first; see the roadmap).
 
 Slug mapping
@@ -42,17 +42,17 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jobspine.http import AsyncFetcher  # noqa: E402
-from jobspine.providers.base import get_provider, load_builtins  # noqa: E402
-from jobspine.providers.workday import WorkdayProvider  # noqa: E402
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon_tracker.providers.workday import WorkdayProvider  # noqa: E402
 
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_jobhive.json"
 
 # jobhive raw CSV base (one file per ATS).
 _RAW = "https://raw.githubusercontent.com/kalil0321/ats-scrapers/main/ats-companies/{ats}.csv"
 
-# ATSes jobspine has providers for (their CSV stem == our provider name for all 8).
+# ATSes ergon_tracker has providers for (their CSV stem == our provider name for all 8).
 SUPPORTED_ATSES = (
     "greenhouse",
     "lever",
@@ -66,6 +66,8 @@ SUPPORTED_ATSES = (
     "breezy",
     "teamtailor",
     "join",
+    "rippling",
+    "pinpoint",
 )
 
 # Where our provider name differs from jobhive's CSV stem.
@@ -83,7 +85,7 @@ def company_key(name: str) -> str:
 
 
 def row_to_candidate(ats: str, row: dict[str, str]) -> dict[str, object] | None:
-    """Map one jobhive CSV row to a jobspine candidate dict, or ``None`` if unmappable.
+    """Map one jobhive CSV row to a ergon_tracker candidate dict, or ``None`` if unmappable.
 
     Uses ``slug`` when present; otherwise recovers the token from ``url`` via the provider's
     ``matches()``. Workday always parses ``url`` into the ``tenant|wd|site`` composite.

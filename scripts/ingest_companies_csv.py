@@ -3,7 +3,7 @@
 This is the "one CSV per ATS, PR adds tenants, CI verifies" contribution path: humans
 hand-curate ``data/companies/{ats}.csv`` (one ATS per file, one company per row); this script
 flattens those CSVs into the candidate schema that :mod:`build_registry` understands, then
-``build_registry.py`` **verifies every candidate live** through jobspine's own providers before
+``build_registry.py`` **verifies every candidate live** through ergon_tracker's own providers before
 merging into ``seed.json``.
 
 Propose, don't dispose
@@ -50,7 +50,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
 COMPANIES_DIR = ROOT / "data" / "companies"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_csv.json"
 

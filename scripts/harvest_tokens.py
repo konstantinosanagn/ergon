@@ -6,10 +6,10 @@ crt.sh therefore cannot enumerate them (see :mod:`harvest_crtsh`). But the token
 always a *predictable slug* of the company name (``Acme Labs Inc`` -> ``acmelabs``,
 ``acme-labs``, ``acmelabsinc`` ...). So instead of enumerating, we **guess**: generate a small
 ordered set of plausible slug variations per company and probe each path-based ATS's public
-API directly through jobspine's own provider stack. A token that returns >=1 job is live.
+API directly through ergon_tracker's own provider stack. A token that returns >=1 job is live.
 
 This is the keyless analog of the crt.sh harvester. No API key, no scraping, no paid service —
-just the same public ATS endpoints jobspine already speaks, driven by name-slug heuristics
+just the same public ATS endpoints ergon_tracker already speaks, driven by name-slug heuristics
 (approach borrowed from Babak-hasani/company-career-scraper).
 
 Which ATSes this works for
@@ -31,7 +31,7 @@ are probed concurrently via an ``anyio`` task group, bounded by the shared ``Asy
 Propose, don't dispose
 ----------------------
 Output is a ``candidates.json`` compatible with :mod:`build_registry`, which then **verifies
-every candidate live** through jobspine's own providers before merging into ``seed.json``.
+every candidate live** through ergon_tracker's own providers before merging into ``seed.json``.
 This script only *proposes*; ``build_registry.py`` *disposes*. We never write ``seed.json``.
 
 Usage::
@@ -55,9 +55,9 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jobspine.http import AsyncFetcher  # noqa: E402
-from jobspine.models import SearchQuery  # noqa: E402
-from jobspine.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.models import SearchQuery  # noqa: E402
+from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
 
 __all__ = [
     "TARGET_ATSES",
@@ -69,7 +69,7 @@ __all__ = [
     "harvest",
 ]
 
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
 DEFAULT_INPUT = ROOT / "scripts" / "companies_to_probe.txt"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_tokens.json"
 

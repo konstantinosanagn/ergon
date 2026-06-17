@@ -1,4 +1,4 @@
-"""Job-aware cross-source deduplication & merge engine — the jobspine differentiator.
+"""Job-aware cross-source deduplication & merge engine — the ergon_tracker differentiator.
 
 Naive dedup (exact id or exact title match) misses the common real-world case: the *same*
 role surfaced by an ATS (greenhouse/lever/...) and by an aggregator (remoteok) with a slightly
@@ -40,6 +40,8 @@ _ATS_PROVIDERS = frozenset(
         "breezy",
         "teamtailor",
         "join",
+        "rippling",
+        "pinpoint",
     }
 )
 _AGGREGATORS = frozenset(

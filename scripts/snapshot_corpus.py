@@ -22,11 +22,11 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jobspine.extract.windows import cue_windows  # noqa: E402
-from jobspine.http import AsyncFetcher  # noqa: E402
-from jobspine.models import SearchQuery  # noqa: E402
-from jobspine.providers.base import get_provider, load_builtins  # noqa: E402
-from jobspine.registry.store import SeedRegistry  # noqa: E402
+from ergon_tracker.extract.windows import cue_windows  # noqa: E402
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.models import SearchQuery  # noqa: E402
+from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
 
 OUT = ROOT / "data" / "corpus.jsonl"
 

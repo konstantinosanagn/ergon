@@ -25,7 +25,7 @@ __all__ = ["AsyncFetcher", "DEFAULT_HEADERS"]
 
 DEFAULT_HEADERS = {
     "User-Agent": (
-        "jobspine/0.1 (+https://github.com/kanagn/jobspine) Mozilla/5.0 (compatible; jobspine bot)"
+        "ergon_tracker/0.1 (+https://github.com/kanagn/ergon_tracker) Mozilla/5.0 (compatible; ergon_tracker bot)"
     ),
     "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
 }

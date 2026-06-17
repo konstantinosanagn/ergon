@@ -1,0 +1,139 @@
+{
+  "data": [
+    {
+      "id": "515428",
+      "benefits": "",
+      "benefits_header": "Benefits",
+      "compensation": "$80,000 - $100,000 / year",
+      "compensation_minimum": 80000.0,
+      "compensation_maximum": 100000.0,
+      "compensation_currency": "USD",
+      "compensation_frequency": "year",
+      "compensation_visible": true,
+      "deadline_at": "2026-06-26T23:59:59-04:00",
+      "description": "<h1><!--block-->The <strong>Warehouse/Fleet Manager</strong> is responsible for overseeing the daily operations of the <strong>Critical Peake Electrical Services Shop</strong>. This role ensures that ",
+      "employment_type": "full_time",
+      "employment_type_text": "Full Time",
+      "key_responsibilities": "<div><!--block-->&nbsp; &nbsp;Oversee and coordinate all day-to-day shop operations, ensuring the shop is clean, organized, and operating efficiently.</div><div><!--block-->·&nbsp; &nbsp; &nbsp; &nbsp",
+      "key_responsibilities_header": "Key Responsibilities",
+      "reporting_to": "",
+      "skills_knowledge_expertise": "<div><!--block-->o&nbsp; High School Diploma, GED, or Equivalency.</div><div><!--block-->o&nbsp; Minimum 3-5 years of experience in warehouse, shop, and/or equipment management, ideally in the electri",
+      "skills_knowledge_expertise_header": "Skills, Knowledge and Expertise",
+      "title": "Warehouse/Fleet Manager",
+      "url": "https://aawdc.pinpointhq.com/en/postings/fca592d6-2561-4b2a-88b0-15d2b375971a",
+      "path": "/en/postings/fca592d6-2561-4b2a-88b0-15d2b375971a",
+      "workplace_type": "onsite",
+      "workplace_type_text": "Onsite",
+      "job": {
+        "id": "521722",
+        "requisition_id": "PIN-0679",
+        "department": {
+          "id": "34082",
+          "name": "Transportation"
+        },
+        "division": {
+          "id": "3047",
+          "name": "AAWDC"
+        },
+        "structure_custom_group_one": null
+      },
+      "location": {
+        "id": "29443",
+        "city": "",
+        "name": "North County",
+        "postal_code": "",
+        "province": ""
+      }
+    },
+    {
+      "id": "512061",
+      "benefits": "",
+      "benefits_header": "Benefits",
+      "compensation": "$17.00 - $18.00 / hour",
+      "compensation_minimum": 17.0,
+      "compensation_maximum": 18.0,
+      "compensation_currency": "USD",
+      "compensation_frequency": "hour",
+      "compensation_visible": true,
+      "deadline_at": "2026-06-19T23:59:59-04:00",
+      "description": "<div><!--block--><strong>Reach truck crown and Walkie Rider EPJ Operators in Jessup, MD: (Right now this warehouse is hiring a lot)</strong></div><div><!--block-->This is full time position, is a bit ",
+      "employment_type": "contract_to_hire",
+      "employment_type_text": "Contract to hire",
+      "key_responsibilities": "<div><!--block-->They have two shifts available:</div><div><!--block-->Sunday to Friday 3:30pm to finish (no exact out time), Saturday off and one other day off given at the job by supervisor</div><di",
+      "key_responsibilities_header": "Key Responsibilities",
+      "reporting_to": "",
+      "skills_knowledge_expertise": "<div><!--block-->All interested associates must first fill out an application online using this link: ProLogistix<br>It will tell them to create an account, and they can start their application proces",
+      "skills_knowledge_expertise_header": "Skills, Knowledge and Expertise",
+      "title": "Reach truck crown and Walkie Rider EPJ Operators in Jessup, MD",
+      "url": "https://aawdc.pinpointhq.com/en/postings/17ea4175-6e7f-4f5d-8eac-0b092226f254",
+      "path": "/en/postings/17ea4175-6e7f-4f5d-8eac-0b092226f254",
+      "workplace_type": "onsite",
+      "workplace_type_text": "Onsite",
+      "job": {
+        "id": "518564",
+        "requisition_id": "PIN-0673",
+        "department": {
+          "id": "34083",
+          "name": "Construction and Skilled Trades"
+        },
+        "division": {
+          "id": "3047",
+          "name": "AAWDC"
+        },
+        "structure_custom_group_one": null
+      },
+      "location": {
+        "id": "29443",
+        "city": "",
+        "name": "North County",
+        "postal_code": "",
+        "province": ""
+      }
+    },
+    {
+      "id": "217178",
+      "benefits": "<div><!--block-->By applying with AAWDC, you’ll gain access to a network of businesses that work closely with the federal government. We go beyond job listings to provide:</div><ul><li><!--block--><st",
+      "benefits_header": "Why Join Our Talent Pipeline? / How to apply",
+      "compensation": null,
+      "compensation_minimum": null,
+      "compensation_maximum": null,
+      "compensation_currency": null,
+      "compensation_frequency": null,
+      "compensation_visible": false,
+      "deadline_at": "2027-01-01T23:59:59-05:00",
+      "description": "<div><!--block-->AAWDC work with businesses throughout the Anne Arundel County area that are seeking talented and motivated professionals to join thier <strong>Talent Pipeline</strong> for upcoming op",
+      "employment_type": "contract",
+      "employment_type_text": "Contract",
+      "key_responsibilities": "<div><!--block-->While the exact duties will depend on the specific role, candidates in the pipeline may be expected to:</div><ul><li><!--block-->Support the federal government in achieving mission-cr",
+      "key_responsibilities_header": "Key Responsibilities",
+      "reporting_to": null,
+      "skills_knowledge_expertise": "<div><!--block--><br><strong>Active Security Clearance</strong>:&nbsp; Public Trust, Secret, Top Secret, TS/SCI or TS/SCI with Full Scope Poly.</div><ul><li><!--block-->Excellent customer service skil",
+      "skills_knowledge_expertise_header": "Qualifications:",
+      "title": "Pipeline for Future IT Federal/Government Positions",
+      "url": "https://aawdc.pinpointhq.com/en/postings/92841fbb-1c42-4adc-b98d-2c0e75802880",
+      "path": "/en/postings/92841fbb-1c42-4adc-b98d-2c0e75802880",
+      "workplace_type": "onsite",
+      "workplace_type_text": "Onsite",
+      "job": {
+        "id": "234938",
+        "requisition_id": "PIN-0166",
+        "department": {
+          "id": "34085",
+          "name": "Other"
+        },
+        "division": {
+          "id": "3047",
+          "name": "AAWDC"
+        },
+        "structure_custom_group_one": null
+      },
+      "location": {
+        "id": "27122",
+        "city": "Varies by Listing",
+        "name": "Partner Employment Opportunity",
+        "postal_code": "21240",
+        "province": "Maryland"
+      }
+    }
+  ]
+}

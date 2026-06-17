@@ -1,4 +1,4 @@
-"""Tests for the jobspine MCP server (skipped if the optional `mcp` extra isn't installed)."""
+"""Tests for the ergon_tracker MCP server (skipped if the optional `mcp` extra isn't installed)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-pytest.importorskip("mcp", reason="install jobspine[mcp] to test the MCP server")
+pytest.importorskip("mcp", reason="install ergon_tracker[mcp] to test the MCP server")
 
-from jobspine import mcp_server as srv  # noqa: E402
+from ergon_tracker import mcp_server as srv  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 

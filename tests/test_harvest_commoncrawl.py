@@ -14,11 +14,26 @@ from harvest_commoncrawl import (  # noqa: E402
     extract_tokens,
     latest_crawl_api,
     parse_cc_urls,
+    parse_num_pages,
 )
 
 
 def _extract(ats: str, url: str) -> str | None:
     return CONFIGS[ats].extract(url)  # type: ignore[operator]
+
+
+def test_parse_num_pages() -> None:
+    assert parse_num_pages(json.dumps({"pages": 7, "pageSize": 5, "blocks": 12})) == 7
+    assert parse_num_pages("3") == 3
+    assert parse_num_pages("garbage") == 1  # flaky response -> at least one page
+    assert parse_num_pages(json.dumps({"no_pages": True})) == 1
+
+
+def test_new_configs_rippling_pinpoint() -> None:
+    # rippling is path-based on ats.rippling.com; pinpoint is a *.pinpointhq.com subdomain.
+    assert _extract("rippling", "https://ats.rippling.com/acme-corp/jobs/123") == "acme-corp"
+    assert _extract("pinpoint", "https://globex.pinpointhq.com/postings.json") == "globex"
+    assert _extract("rippling", "https://example.com/x") is None
 
 
 def test_greenhouse_path_and_embed_for_param() -> None:

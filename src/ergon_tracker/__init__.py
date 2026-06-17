@@ -1,4 +1,4 @@
-"""jobspine — unified, reliable, typed job-fetching SDK."""
+"""ergon_tracker — unified, reliable, typed job-fetching SDK."""
 
 from __future__ import annotations
 

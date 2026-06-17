@@ -12,8 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import jobspine  # noqa: E402
-from jobspine.models import EmploymentType, JobLevel, RemoteType, SearchQuery  # noqa: E402
+import ergon_tracker  # noqa: E402
+from ergon_tracker.models import EmploymentType, JobLevel, RemoteType, SearchQuery  # noqa: E402
 
 COMPANIES = [
     "ramp.com", "stripe.com", "spotify.com", "notion.so", "adobe.com",
@@ -26,7 +26,7 @@ def pct(n: int, d: int) -> str:
 
 
 def main() -> None:
-    pool = jobspine.search(companies=COMPANIES, limit=400).jobs
+    pool = ergon_tracker.search(companies=COMPANIES, limit=400).jobs
     n = len(pool)
     print(f"enriched pool: {n} jobs across {len(COMPANIES)} companies\n")
 

@@ -15,12 +15,12 @@ import json, os, sys, time, urllib.request, urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-SEED = os.path.join(ROOT, "src/jobspine/registry/data/seed.json")
-SECTORS = os.path.join(ROOT, "src/jobspine/registry/data/sectors.json")
+SEED = os.path.join(ROOT, "src/ergon_tracker/registry/data/seed.json")
+SECTORS = os.path.join(ROOT, "src/ergon_tracker/registry/data/sectors.json")
 OUT = os.path.join(HERE, "sector_wikidata.json")
 RAW_CACHE = os.path.join(HERE, ".sector_wd_raw.jsonl")  # resumable raw rows
 
-UA = "jobspine-sector-mapper/1.0 (konstantinos.a@tavily.com; deterministic sector map)"
+UA = "ergon_tracker-sector-mapper/1.0 (konstantinos.a@tavily.com; deterministic sector map)"
 EP = "https://query.wikidata.org/sparql"
 
 VOCAB = ["Software/SaaS","AI/ML","Fintech","Banking/Finance","Insurance","Crypto/Web3",

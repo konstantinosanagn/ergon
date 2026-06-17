@@ -15,7 +15,7 @@ from .models import JobPosting
 
 __all__ = ["JobStore"]
 
-_DEFAULT_PATH = Path(".jobspine/state.sqlite")
+_DEFAULT_PATH = Path(".ergon_tracker/state.sqlite")
 
 
 class JobStore:

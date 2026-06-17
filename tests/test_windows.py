@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jobspine.extract.windows import cue_windows
+from ergon_tracker.extract.windows import cue_windows
 
 
 def test_short_text_passes_through() -> None:

@@ -14,7 +14,7 @@ from .exceptions import JobSpineError
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="jobspine — unified job-fetching SDK CLI",
+    help="ergon-tracker — unified job-fetching SDK CLI",
 )
 console = Console()
 err_console = Console(stderr=True)
@@ -22,8 +22,8 @@ err_console = Console(stderr=True)
 
 @app.command()
 def version() -> None:
-    """Print the jobspine version."""
-    console.print(f"jobspine {__version__}")
+    """Print the ergon_tracker version."""
+    console.print(f"ergon-tracker {__version__}")
 
 
 @app.command()
@@ -34,7 +34,7 @@ def sources() -> None:
     load_builtins()
     load_plugins()
     providers = iter_providers()
-    table = Table(title="jobspine providers")
+    table = Table(title="ergon_tracker providers")
     table.add_column("name", style="cyan")
     table.add_column("type")
     for p in providers:

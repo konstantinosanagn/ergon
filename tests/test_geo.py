@@ -1,11 +1,11 @@
-"""Tests for deterministic geo (city/country) extraction in ``jobspine.extract.geo``."""
+"""Tests for deterministic geo (city/country) extraction in ``ergon_tracker.extract.geo``."""
 
 from __future__ import annotations
 
 import pytest
 
-from jobspine.extract.geo import normalize_geo
-from jobspine.models import Location
+from ergon_tracker.extract.geo import normalize_geo
+from ergon_tracker.models import Location
 
 
 def _geo(raw: str) -> Location:

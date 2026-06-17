@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from jobspine import JobLevel, JobPosting, Location
-from jobspine.enrich import enrich_in_place, level_from_years
+from ergon_tracker import JobLevel, JobPosting, Location
+from ergon_tracker.enrich import enrich_in_place, level_from_years
 
 
 def test_level_from_years_mapping() -> None:

@@ -9,9 +9,9 @@ import httpx
 import pytest
 import respx
 
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from jobspine.providers.smartrecruiters import SmartRecruitersProvider
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -171,7 +171,7 @@ async def test_normalize_detects_hybrid() -> None:
 
 
 def test_normalize_remote_flag() -> None:
-    from jobspine.models import RawJob
+    from ergon_tracker.models import RawJob
 
     provider = SmartRecruitersProvider()
     payload = {

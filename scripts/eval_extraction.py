@@ -18,10 +18,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import jobspine.enrich  # noqa: E402,F401  (registers extractors)
-from jobspine.extract.base import ExtractInput, get_extractor  # noqa: E402
-from jobspine.extract.geo import normalize_geo  # noqa: E402
-from jobspine.models import Location, Salary  # noqa: E402
+import ergon_tracker.enrich  # noqa: E402,F401  (registers extractors)
+from ergon_tracker.extract.base import ExtractInput, get_extractor  # noqa: E402
+from ergon_tracker.extract.geo import normalize_geo  # noqa: E402
+from ergon_tracker.models import Location, Salary  # noqa: E402
 
 GOLD = ROOT / "tests" / "data" / "gold.jsonl"
 

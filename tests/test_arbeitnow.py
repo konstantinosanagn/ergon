@@ -10,10 +10,10 @@ import pytest
 import respx
 
 from conftest import load_fixture
-from jobspine import RemoteType
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, SearchQuery
-from jobspine.providers.arbeitnow import ArbeitnowProvider
+from ergon_tracker import RemoteType
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, SearchQuery
+from ergon_tracker.providers.arbeitnow import ArbeitnowProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -108,7 +108,7 @@ async def test_limit_satisfied_by_first_page_skips_pagination() -> None:
 
 
 def test_employment_mapping() -> None:
-    from jobspine.providers.arbeitnow import _employment
+    from ergon_tracker.providers.arbeitnow import _employment
 
     assert _employment([]) is EmploymentType.UNKNOWN
     assert _employment(None) is EmploymentType.UNKNOWN
@@ -118,7 +118,7 @@ def test_employment_mapping() -> None:
 
 
 def test_parse_epoch_handles_garbage() -> None:
-    from jobspine.providers.arbeitnow import _parse_epoch
+    from ergon_tracker.providers.arbeitnow import _parse_epoch
 
     assert _parse_epoch(None) is None
     assert _parse_epoch("not-a-number") is None

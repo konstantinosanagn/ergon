@@ -9,15 +9,15 @@ import httpx
 import pytest
 import respx
 
-from jobspine.http import AsyncFetcher
-from jobspine.models import (
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import (
     EmploymentType,
     RemoteType,
     SalaryInterval,
     SearchQuery,
     make_job_id,
 )
-from jobspine.providers.lever import LeverProvider
+from ergon_tracker.providers.lever import LeverProvider
 
 pytestmark = pytest.mark.anyio
 

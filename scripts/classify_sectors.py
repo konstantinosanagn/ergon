@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
-SECTORS = ROOT / "src" / "jobspine" / "registry" / "data" / "sectors.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
+SECTORS = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "sectors.json"
 
 # Distinctive SUBSTRINGS (>=4 chars, low false-positive) -> sector. Ordered specific->general;
 # first hit wins. Concatenated slugs like "epicgames"/"shieldai"/"energyvault" are caught.

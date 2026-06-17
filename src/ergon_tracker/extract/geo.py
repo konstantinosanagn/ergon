@@ -228,7 +228,7 @@ _SUBLOCATION_WORDS = {
 def _cities() -> dict[str, str]:
     """Lowercased city -> canonical country (bundled gazetteer). Tolerant if missing."""
     try:
-        text = (files("jobspine.registry.data") / "cities.json").read_text(encoding="utf-8")
+        text = (files("ergon_tracker.registry.data") / "cities.json").read_text(encoding="utf-8")
     except (FileNotFoundError, ModuleNotFoundError):
         return {}
     data = json.loads(text)

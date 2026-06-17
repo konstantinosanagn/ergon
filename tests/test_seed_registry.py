@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from jobspine.registry.store import SeedRegistry
+from ergon_tracker.registry.store import SeedRegistry
 
 SUPPORTED_ATS = {
     "greenhouse",
@@ -19,6 +19,8 @@ SUPPORTED_ATS = {
     "breezy",
     "teamtailor",
     "join",
+    "rippling",
+    "pinpoint",
 }
 
 
@@ -59,7 +61,7 @@ def test_company_keys_are_unique_and_lowercase(registry: SeedRegistry) -> None:
 
 
 def test_resolver_resolves_known_seed_domains(registry: SeedRegistry) -> None:
-    from jobspine.registry.resolver import resolve
+    from ergon_tracker.registry.resolver import resolve
 
     # A sample of newly added companies should resolve via the seed by domain.
     samples = {

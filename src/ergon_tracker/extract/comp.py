@@ -1,6 +1,6 @@
 """Compensation (salary) extractor.
 
-Pulls a structured :class:`~jobspine.models.Salary` out of free-text job postings.
+Pulls a structured :class:`~ergon_tracker.models.Salary` out of free-text job postings.
 
 Two-stage behaviour:
 

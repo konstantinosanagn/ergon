@@ -14,9 +14,9 @@ import httpx
 import pytest
 import respx
 
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from jobspine.providers.bamboohr import BambooHRProvider
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon_tracker.providers.bamboohr import BambooHRProvider
 
 pytestmark = pytest.mark.anyio
 

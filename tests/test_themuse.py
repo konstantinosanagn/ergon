@@ -10,10 +10,10 @@ import pytest
 import respx
 
 from conftest import load_fixture
-from jobspine import RemoteType
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, SearchQuery
-from jobspine.providers.themuse import TheMuseProvider
+from ergon_tracker import RemoteType
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, SearchQuery
+from ergon_tracker.providers.themuse import TheMuseProvider
 
 pytestmark = pytest.mark.anyio
 

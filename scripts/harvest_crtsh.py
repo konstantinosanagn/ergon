@@ -24,7 +24,7 @@ Workday historically issues per-tenant certs and so enumerates best.
 Propose, don't dispose
 ----------------------
 Output is a ``candidates.json`` compatible with :mod:`build_registry`, which then **verifies
-every candidate live** through jobspine's own providers before merging into ``seed.json``.
+every candidate live** through ergon_tracker's own providers before merging into ``seed.json``.
 This script only *proposes*; ``build_registry.py`` *disposes*. We never write ``seed.json``.
 
 Usage::
@@ -49,9 +49,9 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jobspine.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
 
-SEED = ROOT / "src" / "jobspine" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_crtsh.json"
 
 # crt.sh certificate-transparency search, JSON output. The ``q`` wildcard (``%``) is passed via

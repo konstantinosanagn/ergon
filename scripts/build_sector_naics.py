@@ -26,8 +26,8 @@ from collections import defaultdict
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 CACHE = os.path.join(HERE, ".h1b_cache")
-SEED = os.path.join(ROOT, "src/jobspine/registry/data/seed.json")
-SECTORS = os.path.join(ROOT, "src/jobspine/registry/data/sectors.json")
+SEED = os.path.join(ROOT, "src/ergon_tracker/registry/data/seed.json")
+SECTORS = os.path.join(ROOT, "src/ergon_tracker/registry/data/sectors.json")
 OUT = os.path.join(HERE, "sector_naics.json")
 
 YEARS = [2023, 2022, 2021]  # most recent USCIS exports available
@@ -35,7 +35,7 @@ URL = "https://www.uscis.gov/sites/default/files/document/data/h1b_datahubexport
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120 Safari/537.36")
 
-# NAICS 2-digit sector -> jobspine 27-label vocab.
+# NAICS 2-digit sector -> ergon_tracker 27-label vocab.
 # 2-digit conflates some sub-sectors; we pick the dominant/best-fit label.
 # 54 (Professional/Scientific/Technical) is dominated by 5415 Computer Systems
 # Design in a tech-skewed registry, so it maps to Software/SaaS (see report).

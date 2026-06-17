@@ -1,7 +1,7 @@
 """Seed registry loader for the company -> ATS -> token map.
 
-The seed ships as packaged data (``jobspine/registry/data/seed.json``) and is loaded via
-:mod:`importlib.resources`, so it resolves correctly whether jobspine is run from a source
+The seed ships as packaged data (``ergon_tracker/registry/data/seed.json``) and is loaded via
+:mod:`importlib.resources`, so it resolves correctly whether ergon_tracker is run from a source
 checkout or installed as a wheel (no ``__file__`` path hacks).
 
 The registry is read-only at runtime: it maps a known company *domain* (and an opaque company
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 __all__ = ["SeedRegistry"]
 
-_DATA_PACKAGE = "jobspine.registry.data"
+_DATA_PACKAGE = "ergon_tracker.registry.data"
 _SEED_FILE = "seed.json"
 
 

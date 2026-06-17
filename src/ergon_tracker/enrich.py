@@ -2,7 +2,7 @@
 results onto the ``JobPosting`` (level, sector, salary-from-text, years-of-experience), then
 normalize each location.
 
-The per-field logic lives in the ``jobspine.extract`` package; this module is the orchestrator
+The per-field logic lives in the ``ergon_tracker.extract`` package; this module is the orchestrator
 plus backward-compatible re-exports.
 """
 

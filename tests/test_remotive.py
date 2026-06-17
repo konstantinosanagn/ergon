@@ -10,10 +10,10 @@ import pytest
 import respx
 
 from conftest import load_fixture
-from jobspine import RemoteType
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, SearchQuery
-from jobspine.providers.remotive import RemotiveProvider
+from ergon_tracker import RemoteType
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, SearchQuery
+from ergon_tracker.providers.remotive import RemotiveProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -93,7 +93,7 @@ async def test_normalize_full_field_mapping() -> None:
 
 def test_employment_unknown_when_missing() -> None:
     raw = _provider().fetch  # noqa: F841 - reference only
-    from jobspine.providers.remotive import _employment
+    from ergon_tracker.providers.remotive import _employment
 
     assert _employment(None) is EmploymentType.UNKNOWN
     assert _employment("") is EmploymentType.UNKNOWN

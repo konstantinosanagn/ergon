@@ -8,9 +8,9 @@ import httpx
 import pytest
 import respx
 
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery
-from jobspine.providers.adzuna import AdzunaProvider, _country_slug
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery
+from ergon_tracker.providers.adzuna import AdzunaProvider, _country_slug
 
 pytestmark = pytest.mark.anyio
 
@@ -41,7 +41,7 @@ def _provider() -> AdzunaProvider:
 
 def _configured(monkeypatch) -> None:
     creds = {"ADZUNA_APP_ID": "test_id", "ADZUNA_APP_KEY": "test_key"}
-    monkeypatch.setattr("jobspine.providers.adzuna.get_env", lambda k: creds.get(k))
+    monkeypatch.setattr("ergon_tracker.providers.adzuna.get_env", lambda k: creds.get(k))
 
 
 def test_matches_always_none_aggregator() -> None:
@@ -58,7 +58,7 @@ def test_country_slug_mapping() -> None:
 
 
 async def test_fetch_skips_without_keys(monkeypatch) -> None:
-    monkeypatch.setattr("jobspine.providers.adzuna.get_env", lambda k: None)
+    monkeypatch.setattr("ergon_tracker.providers.adzuna.get_env", lambda k: None)
     with respx.mock:
         route = respx.get(url__startswith="https://api.adzuna.com").mock(
             return_value=httpx.Response(200, json=_PAYLOAD)

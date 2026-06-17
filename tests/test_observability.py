@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jobspine.observability import (
+from ergon_tracker.observability import (
     Timer,
     build_health,
     count_sanity_check,

@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-from jobspine.http import AsyncFetcher
-from jobspine.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery
-from jobspine.providers.usajobs import USAJobsProvider, _parse_dt
+from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery
+from ergon_tracker.providers.usajobs import USAJobsProvider, _parse_dt
 
 pytestmark = pytest.mark.anyio
 
@@ -60,7 +60,7 @@ def _provider() -> USAJobsProvider:
 
 def _configured(monkeypatch) -> None:
     creds = {"USAJOBS_API_KEY": "test_key", "USAJOBS_EMAIL": "me@example.com"}
-    monkeypatch.setattr("jobspine.providers.usajobs.get_env", lambda k: creds.get(k))
+    monkeypatch.setattr("ergon_tracker.providers.usajobs.get_env", lambda k: creds.get(k))
 
 
 def test_matches_always_none_aggregator() -> None:
@@ -77,7 +77,7 @@ def test_parse_dt_handles_seven_digit_fraction() -> None:
 
 
 async def test_fetch_skips_without_keys(monkeypatch) -> None:
-    monkeypatch.setattr("jobspine.providers.usajobs.get_env", lambda k: None)
+    monkeypatch.setattr("ergon_tracker.providers.usajobs.get_env", lambda k: None)
     with respx.mock:
         route = respx.get(API).mock(return_value=httpx.Response(200, json=_PAYLOAD))
         async with AsyncFetcher(per_host_rate=100) as f:

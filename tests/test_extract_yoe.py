@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from jobspine.extract import get_extractor
-from jobspine.extract.base import ExtractInput
-from jobspine.extract.yoe import YoeExtractor
+from ergon_tracker.extract import get_extractor
+from ergon_tracker.extract.base import ExtractInput
+from ergon_tracker.extract.yoe import YoeExtractor
 
 
 def _yoe(

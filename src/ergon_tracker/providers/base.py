@@ -32,7 +32,7 @@ __all__ = [
     "load_plugins",
 ]
 
-# Names of first-party provider modules under jobspine.providers to import on startup.
+# Names of first-party provider modules under ergon_tracker.providers to import on startup.
 _BUILTIN_MODULES = (
     "greenhouse",
     "lever",
@@ -47,6 +47,8 @@ _BUILTIN_MODULES = (
     "breezy",
     "teamtailor",
     "join",
+    "rippling",
+    "pinpoint",
     "remotive",
     "arbeitnow",
     "jobicy",
@@ -56,7 +58,7 @@ _BUILTIN_MODULES = (
     "usajobs",
 )
 
-_ENTRYPOINT_GROUP = "jobspine.providers"
+_ENTRYPOINT_GROUP = "ergon_tracker.providers"
 
 
 @runtime_checkable
@@ -158,13 +160,13 @@ def load_builtins() -> None:
     Tolerant of missing modules during incremental development (Phase 1 in progress)."""
     for mod in _BUILTIN_MODULES:
         try:
-            import_module(f"jobspine.providers.{mod}")
+            import_module(f"ergon_tracker.providers.{mod}")
         except ModuleNotFoundError:
             continue
 
 
 def load_plugins() -> None:
-    """Discover third-party providers via the ``jobspine.providers`` entry-point group.
+    """Discover third-party providers via the ``ergon_tracker.providers`` entry-point group.
 
     ``entry_points(group=...)`` is supported on Python 3.10+ (our minimum)."""
     for ep in entry_points(group=_ENTRYPOINT_GROUP):
