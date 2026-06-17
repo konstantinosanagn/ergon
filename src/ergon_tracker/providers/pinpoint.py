@@ -167,7 +167,9 @@ class PinpointProvider(BaseProvider):
         hi = p.get("compensation_maximum")
         if not isinstance(lo, (int, float)) and not isinstance(hi, (int, float)):
             return None
-        interval = _INTERVAL_BY_FREQUENCY.get((p.get("compensation_frequency") or "").strip().lower())
+        interval = _INTERVAL_BY_FREQUENCY.get(
+            (p.get("compensation_frequency") or "").strip().lower()
+        )
         currency = (p.get("compensation_currency") or "").strip() or None
         return Salary(
             min_amount=float(lo) if isinstance(lo, (int, float)) else None,

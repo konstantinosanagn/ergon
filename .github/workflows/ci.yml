@@ -27,4 +27,4 @@ jobs:
       - name: Type check
         run: mypy
       - name: Test
-        run: pytest --cov=jobspine --cov-report=term-missing
+        run: pytest --cov=ergon_tracker --cov-report=term-missing

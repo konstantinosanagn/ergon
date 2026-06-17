@@ -45,7 +45,10 @@ async def test_fetch_builds_rawjobs() -> None:
     assert r0.source_job_id == "3c36e9c8-1bee-45a2-94fe-09f10ccbe10f"
     assert r0.company == "11fs-group-ltd"
     assert r0.token == "11fs-group-ltd"
-    assert r0.url == "https://ats.rippling.com/11fs-group-ltd/jobs/3c36e9c8-1bee-45a2-94fe-09f10ccbe10f"
+    assert (
+        r0.url
+        == "https://ats.rippling.com/11fs-group-ltd/jobs/3c36e9c8-1bee-45a2-94fe-09f10ccbe10f"
+    )
     assert r0.payload["name"] == "Senior Sales Executive"
 
 

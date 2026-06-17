@@ -20,11 +20,22 @@ from harvest_commoncrawl import (  # noqa: E402
 
 
 def test_recent_crawl_apis_returns_n_newest() -> None:
-    info = json.dumps([
-        {"id": "CC-MAIN-2026-21", "cdx-api": "https://index.commoncrawl.org/CC-MAIN-2026-21-index"},
-        {"id": "CC-MAIN-2026-13", "cdx-api": "https://index.commoncrawl.org/CC-MAIN-2026-13-index"},
-        {"id": "CC-MAIN-2026-05", "cdx-api": "https://index.commoncrawl.org/CC-MAIN-2026-05-index"},
-    ])
+    info = json.dumps(
+        [
+            {
+                "id": "CC-MAIN-2026-21",
+                "cdx-api": "https://index.commoncrawl.org/CC-MAIN-2026-21-index",
+            },
+            {
+                "id": "CC-MAIN-2026-13",
+                "cdx-api": "https://index.commoncrawl.org/CC-MAIN-2026-13-index",
+            },
+            {
+                "id": "CC-MAIN-2026-05",
+                "cdx-api": "https://index.commoncrawl.org/CC-MAIN-2026-05-index",
+            },
+        ]
+    )
     apis = recent_crawl_apis(info, 2)
     assert apis == [
         "https://index.commoncrawl.org/CC-MAIN-2026-21-index",

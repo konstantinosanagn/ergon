@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .config import get_env
 
@@ -39,6 +39,7 @@ DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
 def _default_model() -> str:
     return get_env("ERGON_SEMANTIC_MODEL") or DEFAULT_MODEL
+
 
 # How much of each posting to embed. Title carries the most signal; we prepend it and add a
 # bounded slice of the description so long postings don't dominate or slow things down.
@@ -73,7 +74,7 @@ class SemanticReranker:
     def __init__(self, model_name: str | None = None, threads: int | None = None) -> None:
         self.model_name = model_name or _default_model()
         self.threads = threads
-        self._model = None
+        self._model: Any = None  # set lazily to a fastembed TextEmbedding in _ensure_model
 
     def _ensure_model(self) -> None:
         if self._model is not None:
@@ -84,7 +85,7 @@ class SemanticReranker:
             raise ImportError(
                 "Semantic search needs the optional extra: pip install 'ergon-tracker[semantic]'"
             ) from exc
-        kwargs: dict[str, object] = {"model_name": self.model_name}
+        kwargs: dict[str, Any] = {"model_name": self.model_name}
         threads = self.threads if self.threads is not None else get_env("ERGON_SEMANTIC_THREADS")
         if threads:
             kwargs["threads"] = int(threads)

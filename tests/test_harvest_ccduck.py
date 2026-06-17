@@ -34,12 +34,14 @@ def test_surt_bounds_domain_match() -> None:
 
 
 def test_warc_parquet_urls_filters_subset_and_prefixes_https() -> None:
-    paths = "\n".join([
-        "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=warc/part-0.parquet",
-        "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=crawldiagnostics/part-0.parquet",
-        "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=robotstxt/part-0.parquet",
-        "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=warc/part-1.parquet",
-    ])
+    paths = "\n".join(
+        [
+            "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=warc/part-0.parquet",
+            "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=crawldiagnostics/part-0.parquet",
+            "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=robotstxt/part-0.parquet",
+            "cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=warc/part-1.parquet",
+        ]
+    )
     urls = warc_parquet_urls(gzip.compress(paths.encode()))
     assert urls == [
         "https://data.commoncrawl.org/cc-index/table/cc-main/warc/crawl=CC-MAIN-2024-51/subset=warc/part-0.parquet",
