@@ -214,6 +214,9 @@ class SearchQuery(BaseModel):
     # opt-in: derive level from years-of-experience when the title has no seniority marker
     # (boosts level coverage; trades some precision — off by default)
     infer_level_from_experience: bool = False
+    # opt-in: semantic search. Skips the exact-token keyword gate and ranks by embedding
+    # similarity instead (needs the `semantic` extra). off by default = lexical BM25 ranking.
+    semantic: bool = False
 
     def _years_ok(self, job: JobPosting) -> bool:
         if self.min_years is None and self.max_years is None:
@@ -265,7 +268,9 @@ class SearchQuery(BaseModel):
         return True
 
     def matches(self, job: JobPosting) -> bool:
-        if self.keywords:
+        # Semantic mode ranks by meaning, so it must NOT pre-filter on exact tokens here
+        # (that would drop relevant postings that don't contain the literal words).
+        if self.keywords and not self.semantic:
             haystack = " ".join(
                 filter(
                     None,

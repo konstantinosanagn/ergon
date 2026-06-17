@@ -68,6 +68,7 @@ async def search_jobs(
     salary_min: float | None = None,
     salary_max: float | None = None,
     infer_level_from_experience: bool = False,
+    semantic: bool = False,
     limit: int = 20,
 ) -> dict[str, Any]:
     """Search jobs across company ATS feeds and aggregators, returning canonical postings.
@@ -76,6 +77,8 @@ async def search_jobs(
         keywords: free-text query. Matches on title/department/company/description, then
             results are ranked by relevance (field-weighted BM25; title matches rank highest)
             so the most relevant postings come first. Each job carries a `score`.
+        semantic: if true, rank by meaning via embeddings instead of exact-token matching
+            (handles synonyms / natural-language intent). Needs the server's `semantic` extra.
         location: substring match on posting location.
         remote: if true, keep only remote/hybrid roles.
         companies: company domains or careers URLs to target (e.g. ["stripe.com"]). Omit to
@@ -104,6 +107,7 @@ async def search_jobs(
         salary_min=salary_min,
         salary_max=salary_max,
         infer_level_from_experience=infer_level_from_experience,
+        semantic=semantic,
         limit=limit,
     )
     async with AsyncErgonTracker() as js:

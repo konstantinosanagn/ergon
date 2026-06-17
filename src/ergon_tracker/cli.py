@@ -73,6 +73,11 @@ def search(
         "--infer-level",
         help="derive level from years of experience when title has no marker",
     ),
+    semantic: bool = typer.Option(
+        False,
+        "--semantic",
+        help="rank by meaning via embeddings (needs: pip install 'ergon-tracker[semantic]')",
+    ),
     limit: int | None = typer.Option(None, "--limit", "-n"),
     as_json: bool = typer.Option(False, "--json", help="emit JSON instead of a table"),
 ) -> None:
@@ -91,6 +96,7 @@ def search(
             salary_min=salary_min,
             salary_max=salary_max,
             infer_level_from_experience=infer_level,
+            semantic=semantic,
             limit=limit,
         )
     except ValueError as exc:

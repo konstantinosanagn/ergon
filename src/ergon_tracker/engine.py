@@ -153,8 +153,14 @@ async def run_search(query: SearchQuery, fetcher: AsyncFetcher) -> SearchResult:
     combined: list[JobPosting] = [job for i in sorted(results) for job in results[i]]
     deduped = deduplicate(combined)
     # Rank by relevance to the keyword query BEFORE applying the limit, so we keep the best
-    # matches rather than whichever sources happened to return first.
-    deduped = rank(deduped, query.keywords)
+    # matches rather than whichever sources happened to return first. Semantic mode adds an
+    # embeddings reranker over the lexical top-K (opt-in; needs the `semantic` extra).
+    reranker = None
+    if query.semantic and query.keywords:
+        from .semantic import get_semantic_reranker
+
+        reranker = get_semantic_reranker()
+    deduped = rank(deduped, query.keywords, reranker=reranker)
     if query.limit is not None:
         deduped = deduped[: query.limit]
 
