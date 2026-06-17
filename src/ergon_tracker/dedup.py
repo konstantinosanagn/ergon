@@ -44,6 +44,7 @@ _ATS_PROVIDERS = frozenset(
         "pinpoint",
         "eightfold",
         "successfactors",
+        "oracle",
     }
 )
 _AGGREGATORS = frozenset(

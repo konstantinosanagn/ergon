@@ -23,6 +23,7 @@ SUPPORTED_ATS = {
     "pinpoint",
     "eightfold",
     "successfactors",
+    "oracle",
 }
 
 

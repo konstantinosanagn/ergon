@@ -65,6 +65,7 @@ ATS_PRIORITY = {
     "pinpoint": 13,
     "eightfold": 14,
     "successfactors": 15,
+    "oracle": 16,
 }
 
 

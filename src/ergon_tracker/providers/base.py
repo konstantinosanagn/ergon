@@ -51,6 +51,7 @@ _BUILTIN_MODULES = (
     "pinpoint",
     "eightfold",
     "successfactors",
+    "oracle",
     "remotive",
     "arbeitnow",
     "jobicy",
