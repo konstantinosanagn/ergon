@@ -38,6 +38,7 @@ jobs:
           mkdir -p dist
           gh release download index-latest --dir dist --pattern 'index.sqlite.gz' || echo "no prev index"
           gh release download index-latest --dir dist --pattern 'board_state.json' || echo "no prev state"
+          gh release download index-latest --dir dist --pattern 'history.jsonl' || echo "no history"
           [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
 
       - name: Build incremental index (exits non-zero if data-quality gates fail)
@@ -49,7 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ASSETS="dist/index.sqlite.gz dist/manifest.json dist/gates.json dist/board_state.json"
+          ASSETS="dist/index.sqlite.gz dist/manifest.json dist/gates.json dist/board_state.json dist/history.jsonl"
           if gh release view index-latest >/dev/null 2>&1; then
             gh release upload index-latest $ASSETS --clobber
           else

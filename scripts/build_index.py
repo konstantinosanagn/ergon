@@ -87,6 +87,13 @@ def _today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def append_history(history_path: Path, row: dict) -> None:
+    """Append one build-summary row to the history JSONL time series (for drift detection)."""
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
 def _gated_publish(
     tmp_db: Path, final_db: Path, out: Path, *, build_id: str, prev_row_count: int | None = None
 ) -> bool:
@@ -223,6 +230,16 @@ def main(argv: list[str]) -> None:
         )
         save_state(states, state_path)  # record the crawl regardless of publish outcome
         ok = _gated_publish(db_tmp, db, out, build_id=build_id, prev_row_count=len(prev_jobs) or None)
+        append_history(
+            out / "history.jsonl",
+            {
+                "build_id": build_id, "date": _today(), "due_boards": len(outcome),
+                "fresh_jobs": len(fresh), "total_jobs": n, "changed_companies": len(changed),
+                "throttled_boards": sum(1 for o in outcome.values() if o["http_429"]),
+                "errored_boards": sum(1 for o in outcome.values() if o["error"]),
+                "published": ok,
+            },
+        )
         print(
             f"incremental build: crawled {len(outcome)} due boards, {len(fresh)} fresh jobs, "
             f"{n} total{' -> published' if ok else ' (gates FAILED, kept previous)'}"

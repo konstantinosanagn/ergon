@@ -26,3 +26,14 @@ def test_publish_writes_gz_and_manifest(tmp_path):
     assert man["build_id"] == "b1" and man["schema_version"] == 1
     raw = gzip.decompress((out / "index.sqlite.gz").read_bytes())
     assert hashlib.sha256(raw).hexdigest() == man["sha256"]
+
+
+def test_append_history_accumulates(tmp_path):
+    from build_index import append_history
+
+    h = tmp_path / "runs" / "history.jsonl"
+    append_history(h, {"build_id": "b1", "total_jobs": 10})
+    append_history(h, {"build_id": "b2", "total_jobs": 12})
+    import json
+    rows = [json.loads(line) for line in h.read_text().splitlines()]
+    assert [r["build_id"] for r in rows] == ["b1", "b2"]
