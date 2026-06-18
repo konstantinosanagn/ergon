@@ -29,6 +29,7 @@ class ExtractInput:
     title: str
     description_text: str | None = None
     location_raw: str | None = None
+    company: str | None = None
     company_key: str | None = None
     company_domain: str | None = None
     structured_salary: Salary | None = None
@@ -84,6 +85,7 @@ def input_from_job(job: JobPosting, *, company_key: str | None = None) -> Extrac
         title=job.title,
         description_text=job.description_text or html_to_text(job.description_html),
         location_raw=location_raw,
+        company=job.company,
         company_key=company_key,
         company_domain=job.company_domain,
         structured_salary=job.salary,
