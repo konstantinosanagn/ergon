@@ -44,6 +44,24 @@ def test_router_prefers_sharded_over_single_file(tmp_path, monkeypatch):
     assert out is not None and out[0].company == "Stripe"
 
 
+def test_router_skips_shards_for_broad_query(tmp_path, monkeypatch):
+    # A no-sector (broad) query must NOT touch the sharded path: pulling all shards is slower
+    # than the single-file index's one download + global FTS rank. Sharding only helps sectors.
+    p = tmp_path / "i.sqlite"
+    build_index(
+        [JobPosting.create(source="greenhouse", source_job_id="1", company="Co",
+                           title="Senior Backend Engineer", level=JobLevel.SENIOR)],
+        p, build_id="b1",
+    )
+    monkeypatch.setattr(
+        router, "_load_sharded",
+        lambda q: (_ for _ in ()).throw(AssertionError("shards consulted for broad query")),
+    )
+    monkeypatch.setattr(router, "_load_backend", lambda: SqliteIndexBackend(p))
+    out = router.try_index(SearchQuery(keywords="backend", limit=5))  # no sector
+    assert out is not None and out[0].title == "Senior Backend Engineer"
+
+
 def test_env_off_disables_index(monkeypatch):
     monkeypatch.setenv("ERGON_INDEX", "off")
     assert router.try_index(SearchQuery(keywords="x")) is None

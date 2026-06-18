@@ -27,16 +27,21 @@ def _load_backend() -> SqliteIndexBackend | None:
 def try_index(query: SearchQuery) -> list[JobPosting] | None:
     """Return index results for a broad query, or None to signal 'fall back to live'.
 
-    Preference order: sector-sharded index (v2) -> single-file index (v1) -> live (None).
+    Preference order: sector-sharded index (v2, sector queries only) -> single-file index (v1)
+    -> live (None).
     """
     if os.environ.get("ERGON_INDEX", "").lower() == "off":
         return None
     if query.companies or query.sources:  # targeted => live (fresher, already fast)
         return None
     try:
-        sharded = _load_sharded(query)
-        if sharded is not None and sharded.available():
-            return sharded.search(query)
+        # The sharded path only wins for SECTOR-scoped queries (download one small shard). A
+        # broad/cross-sector query would have to pull every shard — slower than the single-file
+        # index's one download + single global FTS rank — so skip straight to single-file.
+        if query.sector:
+            sharded = _load_sharded(query)
+            if sharded is not None and sharded.available():
+                return sharded.search(query)
         backend = _load_backend()
         if backend is None or not backend.available():
             return None
