@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ..models import JobPosting, Provenance, SearchQuery
+from .build import sector_slug
 from .db import SCHEMA_VERSION, connect
 from .mapping import from_row
 from .query import search_rows
@@ -69,3 +71,57 @@ class SqliteIndexBackend:
             return jobs
         finally:
             con.close()
+
+
+class ShardedIndexBackend:
+    """IndexBackend over per-sector shards: a sector query opens one shard; cross-sector fans out."""
+
+    def __init__(self, shard_dir: Path | str) -> None:
+        self.dir = Path(shard_dir)
+        self.manifest_path = self.dir / "shards.json"
+
+    def _manifest(self) -> dict:
+        if not self.manifest_path.exists():
+            return {}
+        try:
+            return json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def available(self) -> bool:
+        m = self._manifest()
+        return bool(m.get("shards")) and int(m.get("schema_version", 0)) == SCHEMA_VERSION
+
+    def metadata(self) -> dict:
+        m = self._manifest()
+        shards = m.get("shards", {})
+        return {
+            "schema_version": int(m.get("schema_version", 0)),
+            "build_id": m.get("build_id"),
+            "row_count": sum(int(s.get("rows", 0)) for s in shards.values()),
+            "shards": len(shards),
+        }
+
+    def search(self, query: SearchQuery) -> list[JobPosting]:
+        shards = self._manifest().get("shards", {})
+        if query.sector:
+            slug = sector_slug(query.sector)
+            targets = [shards[slug]["file"]] if slug in shards else []
+        else:
+            targets = [s["file"] for s in shards.values()]
+
+        results: list[JobPosting] = []
+        for fname in targets:
+            be = SqliteIndexBackend(self.dir / fname)
+            if be.available():
+                results.extend(be.search(query))
+
+        # Cross-shard merge: bm25 scores aren't comparable across shards, so re-rank the union.
+        if query.keywords:
+            from ..ranking import rank
+
+            results = rank(results, query.keywords)
+        else:
+            results.sort(key=lambda j: (j.posted_at is not None, j.posted_at), reverse=True)
+        limit = query.limit or len(results)
+        return results[:limit]
