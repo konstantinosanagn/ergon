@@ -49,3 +49,24 @@ not daily — the crawl load collapses while the index stays current.
 
 **Remaining for v1:** M2 Task 8 (GitHub Action daily cron + publish to Releases) and M3
 (observability + full data-quality gate suite). Then v2 = Approach B (sector shards + deltas).
+
+## 2026-06-18 — M3 (gates + observability) + M2 Action: v1 feature-complete
+
+**Done this iteration:**
+- **Data-quality gates** (`index/gates.py`): integrity, schema, row-floor (vs prev), no-dup-ids,
+  company-FK. **Good-or-nothing publish**: build to a temp file → gate → atomically promote +
+  publish only if all pass; else previous snapshot stays live, run exits non-zero. gates.json
+  always written. (5 tests)
+- **GitHub Action** (`.github/workflows/build-index.yml`): daily cron → incremental build →
+  gated publish to the stable `index-latest` release (assets clobbered). SDK `IndexCache` points
+  at the stable per-tag URL.
+- **Build-history time series** (`history.jsonl`, accumulated across CI runs via the release):
+  per-build due/fresh/total/changed/throttled/errored/published — drift-detection backbone.
+
+**Live proof (full gated pipeline):** re-run incremental → carry-forward 9723→9702 (stable) →
+**all gates passed** → published → history recorded (throttled 0, errored 0). 705 tests pass.
+
+**v1 status: feature-complete.** Queryable index (M1) + tiered throttle-proof incremental crawl
+(M2) + gates/observability/daily Action (M3) all implemented, tested, and proven on live data.
+Remaining v1 polish: full structured-JSON logging + secret redaction + `INDEX_STATUS.md`
+generation, and the first real **full** (46k) CI build. Then v2 = Approach B (sector shards + deltas).
