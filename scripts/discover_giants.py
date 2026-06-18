@@ -35,14 +35,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from census_successfactors import tavily  # noqa: E402
+from census_successfactors import (  # noqa: E402
+    _domain_label,
+    _is_sf,
+    tavily,  # noqa: E402
+)
 from harvest_commoncrawl import load_seed_keys  # noqa: E402
 from harvest_tavily import load_key  # noqa: E402
 from harvest_tokens import _core, name_match  # noqa: E402
 
 from ergon_tracker.http import AsyncFetcher  # noqa: E402
 from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon_tracker.providers.base import get_provider, iter_providers, load_builtins  # noqa: E402
 
 load_builtins()
 GIANTS = ROOT / "runs" / "giants.json"
@@ -74,10 +78,112 @@ _ICIMS = re.compile(r"(careers-[a-z0-9-]+\.icims\.com|[a-z0-9-]+\.icims\.com)", 
 _TALEO = re.compile(r"([a-z0-9-]+\.taleo\.net)", re.I)
 _PHENOM = re.compile(r"([a-z0-9-]+\.phenompeople\.com)", re.I)
 _AVATURE = re.compile(r"([a-z0-9-]+\.avature\.net)", re.I)
+# Every absolute URL in the page — we run each provider's matches() over all of them so EVERY
+# supported ATS is covered (SF/brassring/jobvite/jazzhr/greenhouse/lever/... not just the 7 hosts).
+_ALL_URLS = re.compile(r"https?://[^\s\"'<>)]+", re.I)
+# Provider check order: canonical full boards first, path-based last. Aggregators excluded.
+_ORDER = (
+    "workday",
+    "oracle",
+    "icims",
+    "taleo",
+    "successfactors",
+    "brassring",
+    "phenom",
+    "avature",
+    "jobvite",
+    "jazzhr",
+    "eightfold",
+    "greenhouse",
+    "lever",
+    "ashby",
+    "smartrecruiters",
+    "workable",
+    "recruitee",
+    "personio",
+    "bamboohr",
+    "rippling",
+    "pinpoint",
+    "breezy",
+    "teamtailor",
+)
+_SF_SIG = ("jobs2web", "successfactors", "/services/rss/job", "rmkcdn", "sapsf")
 
 
-def _careers_urls(urls: list[str]) -> list[str]:
-    return [u for u in urls if u and not any(x in u.lower() for x in EXCLUDE)][:3]
+_STOP = (
+    "the",
+    "inc",
+    "llc",
+    "corp",
+    "co",
+    "and",
+    "services",
+    "service",
+    "group",
+    "company",
+    "technologies",
+    "technology",
+    "llp",
+    "ltd",
+    "lp",
+    "usa",
+    "us",
+    "global",
+    "international",
+)
+# A job-search sublink to follow when the landing page has no ATS host.
+_SUBLINK = re.compile(r'href="(https?://[^"]*(?:search|/jobs?|find-?jobs|careers?)[^"]*)"', re.I)
+
+
+def _slug(name: str) -> str:
+    words = [w for w in re.sub(r"[^a-z0-9 ]", " ", name.lower()).split() if w not in _STOP]
+    return words[0] if words else ""
+
+
+# ATSes whose tenant/site identifier SHOULD relate to the sponsor (citi.eightfold.ai,
+# accenture|wd103, careers.wipro.com|wipro). This rejects a careers page that embeds a THIRD-
+# PARTY ATS host (a partner board, or a Coveo `/rest/search` widget that SF.matches false-hits).
+# Shared-host ATSes (greenhouse/lever/...) and opaque-host Oracle are verified by name-match /
+# careers-page provenance instead, so they're exempt.
+_RELATE_ATS = {"workday", "eightfold", "icims", "taleo", "avature", "phenom", "successfactors"}
+
+
+def _identifier(ats: str, token: str) -> str:
+    parts = token.split("|")
+    if ats == "successfactors" and len(parts) > 1:
+        return parts[1].lower()  # siteid
+    if ats == "workday":
+        return parts[0].lower()  # tenant
+    return parts[0].split(".")[0].lower()  # eightfold token / host label
+
+
+def _relates(sponsor: str, ats: str, token: str) -> bool:
+    if ats not in _RELATE_ATS:
+        return True
+    ident = _identifier(ats, token)
+    core = _core(sponsor)
+    if not ident or not core:
+        return True
+    return ident in core or core in ident or core[:5] == ident[:5] or name_match(sponsor, ident)
+
+
+def _candidate_urls(sponsor: str, tavily_urls: list[str]) -> list[str]:
+    """Tavily careers results PLUS guessed hosts (careers./jobs./{domain}) — many giants'
+    real ATS host only appears on the careers subdomain, not whatever Tavily returned first."""
+    out = [u for u in tavily_urls if u and not any(x in u.lower() for x in EXCLUDE)][:3]
+    s = _slug(sponsor)
+    if len(s) >= 3:
+        for guess in (
+            f"careers.{s}.com",
+            f"jobs.{s}.com",
+            f"www.{s}.com/careers",
+            f"{s}.com/careers",
+            f"careers.{s}.com/jobs",
+        ):
+            u = "https://" + guess
+            if u not in out:
+                out.append(u)
+    return out
 
 
 async def _workday_token(host: str, fetcher: AsyncFetcher) -> str | None:
@@ -95,51 +201,48 @@ async def _workday_token(host: str, fetcher: AsyncFetcher) -> str | None:
 
 
 async def detect(sponsor: str, html: str, fetcher: AsyncFetcher) -> tuple[str, str] | None:
-    """Extract the first supported-ATS token from a careers page's HTML.
+    """Extract a supported-ATS token from a careers page's HTML — comprehensively.
 
-    Workday is checked BEFORE Eightfold: on giants that run both (e.g. Citi), Workday is the
-    canonical full board while Eightfold is usually a "Match Me" overlay returning a partial set.
+    Runs EVERY provider's ``matches()`` over EVERY URL in the page (priority order: canonical
+    full boards first; Workday/Oracle before Eightfold, which on dual-stack giants is just a
+    partial "Match Me" overlay). Then host-signature fallbacks for ATSes whose token needs more
+    than a URL: a Workday host with no full URL (resolve the site), and a SuccessFactors host
+    (RSS-confirm + domain-label siteid).
     """
-    m = _WORKDAY_FULL.search(html)
-    if m:
-        tok = get_provider("workday").matches("https://" + m.group(1))
-        if tok:
-            return "workday", tok
-    m = _WORKDAY.search(html)  # host only -> resolve the site by following the host
+    urls = _ALL_URLS.findall(html)
+    provs = {p.name: p for p in iter_providers()}
+    for name in _ORDER:
+        prov = provs.get(name)
+        if prov is None:
+            continue
+        for u in urls:
+            try:
+                tok = prov.matches(u)
+            except Exception:  # noqa: BLE001
+                tok = None
+            if tok and _relates(sponsor, name, tok):
+                return name, tok
+
+    # Fallback A: a bare Workday host (no /{site} URL) -> follow it to the default site.
+    m = _WORKDAY.search(html)
     if m:
         tok = await _workday_token(m.group(1).lower(), fetcher)
         if tok:
             return "workday", tok
-    m = _EIGHTFOLD.search(html)
-    if m:
-        tok = get_provider("eightfold").matches(m.group(1))
-        if tok:
-            return "eightfold", tok
-    for ats, pat in (
-        ("oracle", _ORACLE),
-        ("icims", _ICIMS),
-        ("taleo", _TALEO),
-        ("phenom", _PHENOM),
-        ("avature", _AVATURE),
-    ):
-        m = pat.search(html)
-        if m:
-            tok = get_provider(ats).matches("https://" + m.group(1))
-            if tok:
-                return ats, tok
-    return None
-
-
-async def discover(sponsor: str, key: str, fetcher: AsyncFetcher) -> tuple[str, str] | None:
-    urls = await tavily(sponsor, key, fetcher)
-    for u in _careers_urls(urls):
-        try:
-            resp = await fetcher.request("GET", u, timeout=12.0)
-        except Exception:  # noqa: BLE001
-            continue
-        hit = await detect(sponsor, resp.text or "", fetcher)
-        if hit:
-            return hit
+    # Fallback B: a SuccessFactors careers host (signature present but no /{siteid}/ URL) ->
+    # RSS-confirm the careers host itself and use its domain label as the siteid.
+    low = html.lower()
+    if any(s in low for s in _SF_SIG):
+        core = _core(sponsor)
+        for u in urls[:30]:
+            host = re.sub(r"^https?://", "", u).split("/")[0].split(":")[0].lower()
+            # only probe a host that belongs to the sponsor (its slug is in the host) — skip
+            # third-party search/CDN hosts (coveo, cloudfront, ...) that also answer the RSS path.
+            label = host.split(".")[0]
+            if not host or not (core and (core in host or label in core)):
+                continue
+            if await _is_sf(host, fetcher):
+                return "successfactors", f"{host}|{_domain_label(host)}"
     return None
 
 
@@ -183,12 +286,21 @@ async def main() -> None:
 
     async def find(idx: int, g: dict, tav: AsyncFetcher, probe: AsyncFetcher) -> None:
         urls = await tavily(g["name"], key, tav)
-        for u in _careers_urls(urls):
+        for u in _candidate_urls(g["name"], urls):
             try:
                 resp = await probe.request("GET", u, timeout=12.0)
             except Exception:  # noqa: BLE001
                 continue
-            hit = await detect(g["name"], resp.text or "", probe)
+            html = resp.text or ""
+            hit = await detect(g["name"], html, probe)
+            if hit is None:  # landing has no ATS host -> follow one job-search subpage
+                sm = _SUBLINK.search(html)
+                if sm and sm.group(1) != u:
+                    try:
+                        sub = await probe.request("GET", sm.group(1), timeout=12.0)
+                        hit = await detect(g["name"], sub.text or "", probe)
+                    except Exception:  # noqa: BLE001
+                        pass
             if hit:
                 hits[idx] = hit
                 break

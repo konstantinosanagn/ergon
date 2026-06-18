@@ -36,16 +36,22 @@ def test_keyword_ranks_title_match_first(tmp_path):
 
 
 def test_filter_only_path_and_level_filter(tmp_path):
-    con = _db(tmp_path, [_job("1", "Eng", level=JobLevel.SENIOR), _job("2", "Eng", level=JobLevel.MID)])
+    # distinct titles so the builder's dedup keeps both rows
+    con = _db(
+        tmp_path,
+        [_job("1", "Backend Engineer", level=JobLevel.SENIOR),
+         _job("2", "Frontend Engineer", level=JobLevel.MID)],
+    )
     rows = search_rows(con, SearchQuery(level=JobLevel.SENIOR, limit=10))
     assert len(rows) == 1 and rows[0]["level"] == "senior"
 
 
 def test_matches_parity_on_filters(tmp_path):
+    # distinct titles -> no dedup -> index holds all three (parity vs matches() is meaningful)
     jobs = [
-        _job("1", "Eng", level=JobLevel.SENIOR, sector="Fintech"),
-        _job("2", "Eng", level=JobLevel.MID, sector="Fintech"),
-        _job("3", "Eng", level=JobLevel.SENIOR, sector=None),
+        _job("1", "Backend Engineer", level=JobLevel.SENIOR, sector="Fintech"),
+        _job("2", "Frontend Engineer", level=JobLevel.MID, sector="Fintech"),
+        _job("3", "Data Engineer", level=JobLevel.SENIOR, sector=None),
     ]
     con = _db(tmp_path, jobs)
     for q in [
