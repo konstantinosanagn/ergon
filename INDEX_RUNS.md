@@ -118,3 +118,28 @@ cross-sector merges + re-ranks (senior backend → Databricks/Coinbase). Partial
 gracefully fall back to the single-file index.
 
 **v2 core done.** Deferred to v2.1: per-shard daily deltas (download diffs, not full shards).
+
+## 2026-06-18 — v1+v2 cross-surface stress test ("works for others") + hardening
+
+Live index: **~350k jobs, ~8.4k companies, 11 ATS providers** on `index-latest` (29 sector
+shards + single file + coverage.json + INDEX_STATUS.md). Verified end-to-end for an anonymous
+token-less user.
+
+**Throttle-proof on every surface** (broad query → served by index, 0 ATS calls):
+- SDK `AsyncErgonTracker.search` → `health: [('index', True, n)]`
+- CLI `ergon-tracker search` → index result (Visa Staff Data Engineer)
+- MCP `search_jobs` (via `AsyncErgonTracker`) → `health: [('index', True, 5)]`
+
+**Optimized routing (v2):** sector query → 1 small shard (~2MB, 0.6s); broad query →
+single-file (0 shards). Proven live.
+
+**Query robustness:** 14-case adversarial battery passes on live data (FTS injection
+`" OR 1=1 --` / `DROP TABLE` neutralized, special chars, lone operators, huge/zero limits,
+unicode). Found+fixed an FTS crash on punctuation-only keywords; regression-guarded.
+
+**Hardening this round:** routing perf fix (broad no longer pulls all shards); high-precision
+company-name sector fallback (`name_sector`, 23/23 correct spot-check); e2e test made hermetic
+vs live shards; forward-compat schema_version fallback locked in for both caches. 742 tests.
+
+**v1 + v2 sector-sharding: OFFICIALLY DONE, LIVE, STRESS-TESTED.** Deferred/tracked: cross-build
+conditional requests (etag unwired — top efficiency lever, needs own plan); v2.1 row-level deltas.
