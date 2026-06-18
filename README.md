@@ -20,6 +20,9 @@ free OSS tool was *reliable + unified + deduped + ergonomic* at once. ergon-trac
   record — fuzzy title/company matching, location compatibility, the most authoritative source
   (employer ATS) wins, and every source that listed it is kept under `provenance`.
 - ✅ **Live jobs are real.** Postings are fetched on demand, directly from source APIs.
+- ✅ **Broad search without throttling.** A free **prebuilt index** (daily SQLite/FTS5 snapshot of
+  every ATS we track) serves whole-registry queries locally — fast, anonymous, and with **zero ATS
+  contact at query time**, so you (and everyone else) never get rate-limited. See below.
 - ✅ **Filters are real and strong.** Level, location (country/city), salary range, years of
   experience, sector, remote, employment type, posting recency — all typed and tested.
 - ✅ **Companies are easy to find & search.** Point at a domain (`stripe.com`) and it auto-detects
@@ -118,6 +121,39 @@ ergon-tracker-mcp
 
 See **[docs/mcp-quickstart.md](docs/mcp-quickstart.md)** for the Claude Desktop / Claude Code
 config block.
+
+---
+
+## The prebuilt index (broad search, throttle-proof)
+
+Two kinds of query, two paths — automatic, no config:
+
+- **Targeted** (`companies=[...]` / specific sources) → fetched **live** from the source API
+  (freshest, already fast).
+- **Broad** (no company — searching the whole registry) → served from a **free prebuilt index**:
+  a daily SQLite/FTS5 snapshot of every ATS we track, published to a stable GitHub Release. The
+  SDK downloads it once (cached under `~/.cache/ergon-tracker`), verifies it, and queries it
+  **locally**. That means broad search is **fast and makes zero ATS requests at query time**, so
+  no one — you or the ATSes — ever gets rate-limited.
+
+```python
+from ergon_tracker import search
+# No company -> served from the prebuilt index (instant, no ATS contact):
+res = search("machine learning engineer", sector="AI/ML", remote=True, limit=20)
+```
+
+How it stays polite & current:
+- **Built by one CI crawler**, not by users — a smart **tiered, incremental** crawl (hot/warm/cold
+  boards) with per-host rate limiting and **conditional requests** (ETag/`If-None-Match` → `304`,
+  so unchanged boards aren't re-downloaded). Users never crawl.
+- **Anonymous** — no token needed (public release). **Integrity-gated** (sha256 + schema version +
+  data-quality gates), so a bad build never replaces a good snapshot.
+- **Sector-sharded** — a `sector=` query downloads only that shard (a few MB), not the whole index.
+
+Controls:
+- `ERGON_INDEX=off` — force everything live (skip the index entirely).
+- Coverage of the current snapshot is in **[INDEX_STATUS.md](INDEX_STATUS.md)** (jobs by provider /
+  sector / country, regenerated each build).
 
 ---
 
