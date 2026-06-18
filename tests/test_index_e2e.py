@@ -34,6 +34,8 @@ def test_full_pipeline_offline(tmp_path, monkeypatch):
                     "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)})
     )
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
+    # Hermetic: force the single-file path (no live shard fetch over the network).
+    monkeypatch.setattr(router, "_load_sharded", lambda q: None)
     monkeypatch.setattr(
         router, "_load_backend",
         lambda: (lambda p: SqliteIndexBackend(p) if p else None)(cache.ensure_fresh()),
