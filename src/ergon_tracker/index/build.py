@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..canonicalize import aggregate_companies
-from ..dedup import deduplicate
+from ..dedup import deduplicate, normalize_company
 from ..models import JobPosting
 from .db import connect, fresh_db
-from .mapping import to_row
+from .mapping import from_row, to_row
 
 _JOB_COLS = (  # noqa: SIM905 - space-delimited string is far more readable than a 40-item list
     "id content_hash company_key source company company_domain title department role_family "
@@ -21,6 +21,42 @@ _JOB_COLS = (  # noqa: SIM905 - space-delimited string is far more readable than
 
 class IndexBuildError(RuntimeError):
     pass
+
+
+def read_index_jobs(path: Path | str) -> list[JobPosting]:
+    """Load all postings from an existing index (for carry-forward in an incremental build)."""
+    con = connect(path, read_only=True)
+    try:
+        return [from_row(r) for r in con.execute("SELECT * FROM jobs")]
+    finally:
+        con.close()
+
+
+def merge_incremental(
+    prev_jobs: list[JobPosting], fresh_jobs: list[JobPosting], crawled_keys: set[str]
+) -> list[JobPosting]:
+    """Carry forward prior jobs from boards we did NOT crawl; replace crawled boards with fresh.
+
+    A prior job whose company is in ``crawled_keys`` but absent from ``fresh_jobs`` is dropped
+    (it expired off its board). Boards we didn't crawl keep their prior jobs unchanged. The union
+    is deduped by :func:`build_index` (idempotent), so we just concatenate here.
+    """
+    carried = [j for j in prev_jobs if normalize_company(j.company) not in crawled_keys]
+    return carried + fresh_jobs
+
+
+def build_index_incremental(
+    prev_index: Path | str | None,
+    fresh_jobs: list[JobPosting],
+    crawled_keys: set[str],
+    path: Path | str,
+    *,
+    build_id: str,
+) -> int:
+    """Incremental build: prior index (if any) carried forward + freshly-crawled boards."""
+    prev = read_index_jobs(prev_index) if prev_index and Path(prev_index).exists() else []
+    merged = merge_incremental(prev, fresh_jobs, crawled_keys)
+    return build_index(merged, path, build_id=build_id)
 
 
 def build_index(jobs: list[JobPosting], path: Path | str, *, build_id: str) -> int:
