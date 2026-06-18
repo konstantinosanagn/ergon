@@ -87,6 +87,28 @@ def _today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def _gated_publish(
+    tmp_db: Path, final_db: Path, out: Path, *, build_id: str, prev_row_count: int | None = None
+) -> bool:
+    """Good-or-nothing publish: gate the temp build, promote+publish only if it passes.
+
+    Writes gates.json always. On failure the previous snapshot (final_db) is left untouched.
+    """
+    from ergon_tracker.index.gates import evaluate_gates
+
+    rep = evaluate_gates(tmp_db, prev_row_count=prev_row_count)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "gates.json").write_text(json.dumps(rep.to_dict(), indent=2))
+    if not rep.passed:
+        print(f"GATES FAILED — keeping previous snapshot. {rep.summary()}")
+        tmp_db.unlink(missing_ok=True)
+        return False
+    tmp_db.replace(final_db)  # atomic promote
+    publish_artifacts(final_db, out, build_id=build_id)
+    print(f"gates passed: {rep.summary()}")
+    return True
+
+
 async def _crawl_due(limit_companies: int, states: dict) -> tuple[list, dict]:
     """Crawl ONLY the boards due today (per the scheduler) -> (fresh_jobs, per-board outcome).
 
@@ -195,20 +217,25 @@ def main(argv: list[str]) -> None:
                 http_429=o["http_429"],
                 requests=1,
             )
+        db_tmp = out / "index.tmp.sqlite"
         n = build_index_incremental(
-            db if db.exists() else None, fresh, crawled_keys, db, build_id=build_id
+            db if db.exists() else None, fresh, crawled_keys, db_tmp, build_id=build_id
         )
-        save_state(states, state_path)
-        publish_artifacts(db, out, build_id=build_id)
+        save_state(states, state_path)  # record the crawl regardless of publish outcome
+        ok = _gated_publish(db_tmp, db, out, build_id=build_id, prev_row_count=len(prev_jobs) or None)
         print(
             f"incremental build: crawled {len(outcome)} due boards, {len(fresh)} fresh jobs, "
-            f"{n} total -> {out}/index.sqlite.gz"
+            f"{n} total{' -> published' if ok else ' (gates FAILED, kept previous)'}"
         )
+        if not ok:
+            raise SystemExit(1)
         return
 
     jobs = anyio.run(_crawl, limit)
-    n = build_index(jobs, db, build_id=build_id)
-    publish_artifacts(db, out, build_id=build_id)
+    db_tmp = out / "index.tmp.sqlite"
+    n = build_index(jobs, db_tmp, build_id=build_id)
+    if not _gated_publish(db_tmp, db, out, build_id=build_id):
+        raise SystemExit(1)
     print(f"built index: {n} jobs -> {out}/index.sqlite.gz (+manifest.json)")
 
 
