@@ -73,6 +73,7 @@ ATS_PRIORITY = {
     "jobvite": 21,
     "phenom": 22,
     "brassring": 23,
+    "schemaorg": 24,  # generic fallback (sitemap/JSON-LD) — lowest priority vs a real ATS
 }
 
 

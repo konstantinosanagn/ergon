@@ -126,8 +126,10 @@ def _parse_epoch(value: Any) -> datetime | None:
 class EightfoldProvider(BaseProvider):
     name = "eightfold"
 
-    PER_PAGE = 20  # positions requested per ``num`` page
-    MAX_PAGES = 50  # per-board page cap (=1000 jobs) to bound pagination cost
+    PER_PAGE = 20  # positions requested per ``num`` page (apply/v2 honors it; PCSX caps at ~10)
+    MAX_RESULTS = 10000  # absolute per-board job ceiling; we advance ``start`` by the ACTUAL
+    # batch length (PCSX returns ~10/page regardless of ``num``), so a fixed-step loop both
+    # SKIPPED jobs and truncated big boards (Citi showed 500 of its real ~3800).
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
@@ -175,8 +177,8 @@ class EightfoldProvider(BaseProvider):
         """Page the legacy ``/api/apply/v2/jobs`` API (open tenants)."""
         limit = query.limit
         positions: list[dict[str, Any]] = []
-        for page in range(self.MAX_PAGES):
-            start = page * self.PER_PAGE
+        start = 0
+        while len(positions) < self.MAX_RESULTS:
             params = {
                 "domain": domain,
                 "start": start,
@@ -192,18 +194,19 @@ class EightfoldProvider(BaseProvider):
             if not isinstance(data, dict) or _is_locked(data):
                 break  # locked tenant / unexpected shape: degrade to []
 
-            batch = data.get("positions") or []
+            batch = [p for p in (data.get("positions") or []) if isinstance(p, dict)]
             if not batch:
                 break
-            positions.extend(p for p in batch if isinstance(p, dict))
+            positions.extend(batch)
+            start += len(batch)  # advance by the ACTUAL count returned (never skip/overstep)
 
             if limit is not None and len(positions) >= limit:
                 return positions[:limit]
 
             count = data.get("count")
-            if isinstance(count, int) and start + len(batch) >= count:
+            if isinstance(count, int) and start >= count:
                 break
-        return positions
+        return positions[: self.MAX_RESULTS]
 
     async def _fetch_pcsx(
         self, token: str, domain: str, query: SearchQuery, fetcher: AsyncFetcher
@@ -212,8 +215,8 @@ class EightfoldProvider(BaseProvider):
         url = _PCSX_API.format(tenant=token)
         limit = query.limit
         positions: list[dict[str, Any]] = []
-        for page in range(self.MAX_PAGES):
-            start = page * self.PER_PAGE
+        start = 0
+        while len(positions) < self.MAX_RESULTS:
             params = {
                 "domain": domain,
                 "query": "",
@@ -232,18 +235,19 @@ class EightfoldProvider(BaseProvider):
             block = data.get("data")
             if not isinstance(block, dict):
                 break
-            batch = block.get("positions") or []
+            batch = [p for p in (block.get("positions") or []) if isinstance(p, dict)]
             if not batch:
                 break
-            positions.extend(self._pcsx_canonical(p, token) for p in batch if isinstance(p, dict))
+            positions.extend(self._pcsx_canonical(p, token) for p in batch)
+            start += len(batch)  # PCSX returns ~10/page regardless of num — step by what we got
 
             if limit is not None and len(positions) >= limit:
                 return positions[:limit]
 
             count = block.get("count")
-            if isinstance(count, int) and start + len(batch) >= count:
+            if isinstance(count, int) and start >= count:
                 break
-        return positions
+        return positions[: self.MAX_RESULTS]
 
     @staticmethod
     def _pcsx_canonical(p: dict[str, Any], token: str) -> dict[str, Any]:

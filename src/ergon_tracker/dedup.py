@@ -52,6 +52,7 @@ _ATS_PROVIDERS = frozenset(
         "jobvite",
         "phenom",
         "brassring",
+        "schemaorg",
     }
 )
 _AGGREGATORS = frozenset(

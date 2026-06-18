@@ -59,6 +59,7 @@ _BUILTIN_MODULES = (
     "jobvite",
     "phenom",
     "brassring",
+    "schemaorg",
     "remotive",
     "arbeitnow",
     "jobicy",

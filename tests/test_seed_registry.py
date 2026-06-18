@@ -31,6 +31,7 @@ SUPPORTED_ATS = {
     "jobvite",
     "phenom",
     "brassring",
+    "schemaorg",
 }
 
 

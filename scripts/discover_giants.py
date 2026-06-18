@@ -229,16 +229,19 @@ async def main() -> None:
         )
         if ok:
             taken.add(ck)
-            candidates.append(
-                {
-                    "company": ck,
-                    "ats": ats,
-                    "token": token,
-                    "domain": None,
-                    "_sponsor": sponsor,
-                    "_filings": giants[idx].get("filings"),
-                }
-            )
+            cand: dict = {
+                "company": ck,
+                "ats": ats,
+                "domain": None,
+                "_sponsor": sponsor,
+                "_filings": giants[idx].get("filings"),
+            }
+            if ats == "workday":  # build_registry wants split tenant|wd|site, not a composite token
+                tenant, wd, site = token.split("|", 2)
+                cand.update({"tenant": tenant, "wd": wd, "site": site})
+            else:
+                cand["token"] = token
+            candidates.append(cand)
 
     async with (
         AsyncFetcher(concurrency=10, per_host_rate=6, timeout=25.0, retries=1) as fetcher,
