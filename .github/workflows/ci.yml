@@ -18,13 +18,15 @@ jobs:
         uses: astral-sh/setup-uv@v5
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
+      - name: Create venv
+        run: uv venv --python ${{ matrix.python-version }}
       - name: Install
-        run: uv pip install --system -e ".[dev,pandas,polars,mcp]"
+        run: uv pip install -e ".[dev,pandas,polars,mcp]"
       - name: Lint
-        run: ruff check src tests
+        run: uv run ruff check src tests
       - name: Format check
-        run: ruff format --check src tests
+        run: uv run ruff format --check src tests
       - name: Type check
-        run: mypy
+        run: uv run mypy
       - name: Test
-        run: pytest --cov=ergon_tracker --cov-report=term-missing
+        run: uv run pytest --cov=ergon_tracker --cov-report=term-missing
