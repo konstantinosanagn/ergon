@@ -103,3 +103,18 @@ gates → publishes `index-latest` release → SDK `IndexCache` downloads it **w
 All v1 goals met: queryable index across ATSes · tiered throttle-proof incremental crawl ·
 gated/automated daily build · free for others. **Starting v2 (Approach B: sector-sharded index +
 daily deltas for optimized search).** A larger real build is running to populate the live index.
+
+## 2026-06-18 — v2 (sector-sharded index) core complete (Tasks 1–6)
+
+Approach B implemented + tested (713 tests): `build_sharded_index` (one SQLite shard per sector +
+`shards.json`), `ShardedIndexBackend` (sector query → one shard; cross-sector → fan-out + re-rank;
+parity with single-file proven), `ShardCache` (downloads only the needed shard), router preference
+(sharded → single-file → live), and `build_index.py --sharded` wired into the daily Action.
+
+**Live-data dogfood** (sharding the real 9,702-job index → 13 sector shards): Software/SaaS 2042,
+Healthcare 1807, Semiconductors 1493, AI/ML 1207, Fintech 722. Sector queries route to one shard
+and return correct results (Software/SaaS→Adobe/Salesforce, AI/ML→OpenAI, Fintech→Ramp);
+cross-sector merges + re-ranks (senior backend → Databricks/Coinbase). Partial-sector queries
+gracefully fall back to the single-file index.
+
+**v2 core done.** Deferred to v2.1: per-shard daily deltas (download diffs, not full shards).
