@@ -165,13 +165,22 @@ def search(
         table.add_column("title")
         table.add_column("location")
         table.add_column("level", style="magenta")
+        table.add_column("salary", style="green")
         table.add_column("sector", style="green")
         table.add_column("source", style="dim")
         for job in result.jobs:
             loc = job.locations[0].as_text() if job.locations else ""
             score = f"{job.score:.1f}" if job.score is not None else "—"
+            salary = job.salary.as_text() if job.salary else ""
             table.add_row(
-                score, job.company, job.title, loc, job.level.value, job.sector or "", job.source
+                score,
+                job.company,
+                job.title,
+                loc,
+                job.level.value,
+                salary,
+                job.sector or "",
+                job.source,
             )
         console.print(table)
         for h in result.failed_sources:
