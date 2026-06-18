@@ -55,8 +55,6 @@ from ergon_tracker.providers.phenom import PhenomProvider  # noqa: E402
 load_builtins()
 DEFAULT_OUT = ROOT / "scripts" / "candidates_ats.json"
 _ICIMS_API = "https://{host}/api/jobs?page=1&limit=1"
-_PHENOM_API = "https://{host}/widgets"
-_PHENOM_PROBE = {"ddoKey": "refineSearch", "jobs": True, "from": 0, "size": 1}
 # Host-based providers whose matches() recognises a careers URL directly (order = preference).
 # Each is host-specific (*.taleo.net, *.oraclecloud.com, *.icims.com, *.avature.net,
 # *.applytojob.com, jobs.jobvite.com, *.phenompeople.com) so order never causes mis-matches.
@@ -99,8 +97,10 @@ async def detect(urls: list[str], fetcher: AsyncFetcher) -> tuple[str, str] | No
             tok = get_provider(ats).matches(u)
             if tok:
                 return ats, tok
-    # (b) probe careers hosts for the providers that live on vanity domains: iCIMS (/api/jobs
-    # JSON), Phenom (/widgets refineSearch), then SuccessFactors (RSS).
+    # (b) probe careers hosts for the vanity-domain providers via cheap GETs: iCIMS (/api/jobs
+    # JSON) then SuccessFactors (RSS). NOTE: Phenom is intentionally NOT probed here — a blind
+    # POST /widgets to arbitrary careers hosts hangs many of them to the timeout (~20x slowdown
+    # for 0.2% of the gap), so Phenom is caught only via matches() on deep Tavily links above.
     for host in _sf_candidate_hosts(urls)[:5]:
         try:
             resp = await fetcher.request("GET", _ICIMS_API.format(host=host), timeout=8.0)
@@ -108,16 +108,6 @@ async def detect(urls: list[str], fetcher: AsyncFetcher) -> tuple[str, str] | No
                 body = resp.json()
                 if isinstance(body, dict) and ("jobs" in body or "totalCount" in body):
                     return "icims", host
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            resp = await fetcher.request(
-                "POST", _PHENOM_API.format(host=host), json=_PHENOM_PROBE, timeout=8.0
-            )
-            if resp.status_code == 200 and "json" in resp.headers.get("content-type", "").lower():
-                body = resp.json()
-                if isinstance(body, dict) and isinstance(body.get("refineSearch"), dict):
-                    return "phenom", host
         except Exception:  # noqa: BLE001
             pass
         if await _is_sf(host, fetcher):
