@@ -178,7 +178,7 @@ async def _crawl_due(limit_companies: int, states: dict, fresh_db_path, build_id
     """
     import anyio
 
-    from ergon_tracker.dedup import normalize_company
+    from ergon_tracker.dedup import deduplicate, normalize_company
     from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.exceptions import RateLimitError
     from ergon_tracker.http import AsyncFetcher
@@ -248,6 +248,9 @@ async def _crawl_due(limit_companies: int, states: dict, fresh_db_path, build_id
             board_jobs.append(job)
             outcome[bkey]["companies"].add(normalize_company(job.company))
         if board_jobs:
+            # Per-board fuzzy dedup (cheap, memory-safe) recovers most of the old in-memory
+            # deduplicate() quality; cross-board exact-id dedup is handled by append_jobs' UNIQUE.
+            board_jobs = deduplicate(board_jobs)
             # one shared connection; the lock serializes the (sync, fast) batch insert
             async with write_lock:
                 append_jobs(con, board_jobs, build_id=build_id)
