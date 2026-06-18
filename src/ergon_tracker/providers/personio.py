@@ -99,6 +99,11 @@ class PersonioProvider(BaseProvider):
                     return token
         return None
 
+    def conditional_url(self, token: str) -> str | None:
+        # Whole feed in one XML response with a strong ETag (honors If-None-Match -> 304). No
+        # raws_from_body override: a 200 falls back to fetch (XML parse) — the 304 skip is the win.
+        return _API.format(token=token)
+
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         # Personio has no server-side filtering: pull the whole feed in one request.
         url = _API.format(token=token)

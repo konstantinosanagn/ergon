@@ -77,10 +77,22 @@ class BreezyProvider(BaseProvider):
                     return token
         return None
 
+    def conditional_url(self, token: str) -> str | None:
+        # Whole board in one JSON response with a strong ETag (honors If-None-Match -> 304).
+        return _API.format(token=token)
+
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         # Breezy has no server-side filtering: pull the whole board in one request.
-        url = _API.format(token=token)
-        data = await fetcher.get_json(url)
+        data = await fetcher.get_json(_API.format(token=token))
+        return self._raws_from_data(data, token)
+
+    def raws_from_body(self, token: str, body: bytes) -> list[RawJob]:
+        """Parse an already-downloaded body (from a conditional 200), avoiding a refetch."""
+        import json
+
+        return self._raws_from_data(json.loads(body), token)
+
+    def _raws_from_data(self, data: Any, token: str) -> list[RawJob]:
         positions: list[dict[str, Any]] = data if isinstance(data, list) else []
         raws: list[RawJob] = []
         for pos in positions:

@@ -22,6 +22,14 @@ def test_opted_in_providers_return_exact_fetch_url():
     )
 
 
+def test_more_opted_in_providers_return_exact_fetch_url():
+    # breezy/teamtailor/personio also honor If-None-Match -> 304 (single whole-board response).
+    load_builtins()
+    assert get_provider("breezy").conditional_url("acme") == "https://acme.breezy.hr/json"
+    assert get_provider("teamtailor").conditional_url("acme") == "https://acme.teamtailor.com/jobs.json"
+    assert get_provider("personio").conditional_url("acme") == "https://acme.jobs.personio.de/xml"
+
+
 def test_paginated_or_unsupported_providers_return_none():
     # smartrecruiters paginates (page-1 ETag isn't a whole-board validator) -> must NOT opt in.
     load_builtins()
