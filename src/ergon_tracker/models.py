@@ -21,6 +21,7 @@ __all__ = [
     "JobLevel",
     "Location",
     "Salary",
+    "Company",
     "RawJob",
     "Provenance",
     "JobPosting",
@@ -117,6 +118,22 @@ class Salary(BaseModel):
             body = f"{(lo if lo is not None else hi):,.0f}"
         suffix = f"/{self.interval.value}" if self.interval else ""
         return f"{prefix}{body}{suffix}"
+
+
+class Company(BaseModel):
+    """Canonical employer identity (keyed by dedup.normalize_company)."""
+
+    company_key: str
+    display_name: str
+    domain: str | None = None
+    primary_ats: str | None = None
+    board_token: str | None = None
+    sector: str | None = None
+    h1b_sponsor: bool | None = None
+    h1b_last_filed: str | None = None
+    open_roles: int = 0
+    first_seen: str | None = None
+    last_seen: str | None = None
 
 
 class RawJob(BaseModel):
