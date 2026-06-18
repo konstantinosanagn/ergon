@@ -74,6 +74,7 @@ ATS_PRIORITY = {
     "phenom": 22,
     "brassring": 23,
     "schemaorg": 24,  # generic fallback (sitemap/JSON-LD) — lowest priority vs a real ATS
+    "apicapture": 25,  # captured own-domain JSON/GraphQL API (proxied giants)
 }
 
 

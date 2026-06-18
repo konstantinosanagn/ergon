@@ -60,6 +60,7 @@ _BUILTIN_MODULES = (
     "phenom",
     "brassring",
     "schemaorg",
+    "apicapture",
     "remotive",
     "arbeitnow",
     "jobicy",

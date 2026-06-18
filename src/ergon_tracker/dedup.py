@@ -53,6 +53,7 @@ _ATS_PROVIDERS = frozenset(
         "phenom",
         "brassring",
         "schemaorg",
+        "apicapture",
     }
 )
 _AGGREGATORS = frozenset(

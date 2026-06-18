@@ -32,6 +32,7 @@ SUPPORTED_ATS = {
     "phenom",
     "brassring",
     "schemaorg",
+    "apicapture",
 }
 
 
