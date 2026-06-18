@@ -331,3 +331,63 @@ def build_sharded_index(jobs: list[JobPosting], out_dir: Path | str, *, build_id
     manifest = {"build_id": build_id, "schema_version": SCHEMA_VERSION, "shards": shards}
     (out / "shards.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
+
+
+def _build_shard_from_db(src_db: Path | str, shard_path: Path, sectors: list, *, build_id: str) -> int:
+    """Copy one sector's rows from a built index into a shard DB via SQL (memory-bounded)."""
+    fresh_db(shard_path)
+    con = connect(shard_path)
+    try:
+        con.execute("PRAGMA foreign_keys = OFF")  # companies aggregated in finalize_index
+        con.execute("ATTACH DATABASE ? AS src", (str(src_db),))
+        cols = ",".join(_JOB_COLS)
+        non_null = [s for s in sectors if s not in (None, "")]
+        clauses, params = [], []
+        if non_null:
+            clauses.append(f"sector IN ({','.join('?' for _ in non_null)})")
+            params.extend(non_null)
+        if any(s in (None, "") for s in sectors):
+            clauses.append("sector IS NULL OR sector = ''")
+        where = " OR ".join(f"({c})" for c in clauses) or "0"
+        con.execute(
+            f"INSERT INTO jobs({cols}) SELECT {cols} FROM src.jobs WHERE {where}",  # noqa: S608
+            params,
+        )
+        con.execute(
+            "INSERT OR IGNORE INTO job_sources SELECT s.* FROM src.job_sources s "
+            "WHERE s.job_id IN (SELECT id FROM jobs)"
+        )
+        con.commit()  # close the txn so DETACH (and finalize's VACUUM) can run
+        con.execute("DETACH DATABASE src")
+        return finalize_index(con, build_id=build_id)
+    finally:
+        con.close()
+
+
+def build_sharded_index_from_db(db_path: Path | str, out_dir: Path | str, *, build_id: str) -> dict:
+    """Build per-sector shards from an already-built index via SQL — no jobs loaded into memory.
+
+    Memory-bounded equivalent of build_sharded_index: partitions the index by sector slug using
+    SQL ATTACH + finalize_index per shard. Use for full-scale builds.
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    src = connect(db_path, read_only=True)
+    try:
+        raw_sectors = [r[0] for r in src.execute("SELECT DISTINCT sector FROM jobs")]
+    finally:
+        src.close()
+    slug_to_sectors: dict[str, list] = {}
+    for s in raw_sectors:
+        slug_to_sectors.setdefault(sector_slug(s), []).append(s)
+
+    shards: dict[str, dict] = {}
+    for slug, sectors in sorted(slug_to_sectors.items()):
+        fname = f"shard-{slug}.sqlite"
+        n = _build_shard_from_db(db_path, out / fname, sectors, build_id=build_id)
+        raw = (out / fname).read_bytes()
+        shards[slug] = {"file": fname, "rows": n, "sha256": hashlib.sha256(raw).hexdigest()}
+
+    manifest = {"build_id": build_id, "schema_version": SCHEMA_VERSION, "shards": shards}
+    (out / "shards.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest

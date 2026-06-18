@@ -130,3 +130,37 @@ def test_shardcache_missing_sector_returns_none(tmp_path):
     _publish_shards(remote, src)
     cache = ShardCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
     assert cache.ensure(SearchQuery(sector="Healthcare")) is None  # no such shard -> fallback
+
+
+def test_sharded_from_db_parity_with_in_memory(tmp_path):
+    # build_sharded_index_from_db (SQL, memory-bounded) must produce the same shards as the
+    # in-memory build_sharded_index for the same jobs.
+    from ergon_tracker.index.build import (
+        build_index,
+        build_sharded_index,
+        build_sharded_index_from_db,
+    )
+    from ergon_tracker.index.db import connect
+
+    jobs = [
+        _job("1", "Stripe", "Backend Engineer", sector="Fintech"),
+        _job("2", "Ramp", "Payments Engineer", sector="Fintech"),
+        _job("3", "Hugging Face", "ML Engineer", sector="AI/ML"),
+        _job("4", "Acme", "Generalist", sector=None),
+    ]
+    mem = build_sharded_index(jobs, tmp_path / "mem", build_id="b1")
+
+    src = tmp_path / "index.sqlite"
+    build_index(jobs, src, build_id="b1")
+    db = build_sharded_index_from_db(src, tmp_path / "db", build_id="b1")
+
+    assert set(mem["shards"]) == set(db["shards"])  # same slugs
+    for slug in mem["shards"]:
+        assert mem["shards"][slug]["rows"] == db["shards"][slug]["rows"]
+    # ids per shard match
+    for slug in db["shards"]:
+        a = {r[0] for r in connect(tmp_path / "mem" / f"shard-{slug}.sqlite", read_only=True).execute("SELECT id FROM jobs")}
+        b = {r[0] for r in connect(tmp_path / "db" / f"shard-{slug}.sqlite", read_only=True).execute("SELECT id FROM jobs")}
+        assert a == b
+    # the unknown shard exists and holds the sector-less job
+    assert db["shards"]["unknown"]["rows"] == 1
