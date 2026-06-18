@@ -25,6 +25,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Add swap (headroom for large full crawls; build holds jobs in memory)
+        run: |
+          # A full ~46k-board crawl can build a ~1M-row index; the in-memory merge/build can
+          # exceed the runner's RAM. Add generous swap on the large /mnt disk so a peak spike
+          # pages out (slow but safe) instead of OOM-killing a multi-hour build.
+          sudo fallocate -l 16G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=16384
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
