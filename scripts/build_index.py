@@ -35,17 +35,50 @@ def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
 
 
 async def _crawl(limit_companies: int) -> list:
-    from ergon_tracker.engine import run_search  # reuse the live engine
+    """Bounded registry crawl: fetch N boards directly by their stored (ats, token).
+
+    Bypasses resolve() (which is for arbitrary user domains/URLs) and reuses the providers +
+    enrich + dedup, crash-isolated per board so one dead board never sinks the run.
+    """
+    import anyio
+
+    from ergon_tracker.dedup import deduplicate
+    from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.http import AsyncFetcher
     from ergon_tracker.models import SearchQuery
+    from ergon_tracker.providers.base import get_provider, load_builtins
     from ergon_tracker.registry.store import SeedRegistry
 
-    keys = list(SeedRegistry().all())[:limit_companies]
-    # companies= => run_search takes the live path (try_index returns None), so no recursion.
-    q = SearchQuery(companies=keys)
-    async with AsyncFetcher() as fetcher:
-        result = await run_search(q, fetcher)
-    return result.jobs
+    load_builtins()
+    items = [
+        (k, e)
+        for k, e in list(SeedRegistry().all().items())[:limit_companies]
+        if e.get("ats") and e.get("token")
+    ]
+    jobs: list = []
+
+    async def grab(key: str, entry: dict, fetcher: AsyncFetcher) -> None:
+        provider = get_provider(entry["ats"])
+        if provider is None:
+            return
+        try:
+            raws = await provider.fetch(entry["token"], SearchQuery(), fetcher)
+        except Exception:  # noqa: BLE001 - dead/blocked board, skip
+            return
+        for raw in raws:
+            try:
+                job = provider.normalize(raw)
+            except Exception:  # noqa: BLE001
+                continue
+            if entry.get("domain") and not job.company_domain:
+                job.company_domain = entry["domain"]
+            enrich_in_place(job, company_key=key)
+            jobs.append(job)
+
+    async with AsyncFetcher() as fetcher, anyio.create_task_group() as tg:
+        for key, entry in items:
+            tg.start_soon(grab, key, entry, fetcher)
+    return deduplicate(jobs)
 
 
 def main(argv: list[str]) -> None:
