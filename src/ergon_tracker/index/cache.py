@@ -147,7 +147,9 @@ class ShardCache:
             fetch = _asset_fetcher(self.base_url, self.repo, self.tag)
             remote = json.loads(fetch("shards.json"))
         except Exception as exc:  # noqa: BLE001 - no shards published -> caller falls back
-            log.warning("shard manifest fetch failed (%s)", exc)
+            # Expected on single-file deployments / before the first shard publish, not an
+            # error: the caller transparently falls back to the single-file index.
+            log.debug("no shard manifest (%s); falling back to single-file index", exc)
             return None
         if int(remote.get("schema_version", -1)) != SCHEMA_VERSION:
             return None
