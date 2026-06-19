@@ -57,6 +57,23 @@ from ergon_tracker.models import JobLevel
         ("CISO Argentina", JobLevel.EXECUTIVE),
         ("CHRO", JobLevel.EXECUTIVE),
         ("Chief Data Officer", JobLevel.EXECUTIVE),
+        # --- "Staff X": senior IC for tech, rank-and-file for other professions ---
+        ("Staff Software Engineer", JobLevel.STAFF),
+        ("Staff Data Scientist", JobLevel.STAFF),
+        ("Staff Accountant", JobLevel.UNKNOWN),
+        ("Staff Nurse", JobLevel.UNKNOWN),
+        ("Staff Auditor", JobLevel.UNKNOWN),
+        # --- "Fellow": tech principal-IC vs academic/medical trainee ---
+        ("Technical Fellow", JobLevel.PRINCIPAL),
+        ("Distinguished Fellow", JobLevel.PRINCIPAL),
+        ("Fellow Engineer", JobLevel.PRINCIPAL),
+        ("Research Fellow", JobLevel.JUNIOR),
+        ("Postdoctoral Fellow", JobLevel.JUNIOR),
+        ("Postdoc", JobLevel.JUNIOR),
+        ("Senior Research Fellow", JobLevel.SENIOR),  # explicit senior wins
+        # --- unambiguous academic ladder (title fixes level regardless of sector) ---
+        ("Assistant Professor", JobLevel.ENTRY),
+        ("Associate Professor", JobLevel.MID),
         # --- New-grad / campus-hire markers -> entry ----------------------
         ("Software Engineer (New Grads 2025-2026)", JobLevel.ENTRY),  # plural "new grads"
         ("Software Engineer New Grads", JobLevel.ENTRY),
