@@ -70,10 +70,13 @@ class WorkdayProvider(BaseProvider):
     name = "workday"
 
     PAGE_SIZE = 20  # Workday rejects limit > 20
-    MAX_RESULTS = 10000  # absolute hard pagination cap (per board, and per facet bucket)
-    MAX_PAGES = 500  # per-board page cap — kept consistent with MAX_RESULTS (500*20=10000) so the
+    MAX_RESULTS = 30000  # absolute hard pagination cap (per board, and per facet bucket). Raised
+    # from 10k so mega-tenants (CVS Health ~16k, large banks/retailers) aren't truncated. Each
+    # Workday tenant is a SEPARATE host with its own per-host rate bucket, so pulling a big tenant
+    # fully never throttles other providers/tenants.
+    MAX_PAGES = 1500  # per-board page cap — kept consistent with MAX_RESULTS (1500*20=30000) so the
     # flat path isn't silently truncated below MAX_RESULTS. Pages fetch CONCURRENTLY (bounded by
-    # the fetcher). Boards above 10k postings (e.g. CVS Health ~16k) are intentionally bounded here.
+    # the fetcher). A ~30k-posting tenant = 1500 paged requests at the per-tenant rate (~minutes).
 
     # --- token <-> composite ------------------------------------------------
 
