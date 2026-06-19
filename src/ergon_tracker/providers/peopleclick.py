@@ -111,7 +111,9 @@ class PeopleClickProvider(BaseProvider):
             source=self.name,
             source_job_id=raw.source_job_id,
             company=raw.company,
-            title=self._clean(a.get("FLD_JP_POSTING_TITLE")) or self._clean(a.get("JPM_TITLE")) or "",
+            title=self._clean(a.get("FLD_JP_POSTING_TITLE"))
+            or self._clean(a.get("JPM_TITLE"))
+            or "",
             fetched_at=raw.fetched_at,
             apply_url=raw.url,
             locations=locations,

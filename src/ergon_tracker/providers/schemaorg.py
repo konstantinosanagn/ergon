@@ -157,7 +157,8 @@ class _DualFetch:
                 )
             r = await self._h1.get(url)
             r.raise_for_status()
-            return r.text
+            text: str = r.text
+            return text
 
     async def aclose(self) -> None:
         if self._h1 is not None:
@@ -223,7 +224,7 @@ class SchemaOrgProvider(BaseProvider):
 
     # --- sitemap resolution ----------------------------------------------
 
-    async def _resolve_sitemaps(self, token: str, fetcher: AsyncFetcher) -> tuple[list[str], str]:
+    async def _resolve_sitemaps(self, token: str, fetcher: _DualFetch) -> tuple[list[str], str]:
         """Return ``(sitemap_root_urls, host)`` for a host or a direct sitemap URL token."""
         if "://" in token:
             host = urlsplit(token).netloc.split("@")[-1].split(":")[0].lower()
@@ -254,7 +255,7 @@ class SchemaOrgProvider(BaseProvider):
         return [], host
 
     async def _collect_job_urls(
-        self, roots: list[str], fetcher: AsyncFetcher, target: int
+        self, roots: list[str], fetcher: _DualFetch, target: int
     ) -> list[str]:
         """BFS the sitemap graph, collecting de-duped per-job detail URLs up to ``target``."""
         seen_docs: set[str] = set()
@@ -295,7 +296,7 @@ class SchemaOrgProvider(BaseProvider):
 
     # --- detail parsing --------------------------------------------------
 
-    async def _fetch_detail(self, url: str, host: str, fetcher: AsyncFetcher) -> RawJob | None:
+    async def _fetch_detail(self, url: str, host: str, fetcher: _DualFetch) -> RawJob | None:
         try:
             html = await fetcher.get_text(url)
         except Exception:

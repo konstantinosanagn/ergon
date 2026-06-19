@@ -332,6 +332,36 @@ def finalize_index(con: object, *, build_id: str, vacuum: bool = False) -> int:
     return n
 
 
+def _relevel_from_years(con: object) -> int:
+    """Reclassify level='unknown' rows from already-stored years-of-experience — no re-crawl.
+
+    Propagates the years->level inference to carried-forward jobs built BEFORE inference was
+    enabled (fixes the whole index on the next build, not just newly-crawled boards). Description-
+    phrase cues need JD text (not stored), so this covers the years path only — the bigger lever
+    for the backlog. Reuses level_from_years so SQL/Python never drift; memory-bounded (only the
+    unknown-with-years slice).
+    """
+    import sqlite3
+
+    from ..extract.level import level_from_years
+    from ..models import JobLevel
+
+    assert isinstance(con, sqlite3.Connection)
+    rows = con.execute(
+        "SELECT id, years_min, years_max FROM jobs WHERE level = 'unknown' "
+        "AND (years_min IS NOT NULL OR years_max IS NOT NULL)"
+    ).fetchall()
+    updates = [
+        (lvl.value, jid)
+        for jid, ymin, ymax in rows
+        if (lvl := level_from_years(ymin, ymax)) is not JobLevel.UNKNOWN
+    ]
+    if updates:
+        con.executemany("UPDATE jobs SET level = ? WHERE id = ?", updates)
+        con.commit()
+    return len(updates)
+
+
 def build_index_streaming(
     job_batches: Iterable[Iterable[JobPosting]],
     path: Path | str,
@@ -356,6 +386,7 @@ def build_index_streaming(
             append_jobs(con, batch, build_id=build_id)
         if prev_db is not None and crawled_keys is not None and Path(prev_db).exists():
             carry_forward(con, prev_db, crawled_keys)
+        _relevel_from_years(con)  # re-level carried-forward backlog from stored years (no re-crawl)
         return finalize_index(con, build_id=build_id)
     finally:
         con.close()
@@ -387,6 +418,7 @@ def build_index_from_fresh_db(
         con.execute("DETACH DATABASE fr")
         if prev_db is not None and crawled_keys is not None and Path(prev_db).exists():
             carry_forward(con, prev_db, crawled_keys)
+        _relevel_from_years(con)  # re-level carried-forward backlog from stored years (no re-crawl)
         return finalize_index(con, build_id=build_id)
     finally:
         con.close()

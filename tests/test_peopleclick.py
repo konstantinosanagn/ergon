@@ -22,7 +22,11 @@ def _job(jid: int, title: str, loc: str, dept: str) -> dict:
     return {
         "jobPostId": jid,
         "identity": {"id": jid},
-        "attributes": {"FLD_JP_POSTING_TITLE": title, "JPM_LOCATION": loc, "FLD_JP_DEPARTMENT": dept},
+        "attributes": {
+            "FLD_JP_POSTING_TITLE": title,
+            "JPM_LOCATION": loc,
+            "FLD_JP_DEPARTMENT": dept,
+        },
     }
 
 

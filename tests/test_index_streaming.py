@@ -199,3 +199,45 @@ def test_carry_forward_corrupt_prev_degrades_to_fresh_only(tmp_path):
     # fresh-only build succeeded (1 job), no exception
     _ids, _comp, total = _rows(out)
     assert total == 1 and n == 1
+
+
+def test_relevel_from_years_reclassifies_unknown(tmp_path):
+    # Carried-forward jobs built before years-inference: level=unknown but years stored. The
+    # re-level pass reclassifies them from the stored years (no re-crawl).
+    from ergon_tracker.index.build import _relevel_from_years, append_jobs
+    from ergon_tracker.index.db import connect, fresh_db
+
+    p = tmp_path / "i.sqlite"
+    fresh_db(p)
+    con = connect(p)
+    con.execute("PRAGMA foreign_keys = OFF")
+    try:
+        jobs = [
+            JobPosting.create(
+                source="greenhouse",
+                source_job_id="1",
+                company="A",
+                title="Software Engineer",
+                years_experience_min=1,
+            ),  # -> entry
+            JobPosting.create(
+                source="greenhouse",
+                source_job_id="2",
+                company="A",
+                title="Data Engineer",
+                years_experience_min=6,
+            ),  # -> senior
+            JobPosting.create(
+                source="greenhouse", source_job_id="3", company="A", title="Backend Engineer"
+            ),  # no years -> stays unknown
+        ]
+        append_jobs(con, jobs, build_id="b1")
+        assert {r[0] for r in con.execute("SELECT DISTINCT level FROM jobs")} == {"unknown"}
+        n = _relevel_from_years(con)
+        assert n == 2
+        got = {r[0]: r[1] for r in con.execute("SELECT title, level FROM jobs")}
+        assert got["Software Engineer"] == "entry"
+        assert got["Data Engineer"] == "senior"
+        assert got["Backend Engineer"] == "unknown"  # no years -> untouched
+    finally:
+        con.close()

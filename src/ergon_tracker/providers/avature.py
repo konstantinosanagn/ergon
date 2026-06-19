@@ -121,7 +121,10 @@ class AvatureProvider(BaseProvider):
         # careers.bv.com) -> strip the generic prefix and use the brand label.
         parts = host.split(".")
         first = parts[0] if parts else host
-        if first in {"jobs", "careers", "career", "job", "apply", "work", "talent"} and len(parts) >= 3:
+        if (
+            first in {"jobs", "careers", "career", "job", "apply", "work", "talent"}
+            and len(parts) >= 3
+        ):
             return parts[1]
         return first
 
@@ -147,7 +150,9 @@ class AvatureProvider(BaseProvider):
             if jid in seen:
                 continue
             seen.add(jid)
-            title_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, re.S | re.I)
+            title_m = re.search(
+                r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, re.S | re.I
+            )
             title = _html.unescape((title_m.group(1) if title_m else "").strip())
             out.append(
                 RawJob(
