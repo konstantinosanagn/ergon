@@ -105,6 +105,11 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
         # Mirror matches(): keep the requested type plus UNKNOWN (most postings don't state it).
         cl.append("(j.employment_type = ? OR j.employment_type = 'unknown')")
         p.append(q.employment_type.value)
+    if q.posted_after is not None:
+        # Mirror matches(): drop postings older than the cutoff; keep those with no posted_at
+        # (unknown date). posted_at is stored as an ISO-8601 string, which sorts chronologically.
+        cl.append("(j.posted_at IS NULL OR j.posted_at >= ?)")
+        p.append(q.posted_after.isoformat())
     return cl, p
 
 

@@ -10,6 +10,7 @@ filters, where every parity bug has lived.
 from __future__ import annotations
 
 import random
+from datetime import datetime, timezone
 
 from ergon_tracker.index.backend import SqliteIndexBackend
 from ergon_tracker.index.build import build_index
@@ -30,6 +31,14 @@ _REMOTE = list(RemoteType)
 _LEVELS = list(JobLevel)
 _EMP = list(EmploymentType)
 _CCY = ["USD", "EUR", "GBP", None]
+# tz-aware UTC datetimes so the index's ISO-string compare and matches()' datetime compare agree
+_POSTED = [
+    None,
+    datetime(2026, 1, 1, tzinfo=timezone.utc),
+    datetime(2026, 4, 1, tzinfo=timezone.utc),
+    datetime(2026, 6, 1, tzinfo=timezone.utc),
+]
+_CUTOFFS = [datetime(2026, 3, 1, tzinfo=timezone.utc), datetime(2026, 5, 15, tzinfo=timezone.utc)]
 
 
 def _make_jobs(rng, n):
@@ -65,6 +74,7 @@ def _make_jobs(rng, n):
                 years_experience_max=ymax,
                 visa_sponsor=rng.choice([True, None]),
                 sponsorship_offered=rng.choice([True, False, None]),
+                posted_at=rng.choice(_POSTED),
                 locations=[Location(raw=raw, city=city, country=country)],
             )
         )
@@ -102,6 +112,8 @@ def _random_query(rng):
         q["include_unknown_years"] = rng.random() < 0.5
     if rng.random() < 0.25:
         q["employment_type"] = rng.choice(_EMP)
+    if rng.random() < 0.3:
+        q["posted_after"] = rng.choice(_CUTOFFS)
     if rng.random() < 0.2:
         q["visa_sponsor"] = True
     if rng.random() < 0.2:
