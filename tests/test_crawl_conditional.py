@@ -68,9 +68,10 @@ def test_crawl_due_304_carries_forward(monkeypatch, tmp_path):
 
     outcome, _cursor = anyio.run(bi._crawl_due, 10, states, fresh_db_path, "b1")
 
-    assert connect(fresh_db_path, read_only=True).execute(
-        "SELECT COUNT(*) FROM jobs"
-    ).fetchone()[0] == 0  # nothing re-downloaded
+    assert (
+        connect(fresh_db_path, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        == 0
+    )  # nothing re-downloaded
     assert outcome[bs.key]["not_modified"] is True
     assert outcome[bs.key]["companies"] == set()  # empty -> prev jobs carry forward in merge
 
@@ -90,17 +91,29 @@ class _Provider200:
         import json
 
         from ergon_tracker.models import RawJob
+
         data = json.loads(body)
         return [
-            RawJob(source="greenhouse", source_job_id=str(j["id"]), company=token,
-                   token=token, url=None, payload=j)
+            RawJob(
+                source="greenhouse",
+                source_job_id=str(j["id"]),
+                company=token,
+                token=token,
+                url=None,
+                payload=j,
+            )
             for j in data["jobs"]
         ]
 
     def normalize(self, raw):
         from ergon_tracker.models import JobPosting
-        return JobPosting.create(source="greenhouse", source_job_id=raw.source_job_id,
-                                 company=raw.company, title=raw.payload["title"])
+
+        return JobPosting.create(
+            source="greenhouse",
+            source_job_id=raw.source_job_id,
+            company=raw.company,
+            title=raw.payload["title"],
+        )
 
 
 class _Fetcher200:

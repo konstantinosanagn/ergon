@@ -40,6 +40,7 @@ class ConditionalResult:
     last_modified: str | None = None
     body: bytes | None = None
 
+
 DEFAULT_HEADERS = {
     "User-Agent": (
         "ergon_tracker/0.1 (+https://github.com/kanagn/ergon_tracker) Mozilla/5.0 (compatible; ergon_tracker bot)"

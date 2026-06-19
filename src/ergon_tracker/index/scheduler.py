@@ -77,8 +77,12 @@ def assign_tier(state: BoardState, today: str) -> str:
 
 
 def compute_next_due(tier: str, today: str) -> str:
-    interval = {"hot": 0, "warm": WARM_INTERVAL, "cold": COLD_INTERVAL,
-                "quarantine": QUARANTINE_COOLDOWN}.get(tier, 0)
+    interval = {
+        "hot": 0,
+        "warm": WARM_INTERVAL,
+        "cold": COLD_INTERVAL,
+        "quarantine": QUARANTINE_COOLDOWN,
+    }.get(tier, 0)
     return (_d(today) + timedelta(days=interval)).isoformat()
 
 

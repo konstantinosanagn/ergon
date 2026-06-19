@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ..models import JobPosting, Provenance, SearchQuery
 from .build import sector_slug
@@ -16,7 +16,7 @@ from .query import search_rows
 @runtime_checkable
 class IndexBackend(Protocol):
     def available(self) -> bool: ...
-    def metadata(self) -> dict: ...
+    def metadata(self) -> dict[str, Any]: ...
     def search(self, query: SearchQuery) -> list[JobPosting]: ...
 
 
@@ -35,7 +35,7 @@ class SqliteIndexBackend:
         except Exception:  # noqa: BLE001 - any open/read failure => not usable
             return False
 
-    def metadata(self) -> dict:
+    def metadata(self) -> dict[str, Any]:
         con = connect(self.path, read_only=True)
         try:
             meta = {r["key"]: r["value"] for r in con.execute("SELECT key,value FROM meta")}
@@ -80,11 +80,12 @@ class ShardedIndexBackend:
         self.dir = Path(shard_dir)
         self.manifest_path = self.dir / "shards.json"
 
-    def _manifest(self) -> dict:
+    def _manifest(self) -> dict[str, Any]:
         if not self.manifest_path.exists():
             return {}
         try:
-            return json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            data: dict[str, Any] = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            return data
         except Exception:  # noqa: BLE001
             return {}
 
@@ -92,7 +93,7 @@ class ShardedIndexBackend:
         m = self._manifest()
         return bool(m.get("shards")) and int(m.get("schema_version", 0)) == SCHEMA_VERSION
 
-    def metadata(self) -> dict:
+    def metadata(self) -> dict[str, Any]:
         m = self._manifest()
         shards = m.get("shards", {})
         return {

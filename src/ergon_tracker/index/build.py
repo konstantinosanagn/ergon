@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 from ..canonicalize import aggregate_companies
 from ..dedup import deduplicate, normalize_company
@@ -35,9 +37,7 @@ def read_index_jobs(path: Path | str) -> list[JobPosting]:
         con.close()
 
 
-def changed_companies(
-    prev_jobs: list[JobPosting], fresh_jobs: list[JobPosting]
-) -> set[str]:
+def changed_companies(prev_jobs: list[JobPosting], fresh_jobs: list[JobPosting]) -> set[str]:
     """Company keys whose content set differs between prior and fresh crawls (for tiering).
 
     Compares the set of content hashes per normalized company. A company present in fresh with a
@@ -175,7 +175,7 @@ def build_index(jobs: list[JobPosting], path: Path | str, *, build_id: str) -> i
 # callers may deduplicate() each batch first to catch intra-batch fuzzy dupes).
 
 
-def append_jobs(con: object, jobs: object, *, build_id: str) -> int:
+def append_jobs(con: object, jobs: Iterable[JobPosting], *, build_id: str) -> int:
     """Insert a batch of JobPostings (+ provenance) into an open index connection.
 
     Exact-id dedup via INSERT OR IGNORE on the unique ``id``. Returns the number of *new* job
@@ -188,7 +188,7 @@ def append_jobs(con: object, jobs: object, *, build_id: str) -> int:
     batch: list[JobPosting] = list(jobs) if isinstance(jobs, Iterable) else []
     if not batch:
         return 0
-    before = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    before = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
     placeholders = ",".join(":" + c for c in _JOB_COLS)
     con.executemany(
         f"INSERT OR IGNORE INTO jobs({','.join(_JOB_COLS)}) VALUES({placeholders})",
@@ -203,7 +203,7 @@ def append_jobs(con: object, jobs: object, *, build_id: str) -> int:
             for p in j.provenance
         ],
     )
-    after = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    after = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
     return after - before
 
 
@@ -233,7 +233,7 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
         return 0
     try:
         cols = ",".join(_JOB_COLS)
-        before = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        before = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
         con.execute(
             f"INSERT OR IGNORE INTO jobs({cols}) SELECT {cols} FROM prev.jobs "  # noqa: S608 - fixed cols
             "WHERE company_key IS NULL OR company_key NOT IN (SELECT k FROM _crawled)"
@@ -242,7 +242,7 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
             "INSERT OR IGNORE INTO job_sources SELECT s.* FROM prev.job_sources s "
             "WHERE s.job_id IN (SELECT id FROM jobs)"
         )
-        after = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        after = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
         con.commit()
         return after - before
     except sqlite3.DatabaseError as exc:
@@ -255,7 +255,7 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
         con.execute("DETACH DATABASE prev")
 
 
-def _aggregate_companies_streamed(con: object) -> list:
+def _aggregate_companies_streamed(con: object) -> list[Any]:
     """Aggregate Company rows by streaming the jobs cursor (memory O(#companies), not O(#jobs)).
 
     Mirrors canonicalize.aggregate_companies: keyed by normalize_company, open_roles counted,
@@ -280,9 +280,14 @@ def _aggregate_companies_streamed(con: object) -> list:
             c = out.get(key)
             if c is None:
                 out[key] = Company(
-                    company_key=key, display_name=company, domain=domain, primary_ats=source,
-                    sector=sector, h1b_sponsor=True if is_h1b_sponsor(company) else None,
-                    h1b_last_filed=h1b_last_filed(company), open_roles=1,
+                    company_key=key,
+                    display_name=company,
+                    domain=domain,
+                    primary_ats=source,
+                    sector=sector,
+                    h1b_sponsor=True if is_h1b_sponsor(company) else None,
+                    h1b_last_filed=h1b_last_filed(company),
+                    open_roles=1,
                 )
             else:
                 c.open_roles += 1
@@ -312,7 +317,7 @@ def finalize_index(con: object, *, build_id: str, vacuum: bool = False) -> int:
         ":h1b_sponsor,:h1b_last_filed,:open_roles,:first_seen,:last_seen)",
         [{**c.model_dump(), "h1b_sponsor": 1 if c.h1b_sponsor else None} for c in companies],
     )
-    n = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    n = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
     con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('build_id',?)", (build_id,))
     con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('row_count',?)", (str(n),))
     con.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')")
@@ -328,7 +333,7 @@ def finalize_index(con: object, *, build_id: str, vacuum: bool = False) -> int:
 
 
 def build_index_streaming(
-    job_batches: object,
+    job_batches: Iterable[Iterable[JobPosting]],
     path: Path | str,
     *,
     build_id: str,
@@ -395,7 +400,9 @@ def sector_slug(sector: str | None) -> str:
     return slug or "unknown"
 
 
-def build_sharded_index(jobs: list[JobPosting], out_dir: Path | str, *, build_id: str) -> dict:
+def build_sharded_index(
+    jobs: list[JobPosting], out_dir: Path | str, *, build_id: str
+) -> dict[str, Any]:
     """Build one SQLite shard per sector (+ 'unknown') + a shards.json manifest. Returns manifest.
 
     Dedup once over the whole set, then partition by sector so a sector-scoped query later opens
@@ -409,7 +416,7 @@ def build_sharded_index(jobs: list[JobPosting], out_dir: Path | str, *, build_id
     for j in deduped:
         by_sector.setdefault(sector_slug(j.sector), []).append(j)
 
-    shards: dict[str, dict] = {}
+    shards: dict[str, dict[str, Any]] = {}
     for slug, sjobs in sorted(by_sector.items()):
         fname = f"shard-{slug}.sqlite"
         n = build_index(sjobs, out / fname, build_id=build_id)
@@ -421,7 +428,9 @@ def build_sharded_index(jobs: list[JobPosting], out_dir: Path | str, *, build_id
     return manifest
 
 
-def _build_shard_from_db(src_db: Path | str, shard_path: Path, sectors: list, *, build_id: str) -> int:
+def _build_shard_from_db(
+    src_db: Path | str, shard_path: Path, sectors: list[Any], *, build_id: str
+) -> int:
     """Copy one sector's rows from a built index into a shard DB via SQL (memory-bounded)."""
     fresh_db(shard_path)
     con = connect(shard_path)
@@ -452,7 +461,9 @@ def _build_shard_from_db(src_db: Path | str, shard_path: Path, sectors: list, *,
         con.close()
 
 
-def build_sharded_index_from_db(db_path: Path | str, out_dir: Path | str, *, build_id: str) -> dict:
+def build_sharded_index_from_db(
+    db_path: Path | str, out_dir: Path | str, *, build_id: str
+) -> dict[str, Any]:
     """Build per-sector shards from an already-built index via SQL — no jobs loaded into memory.
 
     Memory-bounded equivalent of build_sharded_index: partitions the index by sector slug using
@@ -465,11 +476,11 @@ def build_sharded_index_from_db(db_path: Path | str, out_dir: Path | str, *, bui
         raw_sectors = [r[0] for r in src.execute("SELECT DISTINCT sector FROM jobs")]
     finally:
         src.close()
-    slug_to_sectors: dict[str, list] = {}
+    slug_to_sectors: dict[str, list[Any]] = {}
     for s in raw_sectors:
         slug_to_sectors.setdefault(sector_slug(s), []).append(s)
 
-    shards: dict[str, dict] = {}
+    shards: dict[str, dict[str, Any]] = {}
     for slug, sectors in sorted(slug_to_sectors.items()):
         fname = f"shard-{slug}.sqlite"
         n = _build_shard_from_db(db_path, out / fname, sectors, build_id=build_id)

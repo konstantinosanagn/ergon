@@ -133,6 +133,13 @@ class USAJobsProvider(BaseProvider):
         params: dict[str, Any] = {
             "ResultsPerPage": min(query.limit or 50, _MAX_RESULTS),
         }
+        # A non-empty token = a single federal AGENCY board: USAJOBS' `Organization` agency-code
+        # filter (e.g. "HE38" = National Institutes of Health) returns only that agency's postings.
+        # This lets a federal-agency giant be seeded as {ats: usajobs, token: "<agency code>"};
+        # the empty-token aggregator path (matches() -> None) is unaffected.
+        org = (token or "").strip()
+        if org:
+            params["Organization"] = org
         if query.keywords:
             params["Keyword"] = query.keywords
         where = query.city or query.location

@@ -1,0 +1,10 @@
+{
+  "ustglobal": {
+    "org": "ustglobalproduction4ggrtx7v",
+    "mint_url": "https://www.ust.com/services/search",
+    "mint_param": "currentDate",
+    "warm_url": "https://www.ust.com/en/jobsearch",
+    "search_hub": "prod-jobs-search-hub",
+    "company": "UST"
+  }
+}

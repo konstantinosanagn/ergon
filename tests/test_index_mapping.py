@@ -23,8 +23,9 @@ def _job():
         remote=RemoteType.REMOTE,
         level=JobLevel.SENIOR,
         sector="Fintech",
-        salary=Salary(min_amount=120000, max_amount=160000, currency="USD",
-                      interval=SalaryInterval.YEAR),
+        salary=Salary(
+            min_amount=120000, max_amount=160000, currency="USD", interval=SalaryInterval.YEAR
+        ),
         apply_url="https://x/1",
         posted_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
         visa_sponsor=True,
@@ -56,12 +57,23 @@ def test_content_hash_stable_and_change_sensitive():
     from ergon_tracker.index.mapping import content_hash
     from ergon_tracker.models import JobLevel, JobPosting, Salary
 
-    base = JobPosting.create(source="greenhouse", source_job_id="1", company="Stripe",
-                             title="Backend Engineer", level=JobLevel.SENIOR)
-    same = JobPosting.create(source="lever", source_job_id="zzz", company="Stripe, Inc.",
-                             title="Backend Engineer", level=JobLevel.MID)
-    diff = JobPosting.create(source="greenhouse", source_job_id="1", company="Stripe",
-                             title="Frontend Engineer")
+    base = JobPosting.create(
+        source="greenhouse",
+        source_job_id="1",
+        company="Stripe",
+        title="Backend Engineer",
+        level=JobLevel.SENIOR,
+    )
+    same = JobPosting.create(
+        source="lever",
+        source_job_id="zzz",
+        company="Stripe, Inc.",
+        title="Backend Engineer",
+        level=JobLevel.MID,
+    )
+    diff = JobPosting.create(
+        source="greenhouse", source_job_id="1", company="Stripe", title="Frontend Engineer"
+    )
     assert content_hash(base) == content_hash(same)  # same content, different source/id/level
     assert content_hash(base) != content_hash(diff)  # title changed
     withsal = base.model_copy(update={"salary": Salary(min_amount=100, max_amount=200)})

@@ -7,8 +7,13 @@ from ergon_tracker.models import JobPosting, Location, RemoteType
 
 def _job(sid, company, title, sector=None):
     return JobPosting.create(
-        source="greenhouse", source_job_id=sid, company=company, title=title, sector=sector,
-        locations=[Location(raw="Remote", is_remote=True)], remote=RemoteType.REMOTE,
+        source="greenhouse",
+        source_job_id=sid,
+        company=company,
+        title=title,
+        sector=sector,
+        locations=[Location(raw="Remote", is_remote=True)],
+        remote=RemoteType.REMOTE,
     )
 
 
@@ -89,6 +94,7 @@ def _publish_shards(remote, src_dir):
     """gzip each shard + copy shards.json into a file:// 'remote' (mimics the release assets)."""
     import gzip
     import shutil
+
     remote.mkdir(parents=True, exist_ok=True)
     shutil.copy(src_dir / "shards.json", remote / "shards.json")
     for f in src_dir.glob("shard-*.sqlite"):
@@ -101,9 +107,12 @@ def test_shardcache_downloads_only_needed_shard(tmp_path):
 
     src = tmp_path / "build"
     build_sharded_index(
-        [_job("1", "Stripe", "Backend Engineer", sector="Fintech"),
-         _job("2", "HF", "ML Engineer", sector="AI/ML")],
-        src, build_id="b1",
+        [
+            _job("1", "Stripe", "Backend Engineer", sector="Fintech"),
+            _job("2", "HF", "ML Engineer", sector="AI/ML"),
+        ],
+        src,
+        build_id="b1",
     )
     remote = tmp_path / "remote"
     _publish_shards(remote, src)
@@ -159,8 +168,18 @@ def test_sharded_from_db_parity_with_in_memory(tmp_path):
         assert mem["shards"][slug]["rows"] == db["shards"][slug]["rows"]
     # ids per shard match
     for slug in db["shards"]:
-        a = {r[0] for r in connect(tmp_path / "mem" / f"shard-{slug}.sqlite", read_only=True).execute("SELECT id FROM jobs")}
-        b = {r[0] for r in connect(tmp_path / "db" / f"shard-{slug}.sqlite", read_only=True).execute("SELECT id FROM jobs")}
+        a = {
+            r[0]
+            for r in connect(tmp_path / "mem" / f"shard-{slug}.sqlite", read_only=True).execute(
+                "SELECT id FROM jobs"
+            )
+        }
+        b = {
+            r[0]
+            for r in connect(tmp_path / "db" / f"shard-{slug}.sqlite", read_only=True).execute(
+                "SELECT id FROM jobs"
+            )
+        }
         assert a == b
     # the unknown shard exists and holds the sector-less job
     assert db["shards"]["unknown"]["rows"] == 1

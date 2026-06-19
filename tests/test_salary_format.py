@@ -17,7 +17,9 @@ from ergon_tracker.models import Salary, SalaryInterval
         (Salary(min_amount=150000, max_amount=150000), "150,000"),  # equal -> single
         (Salary(min_amount=120000, currency="USD"), "USD 120,000"),
         (
-            Salary(min_amount=120000, max_amount=150000, currency="USD", interval=SalaryInterval.YEAR),
+            Salary(
+                min_amount=120000, max_amount=150000, currency="USD", interval=SalaryInterval.YEAR
+            ),
             "USD 120,000–150,000/year",
         ),
         (Salary(max_amount=60, currency="USD", interval=SalaryInterval.HOUR), "USD 60/hour"),

@@ -30,8 +30,18 @@ if TYPE_CHECKING:
 __all__ = ["LeverProvider"]
 
 _API = "https://api.lever.co/v0/postings/{token}"
+# Lever EU data-residency host. A "|eu" token suffix (e.g. "cirrus|eu") routes here — some
+# EU-hosted boards (Cirrus Logic) 404 on the default US host.
+_EU_API = "https://api.eu.lever.co/v0/postings/{token}"
 
 _HOST_NEEDLE = "jobs.lever.co/"
+
+
+def _slug_base(token: str) -> tuple[str, str]:
+    if token.endswith("|eu"):
+        return token[:-3], _EU_API
+    return token, _API
+
 
 _REMOTE_BY_WORKPLACE = {
     "remote": RemoteType.REMOTE,
@@ -92,7 +102,8 @@ class LeverProvider(BaseProvider):
     def conditional_url(self, token: str) -> str | None:
         # Whole board in one JSON response with a strong ETag. The crawler fetches with an empty
         # query, so the validatable representation is exactly ?mode=json.
-        return _API.format(token=token) + "?mode=json"
+        slug, base = _slug_base(token)
+        return base.format(token=slug) + "?mode=json"
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         params: dict[str, str] = {"mode": "json"}
@@ -103,15 +114,16 @@ class LeverProvider(BaseProvider):
             if commitment:
                 params["commitment"] = commitment
 
-        url = _API.format(token=token)
+        slug, base = _slug_base(token)
+        url = base.format(token=slug)
         data = await fetcher.get_json(url, params=params)
-        return self._raws_from_data(data, token)
+        return self._raws_from_data(data, slug)
 
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob]:
         """Parse an already-downloaded response body (from a conditional 200), avoiding a refetch."""
         import json
 
-        return self._raws_from_data(json.loads(body), token)
+        return self._raws_from_data(json.loads(body), _slug_base(token)[0])
 
     def _raws_from_data(self, data: Any, token: str) -> list[RawJob]:
         postings: list[dict[str, Any]] = data if isinstance(data, list) else []

@@ -20,6 +20,7 @@ import os
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from .db import SCHEMA_VERSION
 
@@ -48,7 +49,8 @@ def _get(url: str, *, token: str | None = None, accept: str | None = None) -> by
     if accept:
         req.add_header("Accept", accept)
     with urllib.request.urlopen(req, timeout=60) as r:
-        return r.read()
+        data: bytes = r.read()
+        return data
 
 
 def _asset_fetcher(base_url: str, repo: str, tag: str) -> Callable[[str], bytes]:
@@ -115,15 +117,18 @@ class ShardCache:
     """Download the shard manifest + only the shard(s) a query needs (v2 optimized path)."""
 
     def __init__(
-        self, base_url: str | None = None, cache_dir: Path | None = None,
-        repo: str = _REPO, tag: str = _TAG,
+        self,
+        base_url: str | None = None,
+        cache_dir: Path | None = None,
+        repo: str = _REPO,
+        tag: str = _TAG,
     ) -> None:
         self.base_url = (base_url or _DEFAULT_BASE).rstrip("/")
         self.repo, self.tag = repo, tag
         self.dir = Path(cache_dir or _default_cache_dir()) / "shards"
         self.manifest_path = self.dir / "shards.json"
 
-    def _ensure_shard(self, info: dict, fetch: Callable[[str], bytes]) -> bool:
+    def _ensure_shard(self, info: dict[str, Any], fetch: Callable[[str], bytes]) -> bool:
         dest = self.dir / info["file"]
         if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() == info["sha256"]:
             return True  # already cached for this build
@@ -140,7 +145,7 @@ class ShardCache:
         tmp.replace(dest)
         return True
 
-    def ensure(self, query) -> Path | None:
+    def ensure(self, query: Any) -> Path | None:
         """Ensure the manifest + needed shards are cached; return the shard dir, or None."""
         self.dir.mkdir(parents=True, exist_ok=True)
         try:

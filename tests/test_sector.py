@@ -102,5 +102,7 @@ def test_extractor_prefers_table_over_name(extractor: SectorExtractor) -> None:
 
 def test_extractor_falls_back_to_name(extractor: SectorExtractor) -> None:
     # Company absent from the table but with an unambiguous name word -> classified.
-    inp = ExtractInput(title="Teller", company="Riverside Community Bank", company_key="zzz-not-in-table")
+    inp = ExtractInput(
+        title="Teller", company="Riverside Community Bank", company_key="zzz-not-in-table"
+    )
     assert extractor.extract(inp) == "Banking/Finance"

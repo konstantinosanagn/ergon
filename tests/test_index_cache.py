@@ -19,8 +19,12 @@ def _publish(remote_dir, tmp_path):
     (remote_dir / "index.sqlite.gz").write_bytes(gzip.compress(raw))
     (remote_dir / "manifest.json").write_text(
         json.dumps(
-            {"build_id": "b1", "sha256": hashlib.sha256(raw).hexdigest(),
-             "bytes": len(raw), "schema_version": 1}
+            {
+                "build_id": "b1",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "bytes": len(raw),
+                "schema_version": 1,
+            }
         )
     )
 
@@ -68,9 +72,17 @@ def test_shardcache_rejects_future_schema_version(tmp_path):
 
     src = tmp_path / "build"
     build_sharded_index(
-        [JobPosting.create(source="greenhouse", source_job_id="1", company="Stripe",
-                           title="Eng", sector="Fintech")],
-        src, build_id="b1",
+        [
+            JobPosting.create(
+                source="greenhouse",
+                source_job_id="1",
+                company="Stripe",
+                title="Eng",
+                sector="Fintech",
+            )
+        ],
+        src,
+        build_id="b1",
     )
     remote = tmp_path / "remote"
     remote.mkdir()

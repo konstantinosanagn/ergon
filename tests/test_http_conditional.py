@@ -40,7 +40,7 @@ def test_conditional_get_returns_body_and_new_validator_on_200() -> None:
 
     async def main() -> None:
         async with _fetcher(handler) as f:
-            res = await f.conditional_get("https://x.test/jobs", etag="W/\"stale\"")
+            res = await f.conditional_get("https://x.test/jobs", etag='W/"stale"')
             assert res.not_modified is False
             assert res.status_code == 200
             assert res.body == b'{"jobs": []}'

@@ -25,6 +25,7 @@ SUPPORTED_ATS = {
     "successfactors",
     "oracle",
     "taleo",
+    "taleobe",
     "icims",
     "avature",
     "jazzhr",
@@ -33,6 +34,12 @@ SUPPORTED_ATS = {
     "brassring",
     "schemaorg",
     "apicapture",
+    "coveo",
+    "peopleadmin",
+    "jobdiva",
+    "ripplehire",
+    "usajobs",
+    "themuse",
     "adzuna",
 }
 

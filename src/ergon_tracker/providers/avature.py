@@ -57,7 +57,10 @@ if TYPE_CHECKING:
 __all__ = ["AvatureProvider"]
 
 PER_PAGE = 100  # jobRecordsPerPage; jobOffset advances by this each page
-_SEARCH = "https://{host}/{portal}/SearchJobs?jobRecordsPerPage={n}&jobOffset={offset}"
+_SEARCH = "https://{host}/{portal}/{page}?jobRecordsPerPage={n}&jobOffset={offset}"
+# The standard Avature search page; some tenants rename it (Two Sigma -> "OpenRoles"), supplied
+# as the optional 3rd token segment "{host}|{portal}|{page}".
+_DEFAULT_PAGE = "SearchJobs"
 # Default portalPath candidates tried (in order) for a bare-host token.
 _DEFAULT_PORTALS = ("careers", "main")
 # Stable Avature job link: .../JobDetail/{slug}/{numericId} (slug may be absent on some
@@ -96,32 +99,37 @@ class AvatureProvider(BaseProvider):
         return host  # bare host: portalPath discovered at fetch time
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
-        host, portal = self._split(token)
+        host, portal, page_name = self._split(token)
         if portal:
-            return await self._fetch_portal(host, portal, query, fetcher)
+            return await self._fetch_portal(host, portal, page_name, query, fetcher)
         # Bare host: try the default portalPaths and use the first that yields jobs.
         for cand in _DEFAULT_PORTALS:
-            raws = await self._fetch_portal(host, cand, query, fetcher)
+            raws = await self._fetch_portal(host, cand, page_name, query, fetcher)
             if raws:
                 return raws
         return []
 
     @staticmethod
-    def _split(token: str) -> tuple[str, str]:
-        """Return ``(host, portalPath)`` — ``portalPath`` is ``""`` for a bare-host token."""
-        if "|" in token:
-            host, portal = token.split("|", 1)
-            return host.strip().lower(), portal.strip().lower()
-        return token.strip().lower(), ""
+    def _split(token: str) -> tuple[str, str, str]:
+        """Return ``(host, portalPath, pageName)``. Token: ``"{host}"`` | ``"{host}|{portal}"`` |
+        ``"{host}|{portal}|{page}"`` (pageName defaults to the standard ``SearchJobs``)."""
+        parts = [p.strip() for p in token.split("|")]
+        host = parts[0].lower()
+        portal = parts[1].lower() if len(parts) > 1 and parts[1] else ""
+        page = parts[2] if len(parts) > 2 and parts[2] else _DEFAULT_PAGE
+        return host, portal, page
 
     async def _fetch_portal(
-        self, host: str, portal: str, query: SearchQuery, fetcher: AsyncFetcher
+        self, host: str, portal: str, page_name: str, query: SearchQuery, fetcher: AsyncFetcher
     ) -> list[RawJob]:
         limit = query.limit
         seen: set[str] = set()
         raws: list[RawJob] = []
-        for page in range(self.MAX_PAGES):
-            url = _SEARCH.format(host=host, portal=portal, n=PER_PAGE, offset=page * PER_PAGE)
+        offset = 0
+        for _page in range(self.MAX_PAGES):
+            url = _SEARCH.format(
+                host=host, portal=portal, page=page_name, n=PER_PAGE, offset=offset
+            )
             try:
                 resp = await fetcher.request("GET", url)
             except Exception:
@@ -146,6 +154,10 @@ class AvatureProvider(BaseProvider):
                     return raws
             if new == 0:
                 break  # offset overran -> server repeated a page; stop
+            # Advance by the page's ACTUAL size, not a fixed PER_PAGE: some tenants serve a small
+            # fixed page (Two Sigma -> 10) regardless of jobRecordsPerPage, so stepping by PER_PAGE
+            # would skip every job between the real page size and PER_PAGE.
+            offset += len(rows)
         return raws
 
     def _parse_rows(self, html: str, host: str, portal: str) -> list[tuple[str, RawJob]]:

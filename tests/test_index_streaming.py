@@ -14,8 +14,13 @@ from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType
 
 def _job(sid, company, title, **kw):
     return JobPosting.create(
-        source=kw.pop("source", "greenhouse"), source_job_id=sid, company=company, title=title,
-        locations=[Location(raw="Remote", is_remote=True)], remote=RemoteType.REMOTE, **kw,
+        source=kw.pop("source", "greenhouse"),
+        source_job_id=sid,
+        company=company,
+        title=title,
+        locations=[Location(raw="Remote", is_remote=True)],
+        remote=RemoteType.REMOTE,
+        **kw,
     )
 
 
@@ -23,7 +28,9 @@ def _rows(path):
     con = connect(path, read_only=True)
     try:
         ids = {r[0] for r in con.execute("SELECT id FROM jobs")}
-        companies = {r[0]: r[1] for r in con.execute("SELECT company_key, open_roles FROM companies")}
+        companies = {
+            r[0]: r[1] for r in con.execute("SELECT company_key, open_roles FROM companies")
+        }
         n = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         return ids, companies, n
     finally:
@@ -69,7 +76,9 @@ def test_append_jobs_exact_id_dedup(tmp_path):
     p = tmp_path / "d.sqlite"
     fresh_db(p)
     con = connect(p)
-    con.execute("PRAGMA foreign_keys = OFF")  # companies aggregated later; see build_index_streaming
+    con.execute(
+        "PRAGMA foreign_keys = OFF"
+    )  # companies aggregated later; see build_index_streaming
     try:
         j = _job("1", "Stripe", "Backend Engineer")
         assert append_jobs(con, [j], build_id="b1") == 1
@@ -84,7 +93,8 @@ def test_streaming_carry_forward_matches_incremental(tmp_path):
     prev = tmp_path / "prev.sqlite"
     build_index(
         [_job("1", "Stripe", "Old Stripe Role"), _job("2", "Ramp", "Ramp Role")],
-        prev, build_id="b0",
+        prev,
+        build_id="b0",
     )
     fresh = [_job("3", "Stripe", "New Stripe Role")]  # Stripe's board changed
     crawled = {"stripe"}
@@ -100,7 +110,9 @@ def test_streaming_carry_forward_matches_incremental(tmp_path):
     ids_m, _, _ = _rows(m)
     # both: Ramp carried forward, Stripe replaced with the fresh role, old Stripe role dropped
     assert ids_s == ids_m
-    companies_s = {r[0] for r in connect(s, read_only=True).execute("SELECT DISTINCT company FROM jobs")}
+    companies_s = {
+        r[0] for r in connect(s, read_only=True).execute("SELECT DISTINCT company FROM jobs")
+    }
     assert companies_s == {"Stripe", "Ramp"}
     titles_s = {r[0] for r in connect(s, read_only=True).execute("SELECT title FROM jobs")}
     assert titles_s == {"New Stripe Role", "Ramp Role"}  # old Stripe role gone

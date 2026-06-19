@@ -30,9 +30,13 @@ async def _fake_crawl_due(limit_companies, states, fresh_db_path, build_id, curs
     con.execute("PRAGMA foreign_keys = OFF")
     jobs = [
         JobPosting.create(
-            source="greenhouse", source_job_id=str(i), company=f"Co{i % 3}",
-            title=f"Backend Engineer {i}", sector=["Fintech", "AI/ML", None][i % 3],
-            locations=[Location(raw="Remote", is_remote=True)], remote=RemoteType.REMOTE,
+            source="greenhouse",
+            source_job_id=str(i),
+            company=f"Co{i % 3}",
+            title=f"Backend Engineer {i}",
+            sector=["Fintech", "AI/ML", None][i % 3],
+            locations=[Location(raw="Remote", is_remote=True)],
+            remote=RemoteType.REMOTE,
         )
         for i in range(9)
     ]
@@ -48,8 +52,16 @@ def test_main_incremental_streaming_wiring(tmp_path, monkeypatch):
     bi.main(["--incremental", "--sharded", "--limit-companies", "5", "--out", str(out)])
 
     # the full publish set the streaming path must produce
-    for name in ("index.sqlite", "index.sqlite.gz", "manifest.json", "gates.json",
-                 "coverage.json", "INDEX_STATUS.md", "shards.json", "board_state.json"):
+    for name in (
+        "index.sqlite",
+        "index.sqlite.gz",
+        "manifest.json",
+        "gates.json",
+        "coverage.json",
+        "INDEX_STATUS.md",
+        "shards.json",
+        "board_state.json",
+    ):
         assert (out / name).exists(), f"missing artifact: {name}"
 
     # index is real + queryable

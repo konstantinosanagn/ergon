@@ -26,8 +26,11 @@ def test_keyword_ranks_title_match_first(tmp_path):
     con = _db(
         tmp_path,
         [
-            _job("1", "Account Executive",
-                 description_text="work with engineering and engineer teams"),
+            _job(
+                "1",
+                "Account Executive",
+                description_text="work with engineering and engineer teams",
+            ),
             _job("2", "Software Engineer", description_text="build services"),
         ],
     )
@@ -39,8 +42,10 @@ def test_filter_only_path_and_level_filter(tmp_path):
     # distinct titles so the builder's dedup keeps both rows
     con = _db(
         tmp_path,
-        [_job("1", "Backend Engineer", level=JobLevel.SENIOR),
-         _job("2", "Frontend Engineer", level=JobLevel.MID)],
+        [
+            _job("1", "Backend Engineer", level=JobLevel.SENIOR),
+            _job("2", "Frontend Engineer", level=JobLevel.MID),
+        ],
     )
     rows = search_rows(con, SearchQuery(level=JobLevel.SENIOR, limit=10))
     assert len(rows) == 1 and rows[0]["level"] == "senior"
@@ -73,13 +78,22 @@ def test_query_robust_against_adversarial_and_edge_input(tmp_path):
     """
     con = _db(
         tmp_path,
-        [_job("1", "Senior Software Engineer", description_text="c++ and python"),
-         _job("2", "Data Scientist", description_text="ml research"),
-         _job("3", "Account Executive", description_text="sales")],
+        [
+            _job("1", "Senior Software Engineer", description_text="c++ and python"),
+            _job("2", "Data Scientist", description_text="ml research"),
+            _job("3", "Account Executive", description_text="sales"),
+        ],
     )
     # adversarial keyword strings must not raise and must not return the whole table via injection
-    for kw in ('engineer" OR 1=1 --', "c++ (senior) AND/OR *", "AND OR NOT NEAR",
-               "'; DROP TABLE jobs; --", '"""', "ingénieur café", "engineer " * 200):
+    for kw in (
+        'engineer" OR 1=1 --',
+        "c++ (senior) AND/OR *",
+        "AND OR NOT NEAR",
+        "'; DROP TABLE jobs; --",
+        '"""',
+        "ingénieur café",
+        "engineer " * 200,
+    ):
         rows = search_rows(con, SearchQuery(keywords=kw, limit=50))
         assert isinstance(rows, list)
         assert all(r["title"] and r["company"] for r in rows)
@@ -99,16 +113,35 @@ def test_matches_parity_on_location(tmp_path):
     from ergon_tracker.models import Location
 
     jobs = [
-        JobPosting.create(source="greenhouse", source_job_id="1", company="A", title="Eng Berlin",
-                          locations=[Location(raw="Berlin, Germany", city="Berlin", country="Germany")]),
-        JobPosting.create(source="greenhouse", source_job_id="2", company="B", title="Eng London",
-                          locations=[Location(raw="London, UK", city="London", country="United Kingdom")]),
-        JobPosting.create(source="greenhouse", source_job_id="3", company="C", title="Eng NYC",
-                          locations=[Location(raw="New York, US", city="New York", country="United States")]),
+        JobPosting.create(
+            source="greenhouse",
+            source_job_id="1",
+            company="A",
+            title="Eng Berlin",
+            locations=[Location(raw="Berlin, Germany", city="Berlin", country="Germany")],
+        ),
+        JobPosting.create(
+            source="greenhouse",
+            source_job_id="2",
+            company="B",
+            title="Eng London",
+            locations=[Location(raw="London, UK", city="London", country="United Kingdom")],
+        ),
+        JobPosting.create(
+            source="greenhouse",
+            source_job_id="3",
+            company="C",
+            title="Eng NYC",
+            locations=[Location(raw="New York, US", city="New York", country="United States")],
+        ),
     ]
     con = _db(tmp_path, jobs)
-    for q in [SearchQuery(location="Germany"), SearchQuery(location="London"),
-              SearchQuery(location="New York"), SearchQuery(location="zzz-nowhere")]:
+    for q in [
+        SearchQuery(location="Germany"),
+        SearchQuery(location="London"),
+        SearchQuery(location="New York"),
+        SearchQuery(location="zzz-nowhere"),
+    ]:
         sql_ids = {r["id"] for r in search_rows(con, q)}
         match_ids = {j.id for j in jobs if q.matches(j)}
         assert sql_ids == match_ids, f"location parity broke for {q.location!r}"

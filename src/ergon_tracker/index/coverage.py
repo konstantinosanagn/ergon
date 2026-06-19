@@ -9,6 +9,7 @@ anyone can see coverage across all ATSes without downloading and querying the da
 from __future__ import annotations
 
 import sqlite3
+from typing import Any
 
 
 def _counts(con: sqlite3.Connection, col: str, *, limit: int | None = None) -> dict[str, int]:
@@ -24,9 +25,12 @@ def _counts(con: sqlite3.Connection, col: str, *, limit: int | None = None) -> d
     return {r[0]: r[1] for r in rows}
 
 
-def compute_coverage(con: sqlite3.Connection) -> dict:
+def compute_coverage(con: sqlite3.Connection) -> dict[str, Any]:
     """Reduce an index connection to a JSON-serializable coverage summary."""
-    one = lambda q: con.execute(q).fetchone()[0]  # noqa: E731
+
+    def one(q: str) -> int:
+        return int(con.execute(q).fetchone()[0])
+
     total = one("SELECT COUNT(*) FROM jobs")
     active = one("SELECT COUNT(*) FROM jobs WHERE status='active'")
     meta = dict(con.execute("SELECT key, value FROM meta").fetchall())
@@ -65,7 +69,7 @@ def _table(rows: list[tuple[str, int]], headers: tuple[str, str]) -> str:
     return "\n".join(out) + "\n"
 
 
-def render_status_md(cov: dict, *, build_id: str) -> str:
+def render_status_md(cov: dict[str, Any], *, build_id: str) -> str:
     """Render a coverage dict to a human-readable INDEX_STATUS.md body."""
     pct = (cov["with_salary"] / cov["active_jobs"] * 100) if cov["active_jobs"] else 0.0
     parts = [

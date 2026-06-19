@@ -51,6 +51,20 @@ __all__ = ["SuccessFactorsProvider"]
 
 PER_PAGE = 25  # SuccessFactors fixes the search page at 25 rows
 _SEARCH = "https://{host}/{siteid}/search/?q=&startrow={start}"
+# Some white-labeled CSB sites drop the siteid path segment entirely: search lives at ``/search/``
+# and jobs at ``/job/{slug}/{id}/`` (e.g. careers.ltimindtree.com). Token then carries a ``*``
+# siteid sentinel plus an explicit company label: ``"{host}|*|{Company}"``.
+_SEARCH_ROOT = "https://{host}/search/?q=&startrow={start}"
+_ROOT_SITEID = {"*", "-"}
+# Classic "Recruiting Management" (RMK) sites don't use the path-based CSB search above; they
+# expose an RSS job feed keyed by the company id (Skyworks: careers.skyworksinc.com, company=
+# skyworks). We fall back to this when the CSB search yields nothing.
+_RSS = "https://{host}/services/rss/job?company={siteid}"
+_RSS_ITEM = re.compile(r"<item>(.*?)</item>", re.S | re.I)
+_RSS_TITLE = re.compile(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", re.S | re.I)
+_RSS_LINK = re.compile(r"<link>(?:<!\[CDATA\[)?\s*(.*?)\s*(?:\]\]>)?</link>", re.S | re.I)
+_RSS_JOBID = re.compile(r"/job/[^/]*?/(\d{6,})/?", re.I)
+_RSS_LOC = re.compile(r"\(([^()]+)\)\s*$")  # trailing "(City, ST, Country)" in the RSS title
 # A SuccessFactors job URL: /{siteid}/job/{slug}/{numericId}/ — the LONG numeric id (SF ids are
 # 9-10 digits) is the decisive, SF-specific signal.
 _JOB_RE = re.compile(r"^/([^/]+)/job/.+/(\d{6,})/?$")
@@ -113,21 +127,32 @@ class SuccessFactorsProvider(BaseProvider):
         return None
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
-        host, siteid = await self._resolve(token, fetcher)
+        # Token may be "{host}", "{host}|{siteid}", or root-CSB "{host}|*|{Company}".
+        company_label: str | None = None
+        if token.count("|") >= 2:
+            host_s, siteid_s, company_label = (s.strip() for s in token.split("|", 2))
+            host, siteid = host_s.lower(), siteid_s.lower()
+        else:
+            host, siteid = await self._resolve(token, fetcher)
+        root = siteid in _ROOT_SITEID
         if not siteid:
             return []
+        display = company_label or siteid
 
         limit = query.limit
         seen: set[str] = set()
         raws: list[RawJob] = []
         for page in range(self.MAX_PAGES):
-            url = _SEARCH.format(host=host, siteid=siteid, start=page * PER_PAGE)
+            if root:
+                url = _SEARCH_ROOT.format(host=host, start=page * PER_PAGE)
+            else:
+                url = _SEARCH.format(host=host, siteid=siteid, start=page * PER_PAGE)
             try:
                 html = await fetcher.get_text(url)
             except Exception:
                 break  # network/HTTP failure — stop gracefully with what we have
 
-            rows = self._parse_rows(html, host, siteid)
+            rows = self._parse_rows(html, host, display)
             if not rows:
                 break  # past the last page
             new = 0
@@ -141,7 +166,52 @@ class SuccessFactorsProvider(BaseProvider):
                     return raws
             if new == 0:
                 break  # deep-pagination soft-cap returning dupes -> stop
+
+        if not raws and not root:
+            # Classic RMK site (no path-based CSB search) -> try the RSS job feed.
+            raws = await self._fetch_rss(host, siteid, limit, fetcher)
         return raws
+
+    async def _fetch_rss(
+        self, host: str, siteid: str, limit: int | None, fetcher: AsyncFetcher
+    ) -> list[RawJob]:
+        """Classic-RMK fallback: parse the ``/services/rss/job?company={siteid}`` feed."""
+        try:
+            text = await fetcher.get_text(_RSS.format(host=host, siteid=siteid))
+        except Exception:
+            return []
+        out: list[RawJob] = []
+        seen: set[str] = set()
+        for block in _RSS_ITEM.findall(text):
+            link_m = _RSS_LINK.search(block)
+            href = (link_m.group(1).strip() if link_m else "") or ""
+            id_m = _RSS_JOBID.search(href)
+            if not id_m:
+                continue
+            jid = id_m.group(1)
+            if jid in seen:
+                continue
+            seen.add(jid)
+            title_m = _RSS_TITLE.search(block)
+            title = _html.unescape((title_m.group(1) if title_m else "").strip())
+            loc_m = _RSS_LOC.search(title)
+            location = ""
+            if loc_m:
+                location = loc_m.group(1).strip()
+                title = title[: loc_m.start()].strip()
+            out.append(
+                RawJob(
+                    source=self.name,
+                    source_job_id=jid,
+                    company=siteid,
+                    token=f"{host}|{siteid}",
+                    url=href,
+                    payload={"title": title, "location": location, "url": href, "id": jid},
+                )
+            )
+            if limit is not None and len(out) >= limit:
+                break
+        return out
 
     async def _resolve(self, token: str, fetcher: AsyncFetcher) -> tuple[str, str]:
         """Return ``(host, siteid)`` from the token, discovering siteid if only a host is given."""

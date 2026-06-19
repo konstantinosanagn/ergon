@@ -25,9 +25,10 @@ def test_build_writes_rows_companies_fts_and_passes_integrity(tmp_path):
     assert n == 2
     con = connect(p, read_only=True)
     assert con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
-    assert con.execute(
-        "SELECT open_roles FROM companies WHERE company_key='stripe'"
-    ).fetchone()[0] == 2
+    assert (
+        con.execute("SELECT open_roles FROM companies WHERE company_key='stripe'").fetchone()[0]
+        == 2
+    )
     hits = con.execute(
         "SELECT j.title FROM jobs j JOIN jobs_fts f ON j.rowid=f.rowid WHERE jobs_fts MATCH 'backend'"
     ).fetchall()

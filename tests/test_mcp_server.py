@@ -81,7 +81,9 @@ async def test_search_jobs_broad_uses_index_not_live(monkeypatch) -> None:
     import ergon_tracker.index.router as router
     from ergon_tracker.models import JobPosting
 
-    fake = [JobPosting.create(source="greenhouse", source_job_id="1", company="Acme", title="ML Eng")]
+    fake = [
+        JobPosting.create(source="greenhouse", source_job_id="1", company="Acme", title="ML Eng")
+    ]
     monkeypatch.setattr(router, "try_index", lambda q: fake)
 
     out = await srv.search_jobs(keywords="ml engineer", sector="AI/ML", remote=True, limit=5)

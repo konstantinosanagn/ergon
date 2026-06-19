@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .db import SCHEMA_VERSION, connect
 
@@ -28,14 +29,18 @@ class GateReport:
     def passed(self) -> bool:
         return all(r.passed for r in self.results)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
-            "gates": [{"name": r.name, "passed": r.passed, "detail": r.detail} for r in self.results],
+            "gates": [
+                {"name": r.name, "passed": r.passed, "detail": r.detail} for r in self.results
+            ],
         }
 
     def summary(self) -> str:
-        return "; ".join(f"{r.name}={'ok' if r.passed else 'FAIL'}({r.detail})" for r in self.results)
+        return "; ".join(
+            f"{r.name}={'ok' if r.passed else 'FAIL'}({r.detail})" for r in self.results
+        )
 
 
 def evaluate_gates(
@@ -59,10 +64,16 @@ def evaluate_gates(
         if prev_row_count:
             floor = int(prev_row_count * min_ratio)
             rep.results.append(
-                GateResult("row_floor", rows >= floor, f"{rows} rows (floor {floor}, prev {prev_row_count})")
+                GateResult(
+                    "row_floor",
+                    rows >= floor,
+                    f"{rows} rows (floor {floor}, prev {prev_row_count})",
+                )
             )
         else:
-            rep.results.append(GateResult("row_floor", rows > 0, f"{rows} rows (cold start, need >0)"))
+            rep.results.append(
+                GateResult("row_floor", rows > 0, f"{rows} rows (cold start, need >0)")
+            )
 
         dups = con.execute("SELECT COUNT(*) - COUNT(DISTINCT id) FROM jobs").fetchone()[0]
         rep.results.append(GateResult("no_duplicate_ids", dups == 0, f"{dups} duplicates"))

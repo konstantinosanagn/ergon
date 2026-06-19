@@ -84,9 +84,13 @@ def search_rows(con: sqlite3.Connection, q: SearchQuery) -> list[sqlite3.Row]:
     if match:
         sql = (
             "SELECT j.* FROM jobs j JOIN jobs_fts f ON j.rowid = f.rowid "
-            "WHERE jobs_fts MATCH ? AND " + " AND ".join(where) + " ORDER BY bm25(jobs_fts, 10,3,3,1)"
+            "WHERE jobs_fts MATCH ? AND "
+            + " AND ".join(where)
+            + " ORDER BY bm25(jobs_fts, 10,3,3,1)"
             " LIMIT ?"
         )
         return con.execute(sql, [match, *params, limit]).fetchall()
-    sql = "SELECT j.* FROM jobs j WHERE " + " AND ".join(where) + " ORDER BY j.posted_at DESC LIMIT ?"
+    sql = (
+        "SELECT j.* FROM jobs j WHERE " + " AND ".join(where) + " ORDER BY j.posted_at DESC LIMIT ?"
+    )
     return con.execute(sql, [*params, limit]).fetchall()

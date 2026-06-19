@@ -134,3 +134,39 @@ async def test_siteid_discovery_from_host_only_token() -> None:
             raws = await SuccessFactorsProvider().fetch("careers.ey.com", SearchQuery(), f)
     assert len(raws) == 2
     assert raws[0].company == "ey"
+
+
+def _root_page(rows: list[tuple[str, str, str]]) -> str:
+    """A siteid-less CSB page: jobs at /job/{slug}/{id}/ (no /{siteid}/ prefix)."""
+    cards = "".join(
+        f"""
+        <tr class="data-row">
+          <td class="colTitle"><span class="jobTitle">
+            <a href="/job/Some-Slug-{jid}/{jid}/" class="jobTitle-link">{title}</a>
+          </span></td>
+          <td class="colLocation"><span class="jobLocation">{loc}</span></td>
+        </tr>"""
+        for jid, title, loc in rows
+    )
+    return f"<html><body><table><tbody>{cards}</tbody></table></body></html>"
+
+
+async def test_root_csb_no_siteid_with_company_label() -> None:
+    """White-labeled CSB without a siteid path: token '{host}|*|{Company}' searches /search/."""
+    host = "careers.ltimindtree.com"
+    base = f"https://{host}/search/"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("startrow") == "0":
+            return httpx.Response(
+                200, html=_root_page([("1406195133", "Senior Software Engineer", "BR")])
+            )
+        return httpx.Response(200, html=_root_page([]))
+
+    with respx.mock as respx_mock:
+        respx_mock.get(url__startswith=base).mock(side_effect=handler)
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch(f"{host}|*|LTIMindtree", SearchQuery(), f)
+    assert len(raws) == 1
+    assert raws[0].source_job_id == "1406195133"
+    assert raws[0].company == "LTIMindtree"  # explicit label, not the siteid sentinel

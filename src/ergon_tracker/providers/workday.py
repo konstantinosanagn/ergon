@@ -70,9 +70,10 @@ class WorkdayProvider(BaseProvider):
     name = "workday"
 
     PAGE_SIZE = 20  # Workday rejects limit > 20
-    MAX_RESULTS = 10000  # absolute hard pagination cap
-    MAX_PAGES = 250  # per-board page cap (=5000 jobs); pages fetch CONCURRENTLY (bounded by the
-    # fetcher), so big giant boards (Citi ~2000) aren't truncated at the old 500.
+    MAX_RESULTS = 10000  # absolute hard pagination cap (per board, and per facet bucket)
+    MAX_PAGES = 500  # per-board page cap — kept consistent with MAX_RESULTS (500*20=10000) so the
+    # flat path isn't silently truncated below MAX_RESULTS. Pages fetch CONCURRENTLY (bounded by
+    # the fetcher). Boards above 10k postings (e.g. CVS Health ~16k) are intentionally bounded here.
 
     # --- token <-> composite ------------------------------------------------
 
@@ -133,14 +134,48 @@ class WorkdayProvider(BaseProvider):
     def _jobs_url(cls, tenant: str, wd: str, site: str) -> str:
         return f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
 
+    CAP = 2000  # many Workday instances cap the flat result set (offset can't exceed this)
+
     @classmethod
-    def _body(cls, offset: int, search_text: str) -> dict[str, Any]:
+    def _body(
+        cls, offset: int, search_text: str, applied: dict[str, list[str]] | None = None
+    ) -> dict[str, Any]:
         return {
-            "appliedFacets": {},
+            "appliedFacets": applied or {},
             "limit": cls.PAGE_SIZE,
             "offset": offset,
             "searchText": search_text,
         }
+
+    @classmethod
+    def _best_partition_facet(
+        cls, facets: list[dict[str, Any]], total: int
+    ) -> tuple[str, list[str]] | None:
+        """When a board is capped, a facet whose value-counts SUM beyond the flat ``total`` reveals
+        the true size. Return ``(facetParameter, [valueIds])`` for the facet that best partitions
+        the board. Two requirements compete: COVERAGE (the facet's counts should sum to the true
+        size — a facet many jobs lack, e.g. jobFamily, under-counts) and BUCKET SIZE (each bucket
+        must be < CAP to be fully fetchable). We pick the highest-coverage facet whose largest
+        bucket is < CAP; if none qualifies, fall back to the highest-coverage facet overall (its
+        over-CAP buckets stay partially truncated — better than the flat 2000)."""
+        scored: list[tuple[int, int, str, list[str]]] = []  # (coverage, max_bucket, param, ids)
+        for fc in facets or []:
+            param = fc.get("facetParameter")
+            values = [v for v in (fc.get("values") or []) if v.get("id") and v.get("count")]
+            if not param or not values:
+                continue
+            coverage = sum(int(v["count"]) for v in values)
+            if coverage <= total:
+                continue  # this facet doesn't reveal more than the flat total
+            max_bucket = max(int(v["count"]) for v in values)
+            scored.append((coverage, max_bucket, str(param), [str(v["id"]) for v in values]))
+        if not scored:
+            return None
+        # Prefer facets whose every bucket is fetchable (< CAP); among those, max coverage.
+        fetchable = [s for s in scored if s[1] < cls.CAP]
+        pool = fetchable or scored
+        best = max(pool, key=lambda s: s[0])
+        return best[2], best[3]
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         tenant, wd, site = self._parse_token(token)
@@ -149,7 +184,19 @@ class WorkdayProvider(BaseProvider):
 
         # Page 0 (sequential) tells us how many results exist.
         first = await fetcher.post_json(url, json=self._body(0, search_text))
-        total = min(int(first.get("total") or 0), self.MAX_RESULTS)
+        flat_total = int(first.get("total") or 0)
+
+        # Capped instances report a flat total clamped at CAP while their facet counts reveal the
+        # true (larger) size. If we want more than the cap, partition by a facet and union buckets.
+        want_all = query.limit is None or query.limit > flat_total
+        if flat_total >= self.CAP and want_all:
+            facet = self._best_partition_facet(first.get("facets") or [], flat_total)
+            if facet is not None:
+                return await self._fetch_faceted(
+                    fetcher, url, tenant, wd, site, token, search_text, facet, query.limit
+                )
+
+        total = min(flat_total, self.MAX_RESULTS)
 
         # Bound how much we actually pull. Workday tenants can have thousands of postings;
         # fetching every page (even concurrently) is wasteful. We cap by:
@@ -181,10 +228,56 @@ class WorkdayProvider(BaseProvider):
         offset: int,
         search_text: str,
         sink: dict[int, list[dict[str, Any]]],
+        applied: dict[str, list[str]] | None = None,
     ) -> None:
-        data = await fetcher.post_json(url, json=self._body(offset, search_text))
+        data = await fetcher.post_json(url, json=self._body(offset, search_text, applied))
         # Each task writes a distinct offset key — no shared-slot races.
         sink[offset] = list(data.get("jobPostings") or [])
+
+    async def _fetch_faceted(
+        self,
+        fetcher: AsyncFetcher,
+        url: str,
+        tenant: str,
+        wd: str,
+        site: str,
+        token: str,
+        search_text: str,
+        facet: tuple[str, list[str]],
+        limit: int | None,
+    ) -> list[RawJob]:
+        """Recover a capped board by querying each value of a partitioning facet separately and
+        unioning the postings (deduped by externalPath). Each bucket is itself flat-paginated up
+        to CAP; buckets still >= CAP stay partially truncated (rare — a 2nd-level partition would
+        be needed), which is logged implicitly by returning fewer than the facet sum."""
+        param, value_ids = facet
+        by_id: dict[str, RawJob] = {}
+
+        async def fetch_bucket(value_id: str) -> None:
+            applied = {param: [value_id]}
+            head = await fetcher.post_json(url, json=self._body(0, search_text, applied))
+            btotal = min(int(head.get("total") or 0), self.CAP, self.MAX_RESULTS)
+            buckets: dict[int, list[dict[str, Any]]] = {0: list(head.get("jobPostings") or [])}
+            rest = range(self.PAGE_SIZE, btotal, self.PAGE_SIZE)
+            if rest:
+                async with anyio.create_task_group() as tg:
+                    for offset in rest:
+                        tg.start_soon(
+                            self._fetch_page, fetcher, url, offset, search_text, buckets, applied
+                        )
+            for offset in sorted(buckets):
+                for posting in buckets[offset]:
+                    raw = self._to_raw(posting, tenant, wd, site, token)
+                    by_id.setdefault(raw.source_job_id, raw)
+
+        # Buckets fetched concurrently (each internally pages concurrently too; all bounded by the
+        # shared fetcher's concurrency limit).
+        async with anyio.create_task_group() as tg:
+            for vid in value_ids:
+                tg.start_soon(fetch_bucket, vid)
+
+        raws = list(by_id.values())
+        return raws[:limit] if limit is not None else raws
 
     def _to_raw(
         self, posting: dict[str, Any], tenant: str, wd: str, site: str, token: str

@@ -66,7 +66,10 @@ ATS_PRIORITY = {
     "eightfold": 14,
     "successfactors": 15,
     "oracle": 16,
+    "jobdiva": 16.5,  # authoritative staffing/IT-firm candidate portal (own JSON API)
+    "ripplehire": 16.6,  # IT-services career-site ATS (own XML API): Mphasis, CitiusTech
     "taleo": 17,
+    "taleobe": 17.5,  # Taleo Business Edition (CwsV2 HTML)
     "icims": 18,
     "avature": 19,
     "jazzhr": 20,
@@ -75,6 +78,10 @@ ATS_PRIORITY = {
     "brassring": 23,
     "schemaorg": 24,  # generic fallback (sitemap/JSON-LD) — lowest priority vs a real ATS
     "apicapture": 25,  # captured own-domain JSON/GraphQL API (proxied giants)
+    "coveo": 26,
+    "peopleadmin": 27,  # higher-ed/public-sector Atom feed (complete)  # Coveo-for-Sitecore same-origin job proxy (SLB etc.)
+    "usajobs": 28,  # authoritative federal-agency board (Organization code) — gov giants only
+    "themuse": 29,  # curated aggregator company board (employer-matched) — for unreachable giants
     "adzuna": 30,  # aggregator fallback for truly-proxied giants (lowest priority)
 }
 

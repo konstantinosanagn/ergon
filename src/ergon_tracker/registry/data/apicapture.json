@@ -1,60 +1,1242 @@
 {
-  "goldmansachs": {
-    "url": "https://api-higher.gs.com/gateway/api/v1/graphql",
-    "method": "POST",
-    "body": {
-      "operationName": "GetRoles",
-      "variables": {
-        "searchQueryInput": {
-          "page": {
-            "pageSize": 20,
-            "pageNumber": 0
-          },
-          "sort": {
-            "sortStrategy": "RELEVANCE",
-            "sortOrder": "DESC"
-          },
-          "filters": [],
-          "experiences": [
-            "EARLY_CAREER",
-            "PROFESSIONAL"
-          ],
-          "searchTerm": ""
-        }
-      },
-      "query": "query GetRoles($searchQueryInput: RoleSearchQueryInput!) {\n  roleSearch(searchQueryInput: $searchQueryInput) {\n    totalCount\n    items {\n      roleId\n      corporateTitle\n      jobTitle\n      jobFunction\n      locations {\n        primary\n        state\n        country\n        city\n        __typename\n      }\n      status\n      division\n      skills\n      jobType {\n        code\n        description\n        __typename\n      }\n      externalSource {\n        sourceId\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
-    },
-    "page_path": [
-      "variables",
-      "searchQueryInput",
-      "page",
-      "pageNumber"
-    ],
-    "page_start": 0,
-    "size_path": [
-      "variables",
-      "searchQueryInput",
-      "page",
-      "pageSize"
-    ],
-    "size": 50,
-    "records_path": [
-      "data",
-      "roleSearch",
-      "items"
-    ],
-    "total_path": [
-      "data",
-      "roleSearch",
-      "totalCount"
-    ],
-    "company": "Goldman Sachs",
-    "fields": {
-      "id": "roleId",
-      "title": "jobTitle",
-      "department": "division",
-      "location": "locations",
-      "employment_type": "jobType"
+ "goldmansachs": {
+  "url": "https://api-higher.gs.com/gateway/api/v1/graphql",
+  "method": "POST",
+  "body": {
+   "operationName": "GetRoles",
+   "variables": {
+    "searchQueryInput": {
+     "page": {
+      "pageSize": 20,
+      "pageNumber": 0
+     },
+     "sort": {
+      "sortStrategy": "RELEVANCE",
+      "sortOrder": "DESC"
+     },
+     "filters": [],
+     "experiences": [
+      "EARLY_CAREER",
+      "PROFESSIONAL"
+     ],
+     "searchTerm": ""
     }
+   },
+   "query": "query GetRoles($searchQueryInput: RoleSearchQueryInput!) {\n  roleSearch(searchQueryInput: $searchQueryInput) {\n    totalCount\n    items {\n      roleId\n      corporateTitle\n      jobTitle\n      jobFunction\n      locations {\n        primary\n        state\n        country\n        city\n        __typename\n      }\n      status\n      division\n      skills\n      jobType {\n        code\n        description\n        __typename\n      }\n      externalSource {\n        sourceId\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+  },
+  "page_path": [
+   "variables",
+   "searchQueryInput",
+   "page",
+   "pageNumber"
+  ],
+  "page_start": 0,
+  "size_path": [
+   "variables",
+   "searchQueryInput",
+   "page",
+   "pageSize"
+  ],
+  "size": 50,
+  "records_path": [
+   "data",
+   "roleSearch",
+   "items"
+  ],
+  "total_path": [
+   "data",
+   "roleSearch",
+   "totalCount"
+  ],
+  "company": "Goldman Sachs",
+  "fields": {
+   "id": "roleId",
+   "title": "jobTitle",
+   "department": "division",
+   "location": "locations",
+   "employment_type": "jobType"
   }
+ },
+ "optumservices": {
+  "url": "https://api.altrulabs.com/dist-api/us/widgets/12000240",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "structure"
+  ],
+  "total_path": [],
+  "company": "optum services",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "johnshopkinsuniversity": {
+  "url": "https://www.juicer.io/api/feeds/hopkinsmedicine?per=15&origin=embed-code&page=1",
+  "method": "GET",
+  "records_path": [
+   "posts",
+   "items"
+  ],
+  "total_path": [],
+  "company": "johns hopkins university",
+  "fields": {
+   "id": "id",
+   "title": "position",
+   "location": "location",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 1
+ },
+ "goldmansachsbankusa": {
+  "url": "https://www.kenyt.ai/botapp/api/botsetup/loadchatwindow?botId=190704703",
+  "method": "POST",
+  "records_path": [
+   "Response",
+   "Messages",
+   2,
+   "RichCards"
+  ],
+  "total_path": [],
+  "company": "goldman sachs bank usa",
+  "fields": {
+   "id": "Id",
+   "title": "Title",
+   "location": "",
+   "department": ""
+  },
+  "body": {
+   "IsTest": false,
+   "QueryClientUserId": null,
+   "ConversationLanguage": "",
+   "TimezoneOffsetMinutes": -240,
+   "SourceUrl": "https://cpt.hitbullseye.com/goldman-sachs/goldman-sachs-careers.php",
+   "TriggerAutoMessage": true,
+   "InitializeConnection": false,
+   "ConversationContext": {},
+   "User": {}
+  }
+ },
+ "cvssharedservicesresources": {
+  "url": "https://bot-jobs.com/api/jobalerts-options",
+  "method": "GET",
+  "records_path": [
+   "locations"
+  ],
+  "total_path": [],
+  "company": "cvs shared services resources",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "universityofvirginia": {
+  "url": "https://jobs.virginia.edu/widgets",
+  "method": "POST",
+  "records_path": [
+   "leastAppliedJobs",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "university of virginia",
+  "fields": {
+   "id": "jobId",
+   "title": "title",
+   "location": "location",
+   "department": "category"
+  },
+  "body": {
+   "isEagerLoad": true,
+   "lang": "en_us",
+   "deviceType": "desktop",
+   "country": "us",
+   "pageName": "home",
+   "refNum": "UOVUOVUS",
+   "siteType": "external",
+   "pageId": "page10-ds",
+   "pageStateData": {},
+   "ddoKey": "leastAppliedJobs"
+  }
+ },
+ "slkamerica": {
+  "url": "https://bebee.com/api/jobs/oneredce-6874_8e6566fbb3b8b11997076196e1b62101/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "slk america",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "nyugrossmanschoolofmedicine": {
+  "url": "https://sidebar.bugherd.com/sidebar/resources?apikey=j6976ntyzzx9s9xduwxkqg",
+  "method": "GET",
+  "records_path": [
+   "project",
+   "tags"
+  ],
+  "total_path": [],
+  "company": "nyu grossman school of medicine",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "boardofregentsofuniversityofnebraska": {
+  "url": "https://c950.chronicle.com/DG/DEFAULT/rest/rpc/925?referer=https%3A%2F%2Fjobs.chronicle.com%2Fjob%2F37974820%2Fnu-system-opportunity-associate-general-counsel&bcsessionid=&bctempid=&overruleReferrer=&time=2026-06-18T04%3A30%3A31-04%3A00&ts=1781771431573",
+  "method": "POST",
+  "records_path": [
+   3,
+   "result",
+   "interactions"
+  ],
+  "total_path": [],
+  "company": "board of regents of university of nebraska",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  },
+  "body": [
+   {
+    "method": "getProfile",
+    "params": "null",
+    "id": "1781771431559"
+   },
+   {
+    "method": "setProperties",
+    "params": "{\"properties\":{\"language\":[\"en\"],\"currentscreenwidth\":[1280],\"currentscreenheight\":[720],\"currentresolution\":[\"1280x720\"],\"entrypage\":[\"https://jobs.chronicle.com/job/37974820/nu-system-opportunity-associate-general-counsel\"],\"testgroup\":[6]},\"sources\":{\"listenerinteractiontype\":[\"language\",\"currentscreenwidth\",\"currentscreenheight\",\"currentresolution\",\"entrypage\"],\"testgroup_prelistener\":[\"testgroup\"]}}",
+    "id": "1781771431560"
+   },
+   {
+    "method": "addProperties",
+    "params": "{\"properties\":{\"resolution\":[\"1280x720\"]},\"sources\":{\"listenerinteractiontype\":[\"resolution\"]}}",
+    "id": "1781771431561"
+   },
+   {
+    "method": "createEvent",
+    "params": "{\"type\":[\"PAGEVIEW\"],\"referrer\":[\"\"],\"profile\":[]}",
+    "id": "1781771431562"
+   }
+  ]
+ },
+ "trusteesofbostonuniversity": {
+  "url": "https://www.ellis.com/api/posts?depth=1",
+  "method": "GET",
+  "records_path": [
+   "posts"
+  ],
+  "total_path": [],
+  "company": "trustees of boston university",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": "category"
+  }
+ },
+ "qualcommatheros": {
+  "url": "https://bebee.com/api/jobs/theirstack-667820195/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "qualcomm atheros",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "pricewaterhousecoopersllp": {
+  "url": "https://sidebar.bugherd.com/sidebar/resources?apikey=apumfv2m5fller0u8l2njg",
+  "method": "GET",
+  "records_path": [
+   "project",
+   "tags"
+  ],
+  "total_path": [],
+  "company": "pricewaterhousecoopers llp",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "akkodis": {
+  "url": "https://www.akkodis.com/api/data/jobs/summarized",
+  "method": "POST",
+  "records_path": [
+   "jobs"
+  ],
+  "total_path": [
+   "facets",
+   "count"
+  ],
+  "company": "akkodis",
+  "fields": {
+   "id": "jobId",
+   "title": "jobTitle",
+   "location": "jobLocation",
+   "department": ""
+  },
+  "body": {
+   "queryString": "&sort=PostedDate desc&facet.pivot=IsRemote",
+   "baseSearchQuery": "&facet.range=WorkHour_Facet_Weekly&f.WorkHour_Facet_Weekly.facet.range.start=8&f.WorkHour_Facet_Weekly.facet.range.end=80&f.WorkHour_Facet_Weekly.facet.range.gap=1&facet.range=Salary_Facet_Weekly&f.Salary_Facet_Weekly.facet.range.start=0&f.Salary_Facet_Weekly.facet.range.end=5000&f.Salary_Facet_Weekly.facet.range.gap=500&facet.range=PostedDate&f.PostedDate.facet.range.start=NOW-30DAYS/DAY&f.PostedDate.facet.range.end=NOW&f.PostedDate.facet.range.gap=%2B1DAY/DAY",
+   "filtersToDisplay": "{2C88203F-D38C-4ED9-A00B-C318A9180D24}|{3179B0D5-86CE-4066-B3B0-500C724CA2C4}|{831FB33D-594C-440B-92D3-7A81DF833E9B}|{656BFEDA-0C7E-4A89-884D-8AD09CC86627}|{9664A49E-FC07-4560-8141-9A4DDFD799F2}|{300E54A7-721B-41EC-8C2C-CFC7BF236877}|{ACB777DD-3F92-4EE5-BD62-D58C8A3FE9FE}|{986D5561-7FE4-4921-8D3D-F75A26DEE3AA}|{5DF0F076-A387-4A29-9F01-7DA6B2316269}",
+   "range": 0,
+   "siteName": "akkodis",
+   "brand": "modis",
+   "countryCookie": "US",
+   "langCookie": "en",
+   "brandFromDictionary": "akkodis"
+  }
+ },
+ "balyasnyassetmanagementlp": {
+  "url": "https://job-search-ui.efinancialcareers.com/v1/efc/jobs/search?q=asset%20management&countryCode2=AU&radius=40&radiusUnit=km&page=1&pageSize=15&facets=seniority%7CfullNormalizedJobTitle%7ClocationPath%7CsalaryRange%7Csectors%7CemploymentType%7CexperienceLevel%7CworkArrangementType%7CsalaryCurrency%7CminSalary%7CmaxSalary%7CpositionType%7CpostedDate%7CclientBrandNameFilter&filters.clientBrandNameFilter=balyasny%20asset%20management%20lp&currencyCode=AUD&culture=en&recommendations=true&fj=false&includeRemote=false&includeUnspecifiedSalary=true",
+  "method": "GET",
+  "records_path": [
+   "data"
+  ],
+  "total_path": [
+   "meta",
+   "totalResults"
+  ],
+  "company": "balyasny asset management l p",
+  "fields": {
+   "id": "jobId",
+   "title": "title",
+   "location": "jobLocation",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 1
+ },
+ "borusgaoboaugustauniversity": {
+  "url": "https://www.ellis.com/api/posts?depth=1",
+  "method": "GET",
+  "records_path": [
+   "posts"
+  ],
+  "total_path": [],
+  "company": "bor usga obo augusta university",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": "category"
+  }
+ },
+ "lelandstanfordjrunivslacnationalacceleratorlab": {
+  "url": "https://h1btrends-api.onrender.com/api/h1b/jobs/staff-engineer-3/filter-options",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "available_filters",
+   "companies"
+  ],
+  "total_path": [],
+  "company": "leland stanford jr univ slac national accelerator lab",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "city",
+   "department": ""
+  }
+ },
+ "technumen": {
+  "url": "https://gladiator.iimjobs.com/job/similar-company-jobs?page=0",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "technumen",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "locations",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 0
+ },
+ "evercorepartnersserviceseast": {
+  "url": "https://www.ellis.com/api/posts?depth=1",
+  "method": "GET",
+  "records_path": [
+   "posts"
+  ],
+  "total_path": [],
+  "company": "evercore partners services east",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": "category"
+  }
+ },
+ "dataquad": {
+  "url": "https://gladiator.iimjobs.com/job/similar-company-jobs?page=0",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "dataquad",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "locations",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 0
+ },
+ "rjtcompuquestdbaapolis": {
+  "url": "https://h1btrends-api.onrender.com/api/h1b/companies/rjt-compuquest-dba-apolis/filter-options",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "available_filters",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "rjt compuquest dba apolis",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "emonics": {
+  "url": "https://careers.ontologize.com/api/jobalerts-options",
+  "method": "GET",
+  "records_path": [
+   "locations"
+  ],
+  "total_path": [],
+  "company": "emonics",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "ibaseoperations": {
+  "url": "https://bebee.com/api/jobs/techmap_us_ibase-t_37615/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "ibase operations",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "universityofgeorgiaoge": {
+  "url": "https://bebee.com/api/jobs/theirstack-673232578/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "university of georgia oge",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "veridicsolutions": {
+  "url": "https://gladiator.iimjobs.com/job/similar-company-jobs?page=0",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "veridic solutions",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "locations",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 0
+ },
+ "jriamerica": {
+  "url": "https://api-widget.soundcloud.com/playlists/52521283?representation=full&format=json&client_id=gqKBMSuBw5rbN9rDRYPqKNvF17ovlObu&app_version=1781686444",
+  "method": "GET",
+  "records_path": [
+   "tracks"
+  ],
+  "total_path": [],
+  "company": "jri america",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "upstartnetwork": {
+  "url": "https://jobs.gaingels.com/api-boards/search-jobs",
+  "method": "POST",
+  "records_path": [
+   "jobs"
+  ],
+  "total_path": [
+   "total"
+  ],
+  "company": "upstart network",
+  "fields": {
+   "id": "jobId",
+   "title": "title",
+   "location": "locations",
+   "department": ""
+  },
+  "body": {
+   "meta": {
+    "size": 15
+   },
+   "board": {
+    "id": "upstart",
+    "isParent": false
+   },
+   "query": {
+    "promoteFeatured": true
+   },
+   "parentSlug": "gaingels"
+  }
+ },
+ "xyloconsulting": {
+  "url": "https://bebee.com/api/jobs/theirstack-712593520/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "xylo consulting",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "relevantztechnologyservices": {
+  "url": "https://sidebar.bugherd.com/sidebar/resources?apikey=qjovzspyttvkavpce2cr8w",
+  "method": "GET",
+  "records_path": [
+   "project",
+   "tags"
+  ],
+  "total_path": [],
+  "company": "relevantz technology services",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "mediatekusa": {
+  "url": "https://prod-api.oysterlink.com/search/jobs?skip=0&take=10&order=DESC&orderBy=featured",
+  "method": "GET",
+  "records_path": [
+   "data"
+  ],
+  "total_path": [],
+  "company": "mediatek usa",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "trinetusa": {
+  "url": "https://jobs.trinet.com/api/pcsx/search?domain=trinet.com&query=&location=&start=0&",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "positions"
+  ],
+  "total_path": [
+   "data",
+   "count"
+  ],
+  "company": "trinet usa",
+  "fields": {
+   "id": "displayJobId",
+   "title": "name",
+   "location": "locations",
+   "department": "department"
+  },
+  "page_param": "start",
+  "page_start": 0
+ },
+ "suescuelalanguageacademy": {
+  "url": "https://bebee.com/api/jobs/theirstack-665761293/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "su escuela language academy",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "tekinvaderz": {
+  "url": "https://www.tekinvaderz.com/_api/tag-manager/api/v1/tags/sites/85cb8d32-9d48-46a5-9e5c-8062295bd2ed?wixSite=false&htmlsiteId=c8331d84-ff6b-4500-822d-3e023cc6ee9b&language=en",
+  "method": "GET",
+  "records_path": [
+   "tags"
+  ],
+  "total_path": [],
+  "company": "tekinvaderz",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": "category"
+  }
+ },
+ "sinaihospitalofbaltimore": {
+  "url": "https://www.vivian.com/api/self/available-seo-entities?disciplineId=1&employmentType=Permanent&objectiveEntity=specialty",
+  "method": "GET",
+  "records_path": [
+   "message"
+  ],
+  "total_path": [],
+  "company": "sinai hospital of baltimore",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "carnival": {
+  "url": "https://distillery.pixlee.co/getJSON?api_key=u5eU3mCLPUXBRPNvWQz&updated_at=2026-06-15T14:12:37.798Z&page=1&filter_id=10807120&unique_id=0&per_page=9&sortType=",
+  "method": "GET",
+  "records_path": [
+   "data"
+  ],
+  "total_path": [
+   "total"
+  ],
+  "company": "carnival",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 1
+ },
+ "celoristech": {
+  "url": "https://www.tiktokw.us/api/global-footer/graphql",
+  "method": "POST",
+  "records_path": [
+   "data",
+   "footer",
+   "navigation",
+   2,
+   "navTabs"
+  ],
+  "total_path": [],
+  "company": "celoris tech",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "federalsoftsystems": {
+  "url": "https://gladiator.iimjobs.com/job/similar-company-jobs?page=0",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "federal soft systems",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "locations",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 0
+ },
+ "inteliroute": {
+  "url": "https://www.ellis.com/api/posts?depth=1",
+  "method": "GET",
+  "records_path": [
+   "posts"
+  ],
+  "total_path": [],
+  "company": "inteliroute technologies",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": "category"
+  }
+ },
+ "4consulting": {
+  "url": "https://bebee.com/api/jobs/oneredce-6874_5fc76c7aa891464c07bf3da92f8a2938/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "4consulting",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "gavstechnologiesna": {
+  "url": "https://www.instahyre.com/api/v1/employer_misc/employer_profile/anon_employer/36450?getVisibleJobs=true&limit=10",
+  "method": "GET",
+  "records_path": [
+   "office_photos"
+  ],
+  "total_path": [],
+  "company": "gavs technologies na",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "amarthyitsolutions": {
+  "url": "https://h1btrends-api.onrender.com/api/h1b/companies/amarthy-it-solutions/filter-options",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "available_filters",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "amarthy it solutions",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "epsoft": {
+  "url": "https://gladiator.iimjobs.com/job/similar-company-jobs?page=0",
+  "method": "GET",
+  "records_path": [
+   "data",
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "epsoft technologies",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "locations",
+   "department": ""
+  },
+  "page_param": "page",
+  "page_start": 0
+ },
+ "dreamventure": {
+  "url": "https://bebee.com/api/jobs/theirstack-651449530/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "dream venture labs",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "cbsinteractive": {
+  "url": "https://d3hb14vkzrxvla.cloudfront.net/v1/d513777f-eae9-4f4b-85a9-0e42d6a1f663",
+  "method": "GET",
+  "records_path": [
+   "messages"
+  ],
+  "total_path": [],
+  "company": "cbs interactive",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "foxcablenetworkservices": {
+  "url": "https://sidebar.bugherd.com/sidebar/resources?apikey=qgy99teei4pj5vnoh6mtta",
+  "method": "GET",
+  "records_path": [
+   "project",
+   "tags"
+  ],
+  "total_path": [],
+  "company": "fox cable network services",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "",
+   "department": ""
+  }
+ },
+ "triadmathandscienceacademy": {
+  "url": "https://bebee.com/api/jobs/appcast-13509_99963497/enrichment?country=us",
+  "method": "GET",
+  "records_path": [
+   "similarJobs"
+  ],
+  "total_path": [],
+  "company": "triad math and science academy",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": ""
+  }
+ },
+ "geprecisionhealthcare": {
+  "url": "https://content-us.phenompeople.com/api/GEVGHLGLOBAL/getRegionLocales?locale=en_global&siteType=external&deviceType=desktop&payload=%7B%22ddoKey%22%3A%22getRegionLocales%22%7D",
+  "method": "GET",
+  "records_path": [
+   "getRegionLocales",
+   "data"
+  ],
+  "total_path": [],
+  "company": "ge precision healthcare",
+  "fields": {
+   "id": "id",
+   "title": "displayName",
+   "location": "location",
+   "department": ""
+  }
+ },
+ "tiktokusds": {
+  "url": "https://careers.tiktokusds.com/api/v1/search/job/posts",
+  "method": "POST",
+  "browser_http1": true,
+  "warm_url": "https://careers.tiktokusds.com/position",
+  "headers": {
+   "website-path": "usds",
+   "portal-channel": "tiktok",
+   "content-type": "application/json",
+   "Referer": "https://careers.tiktokusds.com/position"
+  },
+  "body": {
+   "keyword": "",
+   "limit": 100,
+   "offset": 0,
+   "job_category_id_list": [],
+   "tag_id_list": [],
+   "location_code_list": [],
+   "subject_id_list": [],
+   "recruitment_id_list": [],
+   "portal_type": 10,
+   "job_function_id_list": [],
+   "storefront_id_list": []
+  },
+  "page_path": [
+   "offset"
+  ],
+  "page_step": 100,
+  "records_path": [
+   "data",
+   "job_post_list"
+  ],
+  "total_path": [
+   "data",
+   "count"
+  ],
+  "company": "TikTok USDS",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "city_info",
+   "department": "job_category",
+   "description": "description"
+  }
+ },
+ "annapurnalabs": {
+  "url": "https://www.amazon.jobs/en/search.json?base_query=annapurna&result_limit=100&offset=0",
+  "method": "GET",
+  "page_param": "offset",
+  "page_step": 100,
+  "page_start": 0,
+  "records_path": [
+   "jobs"
+  ],
+  "total_path": [
+   "hits"
+  ],
+  "company": "Annapurna Labs (Amazon)",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "normalized_location",
+   "url": "job_path",
+   "department": "business_category"
+  }
+ },
+ "epamsystems": {
+  "url": "https://careers.epam.com/api/jobs/v2/search/careers-i18n?lang=en&size=50&sortBy=relevance",
+  "method": "GET",
+  "page_param": "from",
+  "page_start": 0,
+  "page_step": 50,
+  "size": 50,
+  "records_path": [
+   "data",
+   "jobs"
+  ],
+  "total_path": [
+   "data",
+   "total"
+  ],
+  "company": "EPAM Systems",
+  "fields": {
+   "id": "uid",
+   "title": "name",
+   "location": "city",
+   "department": "primary_skill",
+   "description": "description"
+  }
+ },
+ "mountsinaihospital": {
+  "url": "https://careers.mountsinai.org/api/jobs?limit=100&internal=false&sortBy=relevance&descending=false",
+  "method": "GET",
+  "page_param": "page",
+  "page_start": 1,
+  "page_step": 1,
+  "records_path": [
+   "jobs"
+  ],
+  "record_unwrap": [
+   "data"
+  ],
+  "total_path": [
+   "totalCount"
+  ],
+  "company": "Mount Sinai",
+  "fields": {
+   "id": "slug",
+   "title": "title",
+   "location": "full_location",
+   "department": "department",
+   "description": "description"
+  }
+ },
+ "compunnelsoftwaregroup": {
+  "url": "https://stafflineapi.compunnel.com/job/jobsList",
+  "method": "POST",
+  "body": {
+   "PageIndex": 1,
+   "PageSize": 100,
+   "PortalId": 5007,
+   "SearchKey": "",
+   "CountryId": "",
+   "StateId": "-1",
+   "CityId": "-1"
+  },
+  "page_path": [
+   "PageIndex"
+  ],
+  "page_start": 1,
+  "page_step": 1,
+  "size_path": [
+   "PageSize"
+  ],
+  "size": 100,
+  "records_path": [
+   "data"
+  ],
+  "total_path": [
+   "totalrecord"
+  ],
+  "company": "Compunnel",
+  "fields": {
+   "id": "Job_Id",
+   "title": "Job_Title",
+   "location": "Location",
+   "department": "Category_Name",
+   "description": "Job_Summary"
+  }
+ },
+ "aruplaboratories": {
+  "url": "https://recruiting2.ultipro.com/ARU1000ARUP/JobBoard/62cc791d-612e-42e6-909f-0de27efe2038/JobBoardView/LoadSearchResults",
+  "method": "POST",
+  "body": {
+   "opportunitySearch": {
+    "Top": 100,
+    "Skip": 0,
+    "QueryString": "",
+    "OrderBy": [
+     {
+      "Value": "postedDateDesc",
+      "PropertyName": "PostedDate",
+      "Ascending": false
+     }
+    ],
+    "Filters": []
+   },
+   "matchCriteria": {
+    "PreferredJobs": [],
+    "Educations": [],
+    "LicenseAndCertifications": [],
+    "Skills": [],
+    "WorkExperiences": [],
+    "Languages": [],
+    "Categories": [],
+    "Locations": [],
+    "JobTypes": [],
+    "ValueFilters": [],
+    "FilterFields": []
+   }
+  },
+  "page_path": [
+   "opportunitySearch",
+   "Skip"
+  ],
+  "page_start": 0,
+  "page_step": 100,
+  "size_path": [
+   "opportunitySearch",
+   "Top"
+  ],
+  "size": 100,
+  "records_path": [
+   "opportunities"
+  ],
+  "total_path": [
+   "totalCount"
+  ],
+  "company": "ARUP Laboratories",
+  "fields": {
+   "id": "Id",
+   "title": "Title",
+   "location": "Locations.0.Address",
+   "department": "JobCategoryName",
+   "description": "BriefDescription"
+  }
+ },
+ "gandaramentalhealthcenter": {
+  "url": "https://recruiting.ultipro.com/GAN1000GAND/JobBoard/664a7a5f-4694-403c-bef4-591624415ede/JobBoardView/LoadSearchResults",
+  "method": "POST",
+  "body": {
+   "opportunitySearch": {
+    "Top": 100,
+    "Skip": 0,
+    "QueryString": "",
+    "OrderBy": [
+     {
+      "Value": "postedDateDesc",
+      "PropertyName": "PostedDate",
+      "Ascending": false
+     }
+    ],
+    "Filters": []
+   },
+   "matchCriteria": {
+    "PreferredJobs": [],
+    "Educations": [],
+    "LicenseAndCertifications": [],
+    "Skills": [],
+    "WorkExperiences": [],
+    "Languages": [],
+    "Categories": [],
+    "Locations": [],
+    "JobTypes": [],
+    "ValueFilters": [],
+    "FilterFields": []
+   }
+  },
+  "page_path": [
+   "opportunitySearch",
+   "Skip"
+  ],
+  "page_start": 0,
+  "page_step": 100,
+  "size_path": [
+   "opportunitySearch",
+   "Top"
+  ],
+  "size": 100,
+  "records_path": [
+   "opportunities"
+  ],
+  "total_path": [
+   "totalCount"
+  ],
+  "company": "Gandara Mental Health Center",
+  "fields": {
+   "id": "Id",
+   "title": "Title",
+   "location": "Locations.0.Address",
+   "department": "JobCategoryName",
+   "description": "BriefDescription"
+  }
+ },
+ "regentsofuniversityofcaliforniaatriverside": {
+  "url": "https://jobsportal.ucr.edu/api/jobs",
+  "method": "GET",
+  "records_path": [],
+  "total_path": [],
+  "company": "Regents of University of California at Riverside",
+  "fields": {
+   "id": "id",
+   "title": "jobTitle",
+   "location": "",
+   "department": "",
+   "posted_at": "postingDate",
+   "description": "positionInformation"
+  }
+ },
+ "kpit": {
+  "url": "https://talentojo.kpit.com/service/get_career_portal_jobs?limit=24&offset=0&organization_id=133&search=%7B%7D",
+  "method": "GET",
+  "page_param": "offset",
+  "page_start": 0,
+  "page_step": 24,
+  "records_path": [
+   "jobs"
+  ],
+  "total_path": [
+   "total_count"
+  ],
+  "company": "KPIT Technologies",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location",
+   "department": "job_role"
+  }
+ },
+ "caresoftglobal": {
+  "url": "https://caresoftglobal.freshteam.com/hire/widgets/jobs.json",
+  "method": "GET",
+  "records_path": [
+   "jobs"
+  ],
+  "total_path": [],
+  "company": "Caresoft Global Technologies",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "",
+   "department": "",
+   "url": "url",
+   "description": "description"
+  }
+ },
+ "namitus": {
+  "url": "https://namitus.com/wp-json/wp/v2/awsm_job_openings?per_page=100",
+  "method": "GET",
+  "records_path": [],
+  "total_path": [],
+  "company": "Namitus Technologies",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "location": "",
+   "department": "",
+   "url": "link",
+   "description": "content.rendered"
+  }
+ },
+ "kastechsolutions": {
+  "url": "https://www.kastechssg.com/wp-json/wp/v2/career?per_page=100",
+  "method": "GET",
+  "records_path": [],
+  "total_path": [],
+  "company": "Kastech Solutions",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "location": "",
+   "department": "",
+   "url": "link",
+   "description": "content.rendered"
+  }
+ },
+ "lertechforce": {
+  "url": "https://evoportalus.tracker-rms.com/Opportunity/Publish/?db=LERTechForce&fields=reference,title,location,state,city,worktype&sorts=creationdate%20DESC&output=json",
+  "method": "GET",
+  "records_path": [
+   "Jobs",
+   "Job"
+  ],
+  "total_path": [],
+  "company": "LER TechForce",
+  "fields": {
+   "id": "reference",
+   "title": "title",
+   "location": "location"
+  }
+ },
+ "deshaw": {
+  "url": "https://www.deshaw.com/careers",
+  "method": "GET",
+  "embed_script": "__NEXT_DATA__",
+  "records_path": [
+   "props",
+   "pageProps",
+   "regularJobs"
+  ],
+  "total_path": [],
+  "company": "D. E. Shaw",
+  "fields": {
+   "id": "id",
+   "title": "displayName",
+   "location": "office"
+  }
+ }
 }

@@ -13,12 +13,24 @@ from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, Sea
 
 def _jobs():
     return [
-        JobPosting.create(source="greenhouse", source_job_id="1", company="Stripe",
-                          title="Senior Backend Engineer", level=JobLevel.SENIOR, sector="Fintech",
-                          locations=[Location(raw="Remote", is_remote=True)], remote=RemoteType.REMOTE),
-        JobPosting.create(source="lever", source_job_id="2", company="Ramp",
-                          title="Frontend Engineer",
-                          locations=[Location(raw="Remote", is_remote=True)], remote=RemoteType.REMOTE),
+        JobPosting.create(
+            source="greenhouse",
+            source_job_id="1",
+            company="Stripe",
+            title="Senior Backend Engineer",
+            level=JobLevel.SENIOR,
+            sector="Fintech",
+            locations=[Location(raw="Remote", is_remote=True)],
+            remote=RemoteType.REMOTE,
+        ),
+        JobPosting.create(
+            source="lever",
+            source_job_id="2",
+            company="Ramp",
+            title="Frontend Engineer",
+            locations=[Location(raw="Remote", is_remote=True)],
+            remote=RemoteType.REMOTE,
+        ),
     ]
 
 
@@ -30,14 +42,21 @@ def test_full_pipeline_offline(tmp_path, monkeypatch):
     raw = src.read_bytes()
     (remote / "index.sqlite.gz").write_bytes(gzip.compress(raw))
     (remote / "manifest.json").write_text(
-        json.dumps({"build_id": "b1", "schema_version": 1,
-                    "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)})
+        json.dumps(
+            {
+                "build_id": "b1",
+                "schema_version": 1,
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "bytes": len(raw),
+            }
+        )
     )
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
     # Hermetic: force the single-file path (no live shard fetch over the network).
     monkeypatch.setattr(router, "_load_sharded", lambda q: None)
     monkeypatch.setattr(
-        router, "_load_backend",
+        router,
+        "_load_backend",
         lambda: (lambda p: SqliteIndexBackend(p) if p else None)(cache.ensure_fresh()),
     )
 

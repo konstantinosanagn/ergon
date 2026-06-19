@@ -7,8 +7,15 @@ from ergon_tracker.models import JobLevel, JobPosting, SearchQuery
 def test_router_uses_index_for_broad_query(tmp_path, monkeypatch):
     p = tmp_path / "i.sqlite"
     build_index(
-        [JobPosting.create(source="greenhouse", source_job_id="1", company="Co",
-                           title="Senior Backend Engineer", level=JobLevel.SENIOR)],
+        [
+            JobPosting.create(
+                source="greenhouse",
+                source_job_id="1",
+                company="Co",
+                title="Senior Backend Engineer",
+                level=JobLevel.SENIOR,
+            )
+        ],
         p,
         build_id="b1",
     )
@@ -24,7 +31,9 @@ def test_router_returns_none_for_targeted_query():
 
 def test_router_returns_none_when_index_unavailable(tmp_path, monkeypatch):
     monkeypatch.setattr(router, "_load_sharded", lambda q: None)
-    monkeypatch.setattr(router, "_load_backend", lambda: SqliteIndexBackend(tmp_path / "none.sqlite"))
+    monkeypatch.setattr(
+        router, "_load_backend", lambda: SqliteIndexBackend(tmp_path / "none.sqlite")
+    )
     assert router.try_index(SearchQuery(keywords="x")) is None
 
 
@@ -33,13 +42,23 @@ def test_router_prefers_sharded_over_single_file(tmp_path, monkeypatch):
     from ergon_tracker.index.build import build_sharded_index
 
     build_sharded_index(
-        [JobPosting.create(source="greenhouse", source_job_id="1", company="Stripe",
-                           title="Backend Engineer", sector="Fintech")],
-        tmp_path, build_id="b1",
+        [
+            JobPosting.create(
+                source="greenhouse",
+                source_job_id="1",
+                company="Stripe",
+                title="Backend Engineer",
+                sector="Fintech",
+            )
+        ],
+        tmp_path,
+        build_id="b1",
     )
     monkeypatch.setattr(router, "_load_sharded", lambda q: ShardedIndexBackend(tmp_path))
     # single-file should NOT be consulted when shards serve the query
-    monkeypatch.setattr(router, "_load_backend", lambda: (_ for _ in ()).throw(AssertionError("used single-file")))
+    monkeypatch.setattr(
+        router, "_load_backend", lambda: (_ for _ in ()).throw(AssertionError("used single-file"))
+    )
     out = router.try_index(SearchQuery(keywords="backend", sector="Fintech", limit=5))
     assert out is not None and out[0].company == "Stripe"
 
@@ -49,12 +68,21 @@ def test_router_skips_shards_for_broad_query(tmp_path, monkeypatch):
     # than the single-file index's one download + global FTS rank. Sharding only helps sectors.
     p = tmp_path / "i.sqlite"
     build_index(
-        [JobPosting.create(source="greenhouse", source_job_id="1", company="Co",
-                           title="Senior Backend Engineer", level=JobLevel.SENIOR)],
-        p, build_id="b1",
+        [
+            JobPosting.create(
+                source="greenhouse",
+                source_job_id="1",
+                company="Co",
+                title="Senior Backend Engineer",
+                level=JobLevel.SENIOR,
+            )
+        ],
+        p,
+        build_id="b1",
     )
     monkeypatch.setattr(
-        router, "_load_sharded",
+        router,
+        "_load_sharded",
         lambda q: (_ for _ in ()).throw(AssertionError("shards consulted for broad query")),
     )
     monkeypatch.setattr(router, "_load_backend", lambda: SqliteIndexBackend(p))

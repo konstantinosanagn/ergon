@@ -63,8 +63,11 @@ def test_build_incremental_end_to_end(tmp_path):
 def test_build_incremental_cold_start_no_prev(tmp_path):
     out = tmp_path / "new.sqlite"
     n = build_index_incremental(
-        None, fresh_jobs=[_job("1", "Stripe", "Role")], crawled_keys={"stripe"},
-        path=out, build_id="b1",
+        None,
+        fresh_jobs=[_job("1", "Stripe", "Role")],
+        crawled_keys={"stripe"},
+        path=out,
+        build_id="b1",
     )
     assert n == 1
 

@@ -16,6 +16,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -26,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from discover_giants import _candidate_urls  # noqa: E402
+from census_residual import brand_query, residual_urls  # noqa: E402
 from harvest_commoncrawl import load_seed_keys  # noqa: E402
 from harvest_tavily import load_key  # noqa: E402
 from harvest_tokens import _core  # noqa: E402
@@ -111,7 +112,47 @@ _DENY_HOSTS = (
     "talent.com",
     "jobstreet",
     "seek.com",
+    # Embedded chatbot/conversational-ATS widgets, H-1B/job aggregators, and SaaS infra that a
+    # careers page calls but which never serve the sponsor's OWN postings (found poisoning a
+    # brand-normalized residual pass: fedex->paradox.ai, slalom->h1bvisajobs, sphere->a16z, ...).
+    "paradox.ai",
+    "olivia.paradox",
+    "jobdiva.com",
+    "bebee.com",
+    "theirstack",
+    "chronicle.com",
+    "consentmo",
+    "onrender.com",
+    "h1bvisajobs",
+    "h1btrends",
+    "h1bgrader",
+    "myvisajobs",
+    "supabase.co",
+    "a16z.com",
+    "amazon.jobs",
+    "greenhouse.io/embed",
 )
+
+
+def _brand_tokens(name: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]+", name.lower()) if len(w) >= 4}
+
+
+def _host_label(host: str) -> str:
+    parts = host.lower().split(":")[0].split(".")
+    return parts[-2] if len(parts) >= 2 else (parts[0] if parts else "")
+
+
+def _host_relates(host: str, name: str) -> bool:
+    """A legit OWN-domain job API is hosted on the sponsor's own domain (Goldman ->
+    api-higher.gs.com). A third-party widget/aggregator is on someone else's. Require the request
+    host's registrable label to share a brand token (or vice-versa) — kills the embeds that a
+    brand-normalized "X careers" search surfaces, which otherwise poison the registry."""
+    label = _host_label(host)
+    if not label:
+        return False
+    toks = _brand_tokens(name)
+    return any(label in t or t in label for t in toks)
 
 
 def _find_records(obj, path=()):
@@ -177,6 +218,8 @@ def infer_spec(req_url: str, method: str, post_data: str | None, resp, name: str
     host, path = parts.netloc.lower(), parts.path.lower()
     if any(d in host for d in _DENY_HOSTS):
         return None  # embedded third-party job board / gov site, not the sponsor's own jobs
+    if not _host_relates(host, name):
+        return None  # API host doesn't belong to the sponsor -> an embedded widget/aggregator
     if host.split(".")[0] in ("static", "cdn", "assets") or any(
         seg in path for seg in ("/assets/", "/static/", "/dist/", "/_next/", ".js")
     ):
@@ -300,7 +343,13 @@ async def main() -> None:
     urls_by_idx: dict[int, list[str]] = {}
 
     async def find_urls(idx: int, g: dict, fetcher) -> None:
-        urls_by_idx[idx] = _candidate_urls(g["name"], await tavily(g["name"], key, fetcher))
+        # Brand-normalize the legal filing name first: Tavily can't find a careers page for
+        # "trustees of university of pennsylvania" but trivially finds one for the brand. Same
+        # blindspot the static residual census had — and the Playwright pass is exactly where the
+        # JS-loaded boards (OSF iCIMS iframe, university SPAs) get captured.
+        brand = brand_query(g["name"])
+        urls = await tavily(f"{brand} careers", key, fetcher)
+        urls_by_idx[idx] = residual_urls(brand, g["name"], urls)
 
     from ergon_tracker.http import AsyncFetcher  # noqa: E402
 
