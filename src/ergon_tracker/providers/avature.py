@@ -101,13 +101,67 @@ class AvatureProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         host, portal, page_name = self._split(token)
         if portal:
-            return await self._fetch_portal(host, portal, page_name, query, fetcher)
+            raws = await self._fetch_portal(host, portal, page_name, query, fetcher)
+            # JS-widget themes (e.g. Slalom) render no JobDetail anchors in static HTML, so the
+            # HTML parse yields 0; the 20-item RSS feed is then the only reachable source.
+            return raws or await self._fetch_rss(host, portal, query.limit, fetcher)
         # Bare host: try the default portalPaths and use the first that yields jobs.
         for cand in _DEFAULT_PORTALS:
             raws = await self._fetch_portal(host, cand, page_name, query, fetcher)
             if raws:
                 return raws
+            rss = await self._fetch_rss(host, cand, query.limit, fetcher)
+            if rss:
+                return rss
         return []
+
+    @staticmethod
+    def _rss_company(host: str) -> str:
+        # bloomberg.avature.net -> "bloomberg"; own-domain feeds (jobs.slalom.com,
+        # careers.bv.com) -> strip the generic prefix and use the brand label.
+        parts = host.split(".")
+        first = parts[0] if parts else host
+        if first in {"jobs", "careers", "career", "job", "apply", "work", "talent"} and len(parts) >= 3:
+            return parts[1]
+        return first
+
+    async def _fetch_rss(
+        self, host: str, portal: str, limit: int | None, fetcher: AsyncFetcher
+    ) -> list[RawJob]:
+        """Fallback for JS-widget themes: the Avature RSS feed (hard-capped at 20 items)."""
+        url = f"https://{host}/{portal}/SearchJobs/feed/?jobRecordsPerPage=20"
+        try:
+            text = await fetcher.get_text(url)
+        except Exception:
+            return []
+        company = self._rss_company(host)
+        out: list[RawJob] = []
+        seen: set[str] = set()
+        for block in re.findall(r"<item>(.*?)</item>", text, re.S | re.I):
+            link_m = re.search(r"<link>\s*(.*?)\s*</link>", block, re.S | re.I)
+            href = _html.unescape(link_m.group(1).strip()) if link_m else ""
+            id_m = _JOB_RE.search(href)
+            if not id_m:
+                continue
+            jid = id_m.group(1)
+            if jid in seen:
+                continue
+            seen.add(jid)
+            title_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, re.S | re.I)
+            title = _html.unescape((title_m.group(1) if title_m else "").strip())
+            out.append(
+                RawJob(
+                    source=self.name,
+                    source_job_id=jid,
+                    company=company,
+                    token=f"{host}|{portal}",
+                    url=href,
+                    payload={"title": title, "location": "", "url": href, "id": jid},
+                )
+            )
+            if limit is not None and len(out) >= limit:
+                break
+        return out
 
     @staticmethod
     def _split(token: str) -> tuple[str, str, str]:
