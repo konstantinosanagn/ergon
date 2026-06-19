@@ -14,7 +14,54 @@ from importlib.resources import files
 
 from ..models import Location
 
-__all__ = ["normalize_geo"]
+__all__ = ["normalize_geo", "city_match_terms", "city_matches"]
+
+# Metro/synonym groups: names that denote the SAME city a user means when they type the key.
+# High-precision — only true aliases and constituent boroughs/districts (a borough of NYC IS NYC),
+# never neighboring metro suburbs (San Jose is NOT San Francisco). Used to widen a city filter so
+# "New York" also returns "New York City"/"Brooklyn"/"NYC" labelled postings. Short tokens (<=3,
+# e.g. "nyc"/"sf"/"dc") are matched EXACTLY against the parsed city only — never as a substring of
+# free text, where they would false-match ("dc" in "dca").
+_METRO_GROUPS: list[tuple[str, ...]] = [
+    (
+        "new york",
+        "new york city",
+        "nyc",
+        "manhattan",
+        "brooklyn",
+        "queens",
+        "the bronx",
+        "bronx",
+        "staten island",
+    ),
+    ("san francisco", "sf"),
+    ("washington", "washington dc", "washington d.c.", "dc"),
+    ("los angeles", "l.a."),
+]
+_METRO_ALIASES: dict[str, tuple[str, ...]] = {
+    member: group for group in _METRO_GROUPS for member in group
+}
+
+
+def city_match_terms(city: str) -> list[str]:
+    """Lowercased terms that denote the same city as ``city`` (incl. metro/borough synonyms)."""
+    key = city.lower().strip()
+    return list(_METRO_ALIASES.get(key, (key,)))
+
+
+def city_matches(city_query: str, loc_city: str | None, loc_raw: str | None) -> bool:
+    """True if a parsed location matches a city filter, with metro-synonym widening.
+
+    Mirrors the index SQL (query.py) so the SDK live path and the index agree. Matches the parsed
+    city EXACTLY (trimmed) against the alias set. Deliberately NOT a substring of the raw text:
+    "New York"/"Washington" are also US STATE names, so substring matching pulls in whole-state
+    postings (e.g. "Armonk, New York") and "Brooklyn Park, MN". Exact city-column match captures
+    the labelled variants ("New York City", "Brooklyn", "NYC") without those false positives; users
+    wanting free-text location matching use the separate ``location`` filter.
+    """
+    lc = (loc_city or "").strip().lower()
+    return any(lc == t for t in city_match_terms(city_query))
+
 
 # Country aliases -> canonical name (extend freely).
 _COUNTRY_ALIASES: dict[str, str] = {

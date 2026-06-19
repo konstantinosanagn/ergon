@@ -39,8 +39,15 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
         cl.append("LOWER(j.country) = ?")
         p.append(q.country.lower())
     if q.city:
-        cl.append("LOWER(j.city) = ?")
-        p.append(q.city.lower())
+        # Metro-aware exact match (mirrors SearchQuery.matches()._geo_ok via city_match_terms):
+        # widens "New York" to its labelled variants ("New York City"/"Brooklyn"/"NYC") so a city
+        # filter doesn't miss ~28% of NYC postings, while exact (trimmed) matching avoids the
+        # "New York"-the-state / "Brooklyn Park, MN" false positives a substring match would add.
+        from ..extract.geo import city_match_terms
+
+        terms = city_match_terms(q.city)
+        cl.append("(" + " OR ".join("TRIM(LOWER(j.city)) = ?" for _ in terms) + ")")
+        p.extend(terms)
     if q.location:
         # Mirror SearchQuery.matches(): the free-text location must appear in the job's location
         # text (substring). Without this the index ignored `location` and returned non-matching

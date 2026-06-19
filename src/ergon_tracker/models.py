@@ -324,15 +324,18 @@ class SearchQuery(BaseModel):
         return not (job_hi < want_lo or job_lo > want_hi)
 
     def _geo_ok(self, job: JobPosting) -> bool:
-        for field, value in (("country", self.country), ("city", self.city)):
-            if not value:
-                continue
-            needle = value.lower()
-            hit = any(
-                (getattr(loc, field) or "").lower() == needle or needle in (loc.raw or "").lower()
+        if self.country:
+            needle = self.country.lower()
+            if not any(
+                (loc.country or "").lower() == needle or needle in (loc.raw or "").lower()
                 for loc in job.locations
-            )
-            if not hit:
+            ):
+                return False
+        if self.city:
+            # Metro-aware city match (NYC boroughs/"NYC", "SF", ...) shared with the index SQL.
+            from .extract.geo import city_matches
+
+            if not any(city_matches(self.city, loc.city, loc.raw) for loc in job.locations):
                 return False
         return True
 
