@@ -64,6 +64,7 @@ _BUILTIN_MODULES = (
     "apicapture",
     "coveo",
     "peopleadmin",
+    "peopleclick",
     "jobdiva",
     "ripplehire",
     "remotive",

@@ -36,6 +36,7 @@ SUPPORTED_ATS = {
     "apicapture",
     "coveo",
     "peopleadmin",
+    "peopleclick",
     "jobdiva",
     "ripplehire",
     "usajobs",
