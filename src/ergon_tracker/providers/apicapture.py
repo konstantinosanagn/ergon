@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import html as _htmlmod
 import json
 import re
 from datetime import datetime
@@ -63,6 +64,52 @@ def _extract_embed(html: str, script_id: str) -> Any:
         return json.loads(m.group(1).strip())
     except ValueError:
         return {}
+
+
+def _parse_html_table(html: str, spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Parse a server-rendered HTML ``<table>`` of jobs into record dicts.
+
+    Some body-shops expose their board as a plain HTML table (no JSON API). The spec drives it:
+
+      ``"html_table"``: ``{"row_css": "tbody tr", "skip_rows": 1}`` — CSS for the job rows and how
+      many leading rows to drop (the header).
+      ``"columns"``: per-field extraction, each either ``{"col": N}`` (0-based ``<td>`` text) or
+      ``{"re": "pattern"}`` (first capture group of a regex over the row's inner HTML — handy for an
+      id/url buried in an ``href``). Keys match the ``fields`` map values, so normalize reads them
+      straight through.
+    """
+    from selectolax.parser import HTMLParser
+
+    cfg = spec.get("html_table") or {}
+    row_css = cfg.get("row_css", "tr")
+    skip = int(cfg.get("skip_rows", 0))
+    columns: dict[str, dict[str, Any]] = spec.get("columns") or {}
+    tree = HTMLParser(html)
+    rows = tree.css(row_css)[skip:]
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        cells = row.css("td")
+        inner = row.html or ""
+        rec: dict[str, Any] = {}
+        ok = False
+        for field, how in columns.items():
+            val: str | None = None
+            if "col" in how:
+                i = int(how["col"])
+                if 0 <= i < len(cells):
+                    val = cells[i].text(strip=True)
+            elif "re" in how:
+                m = re.search(how["re"], inner, re.S)
+                if m:
+                    # Regex runs over raw HTML, so decode entities (hrefs carry &amp;) for clean
+                    # ids/urls; cell text() is already entity-decoded by the parser.
+                    val = _htmlmod.unescape((m.group(1) if m.groups() else m.group(0)).strip())
+            if val:
+                ok = True
+            rec[field] = val
+        if ok:
+            out.append(rec)
+    return out
 
 
 def _dig(obj: Any, path: list[Any]) -> Any:
@@ -207,22 +254,29 @@ class ApiCaptureProvider(BaseProvider):
                 if spec.get("size_path"):
                     _set(body, spec["size_path"], size)
                 try:
-                    if embed:
+                    if spec.get("html_table"):
+                        page_url = _set_query(url, page_param, offset) if page_param else url
+                        html = await client.get_text(page_url, headers)
+                        records = _parse_html_table(html, spec)
+                    elif embed:
                         page_url = _set_query(url, page_param, offset) if page_param else url
                         html = await client.get_text(page_url, headers)
                         data = _extract_embed(html, embed)
+                        records = _dig(data, rec_path)
                     elif method == "POST":
                         data = await client.post_json(url, body, headers)
+                        records = _dig(data, rec_path)
                     elif page_param:
                         data = await client.get_json(_set_query(url, page_param, offset), headers)
+                        records = _dig(data, rec_path)
                     else:
                         data = await client.get_json(url, headers)
+                        records = _dig(data, rec_path)
                 except Exception:
                     break
-                if total is None:
+                if total is None and not spec.get("html_table"):
                     t = _dig(data, tot_path)
                     total = t if isinstance(t, int) else None
-                records = _dig(data, rec_path)
                 if not isinstance(records, list) or not records:
                     break
                 new = 0

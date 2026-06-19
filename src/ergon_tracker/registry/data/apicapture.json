@@ -1477,5 +1477,40 @@
    "description": "description",
    "posted_at": "open_date"
   }
+ },
+ "artifinttechnologies": {
+  "url": "https://artifint.com/w2-jobs",
+  "method": "GET",
+  "html_table": {
+   "row_css": "tr",
+   "skip_rows": 1
+  },
+  "columns": {
+   "id": {
+    "re": "[&;?]id=(\\d+)"
+   },
+   "title": {
+    "col": 2
+   },
+   "location": {
+    "col": 3
+   },
+   "posted_at": {
+    "col": 1
+   },
+   "url": {
+    "re": "(https://artifint.com/view_job[^\"]+)"
+   }
+  },
+  "records_path": [],
+  "total_path": [],
+  "company": "Artifint Technologies",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location",
+   "posted_at": "posted_at",
+   "url": "url"
+  }
  }
 }
