@@ -197,3 +197,45 @@ def test_shard_tier_identical_to_full_for_sector_queries(tmp_path):
     assert not mismatches, (
         f"shard != full for {len(mismatches)} sector queries, e.g. {mismatches[0]}"
     )
+
+
+def test_delta_applied_index_queries_identically_to_fresh_build(tmp_path):
+    # Returning-user path: a user one build behind applies a delta. Lock that the delta-applied
+    # index returns EXACTLY the fresh full build's results for every filter — a stronger guarantee
+    # than id-set equality, catching a column silently missing from the delta's row copy.
+    from ergon_tracker.index.build import apply_delta, build_delta
+
+    rng = random.Random(2024)
+    prev_jobs = _make_jobs(rng, 80)
+    # churn: drop ~15, mutate ~20 (new salary/level/years/sector), add ~15 new
+    curr_jobs = []
+    for i, j in enumerate(prev_jobs):
+        if i % 5 == 0:
+            continue  # dropped
+        if i % 3 == 0:
+            curr_jobs.append(
+                _make_jobs(rng, 1)[0].model_copy(update={"id": j.id, "title": j.title})
+            )
+        else:
+            curr_jobs.append(j)
+    curr_jobs += _make_jobs(rng, 15)
+
+    prev = tmp_path / "prev.sqlite"
+    curr = tmp_path / "curr.sqlite"
+    build_index(prev_jobs, prev, build_id="b0")
+    build_index(curr_jobs, curr, build_id="b1")
+    delta = tmp_path / "delta.sqlite"
+    build_delta(prev, curr, delta, from_build_id="b0", to_build_id="b1")
+    applied = tmp_path / "applied.sqlite"
+    applied.write_bytes(prev.read_bytes())
+    apply_delta(applied, delta)
+
+    ab, cb = SqliteIndexBackend(applied), SqliteIndexBackend(curr)
+    mismatches = []
+    for _ in range(200):
+        q = _random_query(rng)
+        if {j.id for j in ab.search(q)} != {j.id for j in cb.search(q)}:
+            mismatches.append(q.model_dump(exclude_none=True))
+    assert not mismatches, (
+        f"delta-applied != fresh build for {len(mismatches)} queries, e.g. {mismatches[0]}"
+    )
