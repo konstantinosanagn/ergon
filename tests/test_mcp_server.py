@@ -116,3 +116,34 @@ async def test_search_jobs_broad_falls_back_to_aggregators_when_index_down(monke
     monkeypatch.setattr(srv, "AsyncErgonTracker", lambda *a, **k: _FakeJS())
     await srv.search_jobs(keywords="nurse", limit=5)
     assert set(captured["sources"]) == set(srv.AGGREGATOR_PROVIDERS)  # aggregators, not 46k boards
+
+
+async def test_search_jobs_forwards_new_filters_to_index(monkeypatch) -> None:
+    # The years/employment/currency/recency filters must reach the SearchQuery the index sees,
+    # so a friend can use them via MCP (the years filter is the "0-2 yrs / new grad" use case).
+    from ergon_tracker.index import router
+    from ergon_tracker.models import EmploymentType
+
+    captured = {}
+
+    def fake_try_index(q):
+        captured["q"] = q
+        return []  # serve from index, empty result
+
+    monkeypatch.setattr(router, "try_index", fake_try_index)
+    out = await srv.search_jobs(
+        keywords="engineer",
+        min_years=0,
+        max_years=2,
+        include_unknown_years=False,
+        employment_type="full_time",
+        salary_min=140000,
+        salary_currency="USD",
+        posted_within_days=30,
+    )
+    assert out["health"][0]["source"] == "index"  # served from index, throttle-proof
+    q = captured["q"]
+    assert q.min_years == 0 and q.max_years == 2 and q.include_unknown_years is False
+    assert q.employment_type == EmploymentType.FULL_TIME
+    assert q.salary_min == 140000 and q.salary_currency == "USD"
+    assert q.posted_after is not None  # posted_within_days -> cutoff datetime

@@ -15,18 +15,28 @@ compact view of each posting (no raw payload / HTML) to keep tool responses smal
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from .client import AsyncErgonTracker
 from .engine import AGGREGATOR_PROVIDERS
-from .models import JobLevel, JobPosting, SearchQuery
+from .models import EmploymentType, JobLevel, JobPosting, SearchQuery
 from .providers.base import iter_providers, load_builtins, load_plugins
 from .registry.resolver import resolve
 from .registry.store import SeedRegistry
 
 mcp = FastMCP("ergon-tracker")
+
+
+def _days_ago(days: int | None) -> datetime | None:
+    """Cutoff datetime for `posted_within_days` (None -> no recency filter)."""
+    if not days or days <= 0:
+        return None
+    from datetime import timedelta, timezone
+
+    return datetime.now(timezone.utc) - timedelta(days=days)
 
 
 def _job_to_dict(job: JobPosting) -> dict[str, Any]:
@@ -73,6 +83,12 @@ async def search_jobs(
     city: str | None = None,
     salary_min: float | None = None,
     salary_max: float | None = None,
+    salary_currency: str | None = None,
+    min_years: int | None = None,
+    max_years: int | None = None,
+    include_unknown_years: bool = True,
+    employment_type: str | None = None,
+    posted_within_days: int | None = None,
     visa_sponsor: bool = False,
     sponsorship_offered: bool | None = None,
     infer_level_from_experience: bool = False,
@@ -102,8 +118,19 @@ async def search_jobs(
             dropping unlabeled roles). Recommended when filtering by level on real data.
         sector: industry filter, e.g. "Fintech", "AI/ML", "Healthcare" (NAICS-informed).
         include_unknown_sector: keep postings with no detected sector.
-        country / city: structured location filter.
+        country / city: structured location filter. country accepts common aliases (USA/US ->
+            United States, UK -> United Kingdom); city is metro-aware ("New York" also matches
+            NYC boroughs / "New York City" / "NYC").
         salary_min / salary_max: compensation range (jobs without salary data are kept).
+        salary_currency: restrict to a currency (e.g. "USD") when a salary bound is set, so a
+            $140k floor doesn't return EUR/GBP postings.
+        min_years / max_years: required years-of-experience range — ideal for "new grad / 0-2
+            years" searches (min_years=0, max_years=2). Postings with no stated years are kept
+            unless include_unknown_years=false.
+        include_unknown_years: keep postings with no stated experience requirement (default true).
+        employment_type: full_time / part_time / contract / internship / temporary / other.
+            Postings that don't state a type are kept.
+        posted_within_days: only postings published within the last N days (recency filter).
         visa_sponsor: if true, keep only employers known to have sponsored H-1B visas (from US
             DoL LCA certified-filing data). Each job also reports a `visa_sponsor` flag.
         sponsorship_offered: filter on what the POSTING says about visa sponsorship. true =
@@ -149,6 +176,12 @@ async def search_jobs(
         city=city,
         salary_min=salary_min,
         salary_max=salary_max,
+        salary_currency=salary_currency,
+        min_years=min_years,
+        max_years=max_years,
+        include_unknown_years=include_unknown_years,
+        employment_type=EmploymentType(employment_type) if employment_type else None,
+        posted_after=_days_ago(posted_within_days),
         visa_sponsor=True if visa_sponsor else None,
         sponsorship_offered=sponsorship_offered,
         infer_level_from_experience=infer_level_from_experience,
