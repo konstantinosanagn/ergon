@@ -36,7 +36,9 @@ def _mock(respx_mock: respx.MockRouter, total: int, pages: list[list[dict]]) -> 
     respx_mock.post(CONFIG).mock(
         return_value=httpx.Response(
             200,
-            json={"responseObject": {"company": {"id": 15738, "careerSiteUrl": "careers.acme.com"}}},
+            json={
+                "responseObject": {"company": {"id": 15738, "careerSiteUrl": "careers.acme.com"}}
+            },
         )
     )
 
@@ -68,7 +70,10 @@ def test_filter_cri_encodes_pagination() -> None:
 
 async def test_fetch_paginates_and_normalizes() -> None:
     pages = [
-        [_src(1, "Data Architect", "New York, NY, USA"), _src(2, "QA Engineer", "Bengaluru, India")],
+        [
+            _src(1, "Data Architect", "New York, NY, USA"),
+            _src(2, "QA Engineer", "Bengaluru, India"),
+        ],
         [_src(3, "Remote DevOps", "Remote")],
     ]
     with respx.mock as respx_mock:
