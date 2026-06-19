@@ -41,6 +41,7 @@ SUPPORTED_ATS = {
     "ripplehire",
     "zwayam",
     "ceipal",
+    "radancy",
     "usajobs",
     "dejobs",
     "themuse",
