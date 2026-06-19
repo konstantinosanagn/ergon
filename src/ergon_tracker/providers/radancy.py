@@ -23,7 +23,6 @@ Token: ``"{host}|{Company}"`` (e.g. ``"jobs.us.pwc.com|PwC"``). ``host`` is the 
 
 from __future__ import annotations
 
-import json as _json
 from typing import TYPE_CHECKING, Any
 
 from selectolax.parser import HTMLParser
