@@ -108,3 +108,39 @@ def test_distribution_across_ats(registry: SeedRegistry) -> None:
     assert seen <= SUPPORTED_ATS
     # the four original ATS must all be represented
     assert seen >= {"greenhouse", "lever", "ashby", "workday"}
+
+
+def test_demo_boards_excluded_and_purged():
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "_br", pathlib.Path(__file__).parent.parent / "scripts" / "build_registry.py"
+    )
+    br = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(br)
+    # Lever demo/training boards carry fake postings -> must be denied
+    assert br.is_demo_board("lever", "leverdemo")
+    assert br.is_demo_board("lever", "leverdemo-8")
+    assert br.is_demo_board("lever", "leverdemo50000")
+    assert not br.is_demo_board("lever", "stripe")  # real board
+    assert not br.is_demo_board("greenhouse", "leverdemo")  # only lever's demo tokens
+    # purge removes them from an existing registry dict
+    companies = {
+        "acme": {"ats": "lever", "token": "acme"},
+        "lever-education": {"ats": "lever", "token": "leverdemo193"},
+    }
+    assert br.purge_demo_boards(companies) == 1
+    assert "lever-education" not in companies and "acme" in companies
+
+
+def test_live_seed_has_no_demo_boards():
+    from ergon_tracker.registry.store import SeedRegistry
+
+    r = SeedRegistry().all()
+    bad = [
+        k
+        for k, e in r.items()
+        if e.get("ats") == "lever" and str(e.get("token", "")).lower().startswith("leverdemo")
+    ]
+    assert bad == [], f"demo boards leaked into the registry: {bad}"
