@@ -39,6 +39,7 @@ SUPPORTED_ATS = {
     "peopleclick",
     "jobdiva",
     "ripplehire",
+    "zwayam",
     "usajobs",
     "dejobs",
     "themuse",

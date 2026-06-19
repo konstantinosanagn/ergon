@@ -67,6 +67,7 @@ _BUILTIN_MODULES = (
     "peopleclick",
     "jobdiva",
     "ripplehire",
+    "zwayam",
     "remotive",
     "arbeitnow",
     "jobicy",

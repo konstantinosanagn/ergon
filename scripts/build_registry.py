@@ -68,6 +68,7 @@ ATS_PRIORITY = {
     "oracle": 16,
     "jobdiva": 16.5,  # authoritative staffing/IT-firm candidate portal (own JSON API)
     "ripplehire": 16.6,  # IT-services career-site ATS (own XML API): Mphasis, CitiusTech
+    "zwayam": 16.7,  # Indian IT-services ATS (public.zwayam.com 2-step ES API): Tavant
     "taleo": 17,
     "taleobe": 17.5,  # Taleo Business Edition (CwsV2 HTML)
     "icims": 18,
