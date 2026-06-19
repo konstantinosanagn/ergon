@@ -1044,5 +1044,20 @@
    "title": "requisitionTitle",
    "location": "requisitionLocations.0.address.cityName"
   }
+ },
+ "sdhsystems": {
+  "url": "https://sdhsystems.com/wp-json/wp/v2/jobpost?per_page=100",
+  "method": "GET",
+  "json_text_recover": true,
+  "records_path": [],
+  "page_param": "page",
+  "page_start": 1,
+  "page_step": 1,
+  "company": "SDH Systems",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "url": "link"
+  }
  }
 }

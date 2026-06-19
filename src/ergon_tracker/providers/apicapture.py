@@ -136,6 +136,22 @@ def _parse_rss(text: str) -> list[dict[str, Any]]:
     return out
 
 
+def _recover_json(text: str) -> Any:
+    """Extract the first valid top-level JSON array embedded in ``text`` that is otherwise junk.
+
+    Some WordPress hosts prepend an adsense ``<script>`` and a PHP "headers already sent" warning
+    before the REST array, so ``resp.json()`` chokes. We scan ``[`` positions and ``raw_decode``
+    (ignores trailing junk), returning the first non-empty list — the job array. Prefer arrays over
+    objects so a stray JS object literal in the junk prefix can't win."""
+    dec = json.JSONDecoder()
+    for m in re.finditer(r"\[", text):
+        with contextlib.suppress(ValueError):
+            obj, _ = dec.raw_decode(text, m.start())
+            if isinstance(obj, list) and obj:
+                return obj
+    return None
+
+
 def _dig(obj: Any, path: list[Any]) -> Any:
     for key in path:
         if isinstance(obj, dict):
@@ -335,11 +351,12 @@ class ApiCaptureProvider(BaseProvider):
                     elif method == "POST":
                         data = await client.post_json(url, body, headers)
                         records = _dig(data, rec_path)
-                    elif page_param:
-                        data = await client.get_json(_set_query(url, page_param, offset), headers)
-                        records = _dig(data, rec_path)
                     else:
-                        data = await client.get_json(url, headers)
+                        get_url = _set_query(url, page_param, offset) if page_param else url
+                        if spec.get("json_text_recover"):
+                            data = _recover_json(await client.get_text(get_url, headers))
+                        else:
+                            data = await client.get_json(get_url, headers)
                         records = _dig(data, rec_path)
                 except Exception:
                     break
