@@ -1512,5 +1512,20 @@
    "posted_at": "posted_at",
    "url": "url"
   }
+ },
+ "quadranttechnologies": {
+  "url": "https://www.quadranttechnologies.com/careers/feed/",
+  "method": "GET",
+  "rss": true,
+  "records_path": [],
+  "total_path": [],
+  "company": "Quadrant Technologies",
+  "fields": {
+   "id": "link",
+   "title": "title",
+   "url": "link",
+   "posted_at": "pubDate",
+   "description": "description"
+  }
  }
 }

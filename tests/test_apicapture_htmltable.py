@@ -7,7 +7,7 @@ Some body-shops expose their board as a server-rendered ``<table>`` instead of a
 
 from __future__ import annotations
 
-from ergon_tracker.providers.apicapture import _parse_html_table
+from ergon_tracker.providers.apicapture import _parse_html_table, _parse_rss
 
 _HTML = """
 <table>
@@ -72,3 +72,31 @@ def test_row_with_no_fields_is_dropped() -> None:
     # First <tr> has no cells and no regex hit -> dropped; second has a col-0 but our spec reads
     # col 1..3 / regex, none match -> also dropped.
     assert recs == []
+
+
+_RSS = """<?xml version="1.0"?><rss><channel>
+  <item>
+    <title>Azure Data Engineer</title>
+    <link>https://x.com/careers/azure-data-engineer/</link>
+    <pubDate>Tue, 11 Mar 2025 06:55:58 +0000</pubDate>
+    <description><![CDATA[Build pipelines &amp; models]]></description>
+  </item>
+  <item>
+    <title>SAP Consultant</title>
+    <link>https://x.com/careers/sap-consultant/</link>
+  </item>
+</channel></rss>"""
+
+
+def test_parse_rss_extracts_items() -> None:
+    recs = _parse_rss(_RSS)
+    assert len(recs) == 2
+    assert recs[0]["title"] == "Azure Data Engineer"
+    assert recs[0]["link"] == "https://x.com/careers/azure-data-engineer/"
+    assert recs[0]["description"] == "Build pipelines & models"  # CDATA + entity-decoded
+    assert recs[1]["title"] == "SAP Consultant"
+    assert recs[1]["pubDate"] is None  # absent tag -> None, never invented
+
+
+def test_parse_rss_ignores_empty_items() -> None:
+    assert _parse_rss("<rss><item><guid>x</guid></item></rss>") == []  # no title/link -> dropped

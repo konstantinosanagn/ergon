@@ -112,6 +112,30 @@ def _parse_html_table(html: str, spec: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+_RSS_TAGS = ("title", "link", "guid", "pubDate", "description", "category")
+
+
+def _parse_rss(text: str) -> list[dict[str, Any]]:
+    """Parse an RSS/Atom careers feed (``<item>`` blocks) into record dicts.
+
+    Many WordPress careers sites with no REST job CPT still expose a ``/feed/`` (or
+    ``/careers/feed/``) RSS feed. We extract the standard item tags (CDATA-unwrapped,
+    entity-decoded) keyed by tag name, so the ``fields`` map reads them straight through
+    (e.g. ``"title"``, ``"link"``; use ``link`` as the id when there's no numeric guid).
+    """
+    out: list[dict[str, Any]] = []
+    for block in re.findall(r"<item[ >](.*?)</item>", text, re.S | re.I):
+        rec: dict[str, Any] = {}
+        for tag in _RSS_TAGS:
+            m = re.search(
+                rf"<{tag}[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{tag}>", block, re.S | re.I
+            )
+            rec[tag] = _htmlmod.unescape(m.group(1).strip()) if m else None
+        if rec.get("title") or rec.get("link"):
+            out.append(rec)
+    return out
+
+
 def _dig(obj: Any, path: list[Any]) -> Any:
     for key in path:
         if isinstance(obj, dict):
@@ -258,6 +282,9 @@ class ApiCaptureProvider(BaseProvider):
                         page_url = _set_query(url, page_param, offset) if page_param else url
                         html = await client.get_text(page_url, headers)
                         records = _parse_html_table(html, spec)
+                    elif spec.get("rss"):
+                        page_url = _set_query(url, page_param, offset) if page_param else url
+                        records = _parse_rss(await client.get_text(page_url, headers))
                     elif embed:
                         page_url = _set_query(url, page_param, offset) if page_param else url
                         html = await client.get_text(page_url, headers)
@@ -274,7 +301,7 @@ class ApiCaptureProvider(BaseProvider):
                         records = _dig(data, rec_path)
                 except Exception:
                     break
-                if total is None and not spec.get("html_table"):
+                if total is None and not (spec.get("html_table") or spec.get("rss")):
                     t = _dig(data, tot_path)
                     total = t if isinstance(t, int) else None
                 if not isinstance(records, list) or not records:
