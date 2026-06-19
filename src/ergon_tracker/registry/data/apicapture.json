@@ -1603,5 +1603,20 @@
    "url": "link",
    "description": "content.rendered"
   }
+ },
+ "dvgtechsolutions": {
+  "url": "https://dvgts.com/wp-json/wp/v2/awsm_job_openings?per_page=100",
+  "method": "GET",
+  "page_param": "page",
+  "page_start": 1,
+  "records_path": [],
+  "total_path": [],
+  "company": "DVG Tech Solutions",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "url": "link",
+   "description": "content.rendered"
+  }
  }
 }
