@@ -220,6 +220,11 @@ def search(
                 job.source,
             )
         console.print(table)
+        # Surface index freshness so a CLI user knows how current the snapshot is (matches the
+        # as_of reported via the SDK/MCP). Only the index source carries it; live sources don't.
+        fresh = next((h.as_of for h in result.health if h.source == "index" and h.as_of), None)
+        if fresh:
+            console.print(f"[dim]served from index snapshot {fresh}[/]")
         for h in result.failed_sources:
             err_console.print(f"[yellow]source {h.source} failed:[/] {h.error}")
 
