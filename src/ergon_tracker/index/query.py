@@ -88,6 +88,12 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
             else "j.salary_min <= ?"
         )
         p.append(q.salary_max)
+    if q.salary_currency and (q.salary_min is not None or q.salary_max is not None):
+        # Mirror SearchQuery._salary_ok: when a salary bound is active, drop postings whose currency
+        # is set and differs (a USD floor must not return EUR/GBP). NULL-currency postings are kept
+        # (currency unknown), exactly as matches() does.
+        cl.append("(j.salary_currency IS NULL OR UPPER(j.salary_currency) = ?)")
+        p.append(q.salary_currency.upper())
     return cl, p
 
 
