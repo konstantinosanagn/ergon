@@ -161,26 +161,37 @@ class IndexCache:
         # Only chain when it's actually cheaper than the full file.
         if sum(int(d.get("bytes", 0)) for d in chain) >= int(remote.get("bytes", 0) or 1 << 62):
             return None
-        total = 0
-        for step in chain:
-            try:
-                raw = gzip.decompress(fetch(step["file"]))
-            except Exception as exc:  # noqa: BLE001
-                log.warning("chain delta download failed (%s); full download", exc)
-                return None
-            if hashlib.sha256(raw).hexdigest() != step.get("sha256"):
-                log.warning("chain delta sha mismatch; full download")
-                return None
-            delta_tmp = self.cache_dir / "index-delta-chain.sqlite"
-            delta_tmp.write_bytes(raw)
-            try:
-                apply_delta(self.db_path, delta_tmp)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("chain delta apply failed (%s); full download", exc)
-                return None
-            finally:
-                delta_tmp.unlink(missing_ok=True)
-            total += len(raw)
+        # Apply the chain to a COPY and swap atomically only on full success: each apply_delta
+        # commits separately, so applying in place would leave the cached db half-advanced if a
+        # later step fails. Working on a copy keeps the live db pristine for the full-download
+        # fallback.
+        import shutil
+
+        work = self.db_path.with_suffix(".chain.sqlite")
+        delta_tmp = self.cache_dir / "index-delta-chain.sqlite"
+        try:
+            shutil.copyfile(self.db_path, work)
+            total = 0
+            for step in chain:
+                try:
+                    raw = gzip.decompress(fetch(step["file"]))
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("chain delta download failed (%s); full download", exc)
+                    return None
+                if hashlib.sha256(raw).hexdigest() != step.get("sha256"):
+                    log.warning("chain delta sha mismatch; full download")
+                    return None
+                delta_tmp.write_bytes(raw)
+                try:
+                    apply_delta(work, delta_tmp)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("chain delta apply failed (%s); full download", exc)
+                    return None
+                total += len(raw)
+            work.replace(self.db_path)  # atomic promote — only reached if every step succeeded
+        finally:
+            delta_tmp.unlink(missing_ok=True)
+            work.unlink(missing_ok=True)
         self.local_manifest.write_text(json.dumps(remote))
         log.info(
             "index updated via %d-delta chain %s->%s (%d bytes)",

@@ -362,3 +362,110 @@ def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
     }
     assert "Founding Engineer" in titles  # reached b2 via the 2-delta chain
     assert json.loads((cache_dir / "manifest.json").read_text())["build_id"] == "b2"
+
+
+def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
+    # If a chain step fails (corrupt delta), the cached db must stay at its original build (not be
+    # half-advanced), so the full-download fallback starts from a clean base.
+    from ergon_tracker.index.build import build_delta, build_index
+    from ergon_tracker.index.db import connect
+
+    def _job2(sid, company, title):
+        from ergon_tracker.models import Location, RemoteType
+
+        return JobPosting.create(
+            source="greenhouse",
+            source_job_id=sid,
+            company=company,
+            title=title,
+            locations=[Location(raw="Remote", is_remote=True)],
+            remote=RemoteType.REMOTE,
+        )
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    b0 = tmp_path / "b0.sqlite"
+    b1 = tmp_path / "b1.sqlite"
+    b2 = tmp_path / "b2.sqlite"
+    build_index([_job2("1", "Stripe", "Backend Engineer")], b0, build_id="b0")
+    build_index(
+        [_job2("1", "Stripe", "Backend Engineer"), _job2("2", "Ramp", "Frontend Eng")],
+        b1,
+        build_id="b1",
+    )
+    build_index(
+        [
+            _job2("1", "Stripe", "Backend Engineer"),
+            _job2("2", "Ramp", "Frontend Eng"),
+            _job2("3", "Cursor", "Founding Engineer"),
+        ],
+        b2,
+        build_id="b2",
+    )
+    (cache_dir / "index.sqlite").write_bytes(b0.read_bytes())
+    (cache_dir / "manifest.json").write_text(json.dumps({"build_id": "b0", "schema_version": 1}))
+
+    raw2 = b2.read_bytes()
+    # full download ALSO unavailable so we isolate the chain behavior (ensure_fresh returns None)
+    (remote / "index.sqlite.gz").write_bytes(b"corrupt-full")
+    (remote / "manifest.json").write_text(
+        json.dumps(
+            {
+                "build_id": "b2",
+                "sha256": hashlib.sha256(raw2).hexdigest(),
+                "bytes": len(raw2),
+                "schema_version": 1,
+            }
+        )
+    )
+    (remote / "manifest-delta.json").write_text(
+        json.dumps(
+            {
+                "from_build_id": "b1",
+                "to_build_id": "b2",
+                "sha256": "x",
+                "bytes": 1,
+                "schema_version": 1,
+            }
+        )
+    )
+    d01, d12 = tmp_path / "d01.sqlite", tmp_path / "d12.sqlite"
+    build_delta(b0, b1, d01, from_build_id="b0", to_build_id="b1")
+    build_delta(b1, b2, d12, from_build_id="b1", to_build_id="b2")
+    (remote / "index-delta-b1.sqlite.gz").write_bytes(gzip.compress(d01.read_bytes()))
+    (remote / "index-delta-b2.sqlite.gz").write_bytes(b"corrupt-second-delta")  # mid-chain failure
+    (remote / "deltas.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "deltas": [
+                    {
+                        "from_build_id": "b0",
+                        "to_build_id": "b1",
+                        "file": "index-delta-b1.sqlite.gz",
+                        "sha256": hashlib.sha256(d01.read_bytes()).hexdigest(),
+                        "bytes": len(d01.read_bytes()),
+                    },
+                    {
+                        "from_build_id": "b1",
+                        "to_build_id": "b2",
+                        "file": "index-delta-b2.sqlite.gz",
+                        "sha256": hashlib.sha256(d12.read_bytes()).hexdigest(),
+                        "bytes": len(d12.read_bytes()),
+                    },
+                ],
+            }
+        )
+    )
+
+    cache = IndexCache(base_url=remote.as_uri(), cache_dir=cache_dir)
+    cache.ensure_fresh()  # chain fails on the corrupt 2nd delta; full also corrupt -> no update
+    # the cached db must still be the ORIGINAL b0 (not half-advanced to b1)
+    con = connect(cache_dir / "index.sqlite", read_only=True)
+    bid = con.execute("SELECT value FROM meta WHERE key='build_id'").fetchone()[0]
+    titles = {r[0] for r in con.execute("SELECT title FROM jobs")}
+    con.close()
+    assert bid == "b0"
+    assert titles == {"Backend Engineer"}  # untouched; Frontend Eng (b1) did NOT leak in
