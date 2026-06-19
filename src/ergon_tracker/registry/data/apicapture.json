@@ -1238,5 +1238,47 @@
    "title": "displayName",
    "location": "office"
   }
+ },
+ "infocons": {
+  "url": "https://infoconsinc.com/wp-json/wp/v2/awsm_job_openings?per_page=100",
+  "method": "GET",
+  "page_param": "page",
+  "page_start": 1,
+  "records_path": [],
+  "total_path": [],
+  "company": "Infocons",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "url": "link"
+  }
+ },
+ "inrika": {
+  "url": "https://inrika.com/wp-json/wp/v2/awsm_job_openings?per_page=100",
+  "method": "GET",
+  "page_param": "page",
+  "page_start": 1,
+  "records_path": [],
+  "total_path": [],
+  "company": "Inrika",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "url": "link"
+  }
+ },
+ "vertonsolutions": {
+  "url": "https://vertonsolutions.com/wp-json/wp/v2/job?per_page=100",
+  "method": "GET",
+  "page_param": "page",
+  "page_start": 1,
+  "records_path": [],
+  "total_path": [],
+  "company": "Verton Solutions",
+  "fields": {
+   "id": "id",
+   "title": "title.rendered",
+   "url": "link"
+  }
  }
 }

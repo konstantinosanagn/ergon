@@ -314,9 +314,11 @@ class ApiCaptureProvider(BaseProvider):
 
     @staticmethod
     def _clean_title(t: str) -> str:
-        # Some feeds leak a code-fence/markdown marker into the title ("plaintext\nData Architect",
-        # "```\nTitle"). Strip a leading fence/lang marker line; leave clean titles untouched.
-        t = t.strip()
+        # Unescape HTML entities (WordPress REST leaks "&#8211;" etc.), then strip a leaked
+        # code-fence/markdown marker ("plaintext\nData Architect"); leave clean titles untouched.
+        import html as _html
+
+        t = _html.unescape(t).strip()
         t = re.sub(r"^(?:```+\s*\w*|plaintext|markdown|text)\s*[\r\n]+", "", t, flags=re.I)
         return t.strip("`").strip()
 
