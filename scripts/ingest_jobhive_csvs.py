@@ -68,6 +68,7 @@ SUPPORTED_ATSES = (
     "join",
     "rippling",
     "pinpoint",
+    "jazzhr",  # public app.jazz.co syndication feed (keyless); ~85% of jobhive's tenants verify live
 )
 
 # Where our provider name differs from jobhive's CSV stem.
