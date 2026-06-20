@@ -42,6 +42,7 @@ SUPPORTED_ATS = {
     "zwayam",
     "ceipal",
     "radancy",
+    "pageup",
     "usajobs",
     "dejobs",
     "themuse",

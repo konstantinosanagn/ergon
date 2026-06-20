@@ -70,6 +70,7 @@ _BUILTIN_MODULES = (
     "zwayam",
     "ceipal",
     "radancy",
+    "pageup",
     "remotive",
     "arbeitnow",
     "jobicy",
