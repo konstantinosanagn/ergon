@@ -69,7 +69,10 @@ def enrich_in_place(
         job.sector = sector.extract(inp)
 
     # H-1B sponsor: positive evidence only (set True when matched; leave None otherwise).
-    if job.visa_sponsor is None and is_h1b_sponsor(job.company):
+    # Skip federal postings (USAJOBS): US government roles generally require citizenship, so an
+    # employer-name match against LCA data there is a false positive (e.g. "Veterans Health
+    # Administration") that would mislead visa-dependent applicants into dead-end applications.
+    if job.visa_sponsor is None and job.source != "usajobs" and is_h1b_sponsor(job.company):
         job.visa_sponsor = True
         job.visa_last_filed = h1b_last_filed(job.company)
 

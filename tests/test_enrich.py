@@ -154,3 +154,20 @@ def test_geo_filter_country_and_city() -> None:
 def test_remote_unaffected_by_new_filters() -> None:
     job = _job(remote=RemoteType.REMOTE, locations=[Location(is_remote=True, raw="Remote")])
     assert SearchQuery(remote=True).matches(job)
+
+
+def test_usajobs_federal_postings_skip_h1b_sponsor_flag():
+    # Federal (USAJOBS) roles generally require citizenship, so an employer-name match against LCA
+    # data is a false positive that misleads visa-dependent applicants. Same employer on a normal
+    # ATS should still flag as a sponsor.
+    fed = JobPosting.create(
+        source="usajobs", source_job_id="1", company="Deloitte", title="Analyst"
+    )
+    enrich_in_place(fed)
+    assert fed.visa_sponsor is None  # suppressed for federal postings
+
+    private = JobPosting.create(
+        source="greenhouse", source_job_id="2", company="Deloitte", title="Analyst"
+    )
+    enrich_in_place(private)
+    assert private.visa_sponsor is True  # known LCA sponsor on a private board
