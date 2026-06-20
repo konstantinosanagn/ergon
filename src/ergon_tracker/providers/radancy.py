@@ -19,6 +19,13 @@ page yields no cards. Per-job company is the site owner, carried in the token.
 
 Token: ``"{host}|{Company}"`` (e.g. ``"jobs.us.pwc.com|PwC"``). ``host`` is the careers host whose
 ``/search-jobs`` page is Radancy-powered.
+
+Multi-brand sites: some Radancy tenants host several brands on one board and tag each job card's
+anchor with a ``brand-facet__{brand}`` CSS class (UnitedHealth Group: ``brand-facet__optum`` /
+``brand-facet__uhc`` / ``brand-facet__uhg``). The site's facet UI can't be filtered server-side
+without JS, but the per-card class lets us scope to ONE entity. An optional third token field is a
+substring the card's anchor ``class`` must contain to be kept, e.g.
+``"careers.unitedhealthgroup.com|Optum|brand-facet__optum"`` — captures only Optum's postings.
 """
 
 from __future__ import annotations
@@ -72,13 +79,15 @@ class RadancyProvider(BaseProvider):
         return None  # seed-only (needs the careers host + company label); never auto-claims
 
     @staticmethod
-    def _parse(token: str) -> tuple[str, str | None]:
+    def _parse(token: str) -> tuple[str, str | None, str | None]:
         parts = [p.strip() for p in token.split("|")]
         host = parts[0].replace("https://", "").replace("http://", "").strip("/")
-        return host, (parts[1] if len(parts) > 1 and parts[1] else None)
+        company = parts[1] if len(parts) > 1 and parts[1] else None
+        brand = parts[2] if len(parts) > 2 and parts[2] else None
+        return host, company, brand
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
-        host, company = self._parse(token)
+        host, company, brand = self._parse(token)
         if not host:
             return []
         url = f"https://{host}/search-jobs/results"
@@ -96,28 +105,35 @@ class RadancyProvider(BaseProvider):
             html = data.get("results") if isinstance(data, dict) else None
             if not isinstance(html, str) or "data-job-id" not in html:
                 break
-            cards = self._parse_cards(html, host, company, token)
+            cards = self._parse_cards(html, host, company, token, brand)
             new = 0
             for jid, raw in cards:
                 if jid in seen:
                     continue
-                seen.add(jid)
-                raws.append(raw)
+                seen.add(jid)  # dedup + end-detection for ALL cards, even brand-filtered ones
                 new += 1
+                if raw is None:  # card exists but doesn't match the requested brand facet
+                    continue
+                raws.append(raw)
                 if limit is not None and len(raws) >= limit:
                     return raws
-            if new == 0:
+            if new == 0:  # page yielded no unseen cards (true end), regardless of brand
                 break
         return raws
 
     def _parse_cards(
-        self, html: str, host: str, company: str | None, token: str
-    ) -> list[tuple[str, RawJob]]:
-        out: list[tuple[str, RawJob]] = []
+        self, html: str, host: str, company: str | None, token: str, brand: str | None = None
+    ) -> list[tuple[str, RawJob | None]]:
+        # Returns (jid, raw) per card; raw is None when a brand filter is set and the card's anchor
+        # class lacks it (still yielded so the caller can dedup/detect end-of-results correctly).
+        out: list[tuple[str, RawJob | None]] = []
         for a in HTMLParser(html).css("a[href*='/job/']"):
             jid = a.attributes.get("data-job-id")
             href = a.attributes.get("href") or ""
             if not jid:
+                continue
+            if brand and brand not in (a.attributes.get("class") or ""):
+                out.append((jid, None))
                 continue
             h2 = a.css_first("h2")
             title = h2.text(strip=True) if h2 else ""

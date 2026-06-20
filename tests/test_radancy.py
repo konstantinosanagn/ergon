@@ -38,9 +38,12 @@ def _mock(respx_mock: respx.MockRouter, pages: list[list[str]]) -> None:
 
 
 def test_parse_token() -> None:
-    assert RadancyProvider._parse("jobs.acme.com|Acme") == ("jobs.acme.com", "Acme")
-    assert RadancyProvider._parse("https://jobs.acme.com/|Acme") == ("jobs.acme.com", "Acme")
-    assert RadancyProvider._parse("jobs.acme.com") == ("jobs.acme.com", None)
+    assert RadancyProvider._parse("jobs.acme.com|Acme") == ("jobs.acme.com", "Acme", None)
+    assert RadancyProvider._parse("https://jobs.acme.com/|Acme") == ("jobs.acme.com", "Acme", None)
+    assert RadancyProvider._parse("jobs.acme.com") == ("jobs.acme.com", None, None)
+    assert RadancyProvider._parse("jobs.acme.com|Acme|brand-facet__optum") == (
+        "jobs.acme.com", "Acme", "brand-facet__optum",
+    )
 
 
 async def test_fetch_paginates_and_normalizes() -> None:
@@ -75,6 +78,31 @@ async def test_fetch_respects_limit() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await RadancyProvider().fetch("jobs.acme.com|Acme", SearchQuery(limit=4), f)
     assert len(raws) == 4
+
+
+def _brand_card(jid: str, title: str, brand: str) -> str:
+    return (
+        f'<li><a href="/job/nyc/{jid}/9/{jid}" data-job-id="{jid}" '
+        f'class="brand-facet brand-facet__{brand}"><h2>{title}</h2>'
+        f'<span class="job-location">New York, NY</span></a></li>'
+    )
+
+
+async def test_brand_facet_filter() -> None:
+    # A mixed-brand board: only the optum-tagged cards should survive the filter, but UHC cards on
+    # a later page must NOT trip the end-of-results break.
+    pages = [
+        [_brand_card("1", "Optum RN", "optum"), _brand_card("2", "UHC Analyst", "uhc")],
+        [_brand_card("3", "Optum Coder", "optum"), _brand_card("4", "UHG Clerk", "uhg")],
+    ]
+    with respx.mock as respx_mock:
+        _mock(respx_mock, pages)
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await RadancyProvider().fetch(
+                "jobs.acme.com|Optum|brand-facet__optum", SearchQuery(), f
+            )
+    assert {r.source_job_id for r in raws} == {"1", "3"}  # both optum jobs, across both pages
+    assert all("Optum" in RadancyProvider().normalize(r).title for r in raws)
 
 
 async def test_empty_page_stops() -> None:
