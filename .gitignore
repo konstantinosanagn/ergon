@@ -62,3 +62,5 @@ scripts/map_adzuna_ats.py
 scripts/recheck_revisit.py
 scripts/sweep_residual.py
 scripts/upgrade_registry.py
+scripts/gov_names.txt
+scripts/candidates_*.json
