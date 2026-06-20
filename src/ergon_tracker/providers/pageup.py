@@ -61,8 +61,11 @@ _EMPLOYMENT = {
 
 def _tag(block: str, tag: str) -> str | None:
     """First value of ``<tag>…</tag>`` (CDATA-unwrapped, entity-decoded), else None."""
-    m = re.search(rf"<{re.escape(tag)}[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{re.escape(tag)}>",
-                  block, re.S | re.I)
+    m = re.search(
+        rf"<{re.escape(tag)}[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{re.escape(tag)}>",
+        block,
+        re.S | re.I,
+    )
     if not m:
         return None
     text = _htmlmod.unescape(m.group(1)).strip()

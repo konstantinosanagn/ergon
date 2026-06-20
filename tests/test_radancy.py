@@ -42,7 +42,9 @@ def test_parse_token() -> None:
     assert RadancyProvider._parse("https://jobs.acme.com/|Acme") == ("jobs.acme.com", "Acme", None)
     assert RadancyProvider._parse("jobs.acme.com") == ("jobs.acme.com", None, None)
     assert RadancyProvider._parse("jobs.acme.com|Acme|brand-facet__optum") == (
-        "jobs.acme.com", "Acme", "brand-facet__optum",
+        "jobs.acme.com",
+        "Acme",
+        "brand-facet__optum",
     )
 
 

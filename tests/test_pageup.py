@@ -46,17 +46,22 @@ def _rss(items: list[str]) -> str:
 
 def test_parse_token() -> None:
     assert PageUpProvider._parse_token("669|University of Alabama") == (
-        "669", "University of Alabama", "en-us", "cw",
+        "669",
+        "University of Alabama",
+        "en-us",
+        "cw",
     )
     assert PageUpProvider._parse_token("782") == ("782", None, "en-us", "cw")
     assert PageUpProvider._parse_token("959|PageUp|en|ci") == ("959", "PageUp", "en", "ci")
 
 
 async def test_fetch_parses_feed_and_normalizes() -> None:
-    body = _rss([
-        _item("529465", "Cartographer", "Alabama|Tuscaloosa"),
-        _item("530001", "Remote Research Fellow", "Remote", work="Part Time"),
-    ])
+    body = _rss(
+        [
+            _item("529465", "Cartographer", "Alabama|Tuscaloosa"),
+            _item("530001", "Remote Research Fellow", "Remote", work="Part Time"),
+        ]
+    )
     with respx.mock as respx_mock:
         respx_mock.get(RSS_URL).mock(return_value=httpx.Response(200, text=body))
         async with AsyncFetcher(per_host_rate=100) as f:
@@ -82,7 +87,9 @@ async def test_fetch_respects_limit() -> None:
     with respx.mock as respx_mock:
         respx_mock.get(RSS_URL).mock(return_value=httpx.Response(200, text=body))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await PageUpProvider().fetch("669|University of Alabama", SearchQuery(limit=5), f)
+            raws = await PageUpProvider().fetch(
+                "669|University of Alabama", SearchQuery(limit=5), f
+            )
     assert len(raws) == 5
 
 

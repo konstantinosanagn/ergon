@@ -345,7 +345,11 @@ class ApiCaptureProvider(BaseProvider):
             # Salesforce Experience-Cloud guest Aura: the fwuid + loaded app-version in aura.context
             # rotate when the org is upgraded (a stale pair yields aura:expired). Re-scrape them from
             # a fresh GET of the page so the replay self-heals.
-            aura_ctx = await self._refresh_aura(client, spec, headers) if spec.get("aura_refresh") else None
+            aura_ctx = (
+                await self._refresh_aura(client, spec, headers)
+                if spec.get("aura_refresh")
+                else None
+            )
             for page in range(self.MAX_PAGES):
                 offset = page_start + page * page_step
                 body = copy.deepcopy(spec.get("body"))
@@ -418,7 +422,9 @@ class ApiCaptureProvider(BaseProvider):
         return raws
 
     @staticmethod
-    async def _refresh_aura(client: Any, spec: dict[str, Any], headers: dict[str, str] | None) -> str | None:
+    async def _refresh_aura(
+        client: Any, spec: dict[str, Any], headers: dict[str, str] | None
+    ) -> str | None:
         """Re-scrape ``fwuid`` and the loaded app-version from the live page and patch them into the
         spec body's ``aura.context`` string (Salesforce rotates these on org upgrades). Falls back to
         the stored context on any failure so a transient page error doesn't break the pull."""
@@ -431,11 +437,15 @@ class ApiCaptureProvider(BaseProvider):
             return ctx
         fw = re.search(r'"fwuid":"([^"]+)"', page)
         if fw:
-            ctx = re.sub(r'("fwuid":")[^"]*(")', lambda m: m.group(1) + fw.group(1) + m.group(2), ctx)
+            ctx = re.sub(
+                r'("fwuid":")[^"]*(")', lambda m: m.group(1) + fw.group(1) + m.group(2), ctx
+            )
         ld = re.search(r'"(APPLICATION@markup://[^"]+)":"([^"]+)"', page)
         if ld:
             key, val = re.escape(ld.group(1)), ld.group(2)
-            ctx = re.sub(r'("' + key + r'":")[^"]*(")', lambda m: m.group(1) + val + m.group(2), ctx)
+            ctx = re.sub(
+                r'("' + key + r'":")[^"]*(")', lambda m: m.group(1) + val + m.group(2), ctx
+            )
         return ctx
 
     @staticmethod
