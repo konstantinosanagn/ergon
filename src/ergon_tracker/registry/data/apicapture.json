@@ -1,4 +1,22 @@
 {
+ "google": {
+  "url": "https://www.google.com/about/careers/applications/jobs/results/?page=1",
+  "method": "GET",
+  "tls_impersonate": true,
+  "page_param": "page",
+  "page_start": 1,
+  "page_step": 1,
+  "html_table": {"row_css": "li.lLd3Je", "skip_rows": 0},
+  "columns": {
+   "id": {"re": "ssk=\"18:(\\d+)\""},
+   "title": {"re": "<h3 class=\"QJPWVe\">([\\s\\S]*?)</h3>"},
+   "location": {"re": "<span class=\"r0wTof[^\"]*\">([\\s\\S]*?)</span>"},
+   "url": {"re": "href=\"(jobs/results/[^\"?]+)"}
+  },
+  "company": "Google",
+  "headers": {"Accept-Language": "en-US,en;q=0.9"},
+  "fields": {"id": "id", "title": "title", "location": "location", "url": "url"}
+ },
  "meta": {
   "url": "https://www.metacareers.com/graphql",
   "method": "POST",
