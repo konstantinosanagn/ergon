@@ -57,6 +57,12 @@ def test_accent_folding():
     assert _covered("Telefónica", ["telefonica"])
 
 
+def test_ampersand_dropped_variant():
+    # "&"->"and" makes AT&T -> "atandt"; the &-dropped variant must also match "att".
+    assert _covered("AT&T Inc.", ["att"])
+    assert _covered("Brown & Brown, Inc.", ["brown-brown"])
+
+
 def test_no_false_positive_on_shared_first_word():
     # The classic trap: same first token, different companies must NOT match.
     idx = cr.build_key_index(["american express"])

@@ -117,6 +117,12 @@ def match_keys(name: str) -> set[str]:
         keys.add(core[0])  # single-word brand after stripping descriptors
     else:
         keys.add(" ".join(core[:2]))  # first two tokens — never a bare first token (avoids FPs)
+    # "&" -> "and" in normalize_company makes "AT&T" -> "atandt", missing registry "att". Add a
+    # variant with "&" dropped entirely so AT&T<->att, Brown & Brown<->brownbrown also match.
+    if "&" in name:
+        amp = normalize_company(_canon(name).replace("&", " "))
+        keys.add(amp)
+        keys.add(_collapse(amp))
     # Also emit collapsed (no-space) forms so space/hyphen differences don't block an exact match
     # ("molson coors" <-> "molsoncoors", "t mobile" <-> "tmobile"). Still EXACT on the collapsed
     # string — NOT substring — so "stripe" never matches "stripersonline".
