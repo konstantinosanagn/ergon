@@ -90,6 +90,7 @@ ATS_PRIORITY = {
     "pageup": 16.95,  # PageUp People canonical-host RSS (careers.pageuppeople.com/{id}/cw/{loc}/rss)
     "peoplesoft": 16.97,  # PeopleSoft Candidate Gateway (ICAction postback grid): universities
     "ukg": 16.98,  # UKG Pro / UltiPro Recruiting (LoadSearchResults JSON): UDR, Welltower, …
+    "adp": 16.99,  # ADP Workforce Now Recruitment (cid job-requisitions JSON): Antero, ACNB, …
     "taleo": 17,
     "taleobe": 17.5,  # Taleo Business Edition (CwsV2 HTML)
     "icims": 18,

@@ -74,6 +74,7 @@ _BUILTIN_MODULES = (
     "pageup",
     "peoplesoft",
     "ukg",
+    "adp",
     "remotive",
     "arbeitnow",
     "jobicy",
