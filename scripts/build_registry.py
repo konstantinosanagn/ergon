@@ -89,6 +89,7 @@ ATS_PRIORITY = {
     "radancy": 16.9,  # Radancy/TalentBrew /search-jobs server-rendered board: PwC, Carnival
     "pageup": 16.95,  # PageUp People canonical-host RSS (careers.pageuppeople.com/{id}/cw/{loc}/rss)
     "peoplesoft": 16.97,  # PeopleSoft Candidate Gateway (ICAction postback grid): universities
+    "ukg": 16.98,  # UKG Pro / UltiPro Recruiting (LoadSearchResults JSON): UDR, Welltower, …
     "taleo": 17,
     "taleobe": 17.5,  # Taleo Business Edition (CwsV2 HTML)
     "icims": 18,

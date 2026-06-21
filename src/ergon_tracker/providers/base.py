@@ -73,6 +73,7 @@ _BUILTIN_MODULES = (
     "radancy",
     "pageup",
     "peoplesoft",
+    "ukg",
     "remotive",
     "arbeitnow",
     "jobicy",

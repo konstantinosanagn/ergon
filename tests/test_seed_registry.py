@@ -44,6 +44,7 @@ SUPPORTED_ATS = {
     "radancy",
     "pageup",
     "peoplesoft",
+    "ukg",
     "usajobs",
     "dejobs",
     "themuse",
