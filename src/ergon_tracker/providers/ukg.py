@@ -141,7 +141,8 @@ class UKGProvider(BaseProvider):
         item = locs[0] if isinstance(locs, list) and locs else None
         if not isinstance(item, dict):
             return None
-        addr = item.get("Address") if isinstance(item.get("Address"), dict) else {}
+        addr = item.get("Address")
+        addr = addr if isinstance(addr, dict) else {}
         city = (addr.get("City") or "").strip()
         state = ""
         st = addr.get("State")

@@ -122,10 +122,13 @@ class ADPProvider(BaseProvider):
         if not isinstance(fields, list):
             return None
         for f in fields:
-            if isinstance(f, dict) and isinstance(f.get("nameCode"), dict):
-                if f["nameCode"].get("codeValue") == code:
-                    val = f.get("stringValue")
-                    return str(val).strip() if val else None
+            if (
+                isinstance(f, dict)
+                and isinstance(f.get("nameCode"), dict)
+                and f["nameCode"].get("codeValue") == code
+            ):
+                val = f.get("stringValue")
+                return str(val).strip() if val else None
         return None
 
     def _to_raw(
