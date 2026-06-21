@@ -32,6 +32,7 @@ ALIAS = {
     "usbancorp": "usbank", "lillyeli": "elililly", "fidelitynationalinformationservices": "fis",
     "waltdisney": "disney", "tmobileus": "t-mobile", "hewlettpackardenterprise": "hpe",
     "unitedhealth": "optumservices",
+    "pgande": "pge", "pgecorporation": "pge",  # "PG&E" -> &->and breaks the "pge" key match
 }
 # Generic short keys in seed that entity-checks proved are NAMESAKES (not the S&P company). The real
 # S&P member only counts via its distinct key (brownandbrown, monsterbeverage, …) or is a true gap.
