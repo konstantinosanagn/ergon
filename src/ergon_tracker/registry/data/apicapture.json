@@ -1424,5 +1424,32 @@
    "title": "title",
    "location": "location"
   }
+ },
+ "mckinsey": {
+  "url": "https://gateway.mckinsey.com/apigw-x0cceuow60/v1/api/jobs/search?pageSize=20&start=0&lang=en",
+  "method": "GET",
+  "tls_impersonate": true,
+  "headers": {
+   "accept": "application/json",
+   "Referer": "https://www.mckinsey.com/careers/search-jobs"
+  },
+  "page_param": "start",
+  "page_start": 0,
+  "page_step": 20,
+  "records_path": [
+   "docs"
+  ],
+  "total_path": [
+   "numFound"
+  ],
+  "company": "McKinsey & Company",
+  "fields": {
+   "id": "jobID",
+   "title": "title",
+   "location": "cities",
+   "department": "interest",
+   "url": "jobApplyURL",
+   "description": "whatYouWillDo"
+  }
  }
 }
