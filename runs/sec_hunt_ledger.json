@@ -3838,5 +3838,395 @@
   "last": "2026-06-21",
   "status": "found-no-provider",
   "url": "https://myjobs.adp.com/boottbarnext/cx/job-listing"
+ },
+ "Borealis Foods Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official site borealisfoods.com has no careers/jobs link and no ATS. Its manufac",
+  "status": "no-board"
+ },
+ "Borqs Technologies, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Borqs careers (borqs.com/AboutUs) directs applicants to email (maya@borqs.com) a",
+  "status": "no-board"
+ },
+ "Boundless Bio, Inc.": {
+  "ats": "greenhouse",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://job-boards.greenhouse.io/boundlessbio"
+ },
+ "Bowhead Specialty Holdings Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page bowheadspecialty.com/careers describes culture/benefits bu",
+  "status": "no-board"
+ },
+ "Boxlight Corp": {
+  "ats": "jazzhr",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "jazzhr found, failed verify",
+  "status": "no-board",
+  "url": "https://boxlightinc.applytojob.com/apply"
+ },
+ "Boyd Group Services Inc.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://boydgroup.wd1.myworkdayjobs.com/boydcareers"
+ },
+ "Braemar Hotels & Resorts Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "BHR (NYSE: BHR) is a REIT externally advised/managed by Ashford Inc.; it has no ",
+  "status": "no-board"
+ },
+ "Bragg Gaming Group Inc.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://bragggaming.wd107.myworkdayjobs.com/External"
+ },
+ "BranchOut Food Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official site branchoutfood.com has no careers/jobs link in navigation or footer",
+  "status": "no-board"
+ },
+ "Brand Engagement Network Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official site brandengagementnetwork.com has no careers/jobs link in nav or foot",
+  "status": "no-board"
+ },
+ "BrasilAgro - Brazilian Agricultural Real Estate Co": {
+  "attempts": 1,
+  "host": "brasilagro.enlizt.me",
+  "last": "2026-06-21",
+  "status": "found-no-provider",
+  "url": "https://brasilagro.enlizt.me/"
+ },
+ "Bravada Gold Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Junior Nevada-focused gold exploration company (bravadagold.com). Website has co",
+  "status": "no-board"
+ },
+ "Bravo Mining Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Brazil/Canada mineral exploration company (bravomining.com). No careers page or ",
+  "status": "no-board"
+ },
+ "Bravo Multinational Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small/shell-type US public company with no findable official careers page or ATS",
+  "status": "no-board"
+ },
+ "Brazil Potash Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Toronto-based (NYSE American: GRO) potash developer. Careers ('Work With Us') pa",
+  "status": "no-board"
+ },
+ "BriaCell Therapeutics Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Careers page at briacell.com/careers lists 4 openings but applications go via ca",
+  "status": "no-board"
+ },
+ "BridgeBio Oncology Therapeutics, Inc.": {
+  "ats": "greenhouse",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://job-boards.greenhouse.io/bbot"
+ },
+ "Bridgeline Digital, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page at bridgeline.com/about/careers shows 'No items found' and",
+  "status": "no-board"
+ },
+ "Bridger Aerospace Group Holdings, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Has own careers page at bridgeraerospace.com/careers (returned HTTP 403 to fetch",
+  "status": "no-board"
+ },
+ "Bright Mountain Media, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small Boca Raton digital media/advertising public company. No official careers p",
+  "status": "no-board"
+ },
+ "BrightSpire Capital, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small commercial real estate REIT (NYSE: BRSP). Official site brightspire.com li",
+  "status": "no-board"
+ },
+ "BrightSpring Health Services, Inc.": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://careers-brightspring.icims.com/jobs/intro"
+ },
+ "BrightView Holdings, Inc.": {
+  "ats": "jobvite",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "jobvite found, failed verify",
+  "status": "no-board",
+  "url": "https://jobs.jobvite.com/brightview/jobs"
+ },
+ "BrilliA Inc": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "BrilliA Incorporated (NYSE American: BRIA) is a small ladies' intimate-apparel s",
+  "status": "no-board"
+ },
+ "British American Tobacco p.l.c.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official board careers.bat.com is a Radancy (TalentBrew) recruitment-marketing s",
+  "status": "no-board"
+ },
+ "Brixmor Property Group Inc.": {
+  "ats": "adp",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=38770a03-4ebf-4e9b-9fc0-b6238932109b&ccId=19000101_000001&lang=en_US"
+ },
+ "Brixton Metals Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small Vancouver-based mineral exploration company (~21 employees). Careers page ",
+  "status": "no-board"
+ },
+ "Broadstone Net Lease, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Careers hosted at broadstone.hrmdirect.com/employment/job-openings.php, verified",
+  "status": "no-board"
+ },
+ "Brookdale Senior Living Inc.": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://jobs-brookdale.icims.com/jobs/intro"
+ },
+ "Brookfield Business Corp": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://brookfield.wd5.myworkdayjobs.com/brookfield"
+ },
+ "Brookfield Infrastructure Corp": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://brookfield.wd5.myworkdayjobs.com/brookfield"
+ },
+ "Brookfield Infrastructure Partners L.P.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://brookfield.wd5.myworkdayjobs.com/brookfield"
+ },
+ "Brookfield Oaktree Holdings, LLC": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://oaktree.wd1.myworkdayjobs.com/Oaktree"
+ },
+ "Brookfield Property Partners L.P.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://brookfield.wd5.myworkdayjobs.com/brookfield"
+ },
+ "Brookfield Renewable Corp": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://brookfield.wd5.myworkdayjobs.com/brookfield"
+ },
+ "Brookfield Renewable Partners L.P.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://brookfield.wd5.myworkdayjobs.com/brookfield"
+ },
+ "Brownie's Marine Group, Inc": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small-cap (BWMG, Pompano Beach FL). Official site browniesmarinegroup.com has no",
+  "status": "no-board"
+ },
+ "Bryn Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Bryn Inc. (ticker BRRN) is a dormant shell company with no operations and no rev",
+  "status": "no-board"
+ },
+ "Bubblr Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Bubblr Inc. (BBLR) is a micro-cap AI company in Sheridan, WY. Company website (b",
+  "status": "no-board"
+ },
+ "BuildDirect.com Technologies Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "BuildDirect's prior Jobvite board (jobs.jobvite.com/builddirect) now 302-redirec",
+  "status": "no-board"
+ },
+ "BullFrog AI Holdings, Inc.": {
+  "ats": "paylocity",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "paylocity found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.paylocity.com/recruiting/jobs/All/12ed8dc2-b157-410b-ac1a-68b153e841ef/BullFrogAI"
+ },
+ "Bunker Hill Mining Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (bunkerhillmining.com/careers) invites applications but ex",
+  "status": "no-board"
+ },
+ "Burcon NutraScience Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small Vancouver-based plant-protein company (TSX:BU). No dedicated ATS board fou",
+  "status": "no-board"
+ },
+ "Burke & Herbert Financial Services Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (burkeandherbertbank.com/careers) lists 100+ openings but ",
+  "status": "no-board"
+ },
+ "Byrna Technologies Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (byrna.com/pages/careers) contains only a description and ",
+  "status": "no-board"
+ },
+ "C2 Capital Group, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Boca Raton live-streaming startup founded 2024, ~17 employees, filed for NYSE Am",
+  "status": "no-board"
+ },
+ "C21 Investments Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Vancouver-based cannabis operator (CSE:CXXI). No dedicated ATS board found on cx",
+  "status": "no-board"
+ },
+ "C3 Metals Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Junior copper/gold explorer (TSXV:CCCM). Official site c3metals.com has no caree",
+  "status": "no-board"
+ },
+ "C3is Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Greek dry-bulk shipping micro-cap (Nasdaq:CISS) based in Kifisia, Greece. No car",
+  "status": "no-board"
+ },
+ "C4 Therapeutics, Inc.": {
+  "ats": "adp",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=f12278fc-fdbe-4894-b687-366f928fdfcc&ccId=19000101_000001&type=JS&lang=en_US"
+ },
+ "CABO VERDE CAPITAL INC.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Micro-cap (~11 employees) streaming/media holding company (CAPV, owns Vyre Netwo",
+  "status": "no-board"
+ },
+ "CABOT CORP": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://cabotcorp.wd12.myworkdayjobs.com/Careers"
+ },
+ "CADIZ INC": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small Southern California water solutions company (CDZI). Official site cadizinc",
+  "status": "no-board"
+ },
+ "CAL-MAINE FOODS INC": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://careers-calmainefoods.icims.com"
+ },
+ "CALERES INC": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://careers-caleres.icims.com"
+ },
+ "CALIFORNIA FIRST LEASING CORP": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Tiny equipment-leasing subsidiary (11-50 employees) of California First National",
+  "status": "no-board"
+ },
+ "CALIFORNIA WATER SERVICE GROUP": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://calwatergroup.wd5.myworkdayjobs.com/CWSG"
+ },
+ "CALLAN JMB INC.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small service-disabled veteran-owned logistics/fulfillment company (CJMB) in Spr",
+  "status": "no-board"
+ },
+ "CAMBER ENERGY, INC.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Tiny oil & gas holding company (NYSE American: CEI) with minimal direct staff. T",
+  "status": "no-board"
+ },
+ "CAMDEN NATIONAL CORP": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://camdennational.wd12.myworkdayjobs.com/CNB-Careers"
  }
 }
