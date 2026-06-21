@@ -47,6 +47,7 @@ SUPPORTED_ATS = {
     "ukg",
     "adp",
     "dayforce",
+    "paycom",
     "tesla",
     "paylocity",
     "usajobs",

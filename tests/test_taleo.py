@@ -150,3 +150,30 @@ async def test_fetch_bare_host_discovers_cs_and_portal() -> None:
 
     assert len(raws) == 2
     assert raws[0].url == f"https://{HOST}/careersection/2/jobdetail.ftl?job=264858&lang=en"
+
+
+def test_legacy_ftl_stream_parser() -> None:
+    """Legacy jobsearch.ajax sites embed page-1 jobs as a '!|!' stream; parse id/title/loc/date
+    with type-classified columns (tenant-specific order) and dedupe."""
+    from ergon_tracker.providers.taleo import TaleoProvider
+
+    def job(jid, title, *cols):
+        # signature: id‖title‖id‖title‖id‖id‖id‖id‖id‖ then tenant columns
+        return [jid, title, jid, title, jid, jid, jid, jid, jid, *cols]
+
+    fields = (
+        ["<!DOCTYPE html>", "junk", "listRequisition"]
+        + job("464078", "HR Director - Panels", "USA-WA-Seattle", "false", "", "Jun 19, 2026", "01024482", "Apply")
+        + job("149092", "System Engineer", "INF00EO", "Kansas-Topeka, Missouri", "false", "Jun 21, 2026")  # contestNo-first tenant order
+        + job("464078", "dup id dropped", "USA-WA-Tacoma")
+    )
+    html_text = "!|!".join(fields)
+    raws = TaleoProvider()._raws_from_ftl(html_text, "weyerhaeuser.taleo.net", "10000", None)
+    assert {r.source_job_id for r in raws} == {"464078", "149092"}  # deduped
+    by = {r.source_job_id: TaleoProvider().normalize(r) for r in raws}
+    assert by["464078"].title == "HR Director - Panels"
+    assert by["464078"].locations[0].raw == "USA-WA-Seattle"
+    assert by["464078"].posted_at is not None and by["464078"].posted_at.year == 2026
+    # tenant with contestNo before location -> still classifies location by type
+    assert by["149092"].locations[0].raw == "Kansas-Topeka, Missouri"
+    assert by["149092"].apply_url.endswith("job=149092&lang=en")

@@ -30,6 +30,7 @@ bulk, so ``description_text``/``description_html`` are ``None`` here. Never inve
 
 from __future__ import annotations
 
+import html as _htmlmod
 import json as _json
 import re
 from datetime import datetime, timezone
@@ -54,6 +55,16 @@ _HOST_RE = re.compile(r"([a-z0-9-]+\.taleo\.net)", re.IGNORECASE)
 _CS_RE = re.compile(r"/careersection/([a-z0-9_]+)/", re.IGNORECASE)
 # 9-digit portal id embedded in the career-section HTML.
 _PORTAL_RE = re.compile(r"portal=(\d+)")
+
+# --- Legacy "jobsearch.ajax" career sections (no modern REST endpoint; REST returns 0) -----------
+# These embed the first results page directly in the jobsearch.ftl HTML as a "!|!"-delimited
+# FTL-history stream. Each job record is the signature: id‖title‖id‖title‖id‖id‖id‖id‖id‖<columns…>
+# where the tenant-configured columns (location / contestNo / dates) follow in a tenant-specific
+# order — so we classify the post-id window by TYPE rather than fixed offset.
+_FTL_SEP = "!|!"
+_FTL_DATE = re.compile(r"^[A-Z][a-z]{2,8} \d{1,2}, \d{4}$")  # "Jun 19, 2026"
+_FTL_CODE = re.compile(r"^[A-Z0-9]{5,10}$")  # contestNo (INF00EO / 01024483)
+_FTL_LOC = re.compile(r"^(?=.*[A-Za-z])[A-Za-z0-9].*[-,].*$")  # has a letter + hyphen/comma
 
 # Candidate career-section codes probed during discovery (cheapest-first).
 _CS_CANDIDATES = ("1", "2", "5", "ex", "external", "cb_external")
@@ -140,11 +151,15 @@ class TaleoProvider(BaseProvider):
         portal = parts[2].strip() if len(parts) > 2 else ""
         return host, cs, portal
 
-    async def _discover(self, host: str, cs: str, fetcher: AsyncFetcher) -> tuple[str, str] | None:
-        """Resolve ``(cs, portal)`` for a host by probing career-section pages.
+    async def _discover(
+        self, host: str, cs: str, fetcher: AsyncFetcher
+    ) -> tuple[str, str, str] | None:
+        """Resolve ``(cs, portal, page_html)`` for a host by probing career-section pages.
 
         Honours a caller-supplied ``cs`` (tried first), otherwise probes ``_CS_CANDIDATES``.
-        Returns the first ``(cs, portal)`` whose page is large and yields a ``portal=`` match.
+        Returns the first large career-section page as ``(cs, portal_or_empty, html)`` — ``portal``
+        may be empty (legacy ``jobsearch.ajax`` sites), in which case ``fetch`` parses the embedded
+        ``!|!`` stream from ``html``. The page HTML is returned so the legacy path can reuse it.
         """
         candidates = [cs] if cs else []
         candidates += [c for c in _CS_CANDIDATES if c != cs]
@@ -156,20 +171,38 @@ class TaleoProvider(BaseProvider):
             if len(html) < _CS_MIN_LEN:
                 continue
             m = _PORTAL_RE.search(html)
-            if m:
-                return candidate, m.group(1)
+            return candidate, (m.group(1) if m else ""), html
         return None
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         host, cs, portal = self._split(token)
         if not host:
             return []
+        page_html: str | None = None
         if not (cs and portal):
             resolved = await self._discover(host, cs, fetcher)
             if resolved is None:
                 return []
-            cs, portal = resolved
+            cs, portal, page_html = resolved
+        if not cs:
+            return []
 
+        # Modern faceted-search Taleo: the public REST endpoint. If it yields nothing (legacy
+        # jobsearch.ajax sites return 0 here), fall back to parsing the jobsearch.ftl HTML stream.
+        if portal:
+            rest = await self._fetch_rest(host, cs, portal, query, fetcher)
+            if rest:
+                return rest
+        if page_html is None:
+            try:
+                page_html = await fetcher.get_text(_PAGE.format(host=host, cs=cs))
+            except Exception:
+                return []
+        return self._raws_from_ftl(page_html, host, cs, query.limit)
+
+    async def _fetch_rest(
+        self, host: str, cs: str, portal: str, query: SearchQuery, fetcher: AsyncFetcher
+    ) -> list[RawJob]:
         url = _SEARCH.format(host=host, portal=portal)
         limit = query.limit
         raws: list[RawJob] = []
@@ -219,8 +252,84 @@ class TaleoProvider(BaseProvider):
             payload=req,
         )
 
+    # --- legacy jobsearch.ftl "!|!" stream -------------------------------------------------------
+
+    def _raws_from_ftl(self, html_text: str, host: str, cs: str, limit: int | None) -> list[RawJob]:
+        """Parse the first results page embedded in jobsearch.ftl as a ``!|!`` stream.
+
+        Each job is the signature ``id‖title‖id‖title‖id‖id‖id‖id‖id‖<columns…>``; the
+        tenant-configured columns (location / contestNo / dates) follow in a tenant-specific order,
+        so we classify the post-id window by type. Only the embedded first page is available
+        without the (fragile, CSRF-gated) ajax pagination — a partial but entity-clean capture.
+        """
+        f = [_htmlmod.unescape(x) for x in html_text.split(_FTL_SEP)]
+        n = len(f)
+        raws: list[RawJob] = []
+        seen: set[str] = set()
+        i = 0
+        while i + 9 < n:
+            jid = f[i]
+            if (
+                jid.isdigit()
+                and len(jid) >= 5
+                and f[i + 2] == jid
+                and f[i + 4] == jid
+                and f[i + 8] == jid
+                and f[i + 1]
+                and not f[i + 1].isdigit()
+                and f[i + 3] == f[i + 1]
+                and f[i + 1].strip().lower() not in ("apply", "re-apply")
+            ):
+                title = f[i + 1].strip()
+                window = f[i + 9 : i + 20]
+                loc = next(
+                    (w for w in window if _FTL_LOC.match(w) and not _FTL_DATE.match(w) and not _FTL_CODE.match(w)),
+                    None,
+                )
+                posted = next((w for w in window if _FTL_DATE.match(w)), None)
+                if jid not in seen:
+                    seen.add(jid)
+                    raws.append(
+                        RawJob(
+                            source=self.name,
+                            source_job_id=jid,
+                            company=host.split(".")[0],
+                            token=f"{host}|{cs}|",
+                            url=_DETAIL.format(host=host, cs=cs, jid=jid),
+                            payload={"_ftl": True, "title": title, "location": loc, "posted": posted},
+                        )
+                    )
+                    if limit is not None and len(raws) >= limit:
+                        break
+                i += 9
+            else:
+                i += 1
+        return raws
+
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
+        if p.get("_ftl"):  # legacy jobsearch.ftl stream record
+            loc_label = p.get("location")
+            locations = (
+                [Location(raw=loc_label, is_remote="remote" in loc_label.lower())] if loc_label else []
+            )
+            return JobPosting.create(
+                source=self.name,
+                source_job_id=raw.source_job_id,
+                company=raw.company,
+                title=str(p.get("title") or ""),
+                fetched_at=raw.fetched_at,
+                apply_url=raw.url,
+                locations=locations,
+                remote=RemoteType.REMOTE if (locations and locations[0].is_remote) else RemoteType.UNKNOWN,
+                department=None,
+                salary=None,
+                posted_at=_parse_date(p.get("posted")),
+                updated_at=None,
+                description_html=None,
+                description_text=None,
+                raw=raw.payload,
+            )
         column = p.get("column")
         if not isinstance(column, list):
             column = []
