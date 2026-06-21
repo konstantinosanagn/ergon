@@ -54,6 +54,15 @@ def test_board_of_maps_urls() -> None:
     assert board_of("https://example.com/careers") is None
 
 
+def test_board_of_maps_enterprise_atses() -> None:
+    # Expanded lane: enterprise ATSes where many Fortune-500/large-caps live.
+    assert board_of("https://acme.bamboohr.com/careers") == ("bamboohr", "acme")
+    assert board_of("https://acme.recruitee.com/o/role") == ("recruitee", "acme")
+    assert board_of("https://acme.teamtailor.com/jobs") == ("teamtailor", "acme")
+    assert board_of("https://acme.jobs.personio.de/job/1") == ("personio", "acme")
+    assert board_of("https://careers-pfizer.icims.com/jobs")[0] == "icims"
+
+
 def test_to_candidate_splits_workday() -> None:
     assert to_candidate("greenhouse", "stripe") == {
         "company": "stripe",

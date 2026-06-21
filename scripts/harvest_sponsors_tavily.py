@@ -37,27 +37,38 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from harvest_commoncrawl import CONFIGS, load_seed_keys  # noqa: E402
+from harvest_tavily import load_key  # noqa: E402
+
 from ergon_tracker.http import AsyncFetcher  # noqa: E402
 from ergon_tracker.models import SearchQuery  # noqa: E402
 from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon_tracker.providers.icims import ICIMSProvider  # noqa: E402
+from ergon_tracker.providers.personio import PersonioProvider  # noqa: E402
 from ergon_tracker.providers.workday import WorkdayProvider  # noqa: E402
-from harvest_commoncrawl import CONFIGS, load_seed_keys  # noqa: E402
-from harvest_tavily import load_key  # noqa: E402
 
 GAP = ROOT / "runs" / "h1b_coverage_gap.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_sponsors.json"
 REPORT = ROOT / "runs" / "sponsor_recovery_report.json"
 _API = "https://api.tavily.com/search"
 
-# Supported ATS hosts to restrict Tavily results to (incl. Workday's tenant host).
+# Supported ATS hosts to restrict Tavily results to (incl. Workday's tenant host). The enterprise
+# hosts (icims/bamboohr/recruitee/personio/teamtailor) were added to open the lane where many
+# Fortune-500/large-caps actually live — the 8-host set missed them entirely.
 HOSTS = [
     "boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com", "apply.workable.com",
     "careers.smartrecruiters.com", "ats.rippling.com", "myworkdayjobs.com", "eightfold.ai",
+    "icims.com", "bamboohr.com", "recruitee.com", "teamtailor.com",
+    "jobs.personio.com", "jobs.personio.de",
 ]
 _EIGHTFOLD_RE = re.compile(r"([a-z0-9][a-z0-9-]*)\.eightfold\.ai", re.IGNORECASE)
-# Extractors for the path/subdomain ATSes (reused from the CC harvester).
+# Extractors for the path/subdomain ATSes (reused from the CC harvester) whose token == a clean
+# company slug — adjudication works on these even without a display name.
 _EXTRACT_ATSES = ("greenhouse", "lever", "ashby", "workable", "smartrecruiters", "rippling",
-                  "pinpoint")
+                  "pinpoint", "bamboohr", "recruitee", "teamtailor")
+# ATSes resolved via the provider's own matches() (no CC extractor): the token is a host (icims)
+# or tenant (personio); these lean on the live display-name check in adjudicate().
+_MATCH_PROVIDERS = (("icims", ICIMSProvider), ("personio", PersonioProvider))
 
 
 def _collapse(s: str) -> str:
@@ -81,6 +92,10 @@ def board_of(url: str) -> tuple[str, str] | None:
     m = _EIGHTFOLD_RE.search(url)
     if m and m.group(1).lower() not in ("www", "app"):
         return "eightfold", m.group(1).lower()
+    for ats, provider_cls in _MATCH_PROVIDERS:
+        tok = provider_cls.matches(url)
+        if tok:
+            return ats, tok
     return None
 
 
@@ -224,10 +239,26 @@ async def fetch_and_judge(triples: list[tuple[dict, str, str]], seed_keys: set[s
     return accepted, log
 
 
+def _names_to_sponsors(text: str) -> list[dict]:
+    """A plain names file (one company per line, '#' comments, optional ',domain' ignored) ->
+    sponsor dicts. Lets this recover boards for ANY company list (e.g. SEC public companies),
+    not just the H-1B coverage gap."""
+    out: list[dict] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        name = line.split(",")[0].strip()
+        if name:
+            out.append({"name": name})
+    return out
+
+
 async def main() -> None:
     args = sys.argv[1:]
     top = 150
     out_path = DEFAULT_OUT
+    names_file: Path | None = None
     i = 0
     while i < len(args):
         a = args[i]
@@ -235,14 +266,20 @@ async def main() -> None:
             top = int(args[i + 1]); i += 2
         elif a == "--out":
             out_path = Path(args[i + 1]); i += 2
+        elif a == "--names":
+            names_file = Path(args[i + 1]); i += 2
         else:
             print(f"unknown flag: {a}"); return
 
     key = load_key()
     if not key:
         print("TAVILY_API_KEY not set (env or .env)."); return
-    sponsors = json.loads(GAP.read_text())["uncovered_top"][:top]
-    print(f"recovering boards for top {len(sponsors)} gap sponsors ...")
+    if names_file is not None:
+        sponsors = _names_to_sponsors(names_file.read_text())[:top]
+        print(f"recovering boards for {len(sponsors)} companies from {names_file.name} ...")
+    else:
+        sponsors = json.loads(GAP.read_text())["uncovered_top"][:top]
+        print(f"recovering boards for top {len(sponsors)} gap sponsors ...")
 
     triples = await search_candidates(sponsors, key)
     print(f"  {len(triples)} candidate boards found across supported ATSes; adjudicating ...")
