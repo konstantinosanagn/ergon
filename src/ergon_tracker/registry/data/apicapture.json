@@ -1515,5 +1515,125 @@
    "location": "location",
    "url": "permalink"
   }
+ },
+ "parkerhannifin": {
+  "url": "https://parkercareers.ttcportals.com/jobs/search.json",
+  "method": "GET",
+  "tls_impersonate": true,
+  "page_param": "page",
+  "page_start": 1,
+  "page_step": 1,
+  "records_path": [
+   "entries"
+  ],
+  "total_path": [
+   "total_entries"
+  ],
+  "company": "Parker Hannifin",
+  "headers": {
+   "Accept": "application/json",
+   "Referer": "https://parkercareers.ttcportals.com/jobs/search"
+  },
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location.name",
+   "url": "permalink"
+  }
+ },
+ "saic": {
+  "url": "https://jobs.saic.com/jobs/search.json",
+  "method": "GET",
+  "tls_impersonate": true,
+  "page_param": "page",
+  "page_start": 1,
+  "page_step": 1,
+  "records_path": [
+   "entries"
+  ],
+  "total_path": [
+   "total_entries"
+  ],
+  "company": "SAIC",
+  "headers": {
+   "Accept": "application/json",
+   "Referer": "https://jobs.saic.com/jobs/search"
+  },
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location.name",
+   "url": "permalink"
+  }
+ },
+ "baincompany": {
+  "url": "https://careers.bain.com/jobs/SearchJobs/",
+  "method": "GET",
+  "tls_impersonate": true,
+  "html_table": {
+   "row_css": "article.article--result",
+   "skip_rows": 0
+  },
+  "page_param": "folderOffset",
+  "page_start": 0,
+  "page_step": 10,
+  "records_path": [],
+  "total_path": [],
+  "company": "Bain & Company",
+  "columns": {
+   "id": {
+    "re": "FolderDetail/[^\"]+/(\\d+)"
+   },
+   "title": {
+    "re": "FolderDetail/[^\"]+\">\\s*([\\s\\S]*?)\\s*</a>"
+   },
+   "location": {
+    "re": "subtitle\">\\s*<span>\\s*([\\s\\S]*?)\\s*</span>"
+   },
+   "url": {
+    "re": "href=\"(https://careers\\.bain\\.com/jobs/FolderDetail/[^\"]+)\""
+   }
+  },
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location",
+   "url": "url"
+  }
+ },
+ "lululemon": {
+  "url": "https://careers.lululemon.com/careers/SearchJobs/",
+  "method": "GET",
+  "tls_impersonate": true,
+  "html_table": {
+   "row_css": "article.article--result",
+   "skip_rows": 0
+  },
+  "page_param": "jobOffset",
+  "page_start": 0,
+  "page_step": 10,
+  "records_path": [],
+  "total_path": [],
+  "company": "lululemon",
+  "columns": {
+   "id": {
+    "re": "JobDetail/[^\"]+/(\\d+)"
+   },
+   "title": {
+    "re": "JobDetail/[^\"]+\">\\s*([\\s\\S]*?)\\s*</a>"
+   },
+   "location": {
+    "re": "subtitle\">\\s*<span>\\s*([\\s\\S]*?)\\s*</span>"
+   },
+   "url": {
+    "re": "href=\"(https://careers\\.lululemon\\.com/[^\"]*JobDetail/[^\"]+)\""
+   }
+  },
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location",
+   "url": "url"
+  }
  }
 }
