@@ -1451,5 +1451,69 @@
    "url": "jobApplyURL",
    "description": "whatYouWillDo"
   }
+ },
+ "wipro": {
+  "url": "https://careers.wipro.com/services/recruiting/v1/jobs",
+  "method": "POST",
+  "tls_impersonate": true,
+  "body": {
+   "locale": "en_US",
+   "limit": 50,
+   "offset": 0
+  },
+  "page_path": [
+   "offset"
+  ],
+  "page_start": 0,
+  "page_step": 50,
+  "size": 50,
+  "size_path": [
+   "limit"
+  ],
+  "records_path": [
+   "jobSearchResult"
+  ],
+  "total_path": [
+   "totalJobs"
+  ],
+  "record_unwrap": [
+   "response"
+  ],
+  "company": "Wipro",
+  "headers": {
+   "Content-Type": "application/json"
+  },
+  "fields": {
+   "id": "id",
+   "title": "unifiedStandardTitle",
+   "location": "jobLocationShort",
+   "url": "urlTitle"
+  }
+ },
+ "progressive": {
+  "url": "https://careers.progressive.com/search/jobs.json?per_page=100",
+  "method": "GET",
+  "tls_impersonate": true,
+  "page_param": "page",
+  "page_start": 1,
+  "page_step": 1,
+  "records_path": [
+   "entries"
+  ],
+  "total_path": [
+   "total_entries"
+  ],
+  "company": "Progressive",
+  "headers": {
+   "Accept": "application/json",
+   "X-Requested-With": "XMLHttpRequest",
+   "Referer": "https://careers.progressive.com/search/jobs/"
+  },
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location",
+   "url": "permalink"
+  }
  }
 }
