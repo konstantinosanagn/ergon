@@ -40,6 +40,23 @@ def test_share_class_and_state_suffixes_stripped():
     assert _covered("1895 Bancorp of Wisconsin, Inc. /MD/", ["1895 bancorp of wisconsin"])
 
 
+def test_collapse_matches_space_and_hyphen_variants():
+    # The space/hyphen-collapse fix: registry slug vs SEC multi-word legal name.
+    assert _covered("Molson Coors Beverage Company", ["molson-coors"])
+    assert _covered("T-Mobile US, Inc.", ["tmobile"])
+    assert _covered("Nasdaq, Inc.", ["nasdaq"])
+
+
+def test_collapse_stays_exact_not_substring():
+    # Collapsed match is EXACT, not substring — "stripe" must not match "stripersonline".
+    assert not _covered("Stripe, Inc.", ["stripersonline"])
+    assert not _covered("Cintas Corporation", ["cint"])
+
+
+def test_accent_folding():
+    assert _covered("Telefónica", ["telefonica"])
+
+
 def test_no_false_positive_on_shared_first_word():
     # The classic trap: same first token, different companies must NOT match.
     idx = cr.build_key_index(["american express"])

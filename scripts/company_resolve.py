@@ -19,12 +19,24 @@ from __future__ import annotations
 
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ergon_tracker.dedup import normalize_company  # noqa: E402
+
+
+def _strip_accents(s: str) -> str:
+    """Fold accents so e.g. "Schrödinger"/"Schrodinger" and "Telefónica" match."""
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
+def _collapse(s: str) -> str:
+    """All-lowercase, alphanumerics only — so space/hyphen/punctuation differences don't block an
+    otherwise-exact match (registry slug "molson-coors" vs SEC "Molson Coors Beverage")."""
+    return re.sub(r"[^a-z0-9]", "", _strip_accents(s).lower())
 
 # SEC names carry share-class/state-of-incorp/parenthetical noise that breaks matching:
 # "Alphabet Inc. (Class A)", "Bancorp /MD/", "Foo Corp - Class B". Strip it before normalizing so
@@ -36,7 +48,7 @@ _DESIGNATION_RE = re.compile(
 
 
 def _canon(name: str) -> str:
-    return _DESIGNATION_RE.sub(" ", name)
+    return _DESIGNATION_RE.sub(" ", _strip_accents(name))
 
 # Tokens that describe a company form/industry but don't identify it — dropped before keying.
 _GENERIC = frozenset(
@@ -78,6 +90,7 @@ ALIASES = {
     "international business machines": "ibm",
     "jpmorgan chase": "jpmorgan",
     "the goldman sachs": "goldman sachs",
+    "rtx": "raytheon",  # RTX Corp (formerly Raytheon Technologies)
 }
 
 
@@ -104,6 +117,10 @@ def match_keys(name: str) -> set[str]:
         keys.add(core[0])  # single-word brand after stripping descriptors
     else:
         keys.add(" ".join(core[:2]))  # first two tokens — never a bare first token (avoids FPs)
+    # Also emit collapsed (no-space) forms so space/hyphen differences don't block an exact match
+    # ("molson coors" <-> "molsoncoors", "t mobile" <-> "tmobile"). Still EXACT on the collapsed
+    # string — NOT substring — so "stripe" never matches "stripersonline".
+    keys |= {_collapse(k) for k in keys}
     return {k for k in keys if k}
 
 
