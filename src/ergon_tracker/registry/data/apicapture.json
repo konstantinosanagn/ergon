@@ -1,4 +1,69 @@
 {
+ "meta": {
+  "url": "https://www.metacareers.com/graphql",
+  "method": "POST",
+  "form_encoded": true,
+  "tls_impersonate": true,
+  "headers": {
+   "X-FB-LSD": "AdQU4lAzXXXyOqC185LIW04DJJQ",
+   "X-FB-Friendly-Name": "CareersJobSearchResultsV2DataQuery",
+   "Referer": "https://www.metacareers.com/jobs"
+  },
+  "body": {
+   "lsd": "AdQU4lAzXXXyOqC185LIW04DJJQ",
+   "__a": "1",
+   "fb_api_caller_class": "RelayModern",
+   "fb_api_req_friendly_name": "CareersJobSearchResultsV2DataQuery",
+   "variables": "{\"search_input\":{\"q\":null,\"divisions\":[],\"offices\":[],\"roles\":[],\"leadership_levels\":[],\"saved_jobs\":[],\"saved_searches\":[],\"sub_teams\":[],\"teams\":[],\"is_leadership\":false,\"is_remote_only\":false,\"sort_by_new\":false,\"results_per_page\":null},\"viewasUserID\":null,\"isLoggedIn\":false}",
+   "server_timestamps": "true",
+   "doc_id": "27129360303422352"
+  },
+  "records_path": [
+   "data",
+   "job_search_with_featured_jobs_v2",
+   "all_jobs"
+  ],
+  "company": "Meta",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "locations",
+   "department": "teams"
+  }
+ },
+ "uber": {
+  "url": "https://www.uber.com/api/loadSearchJobsResults?localeCode=en",
+  "method": "POST",
+  "tls_impersonate": true,
+  "headers": {
+   "x-csrf-token": "x",
+   "content-type": "application/json",
+   "accept": "application/json"
+  },
+  "body": {
+   "params": {
+    "location": []
+   },
+   "limit": 100,
+   "page": 0
+  },
+  "page_path": ["page"],
+  "page_start": 0,
+  "page_step": 1,
+  "size_path": ["limit"],
+  "size": 100,
+  "records_path": ["data", "results"],
+  "company": "Uber",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "department": "department",
+   "location": "location",
+   "employment_type": "timeType",
+   "description": "description",
+   "posted_at": "creationDate"
+  }
+ },
  "amazon": {
   "url": "https://www.amazon.jobs/en/search.json?radius=24km&result_limit=100&sort=recent&offset=0",
   "method": "GET",
@@ -1258,6 +1323,35 @@
    "title": "Publish_Title__c",
    "department": "Department__c",
    "location": "Job_Requisition_Positions__r.0.Location__r.External_Name__c"
+  }
+ },
+ "microsoft": {
+  "url": "https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&location=&start=0&",
+  "method": "GET",
+  "tls_impersonate": true,
+  "headers": {
+   "accept": "application/json",
+   "Referer": "https://apply.careers.microsoft.com/careers"
+  },
+  "page_param": "start",
+  "page_start": 0,
+  "page_step": 10,
+  "records_path": [
+   "data",
+   "positions"
+  ],
+  "total_path": [
+   "data",
+   "count"
+  ],
+  "company": "Microsoft",
+  "fields": {
+   "id": "id",
+   "title": "name",
+   "location": "locations",
+   "department": "department",
+   "url": "positionUrl",
+   "posted_at": "postedTs"
   }
  },
  "bostonuniversity": {
