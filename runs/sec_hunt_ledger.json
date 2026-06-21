@@ -2049,17 +2049,19 @@
   "status": "no-board"
  },
  "Angel Oak Mortgage REIT, Inc.": {
+  "ats": "paycom",
   "attempts": 1,
   "host": "www.paycomonline.net",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://www.paycomonline.net/v4/ats/web.php/jobs?jobSearchSettingsId=595&clientkey=9FD670687B0D23E82C1272BF75BA93B0"
  },
  "Angel Studios, Inc.": {
+  "ats": "paycom",
   "attempts": 1,
   "host": "www.paycomonline.net",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://www.paycomonline.net/v4/ats/web.php/portal/BEF408F3E3A024CFE0BF00677696DEA1/career-page"
  },
  "Anika Therapeutics, Inc.": {
@@ -2551,10 +2553,11 @@
   "url": "https://recruiting.ultipro.com/UNI1046UFMB/JobBoard/d8f90aad-672e-4f0a-bbc1-a17aa8cf1111"
  },
  "Atlanticus Holdings Corp": {
+  "ats": "paycom",
   "attempts": 1,
   "host": "www.paycomonline.net",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://www.paycomonline.net/v4/ats/web.php/jobs?clientkey=7FF98BDB027D9F9644B644D93EB039AB&fromClientSide=true"
  },
  "Atlantis Glory Inc.": {
@@ -4530,10 +4533,11 @@
   "url": "https://www.comeet.com/jobs/ceva"
  },
  "CF BANKSHARES INC.": {
+  "ats": "paycom",
   "attempts": 1,
   "host": "www.paycomonline.net",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://www.paycomonline.net/v4/ats/web.php/jobs?clientkey=7C5AC05D8D2EC046AE4FAF26F5F9712E"
  },
  "CFN Enterprises Inc.": {
