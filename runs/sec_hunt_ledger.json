@@ -5814,5 +5814,390 @@
   "last": "2026-06-21",
   "reason": "Externally-managed BDC (NASDAQ: LIEN), managed by Chicago Atlantic Advisers. Nei",
   "status": "no-board"
+ },
+ "Chicago Atlantic Real Estate Finance, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Own sites (refi.reit, chicagoatlantic.com) and LinkedIn show open roles, but no ",
+  "status": "no-board"
+ },
+ "Childrens Place, Inc.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://childrensplace.wd1.myworkdayjobs.com/TCP01"
+ },
+ "Chilean Cobalt Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Junior cobalt mining/exploration company; no findable careers page on its own do",
+  "status": "no-board"
+ },
+ "China Automotive Systems, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "China-based power-steering manufacturer (NASDAQ: CAAS) with own site caasauto.co",
+  "status": "no-board"
+ },
+ "China Dongsheng International, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "No findable official careers page or ATS board; minimal web presence for this sm",
+  "status": "no-board"
+ },
+ "China SXT Pharmaceuticals, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "China-based traditional-Chinese-medicine company (NASDAQ: SXTC) with own site sx",
+  "status": "no-board"
+ },
+ "Chiron Real Estate Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Healthcare REIT (formerly Global Medical REIT, NYSE: XRN). Careers page at chiro",
+  "status": "no-board"
+ },
+ "ChronoScale Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "No company named 'ChronoScale Corp' found with a careers page or ATS board. Clos",
+  "status": "no-board"
+ },
+ "Churchill Downs Inc": {
+  "ats": "ukg",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "ukg found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.ultipro.com/CHU1000CHILL/JobBoard/8fbd6c36-342a-4807-82ea-cc446f2b9f96"
+ },
+ "Cibus, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (cibus.com/careers) hosts job listings on a proprietary in",
+  "status": "no-board"
+ },
+ "Cinemark Holdings, Inc.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://cinemark.wd1.myworkdayjobs.com/cinemark"
+ },
+ "Cineverse Corp.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (home.cineverse.com/careers) has no ATS link; it directs a",
+  "status": "no-board"
+ },
+ "Cingulate Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (cingulate.com/careers) is a self-hosted cover-letter/resu",
+  "status": "no-board"
+ },
+ "Citi Trends Inc": {
+  "attempts": 1,
+  "host": "recruiting.adp.com",
+  "last": "2026-06-21",
+  "status": "found-no-provider",
+  "url": "https://recruiting.adp.com/srccar/public/RTI.home?d=CorporateCareerCenter&c=1102841"
+ },
+ "Citius Pharmaceuticals, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Citius Pharmaceuticals (Nasdaq: CTXR), Cranford NJ, has no dedicated careers pag",
+  "status": "no-board"
+ },
+ "CitroTech Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Tiny OTC-listed company (ticker CITR) with only a LinkedIn page; no official car",
+  "status": "no-board"
+ },
+ "Civeo Corp": {
+  "ats": "oracle",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://fa-esyi-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs"
+ },
+ "Claritev Corp": {
+  "attempts": 1,
+  "host": "myjobs.adp.com",
+  "last": "2026-06-21",
+  "status": "found-no-provider",
+  "url": "https://myjobs.adp.com/claritevcareers/cx?c=1204301&d=External"
+ },
+ "Clarus Corp": {
+  "ats": "paycom",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://www.paycomonline.net/v4/ats/web.php/portal/4F64BCD29ABF6AC47A47924586BDD422/career-page"
+ },
+ "Clean Vision Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Clean Vision Corporation (OTC: CLNV), Manhattan Beach CA, is a small clean-energ",
+  "status": "no-board"
+ },
+ "CleanCore Solutions, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (cleancoresol.com/careers) uses an on-site application for",
+  "status": "no-board"
+ },
+ "Clear Secure, Inc.": {
+  "ats": "greenhouse",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://job-boards.greenhouse.io/clear"
+ },
+ "ClearPoint Neuro, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (clearpointneuro.com/about/careers) currently says 'Check ",
+  "status": "no-board"
+ },
+ "ClearSign Technologies Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page (clearsign.com/careers) lists roles as PDF descriptions an",
+  "status": "no-board"
+ },
+ "Clearmind Medicine Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small clinical-stage psychedelics pharma (Nasdaq: CMND) based in Canada/Israel; ",
+  "status": "no-board"
+ },
+ "Clearside Biomedical, Inc.": {
+  "attempts": 1,
+  "host": "app.trinethire.com",
+  "last": "2026-06-21",
+  "status": "found-no-provider",
+  "url": "https://app.trinethire.com/companies/3541-clearside-biomedical/jobs"
+ },
+ "Cleartronic, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Micro-cap (OTC: CLRI, Clearwater FL; ReadyOp/ReadyMed software). No careers page",
+  "status": "no-board"
+ },
+ "Clearwater Paper Corp": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://careers-clearwaterpaper.icims.com/jobs/intro"
+ },
+ "Clene Inc.": {
+  "ats": "paylocity",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "paylocity found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.paylocity.com/recruiting/jobs/All/61f741a4-2c42-4e75-9a6f-9e56826b21e4/Clene-Nanomedicine"
+ },
+ "Climb Bio, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Climb Bio (clinical-stage biotech) hosts open positions directly on its own site",
+  "status": "no-board"
+ },
+ "Climb Global Solutions, Inc.": {
+  "attempts": 1,
+  "host": "teamclimb.climbgs.com",
+  "last": "2026-06-21",
+  "status": "found-no-provider",
+  "url": "https://teamclimb.climbgs.com/jobs"
+ },
+ "Clipper Realty Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official careers page is clipperrealty.com/careers (also clipperequity.com/caree",
+  "status": "no-board"
+ },
+ "Cloud3 Ventures Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Tiny CSE-listed Canadian blockchain-infrastructure company (formerly Web3 Ventur",
+  "status": "no-board"
+ },
+ "Cloudweb, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Micro-cap OTC web-hosting shell (CLOW), formerly Data Backup Solutions; no caree",
+  "status": "no-board"
+ },
+ "Co-Diagnostics, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Molecular diagnostics company (NASDAQ: CODX) in Salt Lake City. Open roles surfa",
+  "status": "no-board"
+ },
+ "CoJax Oil & Gas Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Early-stage OTC oil & gas shell (CJAX) with ~3 employees; no careers page or ATS",
+  "status": "no-board"
+ },
+ "Cocrystal Pharma, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Clinical-stage biotech (COCP, Bothell WA). Official careers page (cocrystalpharm",
+  "status": "no-board"
+ },
+ "Coda Octopus Group, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Marine technology firm; careers hosted on its own proprietary site (codaoctopus.",
+  "status": "no-board"
+ },
+ "Coeur Mining, Inc.": {
+  "ats": "adp",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=81c0aabf-6f03-44c5-9c88-1eda433fbbd5&ccId=19000101_000001&lang=en_US"
+ },
+ "Cohen & Co Inc.": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://careers-cohenco.icims.com/jobs/intro"
+ },
+ "Colibri Resource Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Junior gold/silver explorer (TSX-V: CBI) operating in Sonora, Mexico; tiny explo",
+  "status": "no-board"
+ },
+ "Collab Z Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Collab Z Inc. (Nasdaq: CLBZ) is a community-based property-management tech compa",
+  "status": "no-board"
+ },
+ "Commerce.com, Inc.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://bigcommerce.wd12.myworkdayjobs.com/Commerce"
+ },
+ "Commercial Bancgroup, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Parent (Nasdaq: CBK) of Commercial Bank, Harrogate TN. Careers page cbtn.com/abo",
+  "status": "no-board"
+ },
+ "Commercial Vehicle Group, Inc.": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://cvgrp.wd5.myworkdayjobs.com/CVG"
+ },
+ "Community Redevelopment Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Shell/acquisition company (OTC: CRDV), Ewing NJ, formerly Crosswind Renewable En",
+  "status": "no-board"
+ },
+ "Compass Diversified Holdings": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Holding company (NYSE: CODI), Westport CT. Its compassdiversified.com/join-us pa",
+  "status": "no-board"
+ },
+ "Compass Gold Corp": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Junior gold exploration company; search returns only the unrelated Compass Group",
+  "status": "no-board"
+ },
+ "Compass Sub North, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "A newly-formed Delaware merger-subsidiary shell entity in the CommerceOne/Green ",
+  "status": "no-board"
+ },
+ "Compass Therapeutics, Inc.": {
+  "ats": "greenhouse",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://job-boards.greenhouse.io/compasstherapeutics"
+ },
+ "Comstock Holding Companies, Inc.": {
+  "ats": "greenhouse",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://job-boards.greenhouse.io/comstock"
+ },
+ "Concentra Group Holdings Parent, Inc.": {
+  "ats": "icims",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://careerchoice-concentra.icims.com/"
+ },
+ "Concentrix Corp": {
+  "ats": "workday",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://cnx.wd1.myworkdayjobs.com/external_global"
+ },
+ "Concrete Leveling Systems Inc": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "No findable official company website or ATS board; searches surfaced only unrela",
+  "status": "no-board"
+ },
+ "Concrete Pumping Holdings, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Corporate careers page (concretepumpingholdings.com/careers) and brand site brun",
+  "status": "no-board"
+ },
+ "Conexeu Sciences Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Early-stage med-tech (NASDAQ: CNXU, ~founded 2022, Reno NV); official site conex",
+  "status": "no-board"
+ },
+ "ConnectM Technology Solutions, Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Official site connectm.com homepage has no careers/jobs link to any ATS; job pre",
+  "status": "no-board"
+ },
+ "Consensus Cloud Solutions, Inc.": {
+  "ats": "greenhouse",
+  "attempts": 1,
+  "last": "2026-06-21",
+  "status": "covered",
+  "url": "https://job-boards.greenhouse.io/consensuscloudservices"
+ },
+ "Contango Silver & Gold Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Small precious-metals explorer/producer (formerly Contango ORE); official site c",
+  "status": "no-board"
+ },
+ "Context Therapeutics Inc.": {
+  "attempts": 1,
+  "last": "2026-06-21",
+  "reason": "Careers page (contexttherapeutics.com/careers) lists openings via internal apply",
+  "status": "no-board"
  }
 }
