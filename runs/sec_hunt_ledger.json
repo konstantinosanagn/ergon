@@ -68,10 +68,11 @@
   "status": "no-board"
  },
  "ACCO BRANDS Corp": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "accocareers.jobs.hr.cloud.sap",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://accocareers.jobs.hr.cloud.sap/"
  },
  "ACHIEVE LIFE SCIENCES, INC.": {
@@ -487,10 +488,11 @@
   "status": "no-board"
  },
  "ALNYLAM PHARMACEUTICALS, INC.": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "opportunities.alnylam.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://opportunities.alnylam.com/"
  },
  "ALPHA MODUS HOLDINGS, INC.": {
@@ -959,10 +961,11 @@
   "status": "no-board"
  },
  "ARMSTRONG WORLD INDUSTRIES INC": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.armstrong.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.armstrong.com/"
  },
  "ARRAS MINERALS CORP.": {
@@ -1174,10 +1177,11 @@
   "url": "https://jobs.aumovio.com/en/jobs/"
  },
  "AURORA CANNABIS INC": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.auroramj.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.auroramj.com/viewalljobs/"
  },
  "AUTOLIV INC": {
@@ -1499,10 +1503,11 @@
   "status": "no-board"
  },
  "Aecon Group Inc.": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.aecon.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.aecon.com/"
  },
  "Aeluma, Inc.": {
@@ -2913,10 +2918,11 @@
   "status": "no-board"
  },
  "BELDEN INC.": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.belden.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.belden.com/viewalljobs/"
  },
  "BELITE BIO, INC": {
@@ -3161,10 +3167,11 @@
   "url": "https://recruiting2.ultipro.com/BOI1001BOIS/JobBoard/d37b562e-1487-4cc9-8cc4-d95be5cacd55/"
  },
  "BOK FINANCIAL CORP": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.bokf.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.bokf.com/"
  },
  "BOLLINGER INNOVATIONS, INC.": {
@@ -3409,10 +3416,11 @@
   "status": "no-board"
  },
  "Bausch & Lomb Corp": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.bauschlomb.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.bauschlomb.com/"
  },
  "Bausch Health Companies Inc.": {
@@ -3423,10 +3431,11 @@
   "url": "https://careers.bauschhealth.com/"
  },
  "BayCom Corp": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.bankwithunited.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.bankwithunited.com/UnitedBank"
  },
  "BayFirst Financial Corp.": {
@@ -4434,10 +4443,11 @@
   "status": "no-board"
  },
  "CELESTICA INC": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.celestica.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.celestica.com/viewalljobs/"
  },
  "CEMENTOS PACASMAYO SAA": {
@@ -4448,10 +4458,11 @@
   "url": "https://cementospacasmayo.hiringroom.com/jobs"
  },
  "CEMEX SAB DE CV": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.cemex.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.cemex.com/"
  },
  "CEMTREX INC": {
@@ -4567,10 +4578,11 @@
   "url": "https://careers.smartrecruiters.com/ChampionsOncologyInc"
  },
  "CHART INDUSTRIES INC": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.chartindustries.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.chartindustries.com/"
  },
  "CHASE PACKAGING CORP": {
@@ -4849,17 +4861,19 @@
   "url": "https://columbiasportswearcompany.wd5.myworkdayjobs.com/CSC_Careers"
  },
  "COLUMBUS MCKINNON CORP": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.cmco.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.cmco.com/"
  },
  "COMMERCIAL METALS Co": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.cmc.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.cmc.com/"
  },
  "COMMUNITY FINANCIAL SYSTEM, INC.": {
@@ -4954,17 +4968,19 @@
   "status": "no-board"
  },
  "CONSTELLIUM SE": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "jobs.constellium.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://jobs.constellium.com/"
  },
  "CONSUMERS ENERGY CO": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "careers.consumersenergy.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://careers.consumersenergy.com/"
  },
  "COPAUR MINERALS INC.": {
@@ -4993,10 +5009,11 @@
   "status": "no-board"
  },
  "CORNING INC /NY": {
+  "ats": "successfactors",
   "attempts": 1,
   "host": "corningjobs.corning.com",
   "last": "2026-06-21",
-  "status": "found-no-provider",
+  "status": "covered",
   "url": "https://corningjobs.corning.com/"
  },
  "CORVEL CORP": {
