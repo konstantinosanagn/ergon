@@ -1635,5 +1635,35 @@
    "location": "location",
    "url": "url"
   }
+ },
+ "eogresources": {
+  "url": "https://careers.eogresources.com/",
+  "method": "GET",
+  "tls_impersonate": true,
+  "html_table": {
+   "row_css": "div.list-group-item",
+   "skip_rows": 0
+  },
+  "columns": {
+   "id": {
+    "re": "jo_num=(\\d+)"
+   },
+   "title": {
+    "re": "coloredlink bold\"[^>]*>([\\s\\S]*?)</a>"
+   },
+   "location": {
+    "re": "thinrow\\s*\"?>\\s*([^<]*?,\\s*[A-Z]{2})\\s*<"
+   },
+   "url": {
+    "re": "(jobdetails\\.asp\\?jo_num=\\d+)"
+   }
+  },
+  "company": "EOG Resources",
+  "fields": {
+   "id": "id",
+   "title": "title",
+   "location": "location",
+   "url": "url"
+  }
  }
 }
