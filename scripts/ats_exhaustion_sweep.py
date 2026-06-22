@@ -28,9 +28,11 @@ Usage::
     .venv/bin/python scripts/ats_exhaustion_sweep.py --gaps        # sweep current S&P 500 gaps
     .venv/bin/python scripts/build_registry.py scripts/cand_exhaustion.json --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import sys
@@ -42,14 +44,6 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import (  # noqa: E402
-    get_provider,
-    iter_providers,
-    load_builtins,
-)
-
 # Reuse the proven brute-force + entity-adjudication logic (do not reinvent).
 from harvest_tokens import (  # noqa: E402
     company_key,
@@ -57,6 +51,14 @@ from harvest_tokens import (  # noqa: E402
     name_match,
     parse_companies,
     probe_company,
+)
+
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.models import SearchQuery  # noqa: E402
+from ergon_tracker.providers.base import (  # noqa: E402
+    get_provider,
+    iter_providers,
+    load_builtins,
 )
 
 LOG_DIR = ROOT / "runs" / "exhaustion"
@@ -77,8 +79,90 @@ _ATS_URL_RE = re.compile(
     re.IGNORECASE,
 )
 # Careers-page URL candidates derived from a bare domain (cheapest first).
-_CAREERS_PATHS = ("https://{d}/careers", "https://careers.{d}", "https://jobs.{d}",
-                  "https://www.{d}/careers", "https://{d}/jobs")
+_CAREERS_PATHS = (
+    "https://{d}/careers",
+    "https://careers.{d}",
+    "https://jobs.{d}",
+    "https://www.{d}/careers",
+    "https://{d}/jobs",
+)
+
+
+def _make_candidate(ats: str, token: str, name: str, domain: str | None) -> dict[str, Any]:
+    """Build a build_registry-compatible candidate.
+
+    Workday is special: build_registry rebuilds its token from ``tenant|wd|site`` fields, so a
+    Workday hit (whose ``provider.matches()`` returns the ``tenant|wd|site`` composite) must be
+    split into those fields — otherwise the hardened gate rejects it as a malformed candidate and
+    the board is silently lost. Non-Workday ATSes carry a plain ``token``.
+    """
+    cand: dict[str, Any] = {
+        "company": company_key(name),
+        "ats": ats,
+        "token": token,
+        "domain": domain,
+    }
+    if ats == "workday" and token.count("|") == 2:
+        tenant, wd, site = token.split("|")
+        cand.update(tenant=tenant, wd=wd, site=site)
+    return cand
+
+
+def classify_exhaustion(captured: bool, rung1_inspected: bool) -> str:
+    """The rigor gate, as pure logic.
+
+    A company is only browser-eligible (``ats-exhausted``) when every autonomous rung failed AND
+    rung 1 actually INSPECTED a careers page. If we never even fetched a careers page, the ATS
+    path is unproven — the board could be on any host — so the company is ``incomplete`` and must
+    NOT reach the browser queue. This is the anti-"assume-it-needs-a-browser" guard, decoupled
+    from any log-string wording.
+    """
+    if captured:
+        return "captured"
+    return "ats-exhausted" if rung1_inspected else "incomplete-needs-careers-url"
+
+
+# Statuses after which a re-run learns nothing new -> skip on --resume. timeout / incomplete /
+# error are NON-terminal: a later run (less load, a domain now supplied, a recovered host) may yet
+# succeed, so they are always re-probed.
+_TERMINAL_STATUSES = frozenset({"captured", "ats-exhausted", "already-in-registry"})
+
+
+def _is_done(rec: dict[str, Any]) -> bool:
+    """True if a prior per-company log is definitively terminal (skip it on --resume)."""
+    return rec.get("status") in _TERMINAL_STATUSES
+
+
+def _aggregate_from_logs(log_dir: Path = LOG_DIR) -> tuple[list[dict], list[dict]]:
+    """Rebuild ``(candidates, browser_queue)`` cumulatively from ALL per-company logs.
+
+    The per-company logs are the source of truth, so the aggregate outputs are deduped and
+    idempotent across batches — a second sweep never clobbers the first's results, it unions them.
+    """
+    candidates: list[dict] = []
+    browser_queue: list[dict] = []
+    seen_c: set[str] = set()
+    seen_b: set[str] = set()
+    for f in sorted(log_dir.glob("*.json")):
+        try:
+            rec = json.loads(f.read_text())
+        except (ValueError, OSError):
+            continue
+        key = rec.get("company")
+        if rec.get("status") == "captured" and rec.get("candidate") and key not in seen_c:
+            seen_c.add(key)
+            candidates.append(rec["candidate"])
+        if rec.get("ats_exhausted") and key not in seen_b:
+            seen_b.add(key)
+            browser_queue.append(
+                {
+                    "company": key,
+                    "name": rec.get("name"),
+                    "domain": rec.get("domain"),
+                    "exhaustion_log": rec.get("rungs", []),
+                }
+            )
+    return candidates, browser_queue
 
 
 def _adjudicate(company: str, raws: list, provider, trust: bool = False) -> bool:
@@ -117,14 +201,23 @@ async def _careers_html(domain: str | None, fetcher: AsyncFetcher) -> str:
 
 async def _rung1_tenant_discovery(
     name: str, domain: str | None, fetcher: AsyncFetcher
-) -> tuple[dict | None, str]:
-    """Grep the careers page for ATS URLs; map each via provider.matches(); fetch + adjudicate."""
+) -> tuple[dict | None, str, bool]:
+    """Grep the careers page for ATS URLs; map each via provider.matches(); fetch + adjudicate.
+
+    Returns ``(candidate_or_None, note, inspected)``. ``inspected`` is the structured signal the
+    rigor gate consumes: True iff a careers page was actually fetched and examined (so a failure
+    genuinely proves the ATS path is dead, not merely unreached).
+    """
     html = await _careers_html(domain, fetcher)
     if not html:
-        return None, "no careers page resolved from domain" if domain else "no domain given"
+        return (
+            None,
+            ("no careers page resolved from domain" if domain else "no domain given"),
+            False,
+        )
     urls = list(dict.fromkeys(_ATS_URL_RE.findall(html)))[:25]
     if not urls:
-        return None, "careers page has no recognizable ATS host"
+        return None, "careers page has no recognizable ATS host", True
     providers = list(iter_providers())
     tried: list[str] = []
     for url in urls:
@@ -144,12 +237,17 @@ async def _rung1_tenant_discovery(
             except Exception:
                 continue
             if _adjudicate(name, raws, prov):
-                return {"company": company_key(name), "ats": prov.name, "token": token,
-                        "domain": domain}, f"HIT via {tag}"
-    return None, f"{len(tried)} (provider,token) candidates from careers page, none entity-correct"
+                return _make_candidate(prov.name, token, name, domain), f"HIT via {tag}", True
+    return (
+        None,
+        f"{len(tried)} (provider,token) candidates from careers page, none entity-correct",
+        True,
+    )
 
 
-async def _rung5_federation(name: str, domain: str | None, fetcher: AsyncFetcher) -> tuple[dict | None, str]:
+async def _rung5_federation(
+    name: str, domain: str | None, fetcher: AsyncFetcher
+) -> tuple[dict | None, str]:
     """DirectEmployers (dejobs) + The Muse — entity-clean fallbacks for WAF-walled giants."""
     slug = company_key(name)  # hyphenated, e.g. "hca-healthcare"
     pd = get_provider("dejobs")
@@ -159,20 +257,33 @@ async def _rung5_federation(name: str, domain: str | None, fetcher: AsyncFetcher
         except Exception:
             raws = []
         if _adjudicate(name, raws, pd, trust=True) and raws:
-            return {"company": slug, "ats": "dejobs", "token": tok, "domain": domain}, f"HIT dejobs|{tok}"
+            return {
+                "company": slug,
+                "ats": "dejobs",
+                "token": tok,
+                "domain": domain,
+            }, f"HIT dejobs|{tok}"
     pm = get_provider("themuse")
-    brand = re.sub(r"\b(inc|corp|corporation|co|company|plc|ltd|group|holdings)\b\.?", "",
-                   name, flags=re.I).strip()
+    brand = re.sub(
+        r"\b(inc|corp|corporation|co|company|plc|ltd|group|holdings)\b\.?", "", name, flags=re.I
+    ).strip()
     try:
         raws = await pm.fetch(brand, PROBE, fetcher)
     except Exception:
         raws = []
     if raws and _adjudicate(name, raws, pm, trust=True):
-        return {"company": slug, "ats": "themuse", "token": brand, "domain": domain}, f"HIT themuse|{brand}"
+        return {
+            "company": slug,
+            "ats": "themuse",
+            "token": brand,
+            "domain": domain,
+        }, f"HIT themuse|{brand}"
     return None, "not in dejobs/themuse federation"
 
 
-async def _rung7_schemaorg(name: str, domain: str | None, fetcher: AsyncFetcher) -> tuple[dict | None, str]:
+async def _rung7_schemaorg(
+    name: str, domain: str | None, fetcher: AsyncFetcher
+) -> tuple[dict | None, str]:
     """JSON-LD / job-sitemap via the schemaorg provider (lowest-priority generic surface)."""
     if not domain:
         return None, "no domain for schema.org"
@@ -183,8 +294,12 @@ async def _rung7_schemaorg(name: str, domain: str | None, fetcher: AsyncFetcher)
         except Exception:
             raws = []
         if raws and _adjudicate(name, raws, p):
-            return {"company": company_key(name), "ats": "schemaorg", "token": tok, "domain": domain}, \
-                f"HIT schemaorg|{tok}"
+            return {
+                "company": company_key(name),
+                "ats": "schemaorg",
+                "token": tok,
+                "domain": domain,
+            }, f"HIT schemaorg|{tok}"
     return None, "no JSON-LD/sitemap jobs"
 
 
@@ -202,9 +317,19 @@ async def exhaust_one(
         log.append({"rung": "0", "method": "registry", "result": "already in seed.json"})
         return record
 
-    # Rungs 1, 2, 5, 7 in order — stop at first hit.
+    # Rung 1 (special): careers-page tenant discovery. Captured separately because it yields the
+    # `inspected` signal the rigor gate needs — decoupled from any log-string wording.
+    try:
+        cand, note, rung1_inspected = await _rung1_tenant_discovery(name, domain, fetcher)
+    except Exception as exc:  # noqa: BLE001 — record, never crash the sweep
+        cand, note, rung1_inspected = None, f"error: {type(exc).__name__}: {exc}"[:100], False
+    log.append({"rung": "1", "method": "correct-tenant-discovery", "result": note})
+    if cand:
+        record.update(status="captured", candidate=cand, ats_exhausted=False)
+        return record
+
+    # Rungs 2, 5, 7 in order — stop at first hit.
     rungs = [
-        ("1", "correct-tenant-discovery", lambda: _rung1_tenant_discovery(name, domain, fetcher)),
         ("2", "harvest_tokens", lambda: _probe_rung2(name, domain, fetcher)),
         ("5", "dejobs/themuse", lambda: _rung5_federation(name, domain, fetcher)),
         ("7", "schemaorg", lambda: _rung7_schemaorg(name, domain, fetcher)),
@@ -220,25 +345,23 @@ async def exhaust_one(
             return record
 
     # Rungs 3 & 6 are not autonomously scriptable — flag for an agent/manual pass before browser.
-    log.append({"rung": "3", "method": "websearch-apply-url", "result": "deferred: needs agent/manual"})
-    log.append({"rung": "6", "method": "apicapture-bespoke", "result": "deferred: needs agent/manual"})
+    log.append(
+        {"rung": "3", "method": "websearch-apply-url", "result": "deferred: needs agent/manual"}
+    )
+    log.append(
+        {"rung": "6", "method": "apicapture-bespoke", "result": "deferred: needs agent/manual"}
+    )
 
-    # RIGOR GATE: a company is "exhausted" ONLY if the strongest ATS rung — rung 1, careers-page
-    # tenant discovery — actually INSPECTED a careers page. If we couldn't even fetch one ("no domain"
-    # or "no careers page resolved"), we have NOT proven the ATS path is dead (the real board could be
-    # on any host). Such a company is INCOMPLETE — it needs a real careers URL (rung 3 / agent), and
-    # must NOT reach the browser queue. This is the anti-"assume-it-needs-a-browser" guard.
-    rung1 = next((r["result"] for r in log if r["rung"] == "1"), "")
-    rung1_inspected = not ("no domain" in rung1 or "no careers page resolved" in rung1)
-    if not rung1_inspected:
-        record.update(status="incomplete-needs-careers-url", ats_exhausted=False)
-        return record
-    record.update(status="ats-exhausted", ats_exhausted=True,
-                  browser_tier_hint=None)  # tier hint set by the agent/manual pass
+    status = classify_exhaustion(captured=False, rung1_inspected=rung1_inspected)
+    record.update(status=status, ats_exhausted=(status == "ats-exhausted"))
+    if status == "ats-exhausted":
+        record["browser_tier_hint"] = None  # tier hint set by the agent/manual pass
     return record
 
 
-async def _probe_rung2(name: str, domain: str | None, fetcher: AsyncFetcher) -> tuple[dict | None, str]:
+async def _probe_rung2(
+    name: str, domain: str | None, fetcher: AsyncFetcher
+) -> tuple[dict | None, str]:
     """Rung 2 wrapper around harvest_tokens.probe_company (path-based + icims/taleo host guesses)."""
     cand = await probe_company(name, domain, fetcher)
     if cand:
@@ -246,52 +369,80 @@ async def _probe_rung2(name: str, domain: str | None, fetcher: AsyncFetcher) -> 
     return None, "no path-based/icims/taleo token matched"
 
 
-async def run_sweep(companies: list[tuple[str, str | None]], concurrency: int) -> dict[str, Any]:
+async def run_sweep(
+    companies: list[tuple[str, str | None]], concurrency: int, *, resume: bool = False
+) -> dict[str, Any]:
     load_builtins()
     existing_keys, _ = load_existing()
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
+    skipped = 0
     sem = anyio.Semaphore(concurrency)
 
-    async def worker(name: str, domain: str | None) -> None:
-        async with sem:
-            rec: dict[str, Any] = {"company": company_key(name), "name": name, "domain": domain,
-                                   "rungs": [], "status": "timeout", "ats_exhausted": False}
-            # Hard per-company deadline: a tarpitting host can never stall the whole sweep. A
-            # timed-out company is NOT sent to the browser queue (it wasn't proven exhausted) — re-run it.
-            with anyio.move_on_after(90):
-                async with AsyncFetcher(retries=1, timeout=12, per_host_rate=4) as f:
-                    rec = await exhaust_one(name, domain, f, existing_keys)
-            (LOG_DIR / f"{rec['company']}.json").write_text(json.dumps(rec, indent=1))
-            results.append(rec)
+    # ONE shared fetcher across the whole sweep so per-host rate limits and circuit breakers are
+    # GLOBAL, not per-company. (A per-worker fetcher let N workers each hit greenhouse/lever at the
+    # full per-host rate simultaneously — an uncoordinated throttle storm at registry scale.)
+    async with AsyncFetcher(retries=1, timeout=12, per_host_rate=4) as fetcher:
 
-    async with anyio.create_task_group() as tg:
-        for nm, dom in companies:
-            tg.start_soon(worker, nm, dom)
+        async def worker(name: str, domain: str | None) -> None:
+            nonlocal skipped
+            key = company_key(name)
+            log_path = LOG_DIR / f"{key}.json"
+            if resume and log_path.exists():
+                try:
+                    prior = json.loads(log_path.read_text())
+                except (ValueError, OSError):
+                    prior = None
+                if prior and _is_done(prior):
+                    skipped += 1
+                    return  # cumulative outputs are rebuilt from logs, so prior work is preserved
+            async with sem:
+                # Hard per-company deadline: a tarpitting host can never stall the whole sweep. A
+                # timed-out company is NOT browser-eligible (unproven) — it's re-probed next run.
+                rec: dict[str, Any] = {
+                    "company": key,
+                    "name": name,
+                    "domain": domain,
+                    "rungs": [],
+                    "status": "timeout",
+                    "ats_exhausted": False,
+                }
+                with anyio.move_on_after(90):
+                    rec = await exhaust_one(name, domain, fetcher, existing_keys)
+                log_path.write_text(json.dumps(rec, indent=1))
+                results.append(rec)
 
-    candidates = [r["candidate"] for r in results if r.get("status") == "captured"]
-    browser_queue = [
-        {"company": r["company"], "name": r["name"], "domain": r["domain"],
-         "exhaustion_log": r["rungs"]}
-        for r in results if r.get("ats_exhausted")
-    ]
+        async with anyio.create_task_group() as tg:
+            for nm, dom in companies:
+                tg.start_soon(worker, nm, dom)
+
+    # Rebuild aggregate outputs from ALL per-company logs (cumulative + idempotent across batches).
+    candidates, browser_queue = _aggregate_from_logs()
     OUT_CANDIDATES.write_text(json.dumps(candidates, indent=1))
     OUT_BROWSER_QUEUE.write_text(json.dumps(browser_queue, indent=1))
     return {
         "total": len(results),
+        "skipped_done": skipped,
         "already": sum(1 for r in results if r.get("status") == "already-in-registry"),
-        "captured": len(candidates),
-        "browser_eligible": len(browser_queue),
+        "captured_this_run": sum(1 for r in results if r.get("status") == "captured"),
+        "candidates_total": len(candidates),
+        "browser_eligible_total": len(browser_queue),
     }
 
 
 # Curated domains for known S&P-500 gaps so rung 1 (careers-page tenant discovery) actually runs.
 # Without a domain the strongest ATS rung is skipped and the company is logged incomplete, not exhausted.
 _GAP_DOMAINS = {
-    "Darden Restaurants": "darden.com", "Fastenal": "fastenal.com", "Linde plc": "linde.com",
-    "Roper Technologies": "ropertech.com", "TransDigm Group": "transdigm.com", "Sempra": "sempra.com",
-    "Vici Properties": "viciproperties.com", "Texas Pacific Land Corporation": "texaspacificland.com",
-    "Ralph Lauren Corporation": "ralphlauren.com", "Targa Resources": "targaresources.com",
+    "Darden Restaurants": "darden.com",
+    "Fastenal": "fastenal.com",
+    "Linde plc": "linde.com",
+    "Roper Technologies": "ropertech.com",
+    "TransDigm Group": "transdigm.com",
+    "Sempra": "sempra.com",
+    "Vici Properties": "viciproperties.com",
+    "Texas Pacific Land Corporation": "texaspacificland.com",
+    "Ralph Lauren Corporation": "ralphlauren.com",
+    "Targa Resources": "targaresources.com",
 }
 
 
@@ -303,18 +454,30 @@ def _load_gap_companies() -> list[tuple[str, str | None]]:
     """
     import subprocess
 
-    out = subprocess.check_output([sys.executable, str(ROOT / "scripts" / "sp500_crosswalk.py")]).decode()
-    names = [line.split("] ", 1)[1].strip()
-             for line in out.splitlines() if re.match(r"\s*\[", line) and "] " in line]
+    out = subprocess.check_output(
+        [sys.executable, str(ROOT / "scripts" / "sp500_crosswalk.py")]
+    ).decode()
+    names = [
+        line.split("] ", 1)[1].strip()
+        for line in out.splitlines()
+        if re.match(r"\s*\[", line) and "] " in line
+    ]
     return [(nm, _GAP_DOMAINS.get(nm)) for nm in names]
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="ATS-exhaustion ladder sweep (predecessor to browser work)")
+    ap = argparse.ArgumentParser(
+        description="ATS-exhaustion ladder sweep (predecessor to browser work)"
+    )
     ap.add_argument("input", nargs="?", help="companies file: 'Name[,domain]' per line")
     ap.add_argument("--gaps", action="store_true", help="sweep the current S&P 500 crosswalk gaps")
     ap.add_argument("--limit", type=int, default=0, help="cap number of companies (0 = all)")
     ap.add_argument("--concurrency", type=int, default=12)
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="skip companies with a terminal prior log (captured/exhausted/in-registry)",
+    )
     args = ap.parse_args()
 
     if args.gaps:
@@ -326,13 +489,20 @@ def main() -> None:
     if args.limit:
         companies = companies[: args.limit]
 
-    summary = anyio.run(run_sweep, companies, args.concurrency)
-    print(f"swept {summary['total']} | already={summary['already']} | "
-          f"captured={summary['captured']} -> {OUT_CANDIDATES.name} | "
-          f"browser-eligible={summary['browser_eligible']} -> {OUT_BROWSER_QUEUE.name}")
+    summary = anyio.run(
+        functools.partial(run_sweep, companies, args.concurrency, resume=args.resume)
+    )
+    print(
+        f"swept {summary['total']} (skipped_done={summary['skipped_done']}) | "
+        f"already={summary['already']} | captured_this_run={summary['captured_this_run']} | "
+        f"candidates_total={summary['candidates_total']} -> {OUT_CANDIDATES.name} | "
+        f"browser-eligible_total={summary['browser_eligible_total']} -> {OUT_BROWSER_QUEUE.name}"
+    )
     print(f"per-company logs: {LOG_DIR.relative_to(ROOT)}/")
-    if summary["captured"]:
-        print(f"NEXT: .venv/bin/python scripts/build_registry.py {OUT_CANDIDATES.relative_to(ROOT)} --dry-run")
+    if summary["candidates_total"]:
+        print(
+            f"NEXT: .venv/bin/python scripts/build_registry.py {OUT_CANDIDATES.relative_to(ROOT)} --dry-run"
+        )
 
 
 if __name__ == "__main__":
