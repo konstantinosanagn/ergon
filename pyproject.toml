@@ -59,11 +59,10 @@ ergon-tracker-mcp = "ergon_tracker.mcp_server:main"
 # myats = "my_pkg.provider:MyATSProvider"
 
 [tool.hatch.build.targets.wheel]
+# All data files (registry/data/*.json, index/schema.sql) are git-tracked and live INSIDE the
+# package dir, so `packages` already ships them. A force-include remapping the same paths would
+# double-add them and fail the wheel build ("A second file is being added at the same path").
 packages = ["src/ergon_tracker"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/ergon_tracker/registry/data" = "ergon_tracker/registry/data"
-"src/ergon_tracker/index/schema.sql" = "ergon_tracker/index/schema.sql"
 
 [tool.ruff]
 line-length = 100

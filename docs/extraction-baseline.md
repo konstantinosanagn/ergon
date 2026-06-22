@@ -51,3 +51,22 @@ The country fix below is the model: a city→country lookup beat the problem out
 
 Regression thresholds are locked in `tests/test_extraction_quality.py` a margin below these;
 Phase 2 must raise them as fields improve.
+
+---
+
+## Addendum (2026-06-22): level-`unknown` is mostly correct-by-convention, not a bug
+
+Diagnosed the index's high `level=unknown` rate against the production artifact (`dist/index.sqlite`)
+and the labeling guide ("unmarked title → `unknown` unless the *description* implies experience").
+Decomposition of the unknown bucket (8,227 rows / 45% of that index):
+
+| Lever | Recovers | Note |
+|---|---:|---|
+| **years → level** (`level_from_years`) | **1,895 (23%)** | already-stored years; **already wired** in `build_index_streaming` (`_relevel_from_years`, line ~389) and locked by `test_relevel_from_years_reclassifies_unknown`. The stale M1 artifact predates it; a fresh build recovers these (45% → 34%). |
+| snippet phrase (`level_from_description`) | **1 (0%)** | truncated ~111-char snippets rarely carry entry/intern phrases — **measured dead end, not built**. |
+| **irreducible** | **6,331 (77%)** | no title marker, no years, no JD cue → **`unknown` is correct per the labeling guide**. Guessing a level here would regress the locked 0.954. |
+
+**Conclusion:** the only legitimate, precision-safe extraction lever (years→level) already exists and is
+tested. The remaining unknown is not an extraction defect — it is unmarked source data. The real lever to
+lower it further is a **crawl-policy change** (fetch full descriptions for more boards → more `yoe` →
+more relevel), which lives in coverage/crawl land, not the extractor. Do **not** add title-guessing rules.
