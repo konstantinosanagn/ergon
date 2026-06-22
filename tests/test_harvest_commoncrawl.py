@@ -16,7 +16,25 @@ from harvest_commoncrawl import (  # noqa: E402
     parse_cc_urls,
     parse_num_pages,
     recent_crawl_apis,
+    recent_crawl_ids,
 )
+
+
+def test_recent_crawl_ids_returns_n_newest() -> None:
+    info = json.dumps(
+        [
+            {"id": "CC-MAIN-2026-25", "cdx-api": "https://index.commoncrawl.org/x-index"},
+            {"id": "CC-MAIN-2026-21", "cdx-api": "https://index.commoncrawl.org/y-index"},
+            {"id": "CC-MAIN-2026-17", "cdx-api": "https://index.commoncrawl.org/z-index"},
+        ]
+    )
+    assert recent_crawl_ids(info, 2) == ["CC-MAIN-2026-25", "CC-MAIN-2026-21"]
+    assert recent_crawl_ids("garbage", 5) == []
+    assert recent_crawl_ids(info, 0) == []
+    # entries without an id are skipped, not crash
+    assert recent_crawl_ids(json.dumps([{"cdx-api": "x"}, {"id": "CC-MAIN-2026-25"}]), 5) == [
+        "CC-MAIN-2026-25"
+    ]
 
 
 def test_recent_crawl_apis_returns_n_newest() -> None:

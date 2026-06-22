@@ -3,14 +3,44 @@
 from __future__ import annotations
 
 import gzip
+import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from harvest_ccduck import surt_bounds, warc_parquet_urls  # noqa: E402
+from harvest_ccduck import (  # noqa: E402
+    DEFAULT_CRAWL,
+    resolve_default_crawls,
+    surt_bounds,
+    warc_parquet_urls,
+)
 from harvest_commoncrawl import CONFIGS  # noqa: E402
+
+
+def test_resolve_default_crawls_uses_latest_n_from_collinfo() -> None:
+    info = json.dumps(
+        [
+            {"id": "CC-MAIN-2026-25", "cdx-api": "x"},
+            {"id": "CC-MAIN-2026-21", "cdx-api": "y"},
+            {"id": "CC-MAIN-2026-17", "cdx-api": "z"},
+            {"id": "CC-MAIN-2026-12", "cdx-api": "w"},
+        ]
+    )
+    got = resolve_default_crawls(3, fetch=lambda: info)
+    assert got == ["CC-MAIN-2026-25", "CC-MAIN-2026-21", "CC-MAIN-2026-17"]
+
+
+def test_resolve_default_crawls_falls_back_on_network_error() -> None:
+    def boom() -> str:
+        raise OSError("collinfo unreachable")
+
+    assert resolve_default_crawls(3, fetch=boom) == [DEFAULT_CRAWL]
+
+
+def test_resolve_default_crawls_falls_back_on_empty() -> None:
+    assert resolve_default_crawls(3, fetch=lambda: "[]") == [DEFAULT_CRAWL]
 
 
 def test_surt_bounds_host_match() -> None:

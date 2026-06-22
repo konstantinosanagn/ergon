@@ -32,16 +32,46 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from harvest_commoncrawl import CONFIGS, CCSource, extract_tokens, load_seed_keys  # noqa: E402
+from harvest_commoncrawl import (  # noqa: E402
+    CONFIGS,
+    CCSource,
+    extract_tokens,
+    load_seed_keys,
+    recent_crawl_ids,
+)
 
 DEFAULT_OUT = ROOT / "scripts" / "candidates_ccduck.json"
 _DATA = "https://data.commoncrawl.org/"
 _PATHS = _DATA + "crawl-data/{crawl}/cc-index-table.paths.gz"
+_COLLINFO = "https://index.commoncrawl.org/collinfo.json"
 
 # Richly-crawled ATS hosts (greenhouse/ashby/workable/smartrecruiters) + the subdomain ATSes.
 # (lever is omitted: its board paths are robots-blocked, so they're absent from CC regardless.)
 DEFAULT_ATSES = ("greenhouse", "ashby", "workable", "smartrecruiters", "rippling", "pinpoint")
-DEFAULT_CRAWL = "CC-MAIN-2024-51"
+# Number of most-recent crawls to union by default (more snapshots = more boards; companies come
+# and go and CC's per-crawl coverage varies).
+DEFAULT_N_CRAWLS = 3
+# Static fallback ONLY for when collinfo.json is unreachable. Kept current; the live default is
+# resolved dynamically from collinfo so this never silently mines a stale snapshot.
+DEFAULT_CRAWL = "CC-MAIN-2026-25"
+
+
+def _fetch_collinfo() -> str:
+    return urllib.request.urlopen(_COLLINFO, timeout=60).read().decode()
+
+
+def resolve_default_crawls(n: int = DEFAULT_N_CRAWLS, *, fetch=None) -> list[str]:
+    """Resolve the ``n`` most-recent crawl ids from collinfo.json; fall back to ``DEFAULT_CRAWL``.
+
+    Network + fallback are isolated here (``fetch`` is injectable for tests) so the harvester
+    never mines an aged-out crawl just because a constant went stale.
+    """
+    fetch = fetch or _fetch_collinfo
+    try:
+        ids = recent_crawl_ids(fetch(), n)
+    except Exception:  # noqa: BLE001 - any failure -> safe static fallback
+        return [DEFAULT_CRAWL]
+    return ids or [DEFAULT_CRAWL]
 
 
 # --- pure SURT bounds (no network; unit-tested) -----------------------------------------------
@@ -97,24 +127,34 @@ def query_ats(con, files: list[str], source: CCSource) -> list[str]:
 def main() -> None:
     args = sys.argv[1:]
     out_path = DEFAULT_OUT
-    crawls = [DEFAULT_CRAWL]
+    crawls: list[str] | None = None  # None -> resolve the latest N from collinfo
     limit = 1_000_000
     atses: list[str] = []
     i = 0
     while i < len(args):
         a = args[i]
         if a == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif a == "--crawls":
-            crawls = [c.strip() for c in args[i + 1].split(",") if c.strip()]; i += 2
+            crawls = [c.strip() for c in args[i + 1].split(",") if c.strip()]
+            i += 2
         elif a == "--crawl":
-            crawls = [args[i + 1]]; i += 2
+            crawls = [args[i + 1]]
+            i += 2
         elif a == "--limit":
-            limit = int(args[i + 1]); i += 2
+            limit = int(args[i + 1])
+            i += 2
         elif a.startswith("--"):
-            print(f"unknown flag: {a}"); return
+            print(f"unknown flag: {a}")
+            return
         else:
-            atses.append(a); i += 1
+            atses.append(a)
+            i += 1
+
+    if crawls is None:
+        crawls = resolve_default_crawls()
+        print(f"resolved latest crawls from collinfo: {crawls}")
 
     if not atses:
         atses = list(DEFAULT_ATSES)
@@ -143,8 +183,9 @@ def main() -> None:
 
     for crawl in crawls:
         try:
-            files = warc_parquet_urls(urllib.request.urlopen(_PATHS.format(crawl=crawl),
-                                                              timeout=60).read())
+            files = warc_parquet_urls(
+                urllib.request.urlopen(_PATHS.format(crawl=crawl), timeout=60).read()
+            )
         except Exception as exc:  # noqa: BLE001 - skip a missing/unreachable crawl
             print(f"  [{crawl}] paths.gz failed ({type(exc).__name__}); skipping")
             continue
@@ -164,7 +205,8 @@ def main() -> None:
         for t in tokens_by_ats[name]:
             if t in seen or t in seed_keys or t in global_seen:
                 continue
-            seen.add(t); global_seen.add(t)
+            seen.add(t)
+            global_seen.add(t)
             candidates.append({"company": t, "ats": name, "token": t, "domain": None})
             if len([c for c in candidates if c["ats"] == name]) >= limit:
                 break

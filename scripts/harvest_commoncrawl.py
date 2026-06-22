@@ -40,10 +40,42 @@ _COLLINFO = "https://index.commoncrawl.org/collinfo.json"
 # Path segments / subdomains that are never a real board token.
 _JUNK = frozenset(
     {
-        "embed", "job_app", "job_board", "jobs", "job", "api", "www", "v1", "v2", "boards",
-        "secure", "app", "apps", "static", "assets", "content", "_next", "favicon.ico",
-        "robots.txt", "sitemap.xml", "search", "share", "widget", "o", "embed.js", "css", "js",
-        "images", "img", "auth", "login", "status", "support", "help", "blog", "cdn",
+        "embed",
+        "job_app",
+        "job_board",
+        "jobs",
+        "job",
+        "api",
+        "www",
+        "v1",
+        "v2",
+        "boards",
+        "secure",
+        "app",
+        "apps",
+        "static",
+        "assets",
+        "content",
+        "_next",
+        "favicon.ico",
+        "robots.txt",
+        "sitemap.xml",
+        "search",
+        "share",
+        "widget",
+        "o",
+        "embed.js",
+        "css",
+        "js",
+        "images",
+        "img",
+        "auth",
+        "login",
+        "status",
+        "support",
+        "help",
+        "blog",
+        "cdn",
     }
 )
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$")
@@ -123,10 +155,14 @@ CONFIGS: dict[str, CCSource] = {
         "workable", "apply.workable.com", "host", _path_extractor("apply.workable.com")
     ),
     "smartrecruiters": CCSource(
-        "smartrecruiters", "careers.smartrecruiters.com", "host",
+        "smartrecruiters",
+        "careers.smartrecruiters.com",
+        "host",
         _path_extractor("careers.smartrecruiters.com", lower=False),  # SR slugs are case-sensitive
     ),
-    "bamboohr": CCSource("bamboohr", "bamboohr.com", "domain", _subdomain_extractor("bamboohr.com")),
+    "bamboohr": CCSource(
+        "bamboohr", "bamboohr.com", "domain", _subdomain_extractor("bamboohr.com")
+    ),
     "breezy": CCSource("breezy", "breezy.hr", "domain", _subdomain_extractor("breezy.hr")),
     "teamtailor": CCSource(
         "teamtailor", "teamtailor.com", "domain", _subdomain_extractor("teamtailor.com")
@@ -208,6 +244,26 @@ def recent_crawl_apis(collinfo: str, n: int) -> list[str]:
     return out
 
 
+def recent_crawl_ids(collinfo: str, n: int) -> list[str]:
+    """Return the crawl ``id`` (e.g. ``CC-MAIN-2026-25``) of the ``n`` most recent crawls.
+
+    collinfo.json is newest-first. The columnar/Parquet index (harvest_ccduck) is addressed by
+    crawl id, not the cdx-api URL, so it needs this sibling of ``recent_crawl_apis``.
+    """
+    try:
+        crawls = json.loads(collinfo)
+    except ValueError:
+        return []
+    if not isinstance(crawls, list):
+        return []
+    out: list[str] = []
+    for crawl in crawls[: max(0, n)]:
+        cid = crawl.get("id") if isinstance(crawl, dict) else None
+        if isinstance(cid, str) and cid:
+            out.append(cid)
+    return out
+
+
 def extract_tokens(source: CCSource, urls: list[str]) -> list[str]:
     """Run one ATS's extractor over crawled URLs; return unique tokens in first-seen order."""
     seen: set[str] = set()
@@ -229,9 +285,7 @@ def load_seed_keys(seed_path: Path = SEED) -> set[str]:
 # --- network harvest ---------------------------------------------------------------------------
 
 
-async def _resolve_crawls(
-    fetcher: AsyncFetcher, override: str | None, n_crawls: int
-) -> list[str]:
+async def _resolve_crawls(fetcher: AsyncFetcher, override: str | None, n_crawls: int) -> list[str]:
     """Resolve the list of CC index cdx-api URLs to query (pinned override, or N most recent)."""
     if override:
         return [f"https://index.commoncrawl.org/{override}-index"]
@@ -250,10 +304,16 @@ async def _query_cc(api: str, source: CCSource, fetcher: AsyncFetcher, max_pages
     greenhouse yields tens of thousands of distinct board URLs instead of a single capped page.
     ``collapse=urlkey`` dedupes per-capture rows (thousands of robots.txt hits) within each page.
     """
-    base = {"url": source.query, "matchType": source.match_type, "output": "json",
-            "collapse": "urlkey"}
+    base = {
+        "url": source.query,
+        "matchType": source.match_type,
+        "output": "json",
+        "collapse": "urlkey",
+    }
     try:
-        pages = parse_num_pages(await fetcher.get_text(api, params={**base, "showNumPages": "true"}))
+        pages = parse_num_pages(
+            await fetcher.get_text(api, params={**base, "showNumPages": "true"})
+        )
     except Exception as exc:  # noqa: BLE001 - CC index is flaky; report and continue
         print(f"  [{source.ats}] CC page-count failed: {type(exc).__name__}: {exc}")
         return []
@@ -263,9 +323,7 @@ async def _query_cc(api: str, source: CCSource, fetcher: AsyncFetcher, max_pages
 
     async def _page(p: int) -> None:
         try:
-            results[p] = parse_cc_urls(
-                await fetcher.get_text(api, params={**base, "page": str(p)})
-            )
+            results[p] = parse_cc_urls(await fetcher.get_text(api, params={**base, "page": str(p)}))
         except Exception:  # noqa: BLE001 - one bad page shouldn't sink the ATS
             results[p] = []
 
@@ -280,8 +338,14 @@ async def _query_cc(api: str, source: CCSource, fetcher: AsyncFetcher, max_pages
     return urls
 
 
-async def harvest(atses: list[str], fetcher: AsyncFetcher, limit: int, pages: int,
-                  n_crawls: int, crawl: str | None) -> list[dict[str, object]]:
+async def harvest(
+    atses: list[str],
+    fetcher: AsyncFetcher,
+    limit: int,
+    pages: int,
+    n_crawls: int,
+    crawl: str | None,
+) -> list[dict[str, object]]:
     apis = await _resolve_crawls(fetcher, crawl, n_crawls)
     if not apis:
         print("  no usable Common Crawl index; aborting")
@@ -318,19 +382,26 @@ async def main() -> None:
     while i < len(args):
         a = args[i]
         if a == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif a == "--limit":
-            limit = int(args[i + 1]); i += 2
+            limit = int(args[i + 1])
+            i += 2
         elif a == "--pages":
-            pages = int(args[i + 1]); i += 2
+            pages = int(args[i + 1])
+            i += 2
         elif a == "--crawls":
-            n_crawls = int(args[i + 1]); i += 2
+            n_crawls = int(args[i + 1])
+            i += 2
         elif a == "--crawl":
-            crawl = args[i + 1]; i += 2
+            crawl = args[i + 1]
+            i += 2
         elif a.startswith("--"):
-            print(f"unknown flag: {a}"); return
+            print(f"unknown flag: {a}")
+            return
         else:
-            atses.append(a); i += 1
+            atses.append(a)
+            i += 1
 
     if not atses:
         atses = list(DEFAULT_ATSES)
@@ -339,8 +410,10 @@ async def main() -> None:
         print(f"unknown ATS(es): {unknown}; known: {sorted(CONFIGS)}")
         return
 
-    print(f"harvesting Common Crawl for: {atses}  (crawls={n_crawls}, max_pages/ats={pages}, "
-          f"cap={limit})")
+    print(
+        f"harvesting Common Crawl for: {atses}  (crawls={n_crawls}, max_pages/ats={pages}, "
+        f"cap={limit})"
+    )
     async with AsyncFetcher(concurrency=6, per_host_rate=3, timeout=120.0) as fetcher:
         candidates = await harvest(atses, fetcher, limit, pages, n_crawls, crawl)
 
