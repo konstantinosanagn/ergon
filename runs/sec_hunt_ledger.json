@@ -11357,364 +11357,390 @@
   "status": "no-board"
  },
  "IES Holdings, Inc.": {
-  "attempts": 1,
+  "ats": "icims",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://careers-ies-co.icims.com/jobs/intro"
  },
  "IGC Pharma, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official site igcpharma.com has no public careers/jobs page or ATS link; directs",
+  "status": "no-board"
  },
  "IIOT-OXYS, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official site oxyscorp.com; ~2-employee OTC micro-cap (ITOX). No careers page or",
+  "status": "no-board"
  },
  "IM Cannabis Corp.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Israel/Canada-based cannabis company (NASDAQ: IMCC). No company-site careers pag",
+  "status": "no-board"
  },
  "IMA Tech": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Ambiguous name \u2014 no single company resolves to 'IMA Tech'. Multiple unrelated 'I",
+  "status": "no-board"
  },
  "IMAC Holdings, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "IMAC Holdings (imacregeneration.com, operator of IMAC Regeneration Centers) list",
+  "status": "no-board"
  },
  "IMAX CORP": {
-  "attempts": 1,
+  "ats": "phenom",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://careers.imax.com/us/en/search-results"
  },
  "IMMERSION CORP": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Immersion Corp (immersion.com/careers, NASDAQ: IMMR) states it is currently not ",
+  "status": "no-board"
  },
  "IMMUCELL CORP /DE/": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "ImmuCell (immucell.com, Portland ME) posts openings on its own custom careers/ca",
+  "status": "no-board"
  },
  "IMMUNIC, INC.": {
-  "attempts": 1,
+  "ats": "personio",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://immunic.jobs.personio.de/"
  },
  "IMPACT ANALYTICS INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official site impactanalytics.ai/careers exists and lists ~57 roles, but the ope",
+  "status": "no-board"
  },
  "IMPACT BIOMEDICAL INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small public (NYSE American: IBO) subsidiary of DSS Inc., Houston TX. Official s",
+  "status": "no-board"
  },
  "IN8BIO, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Careers page in8bio.com/careers lists openings but each role links to internal i",
+  "status": "no-board"
  },
  "INCOME OPPORTUNITY REALTY INVESTORS INC /TX/": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Tiny externally-managed Dallas REIT (part of the ARL/TCI/Pillar Income Asset Man",
+  "status": "no-board"
  },
  "INFINITY NATURAL RESOURCES, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official careers page infinitynaturalresources.com/careers directs applicants to",
+  "status": "no-board"
  },
  "INGLES MARKETS INC": {
-  "attempts": 1,
+  "attempts": 2,
+  "host": "jobs.inglescareers.com",
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "found-no-provider",
+  "url": "https://jobs.inglescareers.com/"
  },
  "INNO HOLDINGS INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small steel-framing/prefab holding company (Nasdaq: INHD), Brookshire TX. Site i",
+  "status": "no-board"
  },
  "INNOCAN PHARMA Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Very small (~11 employees) clinical-stage company based in Herzliya, Israel. inn",
+  "status": "no-board"
  },
  "INNOSPEC INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Specialty-chemicals public company (Nasdaq: IOSP). Its careers page (innospec.co",
+  "status": "no-board"
  },
  "INNOVATIVE DESIGNS INC": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Micro-cap (OTC: IVDN) insulation maker in Pittsburgh PA; only ~handful of employ",
+  "status": "no-board"
  },
  "INNOVATIVE FOOD HOLDINGS INC": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small public specialty-food holding company (IVFH). Official site and searches s",
+  "status": "no-board"
  },
  "INNOVATIVE INDUSTRIAL PROPERTIES INC": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small cannabis REIT (~20 employees). No careers section on innovativeindustrialp",
+  "status": "no-board"
  },
  "INNOVATIVE SOLUTIONS & SUPPORT INC": {
-  "attempts": 1,
+  "ats": "paylocity",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "paylocity found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.paylocity.com/recruiting/jobs/All/f30d422b-e457-4411-ad97-cf04c0a6b0b5/INNOVATIVE-SOLUTIONS-AND-SUPPORT-LLC"
  },
  "INOVIO PHARMACEUTICALS, INC.": {
-  "attempts": 1,
+  "ats": "adp",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=bd6f402e-767e-413c-a7a2-0c8300d0dd9e"
  },
  "INSIGHT ENTERPRISES INC": {
-  "attempts": 1,
+  "ats": "eightfold",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://insight.eightfold.ai/careers"
  },
  "INSMED Inc": {
-  "attempts": 1,
+  "ats": "icims",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "icims found, failed verify",
+  "status": "no-board",
+  "url": "https://careers-insmed.icims.com/jobs/intro"
  },
  "INSPIRE VETERINARY PARTNERS, INC.": {
-  "attempts": 1,
+  "ats": "paylocity",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "paylocity found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.paylocity.com/recruiting/jobs/All/ee71f3ed-2a54-4b33-af73-1d9354f88b78/Inspire-Veterinary-Partners-Inc"
  },
  "INTEGRATED BIOPHARMA INC": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small OTCQX nutraceutical manufacturer (Hillside, NJ). Only an investor-relation",
+  "status": "no-board"
  },
  "INTELLIGENT BIO SOLUTIONS INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Medtech company (NASDAQ: INBS). Corporate site ibs.inc has no careers/jobs link ",
+  "status": "no-board"
  },
  "INTELLIGENT PROTECTION MANAGEMENT CORP.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Formerly Paltalk, Inc. (renamed 2025). Paltalk careers page instructs candidates",
+  "status": "no-board"
  },
  "INTELLINETICS, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official site intellinetics.com has no working careers page (/careers/ returns 4",
+  "status": "no-board"
  },
  "INTENSITY THERAPEUTICS, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official careers page intensitytherapeutics.com/careers lists an 'Open Positions",
+  "status": "no-board"
  },
  "INTERGROUP CORP": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Real-estate/hotel holding company (intgla.com). Employment page routes to a gene",
+  "status": "no-board"
  },
  "INTERLINK ELECTRONICS INC": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official careers page interlinkelectronics.com/careers uses an email-only proces",
+  "status": "no-board"
  },
  "INTERMAP TECHNOLOGIES CORP": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Careers page intermap.com/company/careers has a 'Search Job Openings' button tha",
+  "status": "no-board"
  },
  "INTERNATIONAL PAPER CO /NEW/": {
-  "attempts": 1,
+  "attempts": 2,
+  "host": "jobs.internationalpaper.com",
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "found-no-provider",
+  "url": "https://jobs.internationalpaper.com/"
  },
  "INTERPACE BIOSCIENCES, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official careers page interpace.com/careers uses a self-hosted generic applicati",
+  "status": "no-board"
  },
  "INTERPARFUMS INC": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official careers page interparfumsinc.com/openpositions points 'Join Us' to Link",
+  "status": "no-board"
  },
  "INTERPUMP GROUP SPA /FI": {
-  "attempts": 1,
+  "attempts": 2,
+  "host": "inrec.intervieweb.it",
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "found-no-provider",
+  "url": "https://inrec.intervieweb.it/interpumpgroup/it/career"
  },
  "INTEST CORP": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "inTEST uses the Paylocity ATS \u2014 live search results show job-detail pages under ",
+  "status": "no-board"
  },
  "INTRUSION INC": {
-  "attempts": 1,
+  "ats": "paylocity",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "paylocity found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.paylocity.com/recruiting/jobs/All/28f6d275-4061-414a-ad4a-3a092f554c35/Intrusion-Inc"
  },
  "INVESTORS TITLE CO": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "invtitle.com/careers points to careers.invtitle.com, a self-hosted proprietary A",
+  "status": "no-board"
  },
  "INVO Fertility, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "invofertility.com (INVO Bioscience) has no dedicated careers/ATS board; openings",
+  "status": "no-board"
  },
  "IO Biotech, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "iobiotech.com/about/careers 'Apply Now' routes to a job-application form on its ",
+  "status": "no-board"
  },
  "IONIS PHARMACEUTICALS INC": {
-  "attempts": 1,
+  "ats": "ukg",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://recruiting.ultipro.com/ISI1000ISIS/JobBoard/14a66400-68fa-4847-8593-af776328cfd2/"
  },
  "IP STRATEGY HOLDINGS, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Micro-cap (formerly Heritage Distilling, renamed Feb 2026 to an IP-token treasur",
+  "status": "no-board"
  },
  "IPG PHOTONICS CORP": {
-  "attempts": 1,
+  "attempts": 2,
+  "host": "recruiting.adp.com",
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "found-no-provider",
+  "url": "https://recruiting.adp.com/srccar/public/RTI.home?c=2179707&d=ExternalCareerSite"
  },
  "IQM Finland Oy": {
-  "attempts": 1,
+  "ats": "teamtailor",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://iqm.teamtailor.com/"
  },
  "IRADIMED CORP": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "iradimed.com has no careers/jobs link in site navigation and /careers paths 404;",
+  "status": "no-board"
  },
  "IRIDEX CORP": {
-  "attempts": 1,
+  "attempts": 2,
+  "host": "j.brt.mv",
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "found-no-provider",
+  "url": "https://j.brt.mv/ax.do?refresh=true&portalGK=42775"
  },
  "IRSA INVESTMENTS & REPRESENTATIONS INC": {
-  "attempts": 1,
+  "attempts": 2,
+  "host": "irsa.hiringroom.com",
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "found-no-provider",
+  "url": "https://irsa.hiringroom.com/jobs"
  },
  "IT TECH PACKAGING, INC.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "China-based paper manufacturer (NYSE American: ITP), official site itpackaging.c",
+  "status": "no-board"
  },
  "ITOCHU CORP": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Japanese trading conglomerate (TSE 8001) uses proprietary Japanese recruiting; t",
+  "status": "no-board"
  },
  "ITRON, INC.": {
-  "attempts": 1,
+  "ats": "workday",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://itron.wd5.myworkdayjobs.com/Itron"
  },
  "ITT INC.": {
-  "attempts": 1,
+  "ats": "icims",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://careersenus-itt-inc.icims.com/jobs/intro"
  },
  "IZEA Worldwide, Inc.": {
-  "attempts": 1,
+  "ats": "paylocity",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "paylocity found, failed verify",
+  "status": "no-board",
+  "url": "https://recruiting.paylocity.com/recruiting/jobs/All/a920e3f3-c3e1-44a1-9864-09ae4bb5bbbd/Izea-Worldwide-Inc"
  },
  "Icon Energy Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Greek dry-bulk shipping company (NASDAQ: ICON); small foreign operator with no f",
+  "status": "no-board"
  },
  "Idaho Copper Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small OTC mineral exploration company; no careers page or standard ATS board fou",
+  "status": "no-board"
  },
  "Idaho Strategic Resources, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Mining company idahostrategic.com has no careers/ATS; openings handled via direc",
+  "status": "no-board"
  },
  "Ideal Power Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Careers page at idealpower.com/careers directs applicants to email jobs@idealpow",
+  "status": "no-board"
  },
  "ImageneBio, Inc.": {
   "attempts": 1,
