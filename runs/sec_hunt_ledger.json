@@ -11162,184 +11162,199 @@
   "url": "https://icfcjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/Aerospace/jobs"
  },
  "Hongli Group Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "China-based (Weifang) cold roll-formed steel profile manufacturer. No official c",
+  "status": "no-board"
  },
  "Horizon Kinetics Holding Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small NY investment boutique (Horizon Kinetics LLC). Careers handled via LinkedI",
+  "status": "no-board"
  },
  "Horizon Technology Finance Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Job openings listed on their own WordPress page (horizontechfinance.com/job-open",
+  "status": "no-board"
  },
  "Hotel101 Global Holdings Corp.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Nasdaq-listed global arm of Philippine DoubleDragon. Parent DoubleDragon posts h",
+  "status": "no-board"
  },
  "Hour Loop, Inc": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small NASDAQ e-commerce retailer (Amazon 3P seller); recruits mainly via Taiwan ",
+  "status": "no-board"
  },
  "Hub Group, Inc.": {
-  "attempts": 1,
+  "ats": "oracle",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://hdat.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX/requisitions"
  },
  "Hubilu Venture Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Tiny OTC (HBUV) Beverly Hills real estate advisory firm. No careers page or any ",
+  "status": "no-board"
  },
  "Hudbay Minerals Inc.": {
-  "attempts": 1,
+  "ats": "successfactors",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://careers.hudbayminerals.com/"
  },
  "Hudson Pacific Properties, Inc.": {
-  "attempts": 1,
+  "ats": "jobvite",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "jobvite found, failed verify",
+  "status": "no-board",
+  "url": "https://jobs.jobvite.com/hudsonppi/jobs/"
  },
  "Huineng Technology Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Micro-cap OTC (HNIT) web development services company. No careers page or standa",
+  "status": "no-board"
  },
  "Humacyte, Inc.": {
-  "attempts": 1,
+  "ats": "adp",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=d04444ef-3464-49c4-81aa-2d3eeb7dfc39&ccId=19000101_000001&type=JS&lang=en_US"
  },
  "Huntsman CORP": {
-  "attempts": 1,
+  "ats": "workday",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://huntsman.wd1.myworkdayjobs.com/Huntsman"
  },
  "Huron Consulting Group Inc.": {
-  "attempts": 1,
+  "ats": "workday",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://huron.wd1.myworkdayjobs.com/huroncareers"
  },
  "HyOrc Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "No findable official site or standard ATS board for HyOrc Corp; search results c",
+  "status": "no-board"
  },
  "Hyatt Hotels Corp": {
-  "attempts": 1,
+  "ats": "taleo",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://hyatt.taleo.net/careersection/1/jobsearch.ftl"
  },
  "Hydreight Technologies Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "hydreight.com/career-opportunities posts roles as PDFs and instructs applicants ",
+  "status": "no-board"
  },
  "Hyliion Holdings Corp.": {
-  "attempts": 1,
+  "ats": "greenhouse",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://boards.greenhouse.io/hyliion"
  },
  "Hyperscale Data, Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "hyperscaledata.com (the former Ault Alliance holding company) has no careers/job",
+  "status": "no-board"
  },
  "I Bella Perfect Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Small Malaysia-based aesthetic-clinic operator (Nasdaq IPO candidate, ticker IBL",
+  "status": "no-board"
  },
  "IAMGOLD CORP": {
-  "attempts": 1,
+  "ats": "taleo",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://iamgold.taleo.net/careersection/ex/jobsearch.ftl?lang=en"
  },
  "IBC Advanced Alloys Corp.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Official site ibcadvancedalloys.com has no careers section or ATS link (only an ",
+  "status": "no-board"
  },
  "ICAHN ENTERPRISES L.P.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Diversified holding company (NASDAQ: IEP); the parent entity has no central ATS ",
+  "status": "no-board"
  },
  "ICTS INTERNATIONAL N V": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Aviation-security holding (NASDAQ: ICTSF, Netherlands-domiciled). Hiring is via ",
+  "status": "no-board"
  },
  "ICU MEDICAL INC/DE": {
-  "attempts": 1,
+  "ats": "oracle",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://eduu.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1"
  },
  "ICZOOM Group Inc.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Shenzhen, China-based electronic-component e-commerce company (NASDAQ: IZM); sit",
+  "status": "no-board"
  },
  "IDACORP INC": {
-  "attempts": 1,
+  "ats": "workday",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://idahopowercompany.wd1.myworkdayjobs.com/External"
  },
  "IDEAYA Biosciences, Inc.": {
-  "attempts": 1,
+  "ats": "lever",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "lever found, failed verify",
+  "status": "no-board",
+  "url": "https://jobs.lever.co/ideayabio"
  },
  "IDEX METALS CORP.": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Early-stage mineral-exploration company (TSX.V: IDEX), site idexmetals.com, foun",
+  "status": "no-board"
  },
  "IDEXX LABORATORIES INC /DE": {
-  "attempts": 1,
+  "ats": "workday",
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "status": "covered",
+  "url": "https://idexx.wd1.myworkdayjobs.com/IDEXX"
  },
  "IEH Corp": {
-  "attempts": 1,
+  "attempts": 2,
   "last": "2026-06-21",
-  "reason": "agent lane session-limited; re-hunt after reset",
-  "status": "tavily-miss"
+  "reason": "Hyperboloid-connector manufacturer (iehcorp.com). Careers page (iehcorp.com/cont",
+  "status": "no-board"
  },
  "IES Holdings, Inc.": {
   "attempts": 1,
