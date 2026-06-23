@@ -25,6 +25,7 @@ from __future__ import annotations
 import gzip
 import json
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -48,16 +49,32 @@ _COLLINFO = "https://index.commoncrawl.org/collinfo.json"
 # Richly-crawled ATS hosts (greenhouse/ashby/workable/smartrecruiters) + the subdomain ATSes.
 # (lever is omitted: its board paths are robots-blocked, so they're absent from CC regardless.)
 DEFAULT_ATSES = ("greenhouse", "ashby", "workable", "smartrecruiters", "rippling", "pinpoint")
-# Number of most-recent crawls to union by default (more snapshots = more boards; companies come
-# and go and CC's per-crawl coverage varies).
+# Number of crawls-WITH-DATA to union by default (more snapshots = more boards; companies come and
+# go and CC's per-crawl coverage varies).
 DEFAULT_N_CRAWLS = 3
+# Auto-resolution pulls a larger pool of recent crawls than DEFAULT_N_CRAWLS so the harvester can
+# fall through the newest few (whose columnar table lags publication and returns 0 rows) to the
+# most-recent crawls that actually have data.
+DEFAULT_CRAWL_POOL = 8
 # Static fallback ONLY for when collinfo.json is unreachable. Kept current; the live default is
 # resolved dynamically from collinfo so this never silently mines a stale snapshot.
 DEFAULT_CRAWL = "CC-MAIN-2026-25"
 
 
+# Common Crawl asks clients to send a descriptive User-Agent; the bare urllib UA gets throttled
+# (403) quickly on data.commoncrawl.org. A polite UA + a small inter-request delay keeps the
+# harvester well within CC's free-access etiquette.
+_UA = "ergon-tracker/0.1 (+https://github.com/konstantinosanagn/ergon-tracker) coverage-discovery"
+_CRAWL_DELAY_S = 1.5
+
+
+def _http_get(url: str, timeout: int = 60) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    return urllib.request.urlopen(req, timeout=timeout).read()
+
+
 def _fetch_collinfo() -> str:
-    return urllib.request.urlopen(_COLLINFO, timeout=60).read().decode()
+    return _http_get(_COLLINFO).decode()
 
 
 def resolve_default_crawls(n: int = DEFAULT_N_CRAWLS, *, fetch=None) -> list[str]:
@@ -152,9 +169,16 @@ def main() -> None:
             atses.append(a)
             i += 1
 
-    if crawls is None:
-        crawls = resolve_default_crawls()
-        print(f"resolved latest crawls from collinfo: {crawls}")
+    # Auto-resolution resolves a POOL of recent crawls (not just N), because Common Crawl's
+    # columnar (Parquet) table lags the crawl by weeks: the newest 2-3 crawls have a published
+    # paths.gz but an empty/unbuilt warc table (queries return 0 rows). We harvest newest-first
+    # and STOP after DEFAULT_N_CRAWLS crawls that actually yield data — self-healing against the
+    # publication lag instead of silently mining empty fresh crawls. A pinned --crawls/--crawl is
+    # honored verbatim (no fall-through).
+    auto = crawls is None
+    if auto:
+        crawls = resolve_default_crawls(DEFAULT_CRAWL_POOL)
+        print(f"resolved recent-crawl pool from collinfo: {crawls}")
 
     if not atses:
         atses = list(DEFAULT_ATSES)
@@ -181,24 +205,35 @@ def main() -> None:
     # tokens accumulate across crawls per ATS, then dedupe/skip-seed once.
     tokens_by_ats: dict[str, list[str]] = {a: [] for a in atses}
 
-    for crawl in crawls:
+    good_crawls = 0  # crawls that actually returned data (used to stop the auto pool early)
+    for idx, crawl in enumerate(crawls):
+        if idx:
+            time.sleep(_CRAWL_DELAY_S)  # polite pacing between CC index fetches
         try:
-            files = warc_parquet_urls(
-                urllib.request.urlopen(_PATHS.format(crawl=crawl), timeout=60).read()
-            )
+            files = warc_parquet_urls(_http_get(_PATHS.format(crawl=crawl)))
         except Exception as exc:  # noqa: BLE001 - skip a missing/unreachable crawl
             print(f"  [{crawl}] paths.gz failed ({type(exc).__name__}); skipping")
             continue
         print(f"  [{crawl}] {len(files)} warc parquet files")
+        crawl_urls = 0
         for name in atses:
             try:
                 urls = query_ats(con, files, CONFIGS[name])
             except Exception as exc:  # noqa: BLE001 - one ATS/crawl shouldn't sink the run
                 print(f"    [{name}] query failed: {type(exc).__name__}: {str(exc)[:60]}")
                 continue
+            crawl_urls += len(urls)
             toks = extract_tokens(CONFIGS[name], urls)
             tokens_by_ats[name].extend(toks)
             print(f"    [{name}] urls={len(urls)} tokens={len(toks)}")
+        if crawl_urls == 0:
+            # Empty table: too-fresh (unbuilt) crawl, or schema gap — don't count it.
+            print(f"  [{crawl}] 0 rows (likely too-fresh/unbuilt columnar table); skipping")
+            continue
+        good_crawls += 1
+        if auto and good_crawls >= DEFAULT_N_CRAWLS:
+            print(f"  reached {DEFAULT_N_CRAWLS} crawls with data; stopping pool scan")
+            break
 
     for name in atses:
         seen: set[str] = set()
