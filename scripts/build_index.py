@@ -739,13 +739,19 @@ def main(argv: list[str]) -> None:
             },
         )
         if ok and rich:  # reconcile the rich sidecar from fresh_rich BEFORE fresh.sqlite is deleted
-            rstats, rbytes = build_and_publish_rich_incremental(
-                db, fresh_path, out, build_id=build_id
-            )
-            print(
-                f"  + rich tier (pruned={rstats['pruned']} embedded={rstats['embedded']} "
-                f"missing={rstats['missing']}) -> index-rich.sqlite.gz ({rbytes // 1024} KB)"
-            )
+            # NON-FATAL: the rich tier is an optional enhancement. The main index is already gated +
+            # promoted above, so an embedding OOM/timeout/model-download failure must NOT crash the
+            # build and skip the publish step — log it and carry on (yesterday's rich gz stays live).
+            try:
+                rstats, rbytes = build_and_publish_rich_incremental(
+                    db, fresh_path, out, build_id=build_id
+                )
+                print(
+                    f"  + rich tier (pruned={rstats['pruned']} embedded={rstats['embedded']} "
+                    f"missing={rstats['missing']}) -> index-rich.sqlite.gz ({rbytes // 1024} KB)"
+                )
+            except Exception as exc:  # noqa: BLE001 - never let the rich tier break the core build
+                print(f"  ! rich tier skipped (non-fatal): {type(exc).__name__}: {exc}")
         fresh_path.unlink(missing_ok=True)  # free disk before the shard VACUUMs
         if ok and sharded:
             ns = build_and_publish_shards_from_db(db, out, build_id=build_id)
