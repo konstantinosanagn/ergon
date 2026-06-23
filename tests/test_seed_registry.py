@@ -28,6 +28,7 @@ SUPPORTED_ATS = {
     "taleobe",
     "icims",
     "avature",
+    "applicantpro",
     "jazzhr",
     "jobvite",
     "phenom",

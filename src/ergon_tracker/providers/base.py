@@ -58,6 +58,7 @@ _BUILTIN_MODULES = (
     "taleobe",
     "icims",
     "avature",
+    "applicantpro",
     "jazzhr",
     "jobvite",
     "phenom",

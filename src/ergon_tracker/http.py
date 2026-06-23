@@ -66,6 +66,7 @@ _DOMAIN_RATE_OVERRIDES: dict[str, tuple[float, float]] = {
     "workable.com": (3.0, 1.0),  # empirically throttle-bound: 429-storms at the 5/s default
     "bamboohr.com": (3.0, 1.0),
     "smartrecruiters.com": (3.0, 1.0),
+    "applicantpro.com": (3.0, 1.0),  # small-tenant ATS; keep the public list endpoint polite
     "adp.com": (1.0, 6.0),  # ADP WFN soft-blocks (404/503) on bursts; ~1 req/6s is the safe rate
 }
 # Two-level public suffixes, so the registrable domain is computed correctly.
