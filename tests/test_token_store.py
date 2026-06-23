@@ -34,9 +34,9 @@ def test_ttl_expiry(tmp_path):
     s = _store(tmp_path, t)
     s.set("k", "v", ttl_seconds=300)
     t[0] = 1299.0
-    assert s.get("k") == "v"        # still inside ttl
+    assert s.get("k") == "v"  # still inside ttl
     t[0] = 1301.0
-    assert s.get("k") is None       # expired
+    assert s.get("k") is None  # expired
 
 
 def test_ttl_none_never_expires_until_stale(tmp_path):
@@ -60,7 +60,7 @@ def test_should_refresh_on(tmp_path):
     s = _store(tmp_path, [1.0])
     s.set("k", "v", ttl_seconds=999, refresh_on=(403,))
     assert s.should_refresh_on("k", 403) is True
-    assert s.should_refresh_on("k", 401) is False   # not in this token's policy
+    assert s.should_refresh_on("k", 401) is False  # not in this token's policy
     assert s.should_refresh_on("missing", 403) is True  # default policy
 
 
@@ -96,7 +96,7 @@ async def test_get_or_mint_single_flight(tmp_path):
 
     async def mint():
         calls[0] += 1
-        await anyio.sleep(0.02)   # hold the lock so others pile up behind it
+        await anyio.sleep(0.02)  # hold the lock so others pile up behind it
         return "ONE"
 
     results: list[str] = []

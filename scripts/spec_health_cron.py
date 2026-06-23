@@ -12,14 +12,15 @@ Usage::
     python scripts/spec_health_cron.py            # health-check all apicapture specs
     python scripts/spec_health_cron.py --threshold 2
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Awaitable, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -33,8 +34,12 @@ REDISCOVER_QUEUE = HEALTH_PATH.parent / "rediscover_queue.json"
 
 
 async def check_specs(
-    tokens: list[str], fetch: Callable[[str], Awaitable[list]], health: SpecHealth, *,
-    threshold: int = DEFAULT_STALE_THRESHOLD, now: str | None = None,
+    tokens: list[str],
+    fetch: Callable[[str], Awaitable[list]],
+    health: SpecHealth,
+    *,
+    threshold: int = DEFAULT_STALE_THRESHOLD,
+    now: str | None = None,
 ) -> list[str]:
     """Replay each token via ``fetch``; ok = it returned ≥1 job. Returns the stale (re-discover) list."""
     for token in tokens:
@@ -69,8 +74,10 @@ def main() -> None:
     REDISCOVER_QUEUE.parent.mkdir(parents=True, exist_ok=True)
     REDISCOVER_QUEUE.write_text(json.dumps(stale, indent=1))
     healthy = len(tokens) - len(stale)
-    print(f"checked {len(tokens)} specs | healthy={healthy} | stale={len(stale)} -> "
-          f"{REDISCOVER_QUEUE.relative_to(ROOT)}")
+    print(
+        f"checked {len(tokens)} specs | healthy={healthy} | stale={len(stale)} -> "
+        f"{REDISCOVER_QUEUE.relative_to(ROOT)}"
+    )
     if stale:
         print(f"  re-discover: {stale}", file=sys.stderr)
 

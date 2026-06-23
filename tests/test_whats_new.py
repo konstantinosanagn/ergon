@@ -9,9 +9,15 @@ from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, Sea
 
 
 def _job(sid, title, **kw):
-    return JobPosting.create(source="greenhouse", source_job_id=sid, company=kw.pop("company", "Co"),
-                             title=title, locations=[Location(raw="Remote", is_remote=True)],
-                             remote=RemoteType.REMOTE, **kw)
+    return JobPosting.create(
+        source="greenhouse",
+        source_job_id=sid,
+        company=kw.pop("company", "Co"),
+        title=title,
+        locations=[Location(raw="Remote", is_remote=True)],
+        remote=RemoteType.REMOTE,
+        **kw,
+    )
 
 
 def _build(tmp_path, jobs):
@@ -55,8 +61,13 @@ def test_include_changed_picks_up_updated_old_jobs(tmp_path):
 
 
 def test_filters_compose_with_recency(tmp_path):
-    p = _build(tmp_path, [_job("1", "Senior Engineer", description_text="5+ years required"),
-                          _job("2", "Junior Analyst")])
+    p = _build(
+        tmp_path,
+        [
+            _job("1", "Senior Engineer", description_text="5+ years required"),
+            _job("2", "Junior Analyst"),
+        ],
+    )
     con = connect(p)
     con.execute("UPDATE jobs SET first_seen='2026-06-20'")
     con.execute("UPDATE jobs SET level='senior' WHERE title='Senior Engineer'")
@@ -71,6 +82,7 @@ def test_mcp_tool_is_registered():
     import anyio
 
     from ergon_tracker import mcp_server
+
     names = anyio.run(lambda: _tool_names(mcp_server.mcp))
     assert "whats_new" in names
 
@@ -82,21 +94,32 @@ async def _tool_names(mcp):
 def test_mcp_tool_happy_path_end_to_end(tmp_path, monkeypatch):
     from datetime import date, timedelta
 
-    p = _build(tmp_path, [_job("1", "New Engineer", description_text="build"),
-                          _job("2", "Old Engineer", description_text="build")])
+    p = _build(
+        tmp_path,
+        [
+            _job("1", "New Engineer", description_text="build"),
+            _job("2", "Old Engineer", description_text="build"),
+        ],
+    )
     con = connect(p)
     # date-relative so the test never ages out
-    con.execute("UPDATE jobs SET first_seen=? WHERE title='New Engineer'", (date.today().isoformat(),))
-    con.execute("UPDATE jobs SET first_seen=? WHERE title='Old Engineer'",
-                ((date.today() - timedelta(days=365)).isoformat(),))
+    con.execute(
+        "UPDATE jobs SET first_seen=? WHERE title='New Engineer'", (date.today().isoformat(),)
+    )
+    con.execute(
+        "UPDATE jobs SET first_seen=? WHERE title='Old Engineer'",
+        ((date.today() - timedelta(days=365)).isoformat(),),
+    )
     con.commit()
     con.close()
 
     from ergon_tracker.index import cache as cache_mod
+
     monkeypatch.setattr(cache_mod.IndexCache, "ensure_fresh", lambda self: p)
     monkeypatch.setattr(cache_mod, "cached_index_build_id", lambda *a, **k: "b1")
 
     from ergon_tracker import mcp_server
+
     res = mcp_server.whats_new(since_days=30, keywords="engineer", limit=10)
     assert res["count"] == 1
     job = res["jobs"][0]
@@ -108,8 +131,12 @@ def test_mcp_tool_happy_path_end_to_end(tmp_path, monkeypatch):
 def test_mcp_tool_index_unavailable_is_graceful(monkeypatch):
     from ergon_tracker.index import cache as cache_mod
 
-    monkeypatch.setattr(cache_mod.IndexCache, "ensure_fresh",
-                        lambda self: (_ for _ in ()).throw(RuntimeError("offline")))
+    monkeypatch.setattr(
+        cache_mod.IndexCache,
+        "ensure_fresh",
+        lambda self: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
     from ergon_tracker import mcp_server
+
     res = mcp_server.whats_new(since_days=7)
     assert res["count"] == 0 and "unavailable" in res["note"]

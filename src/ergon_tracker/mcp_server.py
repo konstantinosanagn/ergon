@@ -278,12 +278,20 @@ def whats_new(
 
     since_iso = (date.today() - timedelta(days=max(1, since_days))).isoformat()
     query = SearchQuery(
-        keywords=keywords, location=location, remote=remote,
-        level=JobLevel(level) if level else None, include_unknown_level=include_unknown_level,
-        sector=sector, include_unknown_sector=include_unknown_sector, country=country, city=city,
-        salary_min=salary_min, salary_max=salary_max,
+        keywords=keywords,
+        location=location,
+        remote=remote,
+        level=JobLevel(level) if level else None,
+        include_unknown_level=include_unknown_level,
+        sector=sector,
+        include_unknown_sector=include_unknown_sector,
+        country=country,
+        city=city,
+        salary_min=salary_min,
+        salary_max=salary_max,
         employment_type=EmploymentType(employment_type) if employment_type else None,
-        visa_sponsor=True if visa_sponsor else None, sponsorship_offered=sponsorship_offered,
+        visa_sponsor=True if visa_sponsor else None,
+        sponsorship_offered=sponsorship_offered,
         limit=limit,
     )
 
@@ -299,9 +307,14 @@ def whats_new(
         path = None
     backend = SqliteIndexBackend(path) if path else None
     if backend is None or not backend.available():
-        return {"count": 0, "since": since_iso, "jobs": [],
-                "note": "prebuilt index unavailable — 'what's new' is served from the daily index"}
+        return {
+            "count": 0,
+            "since": since_iso,
+            "jobs": [],
+            "note": "prebuilt index unavailable — 'what's new' is served from the daily index",
+        }
 
+    assert path is not None  # narrowed: backend.available() implies a real index path
     con = connect(path, read_only=True)
     try:
         rows = whats_new_rows(con, query, since_iso, include_changed=include_changed)
@@ -354,11 +367,18 @@ def match_resume(
         return {"count": 0, "jobs": [], "note": "provide résumé or JD text in `resume`"}
 
     query = SearchQuery(
-        keywords=keywords, location=location, remote=remote,
-        level=JobLevel(level) if level else None, include_unknown_level=include_unknown_level,
-        sector=sector, country=country, city=city, salary_min=salary_min,
+        keywords=keywords,
+        location=location,
+        remote=remote,
+        level=JobLevel(level) if level else None,
+        include_unknown_level=include_unknown_level,
+        sector=sector,
+        country=country,
+        city=city,
+        salary_min=salary_min,
         employment_type=EmploymentType(employment_type) if employment_type else None,
-        visa_sponsor=True if visa_sponsor else None, sponsorship_offered=sponsorship_offered,
+        visa_sponsor=True if visa_sponsor else None,
+        sponsorship_offered=sponsorship_offered,
         limit=limit,
     )
     from .index.router import try_index
@@ -366,8 +386,11 @@ def match_resume(
     # Wide, filtered candidate pool from the index; then rerank the WHOLE pool by the full résumé.
     pool = try_index(query.model_copy(update={"limit": max(limit * 8, 120)}))
     if pool is None:
-        return {"count": 0, "jobs": [],
-                "note": "prebuilt index unavailable — résumé match is served from the daily index"}
+        return {
+            "count": 0,
+            "jobs": [],
+            "note": "prebuilt index unavailable — résumé match is served from the daily index",
+        }
     if not pool:
         return {"count": 0, "jobs": [], "note": "no candidates matched the filters; loosen them"}
 
@@ -384,7 +407,9 @@ def match_resume(
         rank(pool, keywords or resume, reranker=None)  # sets lexical job.score in place
         ranked_by = "lexical (install the server's `semantic` extra for embedding fit)"
 
-    ranked = sorted(pool, key=lambda j: j.score if j.score is not None else 0.0, reverse=True)[:limit]
+    ranked = sorted(pool, key=lambda j: j.score if j.score is not None else 0.0, reverse=True)[
+        :limit
+    ]
     jobs = [{**_job_to_dict(j), "fit_score": j.score} for j in ranked]
     return {"count": len(jobs), "ranked_by": ranked_by, "jobs": jobs}
 
@@ -418,26 +443,39 @@ def assess_fit(resume: str, job_description: str, job_title: str | None = None) 
     coverage = round(len(matched) / len(jd_skills), 2) if jd_skills else None
 
     yoe = YoeExtractor()
-    req_years = yoe.extract(ExtractInput(title=job_title or "", description_text=job_description))[0]
+    req_years = yoe.extract(ExtractInput(title=job_title or "", description_text=job_description))[
+        0
+    ]
     cv_min, cv_max = yoe.extract(ExtractInput(title="", description_text=resume))
     your_years = cv_max or cv_min
     meets_years = your_years is not None and req_years is not None and your_years >= req_years
 
-    talking_points = [f"Lead with your {s} experience — it's a stated requirement." for s in matched[:6]]
-    gaps = [f"Address '{s}': not evident in your résumé — cite transferable work or willingness to ramp."
-            for s in missing[:6]]
+    talking_points = [
+        f"Lead with your {s} experience — it's a stated requirement." for s in matched[:6]
+    ]
+    gaps = [
+        f"Address '{s}': not evident in your résumé — cite transferable work or willingness to ramp."
+        for s in missing[:6]
+    ]
     if req_years and (your_years is None or your_years < req_years):
         gaps.append(f"Role asks for ~{req_years}+ years; frame your experience to close that gap.")
 
-    summary = (f"You match {len(matched)} of {len(jd_skills)} listed skills"
-               + (f" ({int(coverage * 100)}%)" if coverage is not None else "")
-               + (f"; gaps: {', '.join(missing[:5])}." if missing else " — strong coverage."))
+    summary = (
+        f"You match {len(matched)} of {len(jd_skills)} listed skills"
+        + (f" ({int(coverage * 100)}%)" if coverage is not None else "")
+        + (f"; gaps: {', '.join(missing[:5])}." if missing else " — strong coverage.")
+    )
     return {
         "summary": summary,
-        "matched_skills": matched, "missing_skills": missing, "extra_strengths": extra[:10],
+        "matched_skills": matched,
+        "missing_skills": missing,
+        "extra_strengths": extra[:10],
         "skill_coverage": coverage,
-        "required_years": req_years, "your_years": your_years, "meets_years": meets_years,
-        "talking_points": talking_points, "gaps_to_address": gaps,
+        "required_years": req_years,
+        "your_years": your_years,
+        "meets_years": meets_years,
+        "talking_points": talking_points,
+        "gaps_to_address": gaps,
     }
 
 
@@ -497,31 +535,49 @@ def h1b_jobs(
     from datetime import date, timedelta
 
     query = SearchQuery(
-        keywords=keywords, location=location, remote=remote,
-        level=JobLevel(level) if level else None, include_unknown_level=include_unknown_level,
-        sector=sector, country=country, city=city, salary_min=salary_min,
+        keywords=keywords,
+        location=location,
+        remote=remote,
+        level=JobLevel(level) if level else None,
+        include_unknown_level=include_unknown_level,
+        sector=sector,
+        country=country,
+        city=city,
+        salary_min=salary_min,
         employment_type=EmploymentType(employment_type) if employment_type else None,
-        visa_sponsor=True, sponsorship_offered=sponsorship_offered, limit=limit,
+        visa_sponsor=True,
+        sponsorship_offered=sponsorship_offered,
+        limit=limit,
     )
     from .index.router import try_index
 
     pool = try_index(query.model_copy(update={"limit": max(limit * 6, 100)}))
     if pool is None:
-        return {"count": 0, "jobs": [],
-                "note": "prebuilt index unavailable — H-1B job match is served from the daily index"}
+        return {
+            "count": 0,
+            "jobs": [],
+            "note": "prebuilt index unavailable — H-1B job match is served from the daily index",
+        }
 
     from .extract.visa import load_sponsor_index
 
     idx = load_sponsor_index()
     today = date.today()
     active_cut = (today - timedelta(days=730)).isoformat()  # "active" = filed within ~2 years
-    user_cut = (today - timedelta(days=365 * active_within_years)).isoformat() if active_within_years else None
+    user_cut = (
+        (today - timedelta(days=365 * active_within_years)).isoformat()
+        if active_within_years
+        else None
+    )
 
     rows: list[tuple[int, float, dict[str, Any]]] = []
     for j in pool:
         prof = idx.profile(j.company)
-        filings = int(prof["filings"]) if prof else 0  # type: ignore[arg-type]
-        last = (str(prof["last_filed"]) if prof and prof["last_filed"] else None) or j.visa_last_filed
+        fv = prof["filings"] if prof else 0
+        filings = fv if isinstance(fv, int) else 0
+        last = (
+            str(prof["last_filed"]) if prof and prof["last_filed"] else None
+        ) or j.visa_last_filed
         if filings == 0 and not j.visa_sponsor:  # defensive: only sponsor employers
             continue
         if filings < min_filings:
@@ -535,8 +591,11 @@ def h1b_jobs(
         rows.append((filings, j.score or 0.0, d))
 
     rows.sort(key=lambda r: (r[0], r[1]), reverse=True)  # strongest sponsor, then relevance
-    return {"count": len(rows[:limit]), "ranked_by": "h1b_sponsor_strength",
-            "jobs": [d for _, _, d in rows[:limit]]}
+    return {
+        "count": len(rows[:limit]),
+        "ranked_by": "h1b_sponsor_strength",
+        "jobs": [d for _, _, d in rows[:limit]],
+    }
 
 
 @mcp.tool()

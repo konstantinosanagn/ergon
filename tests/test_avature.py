@@ -215,6 +215,7 @@ async def test_data_endpoint_full_board() -> None:
     _fetch_data flattens & dedupes it (vs the 20-capped RSS)."""
     import httpx
     import respx
+
     from ergon_tracker.http import AsyncFetcher
     from ergon_tracker.models import SearchQuery
     from ergon_tracker.providers.avature import AvatureProvider
@@ -222,25 +223,49 @@ async def test_data_endpoint_full_board() -> None:
     data = {
         "totalCount": 2,
         "locations": {
-            "geoA": {"title": "New York, NY", "jobs": [
-                {"id": "57886", "title": "Analyst, Planning", "url": "JobDetailCorporate?jobId=57886"},
-                {"id": "64715", "title": "Assistant Buyer", "url": "JobDetailCorporate?jobId=64715"},
-            ]},
-            "geoB": {"title": "Nutley, NJ", "jobs": [
-                {"id": "64715", "title": "dup id dropped", "url": "x"},  # cross-location dup
-                {"id": "59272", "title": "Sales Audit Mgr", "url": "JobDetailCorporate?jobId=59272"},
-            ]},
+            "geoA": {
+                "title": "New York, NY",
+                "jobs": [
+                    {
+                        "id": "57886",
+                        "title": "Analyst, Planning",
+                        "url": "JobDetailCorporate?jobId=57886",
+                    },
+                    {
+                        "id": "64715",
+                        "title": "Assistant Buyer",
+                        "url": "JobDetailCorporate?jobId=64715",
+                    },
+                ],
+            },
+            "geoB": {
+                "title": "Nutley, NJ",
+                "jobs": [
+                    {"id": "64715", "title": "dup id dropped", "url": "x"},  # cross-location dup
+                    {
+                        "id": "59272",
+                        "title": "Sales Audit Mgr",
+                        "url": "JobDetailCorporate?jobId=59272",
+                    },
+                ],
+            },
         },
     }
     base = "https://careers.ralphlauren.com/careerscorporate"
     with respx.mock as m:
-        m.get(url__startswith=f"{base}/SearchJobsCorporate?").mock(return_value=httpx.Response(200, text="<html></html>"))
+        m.get(url__startswith=f"{base}/SearchJobsCorporate?").mock(
+            return_value=httpx.Response(200, text="<html></html>")
+        )
         m.get(f"{base}/SearchJobsCorporateData/").mock(return_value=httpx.Response(200, json=data))
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await AvatureProvider().fetch(
                 "careers.ralphlauren.com|CareersCorporate|SearchJobsCorporate", SearchQuery(), f
             )
-    assert {r.source_job_id for r in raws} == {"57886", "64715", "59272"}  # deduped across locations
+    assert {r.source_job_id for r in raws} == {
+        "57886",
+        "64715",
+        "59272",
+    }  # deduped across locations
     j = next(r for r in raws if r.source_job_id == "57886")
     nj = AvatureProvider().normalize(j)
     assert nj.title == "Analyst, Planning" and nj.locations[0].raw == "New York, NY"

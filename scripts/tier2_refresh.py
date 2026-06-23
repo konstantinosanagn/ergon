@@ -10,25 +10,33 @@ Usage::
     python scripts/tier2_refresh.py            # refresh every target that's expired/near-expiry
     python scripts/tier2_refresh.py fastenal   # refresh just these
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ergon_tracker.token_store import TokenStore  # noqa: E402
 from token_mint import DEFAULT_STORE, MintError, _load_targets, mint  # noqa: E402
+
+from ergon_tracker.token_store import TokenStore  # noqa: E402
 
 DEFAULT_MARGIN = 0.2  # re-mint once <20% of the TTL remains, so a token can't lapse mid-crawl
 
 
-def needs_refresh(store: TokenStore, token_ref: str, target: dict[str, Any], *,
-                  margin_frac: float = DEFAULT_MARGIN) -> bool:
+def needs_refresh(
+    store: TokenStore,
+    token_ref: str,
+    target: dict[str, Any],
+    *,
+    margin_frac: float = DEFAULT_MARGIN,
+) -> bool:
     """True if ``token_ref`` is missing/expired, or within ``margin_frac`` of its TTL expiring."""
     if store.get(token_ref) is None:  # absent or already expired/stale
         return True
@@ -40,7 +48,10 @@ def needs_refresh(store: TokenStore, token_ref: str, target: dict[str, Any], *,
 
 
 async def refresh(
-    store: TokenStore, targets: dict[str, Any], only: list[str] | None = None, *,
+    store: TokenStore,
+    targets: dict[str, Any],
+    only: list[str] | None = None,
+    *,
     margin_frac: float = DEFAULT_MARGIN,
     mint_fn: Callable[[str], Awaitable[str]] | None = None,
 ) -> dict[str, list[str]]:
@@ -71,8 +82,10 @@ def main() -> None:
     targets = _load_targets()
     store = TokenStore(args.store)
     res = anyio.run(refresh, store, targets, args.targets or None, margin_frac=args.margin)
-    print(f"refreshed={len(res['refreshed'])} {res['refreshed']} | skipped={len(res['skipped'])} | "
-          f"failed={len(res['failed'])}")
+    print(
+        f"refreshed={len(res['refreshed'])} {res['refreshed']} | skipped={len(res['skipped'])} | "
+        f"failed={len(res['failed'])}"
+    )
     for f in res["failed"]:
         print(f"  FAIL {f}", file=sys.stderr)
     sys.exit(1 if res["failed"] else 0)

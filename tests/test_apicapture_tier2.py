@@ -24,8 +24,12 @@ def test_apply_token_header_does_not_mutate_original():
 
 
 def test_apply_token_body_cookie_query():
-    spec = {"url": "https://x/api?a=1", "method": "POST", "body": {"q": "x"},
-            "token_inject": {"body_path": ["session"], "cookie": "bm_sv", "query": "t"}}
+    spec = {
+        "url": "https://x/api?a=1",
+        "method": "POST",
+        "body": {"q": "x"},
+        "token_inject": {"body_path": ["session"], "cookie": "bm_sv", "query": "t"},
+    }
     out = apply_token_to_spec(spec, "Z")
     assert out["body"]["session"] == "Z"
     assert out["headers"]["Cookie"] == "bm_sv=Z"
@@ -33,9 +37,17 @@ def test_apply_token_body_cookie_query():
 
 
 def _spec(token_inject):
-    return {"acme": {"company": "Acme", "url": "https://acme.test/api/jobs", "method": "GET",
-                     "records_path": ["jobs"], "fields": {"id": "id", "title": "title"},
-                     "token_ref": "acme", "token_inject": token_inject}}
+    return {
+        "acme": {
+            "company": "Acme",
+            "url": "https://acme.test/api/jobs",
+            "method": "GET",
+            "records_path": ["jobs"],
+            "fields": {"id": "id", "title": "title"},
+            "token_ref": "acme",
+            "token_inject": token_inject,
+        }
+    }
 
 
 # --- integration: cached token is injected into the live request ---------------------------------
@@ -65,7 +77,9 @@ async def test_403_marks_token_stale(tmp_path, monkeypatch):
     monkeypatch.setattr(ap, "_token_store", lambda: store)
     monkeypatch.setattr(ap, "_load_specs", lambda: _spec({"header": "x-tok"}))
     with respx.mock:
-        respx.get("https://acme.test/api/jobs").mock(return_value=httpx.Response(403, text="denied"))
+        respx.get("https://acme.test/api/jobs").mock(
+            return_value=httpx.Response(403, text="denied")
+        )
         async with AsyncFetcher(per_host_rate=100, retries=1) as f:
             raws = await ApiCaptureProvider().fetch("acme", SearchQuery(), f)
     assert raws == []
@@ -81,12 +95,23 @@ async def test_non_token_spec_ignores_store(tmp_path, monkeypatch):
         raise AssertionError("store must not be consulted for a non-token spec")
 
     monkeypatch.setattr(ap, "_token_store", boom)
-    monkeypatch.setattr(ap, "_load_specs", lambda: {"acme": {
-        "company": "Acme", "url": "https://acme.test/api/jobs", "method": "GET",
-        "records_path": ["jobs"], "fields": {"id": "id", "title": "title"}}})
+    monkeypatch.setattr(
+        ap,
+        "_load_specs",
+        lambda: {
+            "acme": {
+                "company": "Acme",
+                "url": "https://acme.test/api/jobs",
+                "method": "GET",
+                "records_path": ["jobs"],
+                "fields": {"id": "id", "title": "title"},
+            }
+        },
+    )
     with respx.mock:
         respx.get("https://acme.test/api/jobs").mock(
-            return_value=httpx.Response(200, json={"jobs": [{"id": "9", "title": "X"}]}))
+            return_value=httpx.Response(200, json={"jobs": [{"id": "9", "title": "X"}]})
+        )
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await ApiCaptureProvider().fetch("acme", SearchQuery(), f)
     assert len(raws) == 1 and called["n"] == 0

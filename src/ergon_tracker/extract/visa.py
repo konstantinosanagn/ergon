@@ -192,7 +192,11 @@ class SponsorIndex:
             return None
         rec = self._records.get(key) or {}
         last = rec.get("last")
-        return {"name": key, "filings": _to_int(rec.get("n")), "last_filed": str(last) if last else None}
+        return {
+            "name": key,
+            "filings": _to_int(rec.get("n")),
+            "last_filed": str(last) if last else None,
+        }
 
     def search(self, query: str | None, limit: int = 20) -> list[dict[str, object]]:
         """Browse the sponsor directory: name-substring match, ranked by filing volume.

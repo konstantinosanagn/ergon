@@ -26,6 +26,7 @@ Usage::
     # after a Playwright capture writes capture.json:
     python scripts/browser_discovery.py capture.json --company "Acme" --token acme
 """
+
 from __future__ import annotations
 
 import argparse
@@ -41,27 +42,96 @@ ROOT = Path(__file__).resolve().parents[1]
 # --- field vocabulary: our-field -> response key synonyms (matched key-normalized) ----------------
 FIELD_VOCAB: dict[str, tuple[str, ...]] = {
     "title": ("title", "jobtitle", "postingtitle", "positiontitle", "name", "roletitle", "jobname"),
-    "id": ("id", "jobid", "positionid", "jobnumber", "reqid", "requisitionid", "jobnum",
-           "jobcode", "code", "slug", "refnumber", "externalid"),
-    "location": ("location", "joblocation", "normalizedlocation", "locations", "city",
-                 "primarylocation", "locationname", "jobcity", "worklocation"),
-    "url": ("url", "jobpath", "applyurl", "link", "joburl", "detailurl", "canonicalurl",
-            "jobdetailurl", "permalink", "absoluteurl"),
-    "department": ("department", "businesscategory", "team", "category", "jobcategory",
-                   "function", "practice", "discipline", "jobfamily"),
-    "posted_at": ("postedat", "posteddate", "postingdate", "publisheddate", "dateposted",
-                  "createddate", "postdate", "datecreated", "firstpublished"),
-    "description": ("description", "jobsummary", "summary", "content", "jobdescription",
-                    "jobdescplace", "descriptionshort", "shortdescription", "snippet"),
+    "id": (
+        "id",
+        "jobid",
+        "positionid",
+        "jobnumber",
+        "reqid",
+        "requisitionid",
+        "jobnum",
+        "jobcode",
+        "code",
+        "slug",
+        "refnumber",
+        "externalid",
+    ),
+    "location": (
+        "location",
+        "joblocation",
+        "normalizedlocation",
+        "locations",
+        "city",
+        "primarylocation",
+        "locationname",
+        "jobcity",
+        "worklocation",
+    ),
+    "url": (
+        "url",
+        "jobpath",
+        "applyurl",
+        "link",
+        "joburl",
+        "detailurl",
+        "canonicalurl",
+        "jobdetailurl",
+        "permalink",
+        "absoluteurl",
+    ),
+    "department": (
+        "department",
+        "businesscategory",
+        "team",
+        "category",
+        "jobcategory",
+        "function",
+        "practice",
+        "discipline",
+        "jobfamily",
+    ),
+    "posted_at": (
+        "postedat",
+        "posteddate",
+        "postingdate",
+        "publisheddate",
+        "dateposted",
+        "createddate",
+        "postdate",
+        "datecreated",
+        "firstpublished",
+    ),
+    "description": (
+        "description",
+        "jobsummary",
+        "summary",
+        "content",
+        "jobdescription",
+        "jobdescplace",
+        "descriptionshort",
+        "shortdescription",
+        "snippet",
+    ),
 }
 _TITLE_KEYS = set(FIELD_VOCAB["title"]) | set(FIELD_VOCAB["id"])
-_TOTAL_KEYS = ("total", "totalcount", "totalrecords", "hits", "count", "numfound",
-               "recordstotal", "totalresults", "totalhits", "resultcount")
+_TOTAL_KEYS = (
+    "total",
+    "totalcount",
+    "totalrecords",
+    "hits",
+    "count",
+    "numfound",
+    "recordstotal",
+    "totalresults",
+    "totalhits",
+    "resultcount",
+)
 _PAGE_PARAMS = ("offset", "start", "from", "page", "pagenumber", "pageindex", "p", "skip")
 _OFFSET_PARAMS = ("offset", "start", "from", "skip")  # advance by page size, not by 1
 _SIZE_PARAMS = ("resultlimit", "limit", "perpage", "pagesize", "size", "count", "rows")
 
-_norm = lambda k: re.sub(r"[^a-z0-9]", "", str(k).lower())
+def _norm(k: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(k).lower())
 
 
 def _walk(obj: Any, path: list[Any]):
@@ -83,9 +153,13 @@ def find_records_path(response: Any) -> list[Any]:
     """Path to the job-records array = the LONGEST list whose elements look like job dicts."""
     best: tuple[int, list[Any]] = (0, [])
     for path, val in _walk(response, []):
-        if isinstance(val, list) and val and sum(_looks_like_job(x) for x in val) >= max(1, len(val) // 2):
-            if len(val) > best[0]:
-                best = (len(val), path)
+        if (
+            isinstance(val, list)
+            and val
+            and sum(_looks_like_job(x) for x in val) >= max(1, len(val) // 2)
+            and len(val) > best[0]
+        ):
+            best = (len(val), path)
     # strip trailing list index if the walk landed on an element; keep the list's own path
     return [p for p in best[1] if not isinstance(p, int)] if best[1] else []
 
@@ -94,9 +168,13 @@ def find_total_path(response: Any, records_path: list[Any]) -> list[Any]:
     """First int-valued key (outside the records array) whose name reads like a total count."""
     rp = tuple(records_path)
     for path, val in _walk(response, []):
-        if isinstance(val, int) and path and _norm(path[-1]) in _TOTAL_KEYS:
-            if tuple(path[: len(rp)]) != rp:  # not inside a record
-                return path
+        if (
+            isinstance(val, int)
+            and path
+            and _norm(path[-1]) in _TOTAL_KEYS
+            and tuple(path[: len(rp)]) != rp  # not inside a record
+        ):
+            return path
     return []
 
 
@@ -117,11 +195,15 @@ def map_fields(records: list[Any]) -> dict[str, str]:
                     continue
                 if not isinstance(val, (str, int, float, list)):
                     continue
-                leaf, parent = _norm(path[-1]), (_norm(path[-2]) if len(path) >= 2
-                                                 and isinstance(path[-2], str) else None)
-                if leaf in rank:            # leaf match = most specific (kind 0)
+                leaf, parent = (
+                    _norm(path[-1]),
+                    (_norm(path[-2]) if len(path) >= 2 and isinstance(path[-2], str) else None),
+                )
+                if leaf in rank:  # leaf match = most specific (kind 0)
                     score = (0, rank[leaf])
-                elif parent in rank:        # parent fallback (kind 1), e.g. team.teamName / title.rendered
+                elif (
+                    parent in rank
+                ):  # parent fallback (kind 1), e.g. team.teamName / title.rendered
                     score = (1, rank[parent])
                 else:
                     continue
@@ -142,17 +224,26 @@ def infer_pagination(request: dict[str, Any]) -> dict[str, Any]:
         for p in _PAGE_PARAMS:
             if p in flat:
                 # recover the original (non-normalized) param name from the URL
-                orig = next((k for k in parse_qs(urlsplit(request["url"]).query) if _norm(k) == p), p)
+                orig = next(
+                    (k for k in parse_qs(urlsplit(request["url"]).query) if _norm(k) == p), p
+                )
                 out["page_param"] = orig
                 out["page_start"] = int(flat[p]) if str(flat[p]).lstrip("-").isdigit() else 0
-                size = next((int(flat[s]) for s in _SIZE_PARAMS if s in flat and str(flat[s]).isdigit()), 1)
+                size = next(
+                    (int(flat[s]) for s in _SIZE_PARAMS if s in flat and str(flat[s]).isdigit()), 1
+                )
                 out["page_step"] = size if p in _OFFSET_PARAMS else 1
                 break
     else:
         body = request.get("body")
         if isinstance(body, dict):
             for path, val in _walk(body, []):
-                if path and isinstance(path[-1], str) and _norm(path[-1]) in _PAGE_PARAMS and isinstance(val, int):
+                if (
+                    path
+                    and isinstance(path[-1], str)
+                    and _norm(path[-1]) in _PAGE_PARAMS
+                    and isinstance(val, int)
+                ):
                     out["page_path"] = [str(p) for p in path]
                     out["page_start"] = val
                     out["page_step"] = 1
@@ -160,7 +251,9 @@ def infer_pagination(request: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def propose_spec(request: dict[str, Any], response: Any, *, company: str, token: str) -> dict[str, Any]:
+def propose_spec(
+    request: dict[str, Any], response: Any, *, company: str, token: str
+) -> dict[str, Any]:
     """Turn a captured (request, response) into an apicapture spec. Pure + deterministic."""
     records_path = find_records_path(response)
     records = response
@@ -170,7 +263,9 @@ def propose_spec(request: dict[str, Any], response: Any, *, company: str, token:
         records = []
     fields = map_fields(records)
     if "title" not in fields:
-        raise ValueError(f"no title-like field found in records for {token!r}; capture may be wrong")
+        raise ValueError(
+            f"no title-like field found in records for {token!r}; capture may be wrong"
+        )
 
     method = (request.get("method") or "GET").upper()
     spec: dict[str, Any] = {
@@ -185,7 +280,15 @@ def propose_spec(request: dict[str, Any], response: Any, *, company: str, token:
         spec["body"] = request["body"]
     if request.get("headers"):
         # keep only stable, semantic headers; drop volatile/auth-ish ones a replay shouldn't pin
-        drop = {"cookie", "authorization", "content-length", "host", "user-agent", "referer", "origin"}
+        drop = {
+            "cookie",
+            "authorization",
+            "content-length",
+            "host",
+            "user-agent",
+            "referer",
+            "origin",
+        }
         hdrs = {k: v for k, v in request["headers"].items() if k.lower() not in drop}
         if hdrs:
             spec["headers"] = hdrs
@@ -206,6 +309,7 @@ def verify_spec(spec: dict[str, Any], token: str) -> tuple[int, str]:
         # Inject the proposed spec into the provider's in-memory map so we can verify it live
         # BEFORE it is ever written to apicapture.json (propose -> verify -> only then merge).
         from ergon_tracker.providers import apicapture as ap
+
         orig = ap._load_specs
         ap._load_specs = lambda: {token: spec}  # type: ignore[assignment]
         try:
@@ -222,7 +326,9 @@ def verify_spec(spec: dict[str, Any], token: str) -> tuple[int, str]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Propose an apicapture spec from a browser capture fixture")
+    ap = argparse.ArgumentParser(
+        description="Propose an apicapture spec from a browser capture fixture"
+    )
     ap.add_argument("capture", help="capture.json with {request, response}")
     ap.add_argument("--company", required=True)
     ap.add_argument("--token", required=True, help="spec key (company slug)")

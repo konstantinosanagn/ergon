@@ -21,9 +21,14 @@ def test_h1b_profile_module_helper():
 
 
 def _job(title, company):
-    j = JobPosting.create(source="greenhouse", source_job_id=f"{company}-{title}", company=company,
-                          title=title, locations=[Location(raw="Remote", is_remote=True)],
-                          remote=RemoteType.REMOTE)
+    j = JobPosting.create(
+        source="greenhouse",
+        source_job_id=f"{company}-{title}",
+        company=company,
+        title=title,
+        locations=[Location(raw="Remote", is_remote=True)],
+        remote=RemoteType.REMOTE,
+    )
     return j.model_copy(update={"visa_sponsor": True})
 
 
@@ -43,7 +48,9 @@ _PROFILES = {
 
 def _patch(monkeypatch, pool):
     monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: list(pool))
-    monkeypatch.setattr("ergon_tracker.extract.visa.load_sponsor_index", lambda: _FakeIdx(_PROFILES))
+    monkeypatch.setattr(
+        "ergon_tracker.extract.visa.load_sponsor_index", lambda: _FakeIdx(_PROFILES)
+    )
 
 
 def test_annotates_and_ranks_by_sponsor_strength(monkeypatch):
@@ -52,8 +59,14 @@ def test_annotates_and_ranks_by_sponsor_strength(monkeypatch):
     assert res["ranked_by"] == "h1b_sponsor_strength"
     assert [j["company"] for j in res["jobs"]] == ["BigSponsor", "SmallSponsor"]  # filings desc
     big = res["jobs"][0]
-    assert big["h1b_filings"] == 500 and big["h1b_last_filed"] == "2026-01-01" and big["h1b_active"] is True
-    assert res["jobs"][1]["h1b_filings"] == 3 and res["jobs"][1]["h1b_active"] is False  # 2019 = stale
+    assert (
+        big["h1b_filings"] == 500
+        and big["h1b_last_filed"] == "2026-01-01"
+        and big["h1b_active"] is True
+    )
+    assert (
+        res["jobs"][1]["h1b_filings"] == 3 and res["jobs"][1]["h1b_active"] is False
+    )  # 2019 = stale
 
 
 def test_min_filings_drops_token_sponsors(monkeypatch):
@@ -64,7 +77,9 @@ def test_min_filings_drops_token_sponsors(monkeypatch):
 
 def test_active_within_years_drops_quiet_sponsors(monkeypatch):
     _patch(monkeypatch, [_job("Eng A", "BigSponsor"), _job("Eng B", "SmallSponsor")])
-    res = mcp_server.h1b_jobs(active_within_years=3, limit=10)  # SmallSponsor last filed 2019 -> dropped
+    res = mcp_server.h1b_jobs(
+        active_within_years=3, limit=10
+    )  # SmallSponsor last filed 2019 -> dropped
     assert [j["company"] for j in res["jobs"]] == ["BigSponsor"]
 
 

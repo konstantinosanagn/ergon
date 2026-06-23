@@ -9,8 +9,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from ergon_tracker.token_store import TokenStore  # noqa: E402
 from token_mint import MintError, extract_token, mint_from_state, summarize  # noqa: E402
+
+from ergon_tracker.token_store import TokenStore  # noqa: E402
 
 _STATE = {
     "cookies": {"_abck": "AKAMAI~SENSOR~VALUE", "ga": "x"},
@@ -28,12 +29,20 @@ def test_extract_from_each_source():
     assert extract_token(_STATE, {"local_storage": "myjobstoken"}) == "LS-TOKEN"
     assert extract_token(_STATE, {"session_storage": "sid"}) == "SS-TOKEN"
     # xhr_header: URL substring match + case-insensitive header name
-    assert extract_token(_STATE, {"xhr_header": {"url_contains": "load-jobs", "header": "x-csrf-token"}}) == "CSRF-123"
+    assert (
+        extract_token(
+            _STATE, {"xhr_header": {"url_contains": "load-jobs", "header": "x-csrf-token"}}
+        )
+        == "CSRF-123"
+    )
 
 
 def test_extract_misses_return_none():
     assert extract_token(_STATE, {"cookie": "nope"}) is None
-    assert extract_token(_STATE, {"xhr_header": {"url_contains": "load-jobs", "header": "absent"}}) is None
+    assert (
+        extract_token(_STATE, {"xhr_header": {"url_contains": "load-jobs", "header": "absent"}})
+        is None
+    )
     assert extract_token({}, {"cookie": "_abck"}) is None
 
 

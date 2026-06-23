@@ -23,6 +23,7 @@ Usage::
     python scripts/token_mint.py fastenal                 # live-capture + mint into the store
     python scripts/token_mint.py fastenal --state cap.json # mint from a pre-captured state fixture
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,9 +77,12 @@ def mint_from_state(
     """Extract the token from ``state`` and write it to ``store``. Returns the value (caller must not log)."""
     value = extract_token(state, target.get("extract") or {})
     if not value:
-        raise MintError(f"{token_ref}: token not found in captured state via {target.get('extract')!r}")
+        raise MintError(
+            f"{token_ref}: token not found in captured state via {target.get('extract')!r}"
+        )
     store.set(
-        token_ref, value,
+        token_ref,
+        value,
         ttl_seconds=target.get("ttl_seconds"),
         refresh_on=tuple(target.get("refresh_on") or (401, 403)),
     )
@@ -87,12 +91,16 @@ def mint_from_state(
 
 def summarize(token_ref: str, value: str, target: dict[str, Any]) -> str:
     """A SECRETS-SAFE one-liner about a mint (never includes the token value)."""
-    return (f"minted {token_ref}: {len(value)} chars via {list((target.get('extract') or {}))[:1]} "
-            f"ttl={target.get('ttl_seconds')}s refresh_on={target.get('refresh_on') or (401, 403)}")
+    return (
+        f"minted {token_ref}: {len(value)} chars via {list(target.get('extract') or {})[:1]} "
+        f"ttl={target.get('ttl_seconds')}s refresh_on={target.get('refresh_on') or (401, 403)}"
+    )
 
 
 # --- browser shell (Playwright; optional import) -------------------------------------------------
-async def capture_state(url: str, *, settle_ms: int = 4000, wait_xhr: str | None = None) -> dict[str, Any]:
+async def capture_state(
+    url: str, *, settle_ms: int = 4000, wait_xhr: str | None = None
+) -> dict[str, Any]:
     """Load ``url`` in a headless browser, let its JS mint the token, return the captured state.
 
     Optional dependency: install the browser extra (``uv pip install playwright && playwright install
@@ -110,9 +118,13 @@ async def capture_state(url: str, *, settle_ms: int = 4000, wait_xhr: str | None
         browser = await p.chromium.launch(headless=True)
         # A believable, internally-consistent fingerprint beats any single stealth trick.
         ctx = await browser.new_context(
-            user_agent=("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
-            locale="en-US", timezone_id="America/New_York", viewport={"width": 1280, "height": 800},
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            locale="en-US",
+            timezone_id="America/New_York",
+            viewport={"width": 1280, "height": 800},
         )
         page = await ctx.new_page()
         page.on("request", lambda r: xhr.append({"url": r.url, "headers": dict(r.headers)}))
@@ -127,8 +139,12 @@ async def capture_state(url: str, *, settle_ms: int = 4000, wait_xhr: str | None
             session_storage = await page.evaluate("() => ({...sessionStorage})")
         finally:
             await browser.close()
-    return {"cookies": cookies, "local_storage": local_storage,
-            "session_storage": session_storage, "xhr": xhr}
+    return {
+        "cookies": cookies,
+        "local_storage": local_storage,
+        "session_storage": session_storage,
+        "xhr": xhr,
+    }
 
 
 async def mint(token_ref: str, store: TokenStore, targets: dict[str, Any]) -> str:
@@ -136,8 +152,9 @@ async def mint(token_ref: str, store: TokenStore, targets: dict[str, Any]) -> st
     target = targets.get(token_ref)
     if not target:
         raise MintError(f"no Tier-2 mint target for {token_ref!r} in {TARGETS_PATH.name}")
-    state = await capture_state(target["url"], wait_xhr=target.get("wait_xhr"),
-                                settle_ms=int(target.get("settle_ms", 4000)))
+    state = await capture_state(
+        target["url"], wait_xhr=target.get("wait_xhr"), settle_ms=int(target.get("settle_ms", 4000))
+    )
     return mint_from_state(token_ref, state, target, store)
 
 
@@ -152,8 +169,12 @@ def main() -> None:
 
     ap = argparse.ArgumentParser(description="Tier-2 offline token mint (browser -> TokenStore)")
     ap.add_argument("token_ref", help="target key in scripts/tier2_mint.json")
-    ap.add_argument("--state", help="mint from a pre-captured state.json instead of launching a browser")
-    ap.add_argument("--store", default=str(DEFAULT_STORE), help="TokenStore path (secrets; gitignored)")
+    ap.add_argument(
+        "--state", help="mint from a pre-captured state.json instead of launching a browser"
+    )
+    ap.add_argument(
+        "--store", default=str(DEFAULT_STORE), help="TokenStore path (secrets; gitignored)"
+    )
     args = ap.parse_args()
 
     targets = _load_targets()
