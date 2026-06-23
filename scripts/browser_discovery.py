@@ -296,33 +296,38 @@ def propose_spec(
     return spec
 
 
-def verify_spec(spec: dict[str, Any], token: str) -> tuple[int, str]:
-    """Replay the proposed spec through the real apicapture provider (the live verify-gate)."""
-    import anyio
+async def verify_spec_async(spec: dict[str, Any], token: str) -> tuple[int, str]:
+    """Async core of the verify-gate: replay the proposed spec through the real apicapture provider.
 
+    Callable from inside a running event loop (e.g. the Tier-1 capture batch). NOTE: monkeypatches the
+    module-global ``_load_specs``, so callers must NOT run this concurrently for different tokens —
+    verify sequentially (the batch capturer does)."""
     sys.path.insert(0, str(ROOT / "src"))
     from ergon_tracker.http import AsyncFetcher
     from ergon_tracker.models import SearchQuery
+    from ergon_tracker.providers import apicapture as ap
     from ergon_tracker.providers.apicapture import ApiCaptureProvider
 
-    async def run() -> tuple[int, str]:
-        # Inject the proposed spec into the provider's in-memory map so we can verify it live
-        # BEFORE it is ever written to apicapture.json (propose -> verify -> only then merge).
-        from ergon_tracker.providers import apicapture as ap
+    # Inject the proposed spec into the provider's in-memory map so we can verify it live BEFORE it is
+    # ever written to apicapture.json (propose -> verify -> only then merge).
+    orig = ap._load_specs
+    ap._load_specs = lambda: {token: spec}  # type: ignore[assignment]
+    try:
+        async with AsyncFetcher(timeout=30) as f:
+            raws = await ApiCaptureProvider().fetch(token, SearchQuery(limit=10), f)
+        if not raws:
+            return 0, "spec replayed but returned 0 jobs"
+        j = ApiCaptureProvider().normalize(raws[0])
+        return len(raws), f"OK — {len(raws)} jobs, e.g. {j.title!r}"
+    finally:
+        ap._load_specs = orig  # type: ignore[assignment]
 
-        orig = ap._load_specs
-        ap._load_specs = lambda: {token: spec}  # type: ignore[assignment]
-        try:
-            async with AsyncFetcher(timeout=30) as f:
-                raws = await ApiCaptureProvider().fetch(token, SearchQuery(limit=10), f)
-            if not raws:
-                return 0, "spec replayed but returned 0 jobs"
-            j = ApiCaptureProvider().normalize(raws[0])
-            return len(raws), f"OK — {len(raws)} jobs, e.g. {j.title!r}"
-        finally:
-            ap._load_specs = orig  # type: ignore[assignment]
 
-    return anyio.run(run)
+def verify_spec(spec: dict[str, Any], token: str) -> tuple[int, str]:
+    """Sync wrapper around :func:`verify_spec_async` (for sync callers / the CLI)."""
+    import anyio
+
+    return anyio.run(verify_spec_async, spec, token)
 
 
 def main() -> None:
