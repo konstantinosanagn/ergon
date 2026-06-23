@@ -170,8 +170,9 @@ def _set(obj: Any, path: list[Any], value: Any) -> None:
     obj[path[-1]] = value
 
 
-def _set_query(url: str, param: str, value: int) -> str:
-    """Return ``url`` with query ``param`` set to ``value`` (for GET pagination)."""
+def _set_query(url: str, param: str, value: int | str) -> str:
+    """Return ``url`` with query ``param`` set to ``value`` (GET pagination offsets, or a
+    token-inject string)."""
     parts = urlsplit(url)
     qs = parse_qs(parts.query)
     qs[param] = [str(value)]

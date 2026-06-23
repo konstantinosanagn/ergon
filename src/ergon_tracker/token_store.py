@@ -14,23 +14,31 @@ Security: tokens are session secrets. The store file is written with ``0600`` pe
 untracked path (``runs/``), and values are NEVER logged or returned in summaries — only injected into
 the replay request. Keep its path out of git.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import tempfile
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Awaitable, Callable
 
 import anyio
 
 __all__ = ["TokenStore", "TokenRecord"]
 
 # A persisted token: the secret value plus the policy needed to know when to drop/refresh it.
-TokenRecord = dict[str, object]  # {"value": str, "minted_at": float, "ttl_seconds": float|None, "refresh_on": list[int]}
+TokenRecord = dict[
+    str, object
+]  # {"value": str, "minted_at": float, "ttl_seconds": float|None, "refresh_on": list[int]}
 
 _DEFAULT_REFRESH_ON = (401, 403)
+
+
+def _f(value: object) -> float:
+    """Best-effort float from a JSON-loaded record field (minted_at / ttl_seconds)."""
+    return float(value) if isinstance(value, (int, float, str)) else 0.0
 
 
 class TokenStore:
@@ -47,9 +55,10 @@ class TokenStore:
         if not self._path.exists():
             return {}
         try:
-            return json.loads(self._path.read_text())
+            data = json.loads(self._path.read_text())
         except (json.JSONDecodeError, OSError):
             return {}  # corrupt/unreadable -> behave as empty; next mint repopulates
+        return data if isinstance(data, dict) else {}
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,7 +69,8 @@ class TokenStore:
             os.chmod(tmp, 0o600)  # restrict before it lands at the final path
             os.replace(tmp, self._path)  # atomic
         except BaseException:
-            os.path.exists(tmp) and os.unlink(tmp)
+            if os.path.exists(tmp):
+                os.unlink(tmp)
             raise
 
     # --- expiry / policy --------------------------------------------------------------------------
@@ -68,7 +78,7 @@ class TokenStore:
         ttl = rec.get("ttl_seconds")
         if ttl is None:  # no expiry policy => valid until explicitly marked stale
             return bool(rec.get("stale"))
-        return bool(rec.get("stale")) or self._clock() >= float(rec["minted_at"]) + float(ttl)
+        return bool(rec.get("stale")) or self._clock() >= _f(rec["minted_at"]) + _f(ttl)
 
     def ttl_remaining(self, key: str) -> float | None:
         """Seconds until ``key`` expires (negative if already past); ``None`` if absent, stale, or no TTL.
@@ -80,7 +90,7 @@ class TokenStore:
         ttl = rec.get("ttl_seconds")
         if ttl is None:
             return None
-        return float(rec["minted_at"]) + float(ttl) - self._clock()
+        return _f(rec["minted_at"]) + _f(ttl) - self._clock()
 
     def get(self, key: str) -> str | None:
         """The cached token value if present and still valid, else ``None`` (caller should mint)."""
@@ -90,7 +100,11 @@ class TokenStore:
         return str(rec["value"])
 
     def set(
-        self, key: str, value: str, *, ttl_seconds: float | None,
+        self,
+        key: str,
+        value: str,
+        *,
+        ttl_seconds: float | None,
         refresh_on: tuple[int, ...] = _DEFAULT_REFRESH_ON,
     ) -> None:
         self._mem[key] = {
@@ -111,12 +125,18 @@ class TokenStore:
     def should_refresh_on(self, key: str, status: int) -> bool:
         """Whether an HTTP ``status`` from a replay means this token must be re-minted."""
         rec = self._mem.get(key)
-        refresh_on = rec.get("refresh_on", list(_DEFAULT_REFRESH_ON)) if rec else _DEFAULT_REFRESH_ON
+        refresh_on = (
+            rec.get("refresh_on", list(_DEFAULT_REFRESH_ON)) if rec else _DEFAULT_REFRESH_ON
+        )
         return status in refresh_on  # type: ignore[operator]
 
     async def get_or_mint(
-        self, key: str, mint_fn: Callable[[], Awaitable[str]], *,
-        ttl_seconds: float | None, refresh_on: tuple[int, ...] = _DEFAULT_REFRESH_ON,
+        self,
+        key: str,
+        mint_fn: Callable[[], Awaitable[str]],
+        *,
+        ttl_seconds: float | None,
+        refresh_on: tuple[int, ...] = _DEFAULT_REFRESH_ON,
     ) -> str:
         """Return a valid token, minting via ``mint_fn`` only if missing/expired.
 
