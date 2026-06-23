@@ -18,6 +18,7 @@ loaded lazily and memoized, so importing this module never downloads anything.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
@@ -101,6 +102,49 @@ class SemanticReranker:
         query_vec = next(iter(self._model.embed([query]))).tolist()
         doc_vecs = [v.tolist() for v in self._model.embed(texts)]
         return [_cosine(query_vec, dv) for dv in doc_vecs]
+
+    def embed_texts(
+        self, texts: list[str], *, batch_size: int = 256, parallel: int | None = None
+    ) -> list[list[float]]:
+        """Embed raw texts → float vectors. ``parallel`` maps to fastembed's data-parallel encoding
+        (``0`` = use all CPU cores via worker processes, ``None`` = single, ``N`` = N workers) — the
+        build-time throughput lever for embedding the whole corpus."""
+        if not texts:
+            return []
+        self._ensure_model()
+        assert self._model is not None
+        return [
+            v.tolist() for v in self._model.embed(texts, batch_size=batch_size, parallel=parallel)
+        ]
+
+    def embed_jobs(
+        self, jobs: list[JobPosting], *, batch_size: int = 256, parallel: int | None = None
+    ) -> list[list[float]]:
+        """Embed postings using the SAME text representation as ``rerank`` (title + dept + desc slice),
+        so a pre-stored vector and a query-time rerank are directly comparable."""
+        return self.embed_texts(
+            [_job_text(j) for j in jobs], batch_size=batch_size, parallel=parallel
+        )
+
+    def embed_jobs_iter(
+        self, jobs: list[JobPosting], *, batch_size: int = 256, parallel: int | None = None
+    ) -> Iterator[tuple[JobPosting, list[float]]]:
+        """Stream ``(job, vector)`` as fastembed yields them — memory-bounded (no 840k-vector list held)
+        AND data-parallel. The build/reconcile path consumes this to quantize+store incrementally."""
+        if not jobs:
+            return
+        self._ensure_model()
+        assert self._model is not None
+        texts = [_job_text(j) for j in jobs]
+        stream = self._model.embed(texts, batch_size=batch_size, parallel=parallel)
+        for job, vec in zip(jobs, stream, strict=True):
+            yield job, vec.tolist()
+
+    def embed_query(self, query: str) -> list[float]:
+        """Embed a single query string (for searching against pre-stored job vectors)."""
+        self._ensure_model()
+        assert self._model is not None
+        return [float(x) for x in next(iter(self._model.embed([query])))]
 
 
 @lru_cache(maxsize=4)
