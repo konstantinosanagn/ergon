@@ -85,7 +85,11 @@ jobs:
           TMPDIR: /mnt
           ERGON_TOKEN_STORE: dist/tier2_tokens.json  # token_ref specs read the freshly-minted tokens
         run: |
-          uv run python scripts/build_index.py --incremental --rich \
+          # NOTE: --rich temporarily disabled — the cold-start embedding of a full 12k-board window
+          # OOM/thrash-killed run 28070765535 at ~182min (job died mid-build, uncatchable by the
+          # non-fatal guard). Re-enable once the rich cold-start is bounded + single-process (see
+          # reconcile_rich_tier_from_fresh). The speed levers (concurrency/shards/pigz) stay on.
+          uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
