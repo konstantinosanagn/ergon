@@ -183,3 +183,41 @@ def test_sharded_from_db_parity_with_in_memory(tmp_path):
         assert a == b
     # the unknown shard exists and holds the sector-less job
     assert db["shards"]["unknown"]["rows"] == 1
+
+
+def test_parallel_shard_build_no_loss(tmp_path, monkeypatch):
+    """Force the ProcessPoolExecutor path (ERGON_SHARD_WORKERS=2) over several sectors and assert the
+    shards partition the index with no row loss/duplication — the parallel publish optimization."""
+    from ergon_tracker.index.build import build_index, build_sharded_index_from_db
+
+    monkeypatch.setenv("ERGON_SHARD_WORKERS", "2")
+    jobs = [
+        _job(str(i), f"Co{i}", f"{role} Engineer {i}", sector=sec)
+        for i, (role, sec) in enumerate(
+            [
+                ("Backend", "Fintech"),
+                ("ML", "AI/ML"),
+                ("Nurse", "Health"),
+                ("Buyer", "Retail"),
+                ("Grid", "Energy"),
+                ("Editor", "Media"),
+            ]
+            * 4
+        )
+    ]
+    db = tmp_path / "index.sqlite"
+    build_index(jobs, db, build_id="b1")
+    idx_rows = connect(db, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+
+    man = build_sharded_index_from_db(db, tmp_path, build_id="b1")
+    assert len(man["shards"]) >= 2  # genuinely multiple shards -> the pool path ran
+    total = 0
+    for meta in man["shards"].values():
+        n = (
+            connect(tmp_path / meta["file"], read_only=True)
+            .execute("SELECT COUNT(*) FROM jobs")
+            .fetchone()[0]
+        )
+        assert n == meta["rows"]  # manifest matches the file
+        total += n
+    assert total == idx_rows  # every indexed row lands in exactly one shard

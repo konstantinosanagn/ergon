@@ -713,14 +713,27 @@ def _build_shard_from_db(
         con.close()
 
 
+def _shard_meta(out: Path, slug: str, n: int) -> dict[str, Any]:
+    fname = f"shard-{slug}.sqlite"
+    raw = (out / fname).read_bytes()
+    return {"file": fname, "rows": n, "sha256": hashlib.sha256(raw).hexdigest()}
+
+
 def build_sharded_index_from_db(
-    db_path: Path | str, out_dir: Path | str, *, build_id: str
+    db_path: Path | str, out_dir: Path | str, *, build_id: str, max_workers: int | None = None
 ) -> dict[str, Any]:
     """Build per-sector shards from an already-built index via SQL — no jobs loaded into memory.
 
-    Memory-bounded equivalent of build_sharded_index: partitions the index by sector slug using
-    SQL ATTACH + finalize_index per shard. Use for full-scale builds.
+    Partitions the index by sector slug using SQL ATTACH + finalize_index per shard. Shards are
+    INDEPENDENT (each is a read-only ATTACH of the immutable finalized index writing to its own file),
+    so they build CONCURRENTLY across a process pool — the per-sector loop was the single biggest serial
+    cost in the publish phase. ``_build_shard_from_db`` takes only paths, so it pickles cleanly. Falls
+    back to sequential for a single shard / single worker (tests, tiny builds) to skip pool overhead.
+    ``ERGON_SHARD_WORKERS`` overrides the worker count (default = cpu_count-2).
     """
+    import os
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     src = connect(db_path, read_only=True)
@@ -731,14 +744,41 @@ def build_sharded_index_from_db(
     slug_to_sectors: dict[str, list[Any]] = {}
     for s in raw_sectors:
         slug_to_sectors.setdefault(sector_slug(s), []).append(s)
+    items = sorted(slug_to_sectors.items())
+
+    env_workers = os.environ.get("ERGON_SHARD_WORKERS")
+    workers = int(env_workers) if env_workers else max(2, (os.cpu_count() or 4) - 2)
+    workers = min(workers, len(items)) if items else 1
 
     shards: dict[str, dict[str, Any]] = {}
-    for slug, sectors in sorted(slug_to_sectors.items()):
-        fname = f"shard-{slug}.sqlite"
-        n = _build_shard_from_db(db_path, out / fname, sectors, build_id=build_id)
-        raw = (out / fname).read_bytes()
-        shards[slug] = {"file": fname, "rows": n, "sha256": hashlib.sha256(raw).hexdigest()}
+    if workers <= 1:  # sequential fallback: tiny builds / tests — no process-pool spawn cost
+        for slug, sectors in items:
+            n = _build_shard_from_db(
+                db_path, out / f"shard-{slug}.sqlite", sectors, build_id=build_id
+            )
+            shards[slug] = _shard_meta(out, slug, n)
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            futs = {
+                pool.submit(
+                    _build_shard_from_db,
+                    db_path,
+                    out / f"shard-{slug}.sqlite",
+                    sectors,
+                    build_id=build_id,
+                ): slug
+                for slug, sectors in items
+            }
+            for fut in as_completed(futs):
+                slug = futs[fut]
+                shards[slug] = _shard_meta(
+                    out, slug, fut.result()
+                )  # .result() re-raises worker errors
 
-    manifest = {"build_id": build_id, "schema_version": SCHEMA_VERSION, "shards": shards}
+    manifest = {
+        "build_id": build_id,
+        "schema_version": SCHEMA_VERSION,
+        "shards": dict(sorted(shards.items())),
+    }
     (out / "shards.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
