@@ -22,10 +22,11 @@ from mcp.server.fastmcp import FastMCP
 
 from .client import AsyncErgonTracker
 from .engine import AGGREGATOR_PROVIDERS
-from .models import EmploymentType, JobLevel, JobPosting, SearchQuery
+from .models import EmploymentType, JobLevel, SearchQuery
 from .providers.base import iter_providers, load_builtins, load_plugins
 from .registry.resolver import resolve
 from .registry.store import SeedRegistry
+from .serialization import job_to_dict
 
 _INSTRUCTIONS = """\
 ergon-tracker: unified job search across company ATS feeds (49k+ boards) + aggregators.
@@ -56,37 +57,8 @@ def _days_ago(days: int | None) -> datetime | None:
     return datetime.now(timezone.utc) - timedelta(days=days)
 
 
-def _job_to_dict(job: JobPosting) -> dict[str, Any]:
-    salary: dict[str, Any] | None = None
-    if job.salary and (job.salary.min_amount or job.salary.max_amount):
-        salary = {
-            "min": job.salary.min_amount,
-            "max": job.salary.max_amount,
-            "currency": job.salary.currency,
-            "interval": job.salary.interval.value if job.salary.interval else None,
-        }
-    return {
-        "company": job.company,
-        "title": job.title,
-        "location": job.locations[0].as_text() if job.locations else None,
-        "remote": job.remote.value,
-        "level": job.level.value,
-        "sector": job.sector,
-        "employment_type": job.employment_type.value,
-        "salary": salary,
-        "years_min": job.years_experience_min,
-        "years_max": job.years_experience_max,
-        "degree_min": job.degree_min,
-        "degree_required": job.degree_required,
-        "apply_url": job.apply_url,
-        "source": job.source,
-        "posted_at": job.posted_at.isoformat() if job.posted_at else None,
-        "found_on": [p.source for p in job.provenance],
-        "score": round(job.score, 4) if job.score is not None else None,
-        "visa_sponsor": job.visa_sponsor,
-        "visa_last_filed": job.visa_last_filed,
-        "sponsorship_offered": job.sponsorship_offered,
-    }
+# Serialization lives in .serialization (shared with the HTTP QUERY surface — one wire shape, no drift).
+_job_to_dict = job_to_dict
 
 
 @mcp.tool()

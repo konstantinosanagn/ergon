@@ -35,6 +35,9 @@ pandas = ["pandas>=2.2"]
 polars = ["polars>=0.20"]
 mcp = ["mcp>=1.12"]
 semantic = ["fastembed>=0.3"]
+# HTTP QUERY (RFC 10008) search surface — only needed to RUN the server (ergon_tracker.serve.serve);
+# the ASGI app itself is dependency-light and testable in-process via httpx (a core dep).
+serve = ["uvicorn>=0.30"]
 # Offline-only: the Tier-2 token-mint shell (scripts/token_mint.py). Never on the runtime/request path.
 browser = ["playwright>=1.40"]
 dev = [
