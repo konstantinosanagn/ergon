@@ -30,9 +30,15 @@ _DIM = 384
 
 
 class FakeReranker:
-    """Deterministic 384-dim embedder: vocab-count dims (dominant) + hashed padding (realistic width)."""
+    """Deterministic 384-dim embedder: vocab-count dims (dominant) + hashed padding (realistic width).
+
+    Records every ``parallel`` value it is called with (``seen_parallel``) so tests can assert the
+    reconcile path stays single-process (``parallel=None`` — never fastembed worker processes)."""
 
     model_name = "fake-384"
+
+    def __init__(self) -> None:
+        self.seen_parallel: list[int | None] = []
 
     def _vec(self, text: str) -> list[float]:
         t = (text or "").lower()
@@ -45,6 +51,7 @@ class FakeReranker:
         return f"{j.title or ''} {j.description_text or ''}"
 
     def embed_jobs_iter(self, jobs, *, batch_size=256, parallel=None):
+        self.seen_parallel.append(parallel)
         for j in jobs:
             yield j, self._vec(self._text(j))
 
@@ -52,6 +59,7 @@ class FakeReranker:
         return [self._vec(self._text(j)) for j in jobs]
 
     def embed_texts_iter(self, texts, *, batch_size=256, parallel=None):
+        self.seen_parallel.append(parallel)
         for t in texts:
             yield self._vec(t)
 
@@ -62,11 +70,14 @@ class FakeReranker:
 FAKE = FakeReranker()
 
 
-def _job(sid, title, desc=""):
+def _job(sid, title, desc="", company="Co"):
+    # `company` matters for bulk synthetic sets: the main index fuzzy-dedups near-identical titles
+    # within one company, so mass-generated "Engineer {i}" jobs must spread across companies to
+    # all stay live.
     return JobPosting.create(
         source="greenhouse",
         source_job_id=sid,
-        company="Co",
+        company=company,
         title=title,
         description_text=desc,
         locations=[Location(raw="Remote", is_remote=True)],
@@ -276,6 +287,180 @@ def test_reconcile_from_fresh_cold_then_carryforward(tmp_path):
     # A's vector survived the carry-forward (never re-embedded) — still searchable
     top = vector_search(con, FAKE.embed_query("python kubernetes"), limit=3)
     assert a.id in {i for i, _ in top}
+
+
+# --- memory-safety rework: chunked streaming reconcile + bounded ramp + single-process ------------
+def _write_fresh(path, jobs):
+    import sqlite3
+
+    from ergon_tracker.index.rich import write_fresh_rich
+
+    con = sqlite3.connect(path)
+    write_fresh_rich(con, jobs)
+    con.commit()
+    con.close()
+
+
+def _dump_rich(path):
+    """Full comparable state: text rows, vector rows (exact bytes), and meta dim/model."""
+    con = open_rich(path)
+    text = sorted(tuple(r) for r in con.execute("SELECT id, sig, description FROM job_text"))
+    vecs = sorted(
+        (r[0], r[1], bytes(r[2])) for r in con.execute("SELECT id, scale, vec FROM job_vectors")
+    )
+    meta = {k: v for k, v in rich_meta(con).items() if k in ("dim", "model", "quant")}
+    con.close()
+    return text, vecs, meta
+
+
+def test_reconcile_from_fresh_chunk_boundaries_match_single_fetch(tmp_path):
+    """chunk_size=3 over a 10-row fresh set (carry-forward + unchanged-recrawl + changed + orphaned
+    + new, deliberately straddling chunk boundaries) must produce stats AND final DB state identical
+    to one big fetch (chunk_size=10_000)."""
+    import shutil
+
+    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+
+    seed = [_job(f"s{i}", f"Role {i}", f"orig desc {i} python") for i in range(10)]
+    fresh0 = tmp_path / "fresh0.sqlite"
+    _write_fresh(fresh0, seed)
+    main0 = tmp_path / "main0.sqlite"
+    build_index(seed, main0, build_id="b0")
+    rich_a = tmp_path / "rich_a.sqlite"
+    s0 = reconcile_rich_tier_from_fresh(rich_a, main0, fresh0, build_id="b0", reranker=FAKE)
+    assert s0 == {"pruned": 0, "embedded": 10, "missing": 0}
+
+    # round 2: s0,s1 orphaned; s2..s5 changed; s6,s7 carried forward (not re-crawled);
+    # s8,s9 re-crawled UNCHANGED (same sig -> must skip); n0..n3 brand new.
+    changed = [_job(f"s{i}", f"Role {i}", f"REWRITTEN desc {i} kubernetes") for i in range(2, 6)]
+    unchanged = [_job(f"s{i}", f"Role {i}", f"orig desc {i} python") for i in (8, 9)]
+    new = [
+        _job(f"n{i}", f"New Role {i}", f"new desc {i} sales", company=f"NewCo{i}") for i in range(4)
+    ]  # distinct companies: same-company "New Role {i}" titles fuzzy-dedup away in the main index
+    live = [seed[6], seed[7], *changed, *unchanged, *new]
+    fresh1 = tmp_path / "fresh1.sqlite"
+    _write_fresh(fresh1, [*changed, *unchanged, *new])  # 10 rows -> chunks of 3,3,3,1
+    main1 = tmp_path / "main1.sqlite"
+    build_index(live, main1, build_id="b1")
+
+    rich_b = tmp_path / "rich_b.sqlite"
+    shutil.copy(rich_a, rich_b)  # identical starting sidecars
+    sa = reconcile_rich_tier_from_fresh(
+        rich_a, main1, fresh1, build_id="b1", reranker=FAKE, chunk_size=3
+    )
+    sb = reconcile_rich_tier_from_fresh(
+        rich_b, main1, fresh1, build_id="b1", reranker=FAKE, chunk_size=10_000
+    )
+    assert (
+        sa == sb == {"pruned": 2, "embedded": 8, "missing": 0}
+    )  # 4 changed + 4 new; unchanged skip
+    assert _dump_rich(rich_a) == _dump_rich(rich_b)  # byte-identical text+vectors+meta
+    con = open_rich(rich_a)
+    assert fulltext_search(con, "REWRITTEN", limit=10) == fulltext_search(
+        open_rich(rich_b), "REWRITTEN", limit=10
+    )  # FTS re-synced identically across the chunked path
+    assert len(fulltext_search(con, "REWRITTEN", limit=10)) == 4
+
+
+def test_reconcile_from_fresh_ramp_cap_converges(tmp_path, capsys):
+    """Changed-set > cap: run1 embeds exactly the cap (missing = the deferred rest — including
+    stale-changed rows whose old text stays), run2 picks up the remainder via sig comparison, and
+    the converged state equals a single uncapped run."""
+    import shutil
+
+    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+
+    x0_old = _job("x0", "X0", "old zero")
+    x1_old = _job("x1", "X1", "old one")
+    fresh0 = tmp_path / "fresh0.sqlite"
+    _write_fresh(fresh0, [x0_old, x1_old])
+    main0 = tmp_path / "main0.sqlite"
+    build_index([x0_old, x1_old], main0, build_id="b0")
+    rich = tmp_path / "rich.sqlite"
+    reconcile_rich_tier_from_fresh(rich, main0, fresh0, build_id="b0", reranker=FAKE)
+
+    # 6 new/changed rows, cap 3. New rows first in fresh_rich so the CHANGED x0',x1' get deferred
+    # -> their stale rows must count into `missing`, not pass as represented.
+    x0_new, x1_new = _job("x0", "X0", "NEW zero"), _job("x1", "X1", "NEW one")
+    new = [_job(f"y{i}", f"Y{i}", f"fresh {i}") for i in range(4)]
+    live = [*new, x0_new, x1_new]
+    fresh1 = tmp_path / "fresh1.sqlite"
+    _write_fresh(fresh1, [*new, x0_new, x1_new])
+    main1 = tmp_path / "main1.sqlite"
+    build_index(live, main1, build_id="b1")
+
+    rich_ref = tmp_path / "rich_ref.sqlite"
+    shutil.copy(rich, rich_ref)
+
+    s1 = reconcile_rich_tier_from_fresh(
+        rich, main1, fresh1, build_id="b1", reranker=FAKE, chunk_size=2, max_embed_per_run=3
+    )
+    assert s1 == {"pruned": 0, "embedded": 3, "missing": 3}  # y3 + stale x0,x1 deferred
+    assert "rich ramp: embedded 3, deferred 3 to next run" in capsys.readouterr().out
+    con = open_rich(rich)
+    assert (
+        con.execute("SELECT description FROM job_text WHERE id=?", (x0_old.id,)).fetchone()[0]
+        == "old zero"
+    )  # deferred stale row keeps its old content until its ramp turn
+
+    s2 = reconcile_rich_tier_from_fresh(
+        rich, main1, fresh1, build_id="b2", reranker=FAKE, chunk_size=2, max_embed_per_run=3
+    )
+    assert s2 == {"pruned": 0, "embedded": 3, "missing": 0}  # remainder picked up via sig diff
+
+    s_ref = reconcile_rich_tier_from_fresh(
+        rich_ref, main1, fresh1, build_id="b1", reranker=FAKE, max_embed_per_run=None
+    )
+    assert s_ref == {"pruned": 0, "embedded": 6, "missing": 0}
+    assert _dump_rich(rich) == _dump_rich(rich_ref)  # capped ramp converges to the uncapped state
+
+
+def test_reconcile_from_fresh_always_single_process(tmp_path, monkeypatch):
+    """The reconcile path must NEVER spawn fastembed worker processes: even on CI with a batch large
+    enough that _auto_parallel would fan out (>= _PARALLEL_MIN), every embed call gets parallel=None."""
+    from ergon_tracker.index.rich import _PARALLEL_MIN, reconcile_rich_tier_from_fresh
+
+    monkeypatch.setenv("CI", "true")  # the env where _auto_parallel would return 0 (all cores)
+    n = _PARALLEL_MIN + 100
+    jobs = [_job(str(i), f"Engineer {i}", f"python {i}", company=f"Co{i}") for i in range(n)]
+    fresh = tmp_path / "fresh.sqlite"
+    _write_fresh(fresh, jobs)
+    main = tmp_path / "main.sqlite"
+    build_index(jobs, main, build_id="b1")
+    rec = FakeReranker()
+    stats = reconcile_rich_tier_from_fresh(
+        tmp_path / "rich.sqlite", main, fresh, build_id="b1", reranker=rec, max_embed_per_run=None
+    )
+    assert stats["embedded"] == n
+    assert len(rec.seen_parallel) >= 1
+    assert all(p is None for p in rec.seen_parallel)  # single_process=True hardwires parallel=None
+
+
+def test_ramp_cap_env_and_ci_defaults(tmp_path, monkeypatch):
+    """max_embed_per_run='auto' resolves ERGON_RICH_MAX_EMBED, else 120k on CI, else unlimited."""
+    from ergon_tracker.index.rich import (
+        _RAMP_DEFAULT_CI,
+        _resolve_max_embed,
+        reconcile_rich_tier_from_fresh,
+    )
+
+    monkeypatch.delenv("ERGON_RICH_MAX_EMBED", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    assert _resolve_max_embed() is None  # local default: unlimited
+    monkeypatch.setenv("CI", "true")
+    assert _resolve_max_embed() == _RAMP_DEFAULT_CI  # CI default: bounded cold start
+    monkeypatch.setenv("ERGON_RICH_MAX_EMBED", "2")
+    assert _resolve_max_embed() == 2  # env wins over the CI default
+
+    jobs = [_job(str(i), f"R{i}", f"d{i}") for i in range(3)]
+    fresh = tmp_path / "fresh.sqlite"
+    _write_fresh(fresh, jobs)
+    main = tmp_path / "main.sqlite"
+    build_index(jobs, main, build_id="b1")
+    stats = reconcile_rich_tier_from_fresh(
+        tmp_path / "rich.sqlite", main, fresh, build_id="b1", reranker=FAKE
+    )  # default 'auto' -> env cap of 2 applies end-to-end
+    assert stats == {"pruned": 0, "embedded": 2, "missing": 1}
 
 
 def test_reconcile_from_fresh_handles_missing_capture(tmp_path):

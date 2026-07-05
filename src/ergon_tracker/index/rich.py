@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from ..models import JobPosting
@@ -268,15 +268,22 @@ def _embed_rows_into(
     *,
     reranker: SemanticReranker | None,
     batch: int,
+    single_process: bool = False,
 ) -> tuple[int, str]:
-    """Embed ``(id, embed_text)`` rows (streamed + data-parallel) → upsert int8 vectors. Returns (dim, model)."""
+    """Embed ``(id, embed_text)`` rows (streamed) → upsert int8 vectors. Returns (dim, model).
+
+    ``single_process=True`` hardwires ``parallel=None`` — no fastembed worker processes, ever
+    (each worker loads its own ~67MB ONNX model; on a memory-constrained CI runner 8-16 workers
+    is ~0.5GB+ of pure model copies). ONNX intra-op *threads* still apply, so this keeps most of
+    the throughput without the per-process memory multiplier. The incremental reconcile path
+    always sets it; the standalone full-build path keeps :func:`_auto_parallel`."""
     if not rows:
         return 0, getattr(reranker, "model_name", "?")
     if reranker is None:
         from ..semantic import get_semantic_reranker
 
         reranker = get_semantic_reranker()
-    par = _auto_parallel(len(rows))
+    par = None if single_process else _auto_parallel(len(rows))
     ids = [r[0] for r in rows]
     texts = [r[1] for r in rows]
     dim = 0
@@ -297,6 +304,21 @@ def _embed_rows_into(
     return dim, getattr(reranker, "model_name", "?")
 
 
+_RAMP_DEFAULT_CI = 120_000  # cold-start bound on a CI runner when ERGON_RICH_MAX_EMBED is unset
+
+
+def _resolve_max_embed() -> int | None:
+    """Embed budget per reconcile run: ``ERGON_RICH_MAX_EMBED`` if set, else a bounded default on CI
+    (a cold start over a full crawl window must ramp across runs, not embed ~1M rows in one job),
+    else unlimited locally."""
+    import os
+
+    env = os.environ.get("ERGON_RICH_MAX_EMBED", "").strip()
+    if env:
+        return int(env)
+    return _RAMP_DEFAULT_CI if os.environ.get("CI") else None
+
+
 def reconcile_rich_tier_from_fresh(
     rich_path: Path | str,
     main_index_path: Path | str,
@@ -305,6 +327,8 @@ def reconcile_rich_tier_from_fresh(
     build_id: str,
     reranker: SemanticReranker | None = None,
     batch: int = 256,
+    chunk_size: int = 10_000,
+    max_embed_per_run: int | None | Literal["auto"] = "auto",
 ) -> dict[str, int]:
     """Incremental (cron) cascade — same contract as :func:`reconcile_rich_tier` but reads the freshly-
     crawled ``(id, sig, description, embed_text)`` from the streaming fresh DB (disk, memory-safe via
@@ -312,49 +336,102 @@ def reconcile_rich_tier_from_fresh(
     for live ids; orphans are pruned; only new/changed fresh rows (``sig`` differs) re-embed; every
     carried-forward id keeps the text+vector already in the persisted sidecar. Returns
     ``{pruned, embedded, missing}`` (``missing`` = live ids not yet represented — they fill in as the
-    rotating crawl window reaches them)."""
+    rotating crawl window reaches them).
+
+    **Memory model (the OOM fix for run 28070765535):** ``fresh_rich`` is never ``fetchall()``'d —
+    at ~1.2M rows × ~5-6KB of description+embed_text that is 6-7GB resident. Instead the cursor is
+    drained with ``fetchmany(chunk_size)`` and each chunk is fully processed (filter → delete stale →
+    upsert text → embed via :func:`_embed_rows_into` with ``single_process=True``, so no per-worker
+    model copies) before the next fetch: peak memory is O(chunk), not O(corpus). The ``have``
+    ``{id: sig}`` map *is* held in memory deliberately — two short strings per row is ~150MB at 1.4M
+    ids, a fine trade for O(1) change detection versus a per-row SQL lookup. The FTS index is rebuilt
+    ONCE after all chunks (it scans the whole ``job_text`` table, so per-chunk rebuilds would be
+    quadratic).
+
+    **Bounded cold-start ramp:** ``max_embed_per_run`` caps total embedded rows across chunks
+    (``"auto"`` → ``ERGON_RICH_MAX_EMBED`` env, else 120k on CI, else unlimited). Once the cap hits,
+    remaining new/changed rows are skipped — they count into ``missing`` and are picked up on the
+    next run via the same sig comparison, so a cold start converges over a few runs instead of
+    OOMing one."""
+    max_embed = _resolve_max_embed() if max_embed_per_run == "auto" else max_embed_per_run
+
     main = sqlite3.connect(f"file:{main_index_path}?mode=ro", uri=True)
     try:
         live_ids = {r[0] for r in main.execute("SELECT id FROM jobs")}
     finally:
         main.close()
-    fresh = sqlite3.connect(f"file:{fresh_db_path}?mode=ro", uri=True)
-    try:
-        fresh_rows = fresh.execute(
-            "SELECT id, sig, description, embed_text FROM fresh_rich"
-        ).fetchall()
-    except sqlite3.OperationalError:
-        fresh_rows = []  # capture was off this run → prune-only reconcile
-    finally:
-        fresh.close()
 
     con = sqlite3.connect(str(rich_path))
     try:
         if not Path(rich_path).exists() or not _has_schema(con):
             con.executescript(RICH_SCHEMA)
+        # id→sig for every row already in the sidecar. Held in memory by design: ~150MB at 1.4M rows
+        # (two short strings each) buys O(1) new/changed detection per fresh row (see docstring).
         have = dict(con.execute("SELECT id, sig FROM job_text"))
         orphans = [i for i in have if i not in live_ids]
         _delete_ids(con, orphans)
 
-        rebuild = [r for r in fresh_rows if r[0] in live_ids and have.get(r[0]) != r[1]]
-        _delete_ids(con, [r[0] for r in rebuild])
-        con.executemany(
-            "INSERT OR REPLACE INTO job_text(id, sig, description) VALUES(?, ?, ?)",
-            [(r[0], r[1], r[2]) for r in rebuild],
-        )
-        dim, model = _embed_rows_into(
-            con, [(r[0], r[3]) for r in rebuild], reranker=reranker, batch=batch
-        )
-        con.execute("INSERT INTO job_text_fts(job_text_fts) VALUES('rebuild')")
+        embedded = 0
+        rebuilt_ids: set[str] = set()
+        deferred_ids: set[str] = set()
+        dim, model = 0, ""
+        fresh = sqlite3.connect(f"file:{fresh_db_path}?mode=ro", uri=True)
+        try:
+            try:
+                cur = fresh.execute("SELECT id, sig, description, embed_text FROM fresh_rich")
+            except sqlite3.OperationalError:
+                cur = None  # capture was off this run → prune-only reconcile
+            while cur is not None:
+                rows = cur.fetchmany(chunk_size)
+                if not rows:
+                    break
+                # new-or-changed live rows only (fresh_rich ids are unique, so no cross-chunk dupes)
+                chunk = [r for r in rows if r[0] in live_ids and have.get(r[0]) != r[1]]
+                if max_embed is not None:
+                    budget = max_embed - embedded
+                    if budget <= 0:
+                        deferred_ids.update(r[0] for r in chunk)
+                        continue
+                    if len(chunk) > budget:
+                        deferred_ids.update(r[0] for r in chunk[budget:])
+                        chunk = chunk[:budget]
+                if not chunk:
+                    continue
+                _delete_ids(con, [r[0] for r in chunk])  # clear stale rows before re-inserting
+                con.executemany(
+                    "INSERT OR REPLACE INTO job_text(id, sig, description) VALUES(?, ?, ?)",
+                    [(r[0], r[1], r[2]) for r in chunk],
+                )
+                d, m = _embed_rows_into(
+                    con,
+                    [(r[0], r[3]) for r in chunk],
+                    reranker=reranker,
+                    batch=batch,
+                    single_process=True,  # never fork per-chunk model copies on the reconcile path
+                )
+                dim, model = dim or d, m or model
+                rebuilt_ids.update(r[0] for r in chunk)
+                embedded += len(chunk)
+        finally:
+            fresh.close()
+
+        con.execute(
+            "INSERT INTO job_text_fts(job_text_fts) VALUES('rebuild')"
+        )  # ONCE, after chunks
         meta = [("build_id", build_id), ("quant", "int8")]
         if dim:
             meta += [("dim", str(dim)), ("model", model)]
         con.executemany("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)", meta)
         con.commit()
-        final_ids = (set(have) - set(orphans)) | {r[0] for r in rebuild}
+        if deferred_ids:
+            print(f"rich ramp: embedded {embedded}, deferred {len(deferred_ids)} to next run")
+        # Represented = carried-forward rows minus anything deferred-with-stale-content, plus this
+        # run's rebuilds. A deferred id already in `have` keeps its stale row but is NOT represented
+        # (counts into missing, like a deferred brand-new id); the sig mismatch re-selects it next run.
+        final_ids = ((set(have) - set(orphans)) - deferred_ids) | rebuilt_ids
         return {
             "pruned": len(orphans),
-            "embedded": len(rebuild),
+            "embedded": embedded,
             "missing": len(live_ids - final_ids),
         }
     finally:
