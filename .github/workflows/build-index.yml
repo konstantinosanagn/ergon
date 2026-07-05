@@ -79,18 +79,32 @@ jobs:
           uv pip install -e ".[browser]" && uv run playwright install --with-deps chromium
           uv run python scripts/tier2_refresh.py --store dist/tier2_tokens.json
 
+      # The embedding model (~130MB ONNX) otherwise re-downloads every run — and would land in
+      # TMPDIR=/mnt (wiped per run) via fastembed's default cache. Pin FASTEMBED_CACHE_PATH to a
+      # stable dir (build step env below) and cache it across runs. Key tracks the model name
+      # (semantic.DEFAULT_MODEL); bump it if ERGON_SEMANTIC_MODEL ever overrides the default.
+      - name: Cache fastembed model (rich-tier embeddings)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-BAAI-bge-small-en-v1.5
+
       - name: Build incremental index (exits non-zero if data-quality gates fail)
         env:
           SQLITE_TMPDIR: /mnt        # large temp disk for FTS/sort spills (/ has only ~14GB)
           TMPDIR: /mnt
           ERGON_TOKEN_STORE: dist/tier2_tokens.json  # token_ref specs read the freshly-minted tokens
+          # Stable model cache dir (matches the cache step). Explicit path: env values are not
+          # shell-expanded, so `~` would be taken literally by fastembed.
+          FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+          ERGON_RICH_MAX_EMBED: "120000"             # rich cold-start ramp: embed budget per run
         run: |
-          # NOTE: --rich temporarily disabled — the cold-start embedding of a full 12k-board window
-          # OOM/thrash-killed run 28070765535 at ~182min (job died mid-build, uncatchable by the
-          # non-fatal guard). Re-enable once the rich cold-start is bounded + single-process (see
-          # reconcile_rich_tier_from_fresh). The speed levers (concurrency/shards/pigz) stay on.
+          # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
+          # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
+          # per-worker model copies), and bounds the cold start via ERGON_RICH_MAX_EMBED — deferred
+          # rows count as `missing` and ramp in over subsequent daily runs via sig comparison.
           uv run python scripts/build_index.py --incremental \
-            --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist
+            --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist --rich
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
