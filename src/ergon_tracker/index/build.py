@@ -18,7 +18,8 @@ from .mapping import from_row, to_row
 _JOB_COLS = (  # noqa: SIM905 - space-delimited string is far more readable than a 40-item list
     "id content_hash company_key source company company_domain title department role_family "
     "location city country remote level employment_type sector salary_min salary_max "
-    "salary_currency salary_interval salary_annual years_min years_max visa_sponsor "
+    "salary_currency salary_interval salary_annual years_min years_max degree_min "
+    "degree_required visa_sponsor "
     "visa_last_filed sponsorship_offered apply_url listing_url board_token posted_at updated_at "
     "closes_at status first_seen last_seen expired_at expiry_reason fetched_at build_id snippet"
 ).split()
@@ -460,9 +461,10 @@ def build_index_from_fresh_db(
 
 # Columns nulled in the slim broad-query tier: heavy/free-text fields a BROAD keyword search
 # doesn't need to match or display. Kept: id, company, title, level, sector, city/country/location,
-# remote, salary*, visa*, sponsorship, apply_url, posted_at, source, status, dates (schema NOT NULL
-# cols must stay). The FTS over title+company+department+snippet auto-shrinks since department +
-# snippet become NULL. content_hash stays (NOT NULL + cheap, 16 hex).
+# remote, salary*, degree_min/degree_required (tiny + filterable, so max_degree serves from slim),
+# visa*, sponsorship, apply_url, posted_at, source, status, dates (schema NOT NULL cols must stay).
+# The FTS over title+company+department+snippet auto-shrinks since department + snippet become
+# NULL. content_hash stays (NOT NULL + cheap, 16 hex).
 _SLIM_NULL_COLS = frozenset(
     {
         "snippet",

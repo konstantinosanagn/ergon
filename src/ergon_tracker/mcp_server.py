@@ -76,6 +76,8 @@ def _job_to_dict(job: JobPosting) -> dict[str, Any]:
         "salary": salary,
         "years_min": job.years_experience_min,
         "years_max": job.years_experience_max,
+        "degree_min": job.degree_min,
+        "degree_required": job.degree_required,
         "apply_url": job.apply_url,
         "source": job.source,
         "posted_at": job.posted_at.isoformat() if job.posted_at else None,
@@ -106,6 +108,8 @@ async def search_jobs(
     min_years: int | None = None,
     max_years: int | None = None,
     include_unknown_years: bool = True,
+    max_degree: str | None = None,
+    include_unknown_degree: bool = True,
     employment_type: str | None = None,
     posted_within_days: int | None = None,
     max_age_days: int | None = 365,
@@ -149,6 +153,14 @@ async def search_jobs(
             years" searches (min_years=0, max_years=2). Postings with no stated years are kept
             unless include_unknown_years=false.
         include_unknown_years: keep postings with no stated experience requirement (default true).
+        max_degree: education ceiling — highschool / associate / bachelor / master / phd_md.
+            Keeps postings whose extracted minimum degree is at or below this level (no other
+            job API has an education field). Excludes even "preferred-only" advanced degrees —
+            a "strongly preferred M.D./Ph.D." still gates new grads — while each job reports
+            `degree_min` + `degree_required` (true=required, false=preferred-only, null=unstated)
+            so you can show the nuance. Combine with min_years/max_years for new-grad searches:
+            max_degree="bachelor", max_years=2.
+        include_unknown_degree: keep postings with no stated degree requirement (default true).
         employment_type: full_time / part_time / contract / internship / temporary / other.
             Postings that don't state a type are kept.
         posted_within_days: only postings published within the last N days (recency filter).
@@ -177,6 +189,8 @@ async def search_jobs(
         search_jobs(keywords="engineer", companies=["stripe.com", "ramp.com"], level="senior")
         # broad, fast (auto aggregator APIs), well-paid + remote
         search_jobs(keywords="data scientist", remote=True, country="United States", salary_min=150000)
+        # new-grad safe: drop roles gated on an advanced degree or 3+ years of experience
+        search_jobs(keywords="research associate", max_degree="bachelor", max_years=2)
         # industry + level, keeping roles whose level/sector couldn't be inferred
         search_jobs(keywords="backend", sector="Fintech", level="senior",
                     include_unknown_level=True, include_unknown_sector=True)
@@ -205,6 +219,8 @@ async def search_jobs(
         min_years=min_years,
         max_years=max_years,
         include_unknown_years=include_unknown_years,
+        max_degree=max_degree,  # type: ignore[arg-type]  # pydantic validates the literal
+        include_unknown_degree=include_unknown_degree,
         employment_type=EmploymentType(employment_type) if employment_type else None,
         posted_after=_days_ago(posted_within_days),
         max_age_days=max_age_days,

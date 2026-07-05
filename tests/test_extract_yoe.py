@@ -156,6 +156,87 @@ def test_future_timeframe_not_matched() -> None:
     assert _yoe("We aim to triple revenue in 5 years.") == (None, None)
 
 
+# --- recall pass: YOE unit, months, degree pairing, alternation ladders ------
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        # "YOE" is a self-cueing unit (it spells out years-of-experience)
+        ("3+ YOE required.", (3, None)),
+        ("2 YOE", (2, None)),
+        ("5 yoe in backend development", (5, None)),
+        # "N yrs' exp" style
+        ("5 yrs' exp in backend systems.", (5, None)),
+        ("7+ yrs exp.", (7, None)),
+        # months convert to years, rounded DOWN
+        ("18 months of experience required.", (1, None)),
+        ("6 months of professional experience.", (0, None)),
+        ("At least 24 months of hands-on experience.", (2, None)),
+        ("12 to 36 months of industry experience.", (1, 3)),
+        # degree + years pairing reads as a requirement (no explicit experience cue needed)
+        ("Bachelor's degree and 5 years in fintech.", (5, None)),
+        ("MS degree plus 3 years in data engineering.", (3, None)),
+    ],
+)
+def test_recall_additions(text: str, expected: tuple[int | None, int | None]) -> None:
+    assert _yoe(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        # degree-alternation ladder -> MINIMUM years across the arms: the lowest barrier a
+        # candidate can clear is the posting's true minimum (PhD + 2 => a 2-year floor).
+        ("BS + 8 years OR MS + 5 years OR PhD + 2 years.", (2, None)),
+        (
+            "BS with 8+ years of experience, MS with 5+ years, or PhD with 2+ years.",
+            (2, None),
+        ),
+        (
+            "Bachelor's degree and 10 years of experience, or Master's degree and 6 years.",
+            (6, None),
+        ),
+        # single degree-paired phrase: no ladder, value passes through unchanged
+        ("PhD and 2 years of postdoctoral experience.", (2, None)),
+    ],
+)
+def test_degree_alternation_takes_minimum(
+    text: str, expected: tuple[int | None, int | None]
+) -> None:
+    assert _yoe(text) == expected
+
+
+def test_alternation_does_not_hijack_unrelated_later_mentions() -> None:
+    # A degree-paired first phrase followed by a DISTANT second phrase is not a ladder.
+    text = (
+        "BS and 8 years of experience required. "
+        "Our founding team spent their careers building infrastructure and developer platforms "
+        "across many companies; ideally you have 2 years of experience with Kubernetes."
+    )
+    assert _yoe(text) == (8, None)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # age gates
+        "Must be 18 years of age.",
+        "Applicants must be 21 years or older.",
+        # company age
+        "25 years in business serving the region.",
+        "Our company has been in operation for 30 years.",
+        # engagement length, not experience (month-denominated)
+        "This is a 6 month contract position.",
+        "12 months maternity cover.",
+        "A 3 month probation period applies.",
+        "A 12 month assignment with possible extension.",
+    ],
+)
+def test_recall_additions_false_positives(text: str) -> None:
+    assert _yoe(text) == (None, None)
+
+
 # --- registry wiring --------------------------------------------------------
 
 

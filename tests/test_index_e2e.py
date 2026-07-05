@@ -8,6 +8,7 @@ import ergon_tracker.index.router as router
 from ergon_tracker.index.backend import SqliteIndexBackend
 from ergon_tracker.index.build import build_index
 from ergon_tracker.index.cache import IndexCache
+from ergon_tracker.index.db import SCHEMA_VERSION
 from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
@@ -45,7 +46,7 @@ def test_full_pipeline_offline(tmp_path, monkeypatch):
         json.dumps(
             {
                 "build_id": "b1",
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
                 "sha256": hashlib.sha256(raw).hexdigest(),
                 "bytes": len(raw),
             }

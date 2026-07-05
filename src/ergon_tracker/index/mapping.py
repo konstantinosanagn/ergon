@@ -83,6 +83,10 @@ def to_row(job: JobPosting, *, build_id: str, now: str | None = None) -> dict[st
         "salary_annual": None,
         "years_min": job.years_experience_min,
         "years_max": job.years_experience_max,
+        "degree_min": job.degree_min,
+        "degree_required": (
+            None if job.degree_required is None else (1 if job.degree_required else 0)
+        ),
         "visa_sponsor": 1 if job.visa_sponsor else None,
         "visa_last_filed": job.visa_last_filed,
         "sponsorship_offered": (
@@ -125,6 +129,7 @@ def from_row(row: Any) -> JobPosting:
             )
         ]
     sp = row["sponsorship_offered"]
+    dr = row["degree_required"]
     return JobPosting(
         id=row["id"],
         source=row["source"],
@@ -142,6 +147,8 @@ def from_row(row: Any) -> JobPosting:
         salary=sal,
         years_experience_min=row["years_min"],
         years_experience_max=row["years_max"],
+        degree_min=row["degree_min"],
+        degree_required=(None if dr is None else bool(dr)),
         apply_url=row["apply_url"],
         posted_at=_parse_dt(row["posted_at"]),
         updated_at=_parse_dt(row["updated_at"]),

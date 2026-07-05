@@ -154,6 +154,46 @@ async def test_search_jobs_forwards_new_filters_to_index(monkeypatch) -> None:
     assert q.posted_after is not None  # posted_within_days -> cutoff datetime
 
 
+async def test_search_jobs_forwards_degree_filter_to_index(monkeypatch) -> None:
+    # The education filter (no competitor API has one) must reach the SearchQuery the index
+    # sees — the "new grad: exclude M.D./Ph.D.-gated roles" use case.
+    from ergon_tracker.index import router
+
+    captured = {}
+
+    def fake_try_index(q):
+        captured["q"] = q
+        return []
+
+    monkeypatch.setattr(router, "try_index", fake_try_index)
+    out = await srv.search_jobs(
+        keywords="research associate",
+        max_degree="bachelor",
+        include_unknown_degree=False,
+        max_years=2,
+    )
+    assert out["health"][0]["source"] == "index"
+    q = captured["q"]
+    assert q.max_degree == "bachelor" and q.include_unknown_degree is False
+    assert q.max_years == 2
+
+
+async def test_job_dict_includes_degree_fields() -> None:
+    # Consumers must see BOTH the level and the required/preferred nuance on every result.
+    from ergon_tracker.models import JobPosting
+
+    j = JobPosting.create(
+        source="greenhouse",
+        source_job_id="1",
+        company="William Blair",
+        title="Equity Research Associate - BioTech",
+        degree_min="phd_md",
+        degree_required=False,  # "strongly preferred" — excluded by max_degree, shown as nuance
+    )
+    d = srv._job_to_dict(j)
+    assert d["degree_min"] == "phd_md" and d["degree_required"] is False
+
+
 async def test_job_dict_includes_years_and_core_fields() -> None:
     # "fetch information": the agent-facing dict must surface the rich fields, incl. the years a
     # role requires (so a years-filtered result can show why it matched).

@@ -6,7 +6,8 @@ import sqlite3
 from importlib.resources import files
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+# v2: degree_min/degree_required columns (+ idx_jobs_degree) for the education filter.
+SCHEMA_VERSION = 2
 
 
 def _schema_sql() -> str:

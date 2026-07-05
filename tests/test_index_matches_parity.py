@@ -56,6 +56,8 @@ def _make_jobs(rng, n):
         ymax = rng.choice([None, 1, 3, 7, 10])
         if ymin is not None and ymax is not None and ymin > ymax:
             ymin, ymax = ymax, ymin
+        degree = rng.choice([None, "highschool", "associate", "bachelor", "master", "phd_md"])
+        degree_required = None if degree is None else rng.choice([True, False, None])
         city = rng.choice(_CITIES)
         country = rng.choice(_COUNTRIES)
         raw = ", ".join(x for x in (city, country) if x) or "Remote"
@@ -72,6 +74,8 @@ def _make_jobs(rng, n):
                 salary=sal,
                 years_experience_min=ymin,
                 years_experience_max=ymax,
+                degree_min=degree,
+                degree_required=degree_required,
                 visa_sponsor=rng.choice([True, None]),
                 sponsorship_offered=rng.choice([True, False, None]),
                 posted_at=rng.choice(_POSTED),
@@ -112,6 +116,9 @@ def _random_query(rng):
     if rng.random() < 0.3:
         q["max_years"] = rng.choice([3, 7])
         q["include_unknown_years"] = rng.random() < 0.5
+    if rng.random() < 0.3:
+        q["max_degree"] = rng.choice(["highschool", "associate", "bachelor", "master", "phd_md"])
+        q["include_unknown_degree"] = rng.random() < 0.5
     if rng.random() < 0.25:
         q["employment_type"] = rng.choice(_EMP)
     if rng.random() < 0.3:

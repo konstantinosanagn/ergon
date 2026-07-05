@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ergon_tracker.index.build import build_index  # noqa: E402
+from ergon_tracker.index.db import SCHEMA_VERSION  # noqa: E402
 
 # Compression level 6 (not gzip's default 9): ~2x faster for ~5% larger output — the right trade for a
 # ~1GB artifact rebuilt daily. Output stays standard gzip (.gz), so the SDK's gunzip is unchanged.
@@ -69,7 +70,7 @@ def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     sha, nbytes = _gzip_file(db_path, out_dir / "index.sqlite.gz")
     (out_dir / "manifest.json").write_text(
-        json.dumps({"build_id": build_id, "schema_version": 1, "sha256": sha, "bytes": nbytes})
+        json.dumps({"build_id": build_id, "schema_version": SCHEMA_VERSION, "sha256": sha, "bytes": nbytes})
     )
 
 
@@ -257,7 +258,7 @@ def build_and_publish_delta(prev_db: Path, curr_db: Path, out: Path, *, build_id
     shutil.copyfile(out / "index-delta.sqlite.gz", out / chain_file)
     delta.unlink(missing_ok=True)
     manifest = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "from_build_id": from_build_id,
         "to_build_id": build_id,
         "sha256": sha,
@@ -297,7 +298,7 @@ def _update_deltas_window(out: Path, entry: dict) -> list[str]:
     deltas = deltas[-_DELTA_WINDOW:]
     kept = {d["file"] for d in deltas}
     pruned = [d["file"] for d in data.get("deltas", []) if d["file"] not in kept]
-    path.write_text(json.dumps({"schema_version": 1, "deltas": deltas}))
+    path.write_text(json.dumps({"schema_version": SCHEMA_VERSION, "deltas": deltas}))
     return pruned
 
 
@@ -347,7 +348,7 @@ def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
     slim.unlink(missing_ok=True)
     (out / "manifest-slim.json").write_text(
         json.dumps(
-            {"build_id": build_id, "schema_version": 1, "sha256": sha, "bytes": nbytes, "rows": n}
+            {"build_id": build_id, "schema_version": SCHEMA_VERSION, "sha256": sha, "bytes": nbytes, "rows": n}
         )
     )
     return n

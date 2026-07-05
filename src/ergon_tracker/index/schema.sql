@@ -22,6 +22,8 @@ CREATE TABLE jobs (
   employment_type TEXT NOT NULL, sector TEXT,
   salary_min REAL, salary_max REAL, salary_currency TEXT, salary_interval TEXT, salary_annual REAL,
   years_min INTEGER, years_max INTEGER,
+  degree_min TEXT CHECK (degree_min IN ('highschool','associate','bachelor','master','phd_md')),
+  degree_required INTEGER CHECK (degree_required IN (0,1)),
   visa_sponsor INTEGER CHECK (visa_sponsor IN (1)),
   visa_last_filed TEXT,
   sponsorship_offered INTEGER CHECK (sponsorship_offered IN (0,1)),
@@ -63,6 +65,7 @@ CREATE INDEX idx_jobs_remote ON jobs(remote);
 CREATE INDEX idx_jobs_role_family ON jobs(role_family);
 CREATE INDEX idx_jobs_status ON jobs(status);
 CREATE INDEX idx_jobs_posted_at ON jobs(posted_at);
+CREATE INDEX idx_jobs_degree ON jobs(degree_min);
 CREATE INDEX idx_jobs_visa ON jobs(visa_sponsor) WHERE visa_sponsor = 1;
 CREATE INDEX idx_jobs_sponsorship ON jobs(sponsorship_offered) WHERE sponsorship_offered = 1;
 CREATE INDEX idx_jobs_active ON jobs(status) WHERE status = 'active';

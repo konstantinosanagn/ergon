@@ -10,7 +10,7 @@ import hashlib
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +19,8 @@ __all__ = [
     "EmploymentType",
     "SalaryInterval",
     "JobLevel",
+    "DEGREE_LEVELS",
+    "DEGREE_ORDER",
     "Location",
     "Salary",
     "Company",
@@ -72,6 +74,14 @@ class JobLevel(str, Enum):
     DIRECTOR = "director"
     EXECUTIVE = "executive"
     UNKNOWN = "unknown"
+
+
+# Minimum-degree ladder (order = strictness) shared by the extractor, the SearchQuery filter,
+# and the index SQL. Values are the ``degree_min`` enum; DEGREE_ORDER gives each its rank so
+# "keep jobs whose degree_min <= max_degree" is a simple integer compare.
+DEGREE_LEVELS: tuple[str, ...] = ("highschool", "associate", "bachelor", "master", "phd_md")
+DEGREE_ORDER: dict[str, int] = {name: i for i, name in enumerate(DEGREE_LEVELS)}
+_DegreeLevel = Literal["highschool", "associate", "bachelor", "master", "phd_md"]
 
 
 def _utcnow() -> datetime:
@@ -197,6 +207,15 @@ class JobPosting(BaseModel):
     # True = offered ("sponsorship available"), False = explicitly not ("must not require
     # sponsorship"), None = not stated (common). Distinct from visa_sponsor (employer-level DoL).
     sponsorship_offered: bool | None = None
+    # Minimum degree the posting asks for (see DEGREE_LEVELS), extracted from the description.
+    # None = the posting doesn't state an education requirement (common). No competitor job API
+    # exposes this field — it's what makes new-grad filtering actually work.
+    degree_min: str | None = None
+    # Scope of that degree ask (tri-state, mirrors sponsorship_offered): True = required,
+    # False = preferred-only / "or equivalent experience", None = degree stated without scope.
+    # NOTE: "strongly preferred" is still False — but max_degree filtering excludes on degree_min
+    # regardless of scope, because a "strongly preferred M.D./Ph.D." effectively gates new grads.
+    degree_required: bool | None = None
 
     @classmethod
     def create(
@@ -289,6 +308,16 @@ class SearchQuery(BaseModel):
     min_years: int | None = None
     max_years: int | None = None
     include_unknown_years: bool = True
+    # Education ceiling: keep jobs whose extracted degree_min is <= this level in the ordering
+    # highschool < associate < bachelor < master < phd_md. Exclusion applies REGARDLESS of
+    # degree_required — a "strongly preferred M.D./Ph.D." (degree_required=False) still gates a
+    # new grad in practice, so max_degree="bachelor" drops it; degree_required is surfaced on
+    # each result so consumers see the nuance. None = no degree filter.
+    max_degree: _DegreeLevel | None = None
+    # When filtering by max_degree, also keep postings with no stated degree (default: keep —
+    # unspecified is the majority and absence isn't evidence of a requirement). Mirrors
+    # include_unknown_years/include_unknown_sponsorship.
+    include_unknown_degree: bool = True
     # opt-in: derive level from years-of-experience when the title has no seniority marker
     # (boosts level coverage; trades some precision — off by default)
     infer_level_from_experience: bool = False
@@ -310,6 +339,22 @@ class SearchQuery(BaseModel):
         want_lo = self.min_years if self.min_years is not None else float("-inf")
         want_hi = self.max_years if self.max_years is not None else float("inf")
         return not (job_hi < want_lo or job_lo > want_hi)
+
+    def _degree_ok(self, job: JobPosting) -> bool:
+        """Degree-ceiling filter: keep when degree_min <= max_degree in the DEGREE_LEVELS order.
+
+        Unknown-degree postings are kept unless include_unknown_degree=False. degree_required is
+        deliberately NOT consulted: a preferred-only advanced degree still exceeds the ceiling
+        (the William Blair case — "M.D. or Ph.D. ... strongly preferred" must be excludable by
+        max_degree="bachelor"); the tri-state scope is exposed on the posting instead.
+        """
+        if self.max_degree is None:
+            return True
+        if job.degree_min is None:
+            return self.include_unknown_degree
+        # Unrecognized stored value (future level?) -> treat as exceeding every ceiling.
+        rank = DEGREE_ORDER.get(job.degree_min, len(DEGREE_LEVELS))
+        return rank <= DEGREE_ORDER[self.max_degree]
 
     def _salary_ok(self, job: JobPosting) -> bool:
         if self.salary_min is None and self.salary_max is None:
@@ -424,6 +469,9 @@ class SearchQuery(BaseModel):
             return False
 
         if not self._years_ok(job):
+            return False
+
+        if not self._degree_ok(job):
             return False
 
         if self.max_age_days is not None:
