@@ -14,7 +14,7 @@ import json
 from ergon_tracker.index.backend import SqliteIndexBackend
 from ergon_tracker.index.build import build_delta, build_index, build_slim_index
 from ergon_tracker.index.cache import IndexCache, SlimCache
-from ergon_tracker.index.db import connect
+from ergon_tracker.index.db import SCHEMA_VERSION, connect
 from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
@@ -39,7 +39,7 @@ def _publish(remote, path, gz_name, manifest_name, extra):
             {
                 "sha256": hashlib.sha256(raw).hexdigest(),
                 "bytes": len(raw),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
                 **extra,
             }
         )
@@ -138,7 +138,9 @@ def test_full_tiered_pipeline_fresh_and_returning_user(tmp_path):
     retdir = tmp_path / "ret"
     retdir.mkdir()
     (retdir / "index.sqlite").write_bytes(prev.read_bytes())
-    (retdir / "manifest.json").write_text(json.dumps({"build_id": "day0", "schema_version": 1}))
+    (retdir / "manifest.json").write_text(
+        json.dumps({"build_id": "day0", "schema_version": SCHEMA_VERSION})
+    )
     # make the FULL file un-downloadable so success can ONLY come from the delta path
     (remote / "index.sqlite.gz").write_bytes(b"corrupt")
     ret = IndexCache(base_url=remote.as_uri(), cache_dir=retdir)

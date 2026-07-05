@@ -5,6 +5,7 @@ import json
 from ergon_tracker.index.backend import SqliteIndexBackend
 from ergon_tracker.index.build import build_index
 from ergon_tracker.index.cache import IndexCache
+from ergon_tracker.index.db import SCHEMA_VERSION
 from ergon_tracker.models import JobPosting
 
 
@@ -23,7 +24,7 @@ def _publish(remote_dir, tmp_path):
                 "build_id": "b1",
                 "sha256": hashlib.sha256(raw).hexdigest(),
                 "bytes": len(raw),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -44,7 +45,9 @@ def test_cache_rejects_corrupt_download(tmp_path):
     remote.mkdir()
     _publish(remote, tmp_path)
     (remote / "manifest.json").write_text(
-        json.dumps({"build_id": "b1", "sha256": "0" * 64, "bytes": 1, "schema_version": 1})
+        json.dumps(
+            {"build_id": "b1", "sha256": "0" * 64, "bytes": 1, "schema_version": SCHEMA_VERSION}
+        )
     )
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
     assert cache.ensure_fresh() is None
@@ -128,7 +131,7 @@ def test_cache_applies_delta_instead_of_full_download(tmp_path):
                 "build_id": "b1",
                 "sha256": hashlib.sha256(raw1).hexdigest(),
                 "bytes": len(raw1),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -150,7 +153,7 @@ def test_cache_applies_delta_instead_of_full_download(tmp_path):
                 "build_id": "b2",
                 "sha256": hashlib.sha256(raw2).hexdigest(),
                 "bytes": len(raw2),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -167,7 +170,7 @@ def test_cache_applies_delta_instead_of_full_download(tmp_path):
                 "to_build_id": "b2",
                 "sha256": hashlib.sha256(draw).hexdigest(),
                 "bytes": len(draw),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -199,7 +202,7 @@ def test_cache_falls_back_to_full_when_delta_base_mismatches(tmp_path):
                 "build_id": "b1",
                 "sha256": hashlib.sha256(raw1).hexdigest(),
                 "bytes": len(raw1),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -220,7 +223,7 @@ def test_cache_falls_back_to_full_when_delta_base_mismatches(tmp_path):
                 "build_id": "b2",
                 "sha256": hashlib.sha256(raw2).hexdigest(),
                 "bytes": len(raw2),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -238,7 +241,7 @@ def test_cache_falls_back_to_full_when_delta_base_mismatches(tmp_path):
                 "to_build_id": "b2",
                 "sha256": hashlib.sha256(draw).hexdigest(),
                 "bytes": len(draw),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -295,7 +298,9 @@ def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
     # prime local cache at b0
     cache_dir.mkdir()
     (cache_dir / "index.sqlite").write_bytes(b0.read_bytes())
-    (cache_dir / "manifest.json").write_text(json.dumps({"build_id": "b0", "schema_version": 1}))
+    (cache_dir / "manifest.json").write_text(
+        json.dumps({"build_id": "b0", "schema_version": SCHEMA_VERSION})
+    )
 
     # remote: b2 full (corrupt so only the chain works) + manifest + deltas window + chain files
     raw2 = b2.read_bytes()
@@ -306,7 +311,7 @@ def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
                 "build_id": "b2",
                 "sha256": hashlib.sha256(raw2).hexdigest(),
                 "bytes": len(raw2),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -324,14 +329,14 @@ def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
                 "to_build_id": "b2",
                 "sha256": hashlib.sha256(d12.read_bytes()).hexdigest(),
                 "bytes": len(d12.read_bytes()),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
     (remote / "deltas.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
                 "deltas": [
                     {
                         "from_build_id": "b0",
@@ -405,7 +410,9 @@ def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
         build_id="b2",
     )
     (cache_dir / "index.sqlite").write_bytes(b0.read_bytes())
-    (cache_dir / "manifest.json").write_text(json.dumps({"build_id": "b0", "schema_version": 1}))
+    (cache_dir / "manifest.json").write_text(
+        json.dumps({"build_id": "b0", "schema_version": SCHEMA_VERSION})
+    )
 
     raw2 = b2.read_bytes()
     # full download ALSO unavailable so we isolate the chain behavior (ensure_fresh returns None)
@@ -416,7 +423,7 @@ def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
                 "build_id": "b2",
                 "sha256": hashlib.sha256(raw2).hexdigest(),
                 "bytes": len(raw2),
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -427,7 +434,7 @@ def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
                 "to_build_id": "b2",
                 "sha256": "x",
                 "bytes": 1,
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -439,7 +446,7 @@ def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
     (remote / "deltas.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": SCHEMA_VERSION,
                 "deltas": [
                     {
                         "from_build_id": "b0",

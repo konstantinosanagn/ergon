@@ -31,6 +31,8 @@ def _job():
         visa_sponsor=True,
         visa_last_filed="2026-03-31",
         sponsorship_offered=True,
+        degree_min="bachelor",
+        degree_required=True,
     )
 
 
@@ -40,8 +42,20 @@ def test_round_trip_preserves_indexed_fields():
     assert j2.id == j.id and j2.company == "Stripe" and j2.title == j.title
     assert j2.level is JobLevel.SENIOR and j2.remote is RemoteType.REMOTE
     assert j2.sector == "Fintech" and j2.visa_sponsor is True and j2.sponsorship_offered is True
+    assert j2.degree_min == "bachelor" and j2.degree_required is True
     assert j2.salary.min_amount == 120000 and j2.salary.currency == "USD"
     assert j2.locations[0].city == "Berlin" and j2.locations[0].country == "Germany"
+
+
+def test_round_trip_preserves_degree_tri_state():
+    # preferred-only (False) and unstated (None) must survive the 0/1/NULL SQLite encoding
+    pref = _job().model_copy(update={"degree_min": "phd_md", "degree_required": False})
+    j2 = from_row(to_row(pref, build_id="b1"))
+    assert j2.degree_min == "phd_md" and j2.degree_required is False
+
+    unknown = _job().model_copy(update={"degree_min": None, "degree_required": None})
+    j3 = from_row(to_row(unknown, build_id="b1"))
+    assert j3.degree_min is None and j3.degree_required is None
 
 
 def test_to_row_sets_role_family_and_company_key():

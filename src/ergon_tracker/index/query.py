@@ -6,7 +6,7 @@ import re
 import sqlite3
 from typing import Any
 
-from ..models import SearchQuery
+from ..models import DEGREE_ORDER, SearchQuery
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -127,6 +127,17 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
         overlap = "COALESCE(j.years_min, j.years_max) <= ?"
         cl.append(f"({_yr_unknown} OR {overlap})" if q.include_unknown_years else overlap)
         p.append(q.max_years)
+    # Degree ceiling, mirroring _degree_ok: compute the allowed enum values in Python and pass
+    # them as an IN-list of placeholders (simpler than a CASE ladder and it uses idx_jobs_degree).
+    # Exclusion ignores degree_required on purpose — see SearchQuery.max_degree.
+    if q.max_degree is not None:
+        allowed = [d for d, rank in DEGREE_ORDER.items() if rank <= DEGREE_ORDER[q.max_degree]]
+        in_list = "j.degree_min IN (" + ",".join("?" for _ in allowed) + ")"
+        if q.include_unknown_degree:
+            cl.append(f"({in_list} OR j.degree_min IS NULL)")
+        else:
+            cl.append(in_list)
+        p.extend(allowed)
     if q.employment_type is not None:
         # Mirror matches(): keep the requested type plus UNKNOWN (most postings don't state it).
         cl.append("(j.employment_type = ? OR j.employment_type = 'unknown')")

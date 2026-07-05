@@ -12,6 +12,7 @@ from .extract.base import get_extractor, input_from_job
 
 # Importing the extractor modules registers them. Also re-exported for backward compatibility.
 from .extract.comp import CompExtractor  # noqa: F401
+from .extract.degree import DegreeExtractor  # noqa: F401
 from .extract.geo import has_us_signal, normalize_geo
 from .extract.level import (  # noqa: F401
     LevelExtractor,
@@ -48,6 +49,12 @@ def enrich_in_place(
     yoe = get_extractor("yoe")
     if yoe is not None and job.years_experience_min is None and job.years_experience_max is None:
         job.years_experience_min, job.years_experience_max = yoe.extract(inp)
+
+    # Minimum-degree requirement (deterministic gazetteer over the description); tri-state
+    # scope like sponsorship. Skipped when a provider already populated either field.
+    degree = get_extractor("degree")
+    if degree is not None and job.degree_min is None and job.degree_required is None:
+        job.degree_min, job.degree_required = degree.extract(inp)
 
     level = get_extractor("level")
     if level is not None and job.level is JobLevel.UNKNOWN:

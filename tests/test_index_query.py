@@ -201,6 +201,41 @@ def test_multiword_injection_safety(tmp_path):
     assert con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
 
 
+def test_degree_filter_round_trip(tmp_path):
+    # Build a tiny index and filter with max_degree=bachelor: a William Blair-style posting
+    # (phd_md, preferred-only) must be EXCLUDED, a bachelor posting included, and an
+    # unspecified-degree posting included by default (include_unknown_degree=True).
+    jobs = [
+        _job("1", "Equity Research Associate", degree_min="phd_md", degree_required=False),
+        _job("2", "Software Engineer", degree_min="bachelor", degree_required=True),
+        _job("3", "Account Executive"),  # no stated degree
+    ]
+    con = _db(tmp_path, jobs)
+
+    rows = search_rows(con, SearchQuery(max_degree="bachelor", limit=10))
+    titles = {r["title"] for r in rows}
+    assert titles == {"Software Engineer", "Account Executive"}
+
+    strict = search_rows(
+        con, SearchQuery(max_degree="bachelor", include_unknown_degree=False, limit=10)
+    )
+    assert {r["title"] for r in strict} == {"Software Engineer"}
+
+    # ceiling high enough -> everything (incl. the phd_md posting) matches
+    assert len(search_rows(con, SearchQuery(max_degree="phd_md", limit=10))) == 3
+
+    # parity with SearchQuery.matches() on the same set
+    for q in [
+        SearchQuery(max_degree="bachelor"),
+        SearchQuery(max_degree="bachelor", include_unknown_degree=False),
+        SearchQuery(max_degree="master"),
+        SearchQuery(max_degree="highschool", include_unknown_degree=False),
+    ]:
+        sql_ids = {r["id"] for r in search_rows(con, q)}
+        match_ids = {j.id for j in jobs if q.matches(j)}
+        assert sql_ids == match_ids, f"degree parity broke for {q}"
+
+
 def test_matches_parity_on_location(tmp_path):
     # The index must filter on the free-text `location` exactly like SearchQuery.matches() —
     # regression for the index silently ignoring `location` (returned non-matching jobs).
