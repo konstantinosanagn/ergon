@@ -138,3 +138,65 @@ The biggest raw-coverage multiplier and the clearest "forget our intentions" mov
 - [ ] 2B deltas-powered "what's new" MCP tool + resume-match + apply-assist
 - [ ] D2 decision → 3 JobSpy board-scraping provider
 - [ ] 1C response-shape classifier + GitHub-code-search / passive-DNS discovery
+
+---
+
+## Priority 4 — career-ops-parity provider gaps (probed 2026-07-05)
+
+career-ops (58.6k★) names ~35 sources; we already cover every ATS platform it has **plus ~25 more, at
+58k-board depth** (see `landscape-job-fetching-tools.md` §11). The only genuine gaps are a handful of
+niche/regional boards + one real ATS. Each below was **live-probed** (curl_cffi, no browser); logged only
+where it's **easy + we've shipped the same pattern before**.
+
+### 4A — Clean JSON board APIs (pattern-proven: mirror `remoteok`/`remotive`/`arbeitnow`)
+Each returned a real JSON list on the first unauthenticated GET.
+
+| Source | Probed endpoint | Result | Notes |
+|---|---|---|---|
+| **Working Nomads** | `workingnomads.com/api/exposed_jobs/` | 200 JSON (~37) | remote aggregator |
+| **Landing.jobs** | `landing.jobs/api/v1/jobs` | 200 JSON (~50) | Europe tech |
+| **Get on Board** | `getonbrd.com/api/v0/search/jobs?query=…` | 200 JSON | LatAm; paginated `/api/v0` |
+| **4 Day Week** | `4dayweek.io/api/jobs` | 200 JSON (~25) | 4-day-week niche |
+
+**Effort:** low — a normalize() over a JSON list, identical to the existing aggregator providers.
+
+### 4B — RSS/XML feeds (easy; adds one small XML-feed helper — the one *new* shape)
+| Source | Probed endpoint | Result |
+|---|---|---|
+| **We Work Remotely** | `weworkremotely.com/remote-jobs.rss` | 200 `application/rss+xml` |
+| **NoDesk** | `nodesk.co/remote-jobs/index.xml` | 200 `application/xml` |
+| **HigherEdJobs** | `higheredjobs.com/rss/articleFeed.cfm` | 200 `text/xml` |
+
+**Effort:** low, but note we have **no RSS provider yet** — all current feeds are JSON. First one adds a
+tiny stdlib-`xml`/feed helper; the rest reuse it. Still "easy," just a new-but-trivial format.
+
+### 4C — Keyed gov API (pattern-proven: mirror `adzuna`/`usajobs`)
+| Source | Probed endpoint | Result |
+|---|---|---|
+| **Arbeitsagentur** (German Federal Employment Agency) | `rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs` + `X-API-Key: jobboerse-jobsuche` | 200 JSON |
+
+**Effort:** low — the static public API key ships in code (no per-user key, unlike Adzuna). High-volume,
+free, clean. The one EU-coverage unlock; worth it if/when we push beyond US.
+
+### 4D — ATS-direct (pattern-proven: mirror `greenhouse`/`lever`/`ashby` — our core lane)
+| Source | Probed endpoint | Result |
+|---|---|---|
+| **Comeet** (Spark Hire Recruit) | `comeet.co/careers-api/2.0/company/{uid}/positions?token=…` | 400 without token (API confirmed live, JSON) | needs per-company (uid, token) discovery |
+
+**Effort:** low-medium — the fetch/normalize is trivial JSON; the work is **token discovery** (mirror
+`harvest_tokens`/`build_registry`). **This is the highest-value add** — a genuine ATS we flagged in the
+browser-queue triage (Israeli micro-caps use it) and the only ATS-direct gap vs career-ops.
+
+### 4E — Deferred (fail the "easy" bar — protected / JS / off-philosophy)
+- **Glints** — GraphQL POST, SEA, protected (405 on GET). **JobStreet/SEEK** — heavy anti-bot + JS.
+  **JibeApply** — Jibe (iCIMS-owned) career sites, typically JS-rendered. **The Hub** — endpoint returns
+  JSON but 0 items unauthenticated (needs param/session investigation). **SolidJobs** — unprobed.
+  **Amazon/AWS, IBM Careers** — company-specific (IBM ~ our existing `brassring`).
+- These are the scrape-y/JS lane we deliberately avoid (the JobSpy philosophy). Revisit only with a
+  specific coverage need, not for career-ops parity.
+
+### Recommended order
+1. **Comeet** (real ATS, our lane, previously-flagged gap) — highest value.
+2. **4A JSON boards** (Working Nomads, Landing.jobs, Get on Board, 4 Day Week) — trivial, batchable.
+3. **4B RSS boards** (build the XML helper on We Work Remotely, then NoDesk + HigherEdJobs).
+4. **Arbeitsagentur** — when EU coverage becomes a goal.
