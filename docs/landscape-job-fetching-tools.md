@@ -300,3 +300,41 @@ Primary sources verified during research:
 **Refuted claims (excluded from findings):**
 - "job-board-aggregator indexes 1,000,000+ active jobs across 20,000+ companies" — refuted 1-2.
 - "JobFunnel sources via Beautiful Soup HTML scraping of Indeed/Glassdoor/LinkedIn" — refuted 1-2 (mechanics uncertain; verify before citing).
+
+---
+
+## 11. Update 2026-07-05 — the agent-native *application* layer (career-ops, ai-job-search)
+
+Two repos surfaced that dwarf (star-wise) everything in the 2026-06-16 snapshot — but they sit in a
+**different layer** than jobspine, and that distinction is the whole point.
+
+| Repo | Stars | What it is | Stack |
+|---|---|---|---|
+| **santifer/career-ops** | **58.6k** (11.5k forks, WIRED/Product Hunt, v1.16.0 Jul 2026) | Local, per-user, agent-native **application co-pilot**: evaluates fit (A–F over 10 weighted dims), tailors CVs, drafts cover letters/emails/LinkedIn msgs, company research, pipeline TUI | Node/TS + Go TUI (Playwright), any AI-coding CLI (Claude/Gemini/Codex/…) |
+| **MadsLorentzen/ai-job-search** | **4.8k** | Claude-Code fork personal assistant, Denmark-focused: fit eval, LaTeX CV/cover-letter gen w/ PDF-verify loops, `/upskill` skill-gap, `/expand` profile enrichment | TS + Python + TeX |
+
+### The decisive finding: they are the "apply" layer and **both punt on the data problem**
+- **career-ops has no persistent index.** It fetches **on-demand** from ~**43 curated ATS/board sources** (one `.mjs` per source, hand-maintained; "add a new provider module + update the table in the same PR"), or from URLs the user pastes. **No shared/hosted data, no MCP** (its ARCHITECTURE.md + SUPPORTED_JOB_BOARDS.md confirm both). Enrichment is LLM ad-hoc ("comp research via WebSearch") — no structured salary/degree/YoE fields.
+- **ai-job-search** scrapes 4 Danish boards + LinkedIn guest endpoints, file-based, the repo *is* the state.
+
+They cover the *same ATS platforms we do* (Greenhouse/Ashby/Lever/Workable/…) but as a **finite, on-demand scanner** — never as a maintained, deduped, enriched, live index. **The maintained enriched index is exactly the thing a 58.6k-star tool chose not to build.** That validates the moat (§Key competitive takeaways) from the other direction.
+
+### Strategic takeaways
+1. **The market is enormous and agent-native is the wave** — 63k+ combined stars, mainstream press. De-risks the whole jobspine direction.
+2. **They're complementary, not competitive.** They're the "**apply**" layer; we're the "**find + enrich + serve**" substrate. career-ops even *has* ATS integrations — but hand-maintained and index-less.
+3. **The funnel opportunity: be the data backend they build on.** career-ops has 11.5k forks of people who need job data and currently fake it with hand-maintained scrapers. If our MCP / HTTP-QUERY API were the plug-in source for "find & enrich jobs," we'd sit under a 58k-star funnel — the open-core play the strategy research already pointed at, now with living proof the funnel exists.
+
+### What's worth incorporating — **gated behind extraction quality** (see `enrichment-and-tools-plan.md`)
+These are moat-aligned *only if* the underlying extracted fields are measured-good first (a fit rubric on a
+20%-wrong `degree_min` is worse than none — confident, authoritative, and wrong):
+1. **Fit rubric** in `assess_fit` — A–F over weighted dims + a don't-bother threshold. We're the *better* place to build it: career-ops LLM-guesses degree/YoE/salary per job; we already extract them as columns, so the hard requirements score **deterministically** (cheap, consistent) and only the soft stuff needs a model.
+2. **Skills-gap tool** (ai-job-search `/upskill`) on `extract/skills.py` + the index — aggregate required skills across matching roles vs. a résumé. Only we can do it well (we have the corpus).
+3. **Salary-benchmark tool** — percentiles by role/geo from our (now ~100%-recall) structured salary.
+4. **Distribution/UX:** `npx`-style one-command onboarding, multi-language READMEs, the viral "candidates use AI to *choose* companies" framing. Positioning drove their reach as much as code.
+
+### What NOT to build (scope discipline)
+Do **not** build a full CV-gen / cover-letter / interview-prep suite — that's their turf, crowded, with a
+58.6k-star incumbent, and it pulls us off the data moat. Stay the substrate; expose fit/skills/salary
+tools that *use* our data, and become the source these tools plug into.
+
+**Sources:** github.com/santifer/career-ops (+ docs/ARCHITECTURE.md, docs/SUPPORTED_JOB_BOARDS.md) · github.com/MadsLorentzen/ai-job-search
