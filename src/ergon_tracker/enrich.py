@@ -12,7 +12,7 @@ from .extract.base import get_extractor, input_from_job
 
 # Importing the extractor modules registers them. Also re-exported for backward compatibility.
 from .extract.comp import CompExtractor  # noqa: F401
-from .extract.geo import normalize_geo
+from .extract.geo import has_us_signal, normalize_geo
 from .extract.level import (  # noqa: F401
     LevelExtractor,
     infer_level,
@@ -32,14 +32,15 @@ def enrich_in_place(
     job: JobPosting,
     *,
     company_key: str | None = None,
-    infer_level_from_experience: bool = False,
+    infer_level_from_experience: bool = True,
 ) -> JobPosting:
     """Enrich a posting in place: level, salary (from text if missing), years-of-experience,
     sector, and normalized locations. Existing values are never overwritten.
 
-    ``infer_level_from_experience`` (opt-in): when the title gives no level, derive a coarse
-    level from the extracted years-of-experience. Off by default — keeps ``level`` title-based
-    and precise; on, it trades some precision for much higher coverage.
+    ``infer_level_from_experience`` (on by default): when the title gives no level, derive a
+    coarse level from the extracted years-of-experience. On, it trades a little precision for
+    much higher coverage (58% of indexed jobs have no title-level signal); pass ``False`` to
+    keep ``level`` strictly title-based.
     """
     inp = input_from_job(job, company_key=company_key)
 
@@ -83,4 +84,10 @@ def enrich_in_place(
 
     for loc in job.locations:
         normalize_geo(loc)
+        # Workday multi-location placeholders ("3 Locations") often hide an unambiguous US
+        # posting. When normalization found no country, default WORKDAY postings to the US —
+        # but ONLY when the raw string carries a US-specific signal (state name/abbrev or a
+        # ZIP-like token); never a blanket default.
+        if loc.country is None and job.source == "workday" and has_us_signal(loc.raw):
+            loc.country = "United States"
     return job

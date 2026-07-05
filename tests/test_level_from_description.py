@@ -44,8 +44,8 @@ def test_enrich_uses_description_level_when_title_bare():
     assert j.level is JobLevel.ENTRY
 
 
-def test_enrich_default_off_keeps_title_only():
-    # default (flag off): description cues are NOT applied -> bare title stays unknown
+def test_enrich_explicit_off_keeps_title_only():
+    # flag explicitly off: description cues are NOT applied -> bare title stays unknown
     j = JobPosting.create(
         source="greenhouse",
         source_job_id="1",
@@ -53,8 +53,21 @@ def test_enrich_default_off_keeps_title_only():
         title="Software Engineer",
         description_text="We welcome new grads!",
     )
-    enrich_in_place(j, company_key="acme")
+    enrich_in_place(j, company_key="acme", infer_level_from_experience=False)
     assert j.level is JobLevel.UNKNOWN
+
+
+def test_enrich_default_on_applies_description_cues():
+    # NEW default (flag on): description cues fill in when the title gives no level
+    j = JobPosting.create(
+        source="greenhouse",
+        source_job_id="2",
+        company="Acme",
+        title="Software Engineer",
+        description_text="We welcome new grads!",
+    )
+    enrich_in_place(j, company_key="acme")
+    assert j.level is JobLevel.ENTRY
 
 
 def test_title_level_still_wins_over_description():

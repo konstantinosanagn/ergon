@@ -186,6 +186,24 @@ _ENTRY = re.compile(
     re.I,
 )
 
+# Bare entry-ramp titles. A handful of professions hire the BARE title as their entry ramp
+# ("Account Executive" at payroll/staffing shops, "Sales Consultant", "Financial Advisor"
+# training programs, "Insurance Agent", "Leasing Consultant") — the unqualified title itself is
+# the first rung. Checked LAST in the cascade, so ANY other signal wins first ("Senior Account
+# Executive" -> senior, "Account Executive II" -> mid), and a market-segment qualifier
+# (enterprise/mid-market/strategic/...) suppresses the inference: those variants require prior
+# closing experience and are NOT entry.
+_ENTRY_RAMP = re.compile(
+    r"\b(?:account executive|sales consultant|financial advisor|insurance agent"
+    r"|leasing consultant)\b",
+    re.I,
+)
+_ENTRY_RAMP_DENY = re.compile(
+    r"\b(?:enterprise|strategic|majors?|named|key|national|global|commercial"
+    r"|mid[- ]?market|smb|experienced)\b",
+    re.I,
+)
+
 # --- Numeric / explicit-level tokens ----------------------------------------
 _TOK_EARLY = re.compile(r"\(\s*early\b|\bearly[- ]career\b", re.I)
 _TOK_MID = re.compile(r"\(\s*mid\b|\bmid[- ]level\b", re.I)
@@ -312,6 +330,11 @@ def infer_level(title: str) -> JobLevel:
     token = _parse_level_token(t)
     if token is not None:
         return token
+
+    # Bare entry-ramp professions LAST: only fires when nothing above matched, so any explicit
+    # seniority word, level token, or manager form has already won.
+    if _ENTRY_RAMP.search(t) and not _ENTRY_RAMP_DENY.search(t):
+        return JobLevel.ENTRY
     return JobLevel.UNKNOWN
 
 

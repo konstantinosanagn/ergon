@@ -112,7 +112,7 @@ async def search_jobs(
     include_undated: bool = False,
     visa_sponsor: bool = False,
     sponsorship_offered: bool | None = None,
-    infer_level_from_experience: bool = False,
+    infer_level_from_experience: bool = True,
     semantic: bool = False,
     limit: int = 20,
 ) -> dict[str, Any]:
@@ -155,22 +155,28 @@ async def search_jobs(
         max_age_days: freshness floor (default 365). ATS boards often leave FILLED reqs open for
             years, so a posting's presence isn't proof it's active — this hides postings whose most
             recent activity (posted/updated) is older than N days. Pass null to include stale ones.
+            The response echoes the floor actually used as `max_age_days_applied`.
         include_undated: keep postings with no date at all (default false; they correlate with stale).
-        visa_sponsor: if true, keep only employers known to have sponsored H-1B visas (from US
-            DoL LCA certified-filing data). Each job also reports a `visa_sponsor` flag.
-        sponsorship_offered: filter on what the POSTING says about visa sponsorship. true =
-            postings that offer it; false = postings that explicitly don't. Unknown postings
-            (the majority) are kept by default. Each job reports `sponsorship_offered`
-            (true/false/null). Tip for international applicants: pass false-exclusion by using
-            true here to hide "no sponsorship" roles while keeping unstated ones.
+        visa_sponsor: COMPANY-level signal. Each job's `visa_sponsor` flag means the EMPLOYER has
+            certified H-1B LCA filings in US DoL data — a historical filer. Positive evidence
+            only: true = the company has filed; null = no filing found, which is NOT "does not
+            sponsor". It says nothing about whether THIS posting is sponsorable. Pass true to
+            keep only known-filer employers.
+        sponsorship_offered: POSTING-level signal — what THIS posting's own text states about
+            visa sponsorship. Tri-state: true = the text offers it; false (0) = the posting
+            EXPLICITLY refuses ("we cannot sponsor"); null = the text doesn't say (the
+            majority). Filtering true keeps only offers; filtering false keeps only explicit
+            refusals; unknowns are kept when unset. Each job reports `sponsorship_offered`.
         infer_level_from_experience: when a title has no seniority word, derive level from the
-            required years of experience (boosts level coverage; combine with a `level` filter).
+            required years of experience (default true — boosts level coverage; pass false for
+            strictly title-based levels).
         semantic: rank by meaning via embeddings instead of exact-token matching (handles
             synonyms / natural-language intent). Needs the server's `semantic` extra.
         limit: max postings to return after dedup + ranking (default 20).
 
     Returns a dict with `count`, `jobs` (compact, relevance-ranked, each with a `score`),
-    and per-source `health`.
+    `max_age_days_applied` (the freshness floor used for this response), and per-source
+    `health`.
 
     Examples (combine filters freely):
         # roles at specific companies
@@ -228,6 +234,7 @@ async def search_jobs(
 
             return {
                 "count": len(indexed),
+                "max_age_days_applied": max_age_days,
                 "jobs": [_job_to_dict(j) for j in indexed],
                 "health": [
                     {
@@ -245,6 +252,7 @@ async def search_jobs(
         result = await js.search(query)
     return {
         "count": len(result.jobs),
+        "max_age_days_applied": max_age_days,
         "jobs": [_job_to_dict(j) for j in result.jobs],
         "health": [h.model_dump() for h in result.health],
     }

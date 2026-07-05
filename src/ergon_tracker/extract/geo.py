@@ -20,6 +20,7 @@ __all__ = [
     "city_matches",
     "country_match_term",
     "country_matches",
+    "has_us_signal",
 ]
 
 # Metro/synonym groups: names that denote the SAME city a user means when they type the key.
@@ -261,14 +262,44 @@ _US_STATE_NAMES = {
     "district of columbia",
 }
 
-# Noise tokens to drop from ATS location strings before matching.
+# Noise tokens to drop from ATS location strings before matching. The anchored alternatives
+# kill Workday multi-location placeholders ("3 Locations", "Multiple Locations", "Several
+# Locations") as WHOLE segments before any city/country resolution, so a counter word can
+# never survive cleaning and be mistaken for a place name.
 _NOISE_RE = re.compile(
-    r"\s*\(.*?\)"
+    r"^\d+\s+locations?$"
+    r"|^(?:multiple|various|several)\s+locations?$"
+    r"|\s*\(.*?\)"
     r"|\b(remote|hybrid|on-?site|locations?|metropolitan area|metro area|greater area"
     r"|bay area|area|region|multiple|various)\b",
     re.IGNORECASE,
 )
 _LEADING_COUNT_RE = re.compile(r"^\d+\s+")
+
+# US-signal detection (used by enrich's conservative Workday-US country default).
+_ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+_US_STATE_NAME_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(n) for n in sorted(_US_STATE_NAMES, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def has_us_signal(raw: str | None) -> bool:
+    """True when a raw location string carries a US-specific token: a full state name, a
+    standalone UPPERCASE two-letter state abbreviation, or a ZIP-like 5-digit token.
+
+    Deliberately conservative — abbreviations count only when uppercase ("IN"/"OR"/"DE"
+    lowercased are ordinary words / country codes) — so callers can use a hit as positive
+    evidence for a US default without blanket-tagging international strings.
+    """
+    if not raw:
+        return False
+    if _US_STATE_NAME_RE.search(raw) or _ZIP_RE.search(raw):
+        return True
+    return any(
+        len(tok) == 2 and tok.isupper() and tok.lower() in _US_STATES
+        for tok in re.split(r"[^A-Za-z]+", raw)
+    )
 
 # Generic sub-location / facility words. A segment built around one of these (e.g.
 # "Depot 2", "LA Depot") is not a city and must never be emitted as one.
