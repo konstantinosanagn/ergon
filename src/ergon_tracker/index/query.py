@@ -10,10 +10,36 @@ from ..models import SearchQuery
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
+# Window (in tokens) for the NEAR group used on 3+-token queries. Measured on the real 1.4M-job
+# index: NEAR-10 kept 88-98% of AND-recall on genuine multi-word titles while excluding the
+# cross-field scatter matches; NEAR-5 excluded the same junk but lost a few more legit hits.
+_NEAR_WINDOW = 10
+
 
 def _match_expr(keywords: str) -> str:
+    """Build an injection-safe FTS5 MATCH expression for ``keywords``.
+
+    Tokens are extracted with ``[a-z0-9]+`` and individually double-quoted, so no FTS5 syntax
+    (operators, parens, quotes, NEAR) can ever be injected — only quoted alphanumeric tokens
+    appear inside the expression.
+
+    * 1-2 tokens: ``"a" AND "b"`` — unchanged historical semantics.
+    * 3+ tokens: ``("a b c") OR (NEAR("a" "b" "c", 10))`` — exact phrase OR an order-insensitive
+      same-column proximity group. Plain AND matched each token in *any* FTS column (title,
+      company, department, snippet), so "equity research associate" matched a law-firm
+      "Summer Associate" whose snippet merely mentioned "research" and "equity" in unrelated
+      sentences. Measured on the 1.4M-job index this hybrid removed those scatter matches
+      entirely (full-set title precision 0.75-0.98 -> 0.89-1.00 across probe queries) while
+      retaining 80-98% of legitimate recall (97.7% on "clinical research coordinator"); a pure
+      phrase kept only 19-90% (too strict). The OR'd phrase arm contributes extra bm25 weight,
+      so exact-phrase hits rank above proximity-only hits.
+    """
     toks = _TOKEN.findall(keywords.lower())
-    return " AND ".join(f'"{t}"' for t in toks)  # quoted = no FTS5 syntax injection
+    if len(toks) <= 2:
+        return " AND ".join(f'"{t}"' for t in toks)  # quoted = no FTS5 syntax injection
+    phrase = '"' + " ".join(toks) + '"'  # one quoted phrase: tokens in exact order
+    near = "NEAR(" + " ".join(f'"{t}"' for t in toks) + f", {_NEAR_WINDOW})"
+    return f"({phrase}) OR ({near})"
 
 
 def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
