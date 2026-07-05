@@ -160,6 +160,13 @@ class SearchService:
             q = SearchQuery.model_validate(body)
         except Exception as exc:  # pydantic ValidationError -> 400 with the reason
             raise QueryError(400, f"invalid query: {exc}") from exc
+        if q.semantic:
+            # Honesty guard: this surface serves the lexical index (the cacheable/idempotent path).
+            # Silently returning BM25 results under a semantic=true cache key would mislead — say so.
+            raise QueryError(
+                501, "semantic ranking is not available on the QUERY surface; "
+                "use the MCP search_jobs(semantic=true) for embedding-based ranking",
+            )
         limit = min(q.limit or _DEFAULT_LIMIT, _LIMIT_CAP)
         return q.model_copy(update={"limit": limit}) if limit != q.limit else q
 

@@ -138,6 +138,13 @@ async def test_error_cases(index):
         assert "QUERY" in allow.headers.get("allow", "")
 
 
+async def test_semantic_rejected_honestly(index):
+    # semantic=true must NOT silently return lexical results — the surface says 501, not a wrong body.
+    async with _client(_app(index)) as c:
+        r = await _query(c, {"keywords": "nurse", "semantic": True})
+    assert r.status_code == 501 and "semantic" in r.json()["error"].lower()
+
+
 async def test_health(index):
     async with _client(_app(index)) as c:
         r = await c.request("GET", "/health")
