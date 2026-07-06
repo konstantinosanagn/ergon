@@ -141,6 +141,36 @@ _DEGREE_NEAR = re.compile(
 # Max chars between one alternation arm's end and the next arm's start ("... OR MS + ").
 _ALT_GAP = 80
 
+# Company / product age & tenure — the years describe the ORGANIZATION, not a candidate
+# requirement: "For over 35 years, we've...", "45 year track record", "30+ years of expertise, we
+# combine", "5 years in a row", "3-5 years sooner", "average tenure ... is 3+ years". yoe.py is
+# precision-first but these slipped through because an experience cue ("experience"/"expertise")
+# sits nearby. Three signals: a tenure phrase right after the number, a company subject right after,
+# and a company framing right before.
+# NOTE: "of industry"/"of expertise" are deliberately NOT here — they collide with legitimate
+# candidate cues ("7 years of industry experience", "5 years of expertise in X"). The company cases
+# that use them ("35 years of industry excellence, we...", "30+ years of expertise, we combine") are
+# caught by _COMPANY_BEFORE ("With over") / _COMPANY_NEAR ("we combine") instead.
+_COMPANY_AFTER = re.compile(
+    r"^\W*(?:track\s+record|of\s+(?:success|excellence|scientific|bootstrapped|"
+    r"international|innovation|growth)|in\s+a\s+row|sooner|maintenance)",
+    re.IGNORECASE,
+)
+# A company-ACHIEVEMENT verb in the SAME sentence as the number ("30+ years of expertise, we
+# combine"). Restricted to achievement verbs (not recruiting boilerplate like "we offer/we're
+# looking") and scoped to the current sentence, so a requirement followed by a new "We're hiring…"
+# sentence is NOT vetoed.
+_COMPANY_NEAR = re.compile(
+    r"\bwe(?:'|’)ve\b|\bwe\s+(?:combine|help|build|connect|serve|deliver|partner|"
+    r"re[-\s]?imagine|founded|pioneered)\b",
+    re.IGNORECASE,
+)
+_COMPANY_BEFORE = re.compile(
+    r"\b(?:for|with)\s+(?:over|more\s+than|nearly|almost)\s+$|\bits\s+(?:more\s+than\s+|over\s+)?$"
+    r"|\bhas\s+(?:a\s+)?$|\btenure\b[^.\n]{0,30}$",
+    re.IGNORECASE,
+)
+
 
 def _to_int(token: str) -> int | None:
     token = token.strip().lower()
@@ -206,7 +236,17 @@ class YoeExtractor:
             if n2 is None or (not months and n2 > _MAX_PLAUSIBLE):
                 return None
             lo, hi = (n1, n2) if n1 <= n2 else (n2, n1)
-            return (lo // 12, hi // 12) if months else (lo, hi)
+            if months:
+                lo, hi = lo // 12, hi // 12
+            # "N-M+ years" / "N to M or more": the trailing "+"/"or more" opens the UPPER bound,
+            # so the requirement is really a minimum of N (not a cap at M) — "6-10+ years" means
+            # "6 or more". Without this we wrongly report (6, 10).
+            suffix = (m.group("suffix") or "").lower()
+            if "+" in m.group(0) or suffix in {
+                "or more", "or above", "or greater", "or higher", "plus", "minimum", "min",
+            }:
+                return (lo, None)
+            return (lo, hi)
         if months:
             n1 //= 12  # months -> whole years, rounded down ("18 months" -> 1)
         prefix = (m.group("prefix") or "").strip().lower()
@@ -220,6 +260,23 @@ class YoeExtractor:
 
         # Hard vetoes: phrase is clearly not about experience.
         if _DQ_AFTER.match(after) or _DQ_BEFORE.search(before):
+            return False
+        # Company/product age & tenure (org's years, not a candidate requirement). Only the
+        # before-framing ("for over N years") and after-tenure phrases ("N year track record",
+        # "N years of success") are safe vetoes; a "we've/our" merely NEAR the number is NOT — real
+        # requirements are routinely followed by company boilerplate ("5+ years experience. We're…").
+        if _COMPANY_AFTER.match(after) or _COMPANY_BEFORE.search(before):
+            return False
+        # A company-achievement clause in the SAME sentence ("30+ years of expertise, we combine").
+        same_sentence_after = re.split(r"[.\n;]", text[m.end() : m.end() + 70])[0]
+        if _COMPANY_NEAR.search(same_sentence_after):
+            return False
+        # Months are almost never a YoE *requirement* (they're contracts/training/timelines/
+        # probation). Accept only when an experience cue sits immediately after ("18 months of
+        # experience"); otherwise veto ("6-12 months looks like...", "3 month training").
+        if m.group("unit").lower().startswith("month") and not (
+            _CUE.search(after[:25]) or _IN_FIELD_AFTER.match(after)
+        ):
             return False
 
         # "YOE" spells out years-of-experience; a degree+years pairing reads as a requirement.
