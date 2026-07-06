@@ -152,6 +152,40 @@ _COUNTRY_NAMES = {
 for _name in _COUNTRY_NAMES:
     _COUNTRY_ALIASES.setdefault(_name, _name.title())
 
+# ISO 3166 country codes, for enterprise HRIS location formats ("Toronto, ON, CA, M5V2T3",
+# "Cologne, NW, DE, 51105", "Warsaw, POL"). alpha-3 codes are UNAMBIGUOUS (no US state is 3 letters)
+# so they're folded into the aliases and resolve anywhere. alpha-2 codes that COLLIDE with US state
+# abbreviations (CA=California/Canada, DE=Delaware/Germany, IN=Indiana/India, CO, ID, IL, ...) are
+# resolved ONLY in country position (see the enterprise block in normalize_geo), never as a bare
+# "City, XX" (which stays a US state).
+_ISO3_COUNTRY: dict[str, str] = {
+    "usa": "United States", "can": "Canada", "gbr": "United Kingdom", "deu": "Germany",
+    "fra": "France", "ind": "India", "mex": "Mexico", "bra": "Brazil", "jpn": "Japan",
+    "chn": "China", "aus": "Australia", "nld": "Netherlands", "esp": "Spain", "ita": "Italy",
+    "irl": "Ireland", "sgp": "Singapore", "pol": "Poland", "swe": "Sweden", "che": "Switzerland",
+    "prt": "Portugal", "isr": "Israel", "kor": "South Korea", "nzl": "New Zealand", "aut": "Austria",
+    "bel": "Belgium", "dnk": "Denmark", "nor": "Norway", "fin": "Finland", "cze": "Czech Republic",
+    "rou": "Romania", "ukr": "Ukraine", "arg": "Argentina", "chl": "Chile", "col": "Colombia",
+    "phl": "Philippines", "idn": "Indonesia", "vnm": "Vietnam", "tha": "Thailand", "mys": "Malaysia",
+    "zaf": "South Africa", "nga": "Nigeria", "egy": "Egypt", "tur": "Turkey", "grc": "Greece",
+    "hun": "Hungary", "are": "United Arab Emirates", "twn": "Taiwan", "hkg": "Hong Kong",
+    "sau": "Saudi Arabia", "ken": "Kenya", "mar": "Morocco",
+}
+_COUNTRY_ALIASES.update(_ISO3_COUNTRY)  # alpha-3 are safe to resolve anywhere
+
+_ISO2_COUNTRY: dict[str, str] = {
+    "us": "United States", "ca": "Canada", "gb": "United Kingdom", "de": "Germany", "fr": "France",
+    "in": "India", "mx": "Mexico", "br": "Brazil", "jp": "Japan", "cn": "China", "au": "Australia",
+    "nl": "Netherlands", "es": "Spain", "it": "Italy", "ie": "Ireland", "sg": "Singapore",
+    "pl": "Poland", "se": "Sweden", "ch": "Switzerland", "pt": "Portugal", "il": "Israel",
+    "kr": "South Korea", "nz": "New Zealand", "at": "Austria", "be": "Belgium", "dk": "Denmark",
+    "no": "Norway", "fi": "Finland", "cz": "Czech Republic", "ro": "Romania", "ua": "Ukraine",
+    "ar": "Argentina", "cl": "Chile", "co": "Colombia", "ph": "Philippines", "id": "Indonesia",
+    "vn": "Vietnam", "th": "Thailand", "my": "Malaysia", "za": "South Africa", "ng": "Nigeria",
+    "eg": "Egypt", "tr": "Turkey", "gr": "Greece", "hu": "Hungary", "ae": "United Arab Emirates",
+    "tw": "Taiwan", "hk": "Hong Kong", "sa": "Saudi Arabia", "ke": "Kenya", "uk": "United Kingdom",
+}
+
 _US_STATES = {
     "al",
     "ak",
@@ -283,6 +317,33 @@ _US_STATE_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A state/country NAME immediately followed by a hyphen (PeopleSoft "Kansas-Topeka",
+# "United States-Texas-Garden City"). Longest-first so "united states" wins over "united". Used to
+# turn those hyphens into commas without touching hyphenated place names ("Winston-Salem").
+_STATE_COUNTRY_DASH = re.compile(
+    r"\b("
+    + "|".join(
+        re.escape(n)
+        for n in sorted(_US_STATE_NAMES | _COUNTRY_NAMES | set(_COUNTRY_ALIASES), key=len, reverse=True)
+    )
+    + r")\s*-\s*",
+    re.IGNORECASE,
+)
+
+# UPPERCASE state/country CODE followed by a hyphen ("CA-Irvine", "USA-WV-Heaters", "MY-Kuala
+# Lumpur"). Case-SENSITIVE + uppercase-only so ordinary hyphenated words ("Co-op", "de-facto",
+# "in-house") are never split — real HRIS location codes are uppercase.
+_CODE_DASH = re.compile(
+    r"\b("
+    + "|".join(
+        c.upper()
+        for c in sorted(
+            set(_US_STATES) | set(_ISO2_COUNTRY) | set(_ISO3_COUNTRY), key=len, reverse=True
+        )
+    )
+    + r")-(?=[A-Za-z])",
+)
+
 
 def has_us_signal(raw: str | None) -> bool:
     """True when a raw location string carries a US-specific token: a full state name, a
@@ -407,10 +468,33 @@ def normalize_geo(loc: Location) -> Location:
     raw = loc.raw.strip()
     if "remote" in raw.lower():
         loc.is_remote = True
+    # PeopleSoft "Country-State-City" / "State-City" (hyphen-delimited): split ONLY a hyphen that
+    # follows a known state/country NAME, so "Kansas-Topeka" and "United States-Texas-Garden City"
+    # split while hyphenated place names ("Winston-Salem", "St. Leon-Rot", "Baden-Württemberg") and
+    # postal codes are never broken. Handles multi-location ("Kansas-Topeka, Kansas-Wichita").
+    raw = _STATE_COUNTRY_DASH.sub(r"\1,", raw)
+    raw = _CODE_DASH.sub(r"\1,", raw)
     cleaned = re.sub(r"\s+[-–—]\s+", ",", raw)
     segments = [c for c in (_clean(s) for s in re.split(r"[,/|]", cleaned)) if c]
     if not segments:
         return loc
+
+    # (0) Enterprise HRIS "City, Region, CC[, Postal]": the country code sits after a region,
+    # optionally before a postal code. Drop digit-bearing (postal) segments; if >=3 place segments
+    # remain and the last is an ISO-2/alias country code, resolve it by POSITION — this is what
+    # disambiguates "Toronto, ON, CA" (Canada) from "Sacramento, CA" (California) and "Cologne, NW,
+    # DE" (Germany) from "Chicago, IL" (Illinois — only 2 segments, so untouched here).
+    if loc.country is None:
+        place_segs = [s for s in segments if not any(ch.isdigit() for ch in s)]
+        had_postal = len(place_segs) < len(segments)
+        # Country-position when there's a region before it (>=3 place segs) OR a postal code marks it
+        # as the final locality token ("Frankfurt, DE, 60313"). A bare "City, XX" with no postal stays
+        # a US state ("Chicago, IL"), preserving that common case.
+        if len(place_segs) >= 3 or (had_postal and len(place_segs) >= 2):
+            tail = place_segs[-1].lower()
+            code_country = _ISO2_COUNTRY.get(tail) or _COUNTRY_ALIASES.get(tail)
+            if code_country:
+                loc.country = code_country
 
     # (1) Country from explicit country tokens / US state names/abbreviations.
     if loc.country is None:

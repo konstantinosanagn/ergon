@@ -200,3 +200,52 @@ Case Manager). intern F1 0.62→0.82, principal 0.55→0.67.
 **Consequence for the fit rubric:** `level` is usable but weaker than comp/yoe — weight it lower and
 never let an ambiguous level flip a pass/fail (same caution as `degree_required`). **Last extractor
 to benchmark: `geo.py`.**
+
+---
+
+## Addendum (2026-07-06): `geo.py` benchmarked — extraction-quality program COMPLETE
+
+Sixth and final extractor. Corpus: 800 DISTINCT location strings (deduped) from enterprise ATS
+(taleo, dejobs, peoplesoft; `scripts/build_geo_corpus.py`), blind-labeled for country + city. Gate:
+`tests/test_geo_recall.py`.
+
+| Field | Result |
+|---|---|
+| **country accuracy** | **0.948** (from 0.770) |
+| **city accuracy** | **0.889** (from 0.801) |
+
+**Bugs the corpus forced — all enterprise-HRIS formats geo.py never parsed:**
+- **2-letter ISO codes colliding with US states**: "Toronto, ON, CA" → CA=**Canada** (was California);
+  "Cologne, NW, DE" → **Germany** (was Delaware); "Vadodara, …, IN" → **India** (was Indiana).
+  Resolved by POSITION — a country-slot code (after a region, or postal-adjacent) is the country;
+  a bare "Chicago, IL" (2 segments, no postal) stays Illinois.
+- **ISO-3 codes** (POL/CAN/DEU/IND) folded into the alias table (unambiguous — no 3-letter US state).
+- **PeopleSoft dash formats**: "United States-Texas-Garden City", "Kansas-Topeka, Kansas-Wichita",
+  "CA-Irvine", "USA-WV-Heaters" — split via a state/country-NAME dash rule + a case-sensitive
+  UPPERCASE-CODE dash rule (so "Co-op"/"de-facto" are never broken).
+
+Remaining tail (hard, not pursued): bare US cities absent from the gazetteer ("Mckeesport"), and
+foreign hyphenated region names ("Germany-North Rhine Westphalia-Düsseldorf").
+
+**country/city are production-grade — the fit rubric can gate on location.**
+
+---
+
+## The extraction-quality program is COMPLETE (2026-07-06)
+
+All six rules-based extractors now have a real number from a real hand-labeled corpus + a ratcheting
+CI gate (the `comp.py` method, replicated field by field):
+
+| Field | Metric | Result | Grade |
+|---|---|---|---|
+| **comp** (salary) | recall / precision | 1.00 / 1.00 | production |
+| **yoe** | recall / precision | 0.978 / 0.877 | production |
+| **skills** | precision / recall | 0.995 / 0.927 | production |
+| **geo/country** | accuracy | 0.948 | production |
+| **geo/city** | accuracy | 0.889 | production |
+| **degree_min** | recall / precision | 0.886 / 0.995 | production |
+| **level** | accuracy / macro-F1 | 0.820 / 0.736 | usable (advisory on ambiguous) |
+| **degree_required** | accuracy | 0.597 | advisory only |
+
+**Phase C (moat-aligned tools) is unblocked.** The fit rubric gates on the production-grade fields and
+treats `degree_required` + ambiguous `level` as advisory — no confident-but-wrong A–F.

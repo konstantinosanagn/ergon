@@ -24,7 +24,7 @@ same as "measured against hundreds of real JDs."
 | **degree** (`degree.py`) | **level 88.6% recall / 99.5% precision**; **scope (req-vs-pref) 59.7%** — the hard half | measured on the corpus below | ✅ 402-record real corpus + ratcheting gate (`test_degree_recall.py`) |
 | **yoe** (`yoe.py`) | **97.8% recall**; **87.7% precision** on an adversarial-negative set (field precision higher) | measured on a 539-record real corpus | ✅ 539-record real corpus + ratcheting gate (`test_yoe_recall.py`) |
 | **level** (`level.py`) | **82.0% acc / 0.736 macro-F1** on enterprise titles (title-only) | measured on a 900-posting corpus | ✅ 900-posting real corpus + ratcheting gate (`test_level_recall.py`) |
-| **geo/country** (`geo.py`) | NULL-country (Workday placeholder) bug fixed | Improved | ❌ |
+| **geo/country** (`geo.py`) | **country 94.8% / city 88.9%** on enterprise location strings | ISO-code + dash-format parsing added | ✅ 800-string real corpus + ratcheting gate (`test_geo_recall.py`) |
 | **skills** (`skills.py`) | **99.5% precision** (deterministic; 5/943 collisions), **92.7% recall** vs human labels | 91→114 skills; +23 gaps added | ✅ 800-window real corpus + ratcheting gate (`test_skills_recall.py`) |
 | **sponsorship** (`sponsorship.py`) | Reliable — extracted from full JD at crawl (caught BTIG's deep "no sponsorship" line) | tri-state, "unknown" common | partial |
 
@@ -50,7 +50,18 @@ For **each** extractor, replicate the `comp.py` method exactly — it is the tem
 3. **Publish the coverage %** per field in `INDEX_STATUS.md` — *no competitor publishes this*; it's both a
    marketing weapon and a forcing function for honesty.
 
-Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → ~~**yoe**~~ **✅ DONE (2026-07-06)** → ~~**skills**~~ **✅ DONE (2026-07-06)** → ~~**level**~~ **✅ DONE (2026-07-06)** → **geo next** (last).
+Order (impact × how-unproven): ~~degree~~ ✅ → ~~yoe~~ ✅ → ~~skills~~ ✅ → ~~level~~ ✅ →
+~~**geo**~~ **✅ DONE (2026-07-06)**. **The extraction-quality program is COMPLETE — all six
+extractors (comp, degree, yoe, skills, level, geo) now have a measured number and a ratcheting gate.**
+
+**geo.py result (2026-07-06):** same rig — 800 DISTINCT location strings from enterprise ATS (taleo,
+dejobs, peoplesoft), blind-labeled for country + city. **country 77.0%→94.8%, city 80.1%→88.9%.** The
+corpus surfaced the enterprise HRIS formats geo.py never parsed: 2-letter ISO codes colliding with US
+states ("Toronto, ON, CA"→CA=Canada not California; "Cologne, NW, DE"→Germany not Delaware; "…, IN"→
+India not Indiana), resolved by POSITION (country-slot, postal-adjacent) so "Chicago, IL" stays
+Illinois; ISO-3 codes (POL/CAN/DEU) folded into aliases; and PeopleSoft dash formats ("United
+States-Texas-Garden City", "CA-Irvine", "Kansas-Topeka, Kansas-Wichita") via name/uppercase-code
+dash-splitting. **country/city are production-grade** — the fit rubric can gate on location.
 
 **level.py result (2026-07-06):** same rig — 900 real postings across enterprise ATS (taleo, dejobs,
 apicapture, paycom), blind-labeled for the level the TITLE conveys (the extractor is title-only).
@@ -128,6 +139,8 @@ Benchmarked so far (all with the same fetch→window→blind-fleet→ratcheting-
 
 ~~Benchmark `skills.py`~~ **✅ done** — 99.5% precision / 92.7% recall, +23 skills.
 ~~Benchmark `level.py`~~ **✅ done (2026-07-06)** — 82.0% acc / 0.736 macro-F1 on enterprise titles.
-**Next (last extractor): benchmark `geo.py`** (country/city) with the same rig. After that the whole
-extraction foundation is measured and the fit-rubric tool is unblocked. Then
-`level.py` → `geo.py`. **No tool before its fields have a number.**
+~~Benchmark `geo.py`~~ **✅ done (2026-07-06)** — country 94.8% / city 88.9%. **The extraction-quality
+program is COMPLETE.** Every field a tool needs now has a measured precision/recall/accuracy number
+and a ratcheting gate. **The fit-rubric tool (Phase C) is UNBLOCKED** — gate on the production-grade
+fields (comp, yoe, skills, level, geo, degree_min); treat `degree_required` (59.7%) and ambiguous
+`level` as advisory only. **No tool before its fields have a number — now they all do.**
