@@ -242,10 +242,10 @@ CI gate (the `comp.py` method, replicated field by field):
 | **skills** | precision / recall | 0.995 / 0.927 | production |
 | **sponsorship** | tri-state accuracy | 0.989 | production |
 | **remote** | accuracy / precision (location path) | 0.994 / 1.00 | production |
-| **yoe** | recall / precision | 0.978 / 0.877 | production |
+| **yoe** | recall / precision | 0.978 / 0.969 | production |
 | **geo/country** | accuracy | 0.948 | production |
 | **geo/city** | accuracy | 0.969 | production |
-| **degree_min** | recall / precision | 0.886 / 0.995 | production |
+| **degree_min** | recall / precision | 0.905 / 0.995 | production |
 | **level** | accuracy / macro-F1 | 0.822 / 0.738 | usable (advisory on ambiguous) |
 | **sector** | accuracy-when-covered / coverage | 0.724 / 0.267 | usable; coverage name-limited |
 | **degree_required** | accuracy | 0.611 | advisory only |

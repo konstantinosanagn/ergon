@@ -105,7 +105,8 @@ _IN_FIELD_AFTER = re.compile(r"^\W*in\s+[a-z]", re.IGNORECASE)
 _DQ_AFTER = re.compile(
     r"^\W*(?:ago|old|or\s+older|of\s+age|vesting|vest|cliff|warranty|lease|"
     r"sentence|imprisonment|in\s+prison|in\s+jail|running|"
-    r"of\s+growth|in\s+business|in\s+operation|"
+    r"of\s+growth|in\s+business|in\s+operation|of\s+employment|of\s+service|"
+    r"(?:'|’)?\s*(?:continuous\s+)?(?:uk\s+|us\s+)?residenc[ey]|"  # "5 years' continuous UK residence"
     r"contract|assignment|probation|maternity|parental|internship|placement)\b",
     re.IGNORECASE,
 )
@@ -270,6 +271,15 @@ class YoeExtractor:
         # A company-achievement clause in the SAME sentence ("30+ years of expertise, we combine").
         same_sentence_after = re.split(r"[.\n;]", text[m.end() : m.end() + 70])[0]
         if _COMPANY_NEAR.search(same_sentence_after):
+            return False
+        # "for/with/just over N years" — the "over"/"more than" is absorbed as the phrase prefix, so
+        # the company framing ("For over 45 years, …", "with over 20 years of experience") sits right
+        # before it. Company/product tenure, not a candidate requirement — veto before the cue/prefix
+        # acceptance below (otherwise a trailing "of experience" or the "over" prefix accepts it).
+        _pfx = (m.group("prefix") or "").strip().lower()
+        if _pfx in {"over", "more than", "nearly", "almost"} and re.search(
+            r"\b(?:for|with|just)\s*$", before, re.IGNORECASE
+        ):
             return False
         # Months are almost never a YoE *requirement* (they're contracts/training/timelines/
         # probation). Accept only when an experience cue sits immediately after ("18 months of
