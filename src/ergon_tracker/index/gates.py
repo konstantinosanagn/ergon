@@ -47,9 +47,19 @@ def evaluate_gates(
     db_path: Path | str,
     *,
     prev_row_count: int | None = None,
+    last_known_rows: int | None = None,
+    allow_cold_start: bool = False,
     min_ratio: float = 0.75,
 ) -> GateReport:
-    """Run all publish gates against a built index. Pure read; never mutates the DB."""
+    """Run all publish gates against a built index. Pure read; never mutates the DB.
+
+    ``prev_row_count`` is the live previous snapshot's row count (None if it's absent on disk).
+    ``last_known_rows`` is a DURABLE fallback floor — the last successfully published row count
+    recovered from history.jsonl — used when the live prev is missing so that a collapse can't
+    masquerade as a cold start and publish over a good large snapshot (a download failure must not
+    weaken the floor). Set ``allow_cold_start`` (an explicit operator decision) to permit publishing
+    below the historical floor for a genuine first build or intentional reset.
+    """
     rep = GateReport()
     con = connect(db_path, read_only=True)
     try:
@@ -61,18 +71,20 @@ def evaluate_gates(
         rep.results.append(GateResult("schema_version", sv_ok, f"{sv[0] if sv else None}"))
 
         rows = con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
-        if prev_row_count:
-            floor = int(prev_row_count * min_ratio)
+        # Prefer the live prev count; fall back to the durable last-published count so a MISSING
+        # prev snapshot (failed download) can't silently drop the floor to >0 and let a collapse
+        # overwrite a good large release.
+        basis = prev_row_count or last_known_rows
+        if basis and not allow_cold_start:
+            floor = int(basis * min_ratio)
+            src = "prev" if prev_row_count else "history[live prev MISSING]"
             rep.results.append(
-                GateResult(
-                    "row_floor",
-                    rows >= floor,
-                    f"{rows} rows (floor {floor}, prev {prev_row_count})",
-                )
+                GateResult("row_floor", rows >= floor, f"{rows} rows (floor {floor}, {src} {basis})")
             )
         else:
+            reason = "cold start override" if (basis and allow_cold_start) else "cold start"
             rep.results.append(
-                GateResult("row_floor", rows > 0, f"{rows} rows (cold start, need >0)")
+                GateResult("row_floor", rows > 0, f"{rows} rows ({reason}, need >0)")
             )
 
         dups = con.execute("SELECT COUNT(*) - COUNT(DISTINCT id) FROM jobs").fetchone()[0]
