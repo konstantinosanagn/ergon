@@ -25,7 +25,7 @@ same as "measured against hundreds of real JDs."
 | **yoe** (`yoe.py`) | **97.8% recall**; **87.7% precision** on an adversarial-negative set (field precision higher) | measured on a 539-record real corpus | ✅ 539-record real corpus + ratcheting gate (`test_yoe_recall.py`) |
 | **level** (`level.py`) | ~44% unknown after yoe→level default-on | Improved, still gaps | ❌ |
 | **geo/country** (`geo.py`) | NULL-country (Workday placeholder) bug fixed | Improved | ❌ |
-| **skills** (`skills.py`) | Gazetteer; never audited | Unknown | ❌ |
+| **skills** (`skills.py`) | **99.5% precision** (deterministic; 5/943 collisions), **92.7% recall** vs human labels | 91→114 skills; +23 gaps added | ✅ 800-window real corpus + ratcheting gate (`test_skills_recall.py`) |
 | **sponsorship** (`sponsorship.py`) | Reliable — extracted from full JD at crawl (caught BTIG's deep "no sponsorship" line) | tri-state, "unknown" common | partial |
 
 ## Two axes of quality — both required
@@ -50,7 +50,20 @@ For **each** extractor, replicate the `comp.py` method exactly — it is the tem
 3. **Publish the coverage %** per field in `INDEX_STATUS.md` — *no competitor publishes this*; it's both a
    marketing weapon and a forcing function for honesty.
 
-Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → ~~**yoe**~~ **✅ DONE (2026-07-06)** → **skills next** → level → geo.
+Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → ~~**yoe**~~ **✅ DONE (2026-07-06)** → ~~**skills**~~ **✅ DONE (2026-07-06)** → **level next** → geo.
+
+**skills.py result (2026-07-06):** same rig — 800 requirement/skill-section windows fetched across
+329 companies / 8 ATS (`scripts/build_skills_corpus.py`, anchored on skill-CONTEXT so it surfaces
+skills the gazetteer lacks), blind-labeled by an 8-agent fleet for the SET of skills present.
+**Precision 99.5%, recall 92.7%.** Key insight: `skills.py` is a deterministic literal matcher — it
+*can't hallucinate*, so the only real precision errors are word-sense collisions (5/943: `rest`,
+`excel`, `rails`, `sap`, `ruby`); the excel-verb + bare-`rest` guards fixed the top ones, and the
+deliberate omission of bare `go`/`c`/`r`/`spring`/`swift` produced **zero** collisions. Recall fix:
+`llm` plurals ("LLMs"). Coverage: **+23 skills** the corpus surfaced (crm, powerpoint, github,
+hubspot, devops, databricks, google analytics, photoshop, …), 91→114. The skills-gap tool's
+normalization pass is effectively the gazetteer's alias map, now benchmarked. **Deferred gap
+worklist** (vaguer/collision-prone, not added): saas, generative-ai/ai, cloud, distributed-systems,
+data-modeling/pipelines/viz, business-intelligence, word/outlook/notion/slack, claude/chatgpt/gemini.
 
 **yoe.py result (2026-07-06):** same rig — 540 "<number> years/months" windows fetched across 237
 companies / 8 ATS (`scripts/build_yoe_corpus.py`, a net wider than the extractor), blind-labeled by
@@ -102,6 +115,7 @@ Benchmarked so far (all with the same fetch→window→blind-fleet→ratcheting-
 - ~~`degree.py`~~ ✅ (2026-07-05) — `degree_min` 88.6%/99.5% (grade); `degree_required` 59.7% (advisory).
 - ~~`yoe.py`~~ ✅ (2026-07-06) — 97.8% recall / 87.7% precision (grade). Fit rubric can gate on years.
 
-**Next: benchmark `skills.py`** (the gazetteer — never audited) with the same rig, retargeted to skill
-mentions; it needs a normalization pass ("React" == "React.js") before the skills-gap tool. Then
+~~Benchmark `skills.py`~~ **✅ done (2026-07-06)** — 99.5% precision / 92.7% recall, +23 skills.
+**Next: benchmark `level.py`** then `geo.py` with the same rig. (Old note kept for context: skills
+needed a normalization pass "React"=="React.js" — that IS the gazetteer alias map, now measured.) Then
 `level.py` → `geo.py`. **No tool before its fields have a number.**

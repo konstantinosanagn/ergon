@@ -45,7 +45,9 @@ _SKILLS: dict[str, tuple[str, ...]] = {
     "spring": ("spring boot", "spring"),
     "rails": ("ruby on rails", "rails"),
     "graphql": ("graphql",),
-    "rest": ("rest api", "restful", "rest"),
+    # bare "rest" collides with the English word ("rest & recharge", "earn the rest"); require an
+    # API-ish surface form. (Benchmarked: bare "rest" was a top false positive.)
+    "rest": ("rest api", "rest apis", "restful"),
     "html": ("html",),
     "css": ("css",),
     "tailwind": ("tailwind",),
@@ -84,7 +86,7 @@ _SKILLS: dict[str, tuple[str, ...]] = {
     "snowflake": ("snowflake",),
     "data engineering": ("data engineering",),
     "etl": ("etl", "elt"),
-    "llm": ("llm", "large language model"),
+    "llm": ("llm", "llms", "large language model", "large language models"),
     # databases
     "postgresql": ("postgresql", "postgres"),
     "mysql": ("mysql",),
@@ -111,6 +113,32 @@ _SKILLS: dict[str, tuple[str, ...]] = {
     "seo": ("seo",),
     "accounting": ("accounting",),
     "financial modeling": ("financial modeling", "financial modelling"),
+    # gazetteer gaps surfaced by the 800-window skills benchmark (2026-07-06), collision-safe forms
+    # only — distinctive tokens unlikely to hit an everyday word. (Omitted the collision-prone ones
+    # labelers named: word/outlook/notion/slack/confluence.)
+    "crm": ("crm",),
+    "powerpoint": ("powerpoint",),
+    "microsoft office": ("microsoft office", "ms office", "office 365", "microsoft 365"),
+    "microsoft word": ("microsoft word",),
+    "github": ("github",),
+    "gitlab": ("gitlab",),
+    "hubspot": ("hubspot",),
+    "devops": ("devops",),
+    "google analytics": ("google analytics", "ga4"),
+    "google ads": ("google ads", "google adwords", "adwords"),
+    "google sheets": ("google sheets",),
+    "photoshop": ("photoshop",),
+    "illustrator": ("illustrator",),
+    "after effects": ("after effects",),
+    "databricks": ("databricks",),
+    "clickhouse": ("clickhouse",),
+    "redshift": ("redshift", "amazon redshift"),
+    "ios": ("ios",),
+    "android": ("android",),
+    "erp": ("erp",),
+    "cad": ("cad",),
+    "revit": ("revit",),
+    "sas": ("sas",),
 }
 
 SKILLS = tuple(_SKILLS)
@@ -126,9 +154,29 @@ _MATCHERS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
+# "excel" collides with the verb ("excel at/in/across", "to excel", "inspire others to excel"). Keep
+# the skill only when at least one occurrence is a NOUN — not immediately a verb. (Benchmarked: the
+# verb was a top false positive; the tool still matches in "Excel spreadsheets", "advanced Excel".)
+_EXCEL = re.compile(r"(?<![a-z0-9+#])excel(?![a-z0-9+#])")
+_EXCEL_VERB_AFTER = re.compile(r"\s+(?:at|in|across|ly|led|ling|s)\b")
+
+
+def _excel_is_noun(t: str) -> bool:
+    for m in _EXCEL.finditer(t):
+        if t[max(0, m.start() - 3) : m.start()].rstrip().endswith("to"):
+            continue  # "to excel"
+        if _EXCEL_VERB_AFTER.match(t[m.end() : m.end() + 8]):
+            continue  # "excel at/in/..."
+        return True
+    return False
+
+
 def extract_skills(text: str | None) -> set[str]:
     """Return the canonical skills mentioned in ``text`` (deterministic gazetteer match)."""
     if not text:
         return set()
     t = text.lower()
-    return {canon for canon, rx in _MATCHERS if rx.search(t)}
+    out = {canon for canon, rx in _MATCHERS if rx.search(t)}
+    if "excel" in out and not _excel_is_noun(t):
+        out.discard("excel")
+    return out
