@@ -89,7 +89,7 @@ _IC_MANAGER = re.compile(
     r"operations|success|delivery|implementation|launch|market|country|"
     r"content|influencer|territory|field|revenue|deployment|engagement|"
     r"activation|relationship|portfolio|customer|client|supply|installation|"
-    r"pr|public relations"
+    r"pr|public relations|business development|case"
     r")\s+(?:managers?|mgr)\b",
     re.I,
 )
@@ -113,7 +113,8 @@ _PEOPLE_MANAGER = re.compile(
 )
 
 _INTERN = re.compile(
-    r"\b(?:intern|internship|co-?op|apprentice|werk?student|werkstudent|praktikant|praktikum)\b",
+    r"\b(?:intern|internship|co-?op|apprentice|werk?student|werkstudent|praktikant|praktikum"
+    r"|v\.i\.e\.?|student\s+(?:assistant|worker|position|intern|trainee)|working\s+student)\b",
     re.I,
 )
 
@@ -130,7 +131,7 @@ _EXECUTIVE = re.compile(
     re.I,
 )
 
-_PRINCIPAL = re.compile(r"\b(?:principal|distinguished)\b", re.I)
+_PRINCIPAL = re.compile(r"\b(?:principal|distinguished|princ)\b", re.I)  # "princ" = Princ. abbrev
 # "Fellow" is overloaded: in tech it's the principal-IC rung ("Technical/Distinguished Fellow",
 # "Fellow Engineer"), but in academia/medicine it's an EARLY-CAREER trainee ("Research Fellow",
 # "Postdoctoral Fellow", "Clinical Fellow"). Only the explicitly-tech form maps to principal; the

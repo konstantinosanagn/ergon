@@ -169,3 +169,34 @@ fail the suite every time we add a legitimate skill, so the gate scores the coll
 needs, and it's now measured-good. **Deferred gap worklist** (vaguer/collision-prone): saas,
 generative-ai, cloud, distributed-systems, data-modeling/pipelines/viz, business-intelligence,
 claude/chatgpt/gemini. **Next extractor to benchmark: `level.py`.**
+
+---
+
+## Addendum (2026-07-06): `level.py` benchmarked on ENTERPRISE titles
+
+Fifth extractor. Unlike the old 500-row gold (startup-heavy, greenhouse/lever), this corpus is 900
+real postings from **enterprise ATS** (taleo, dejobs, apicapture, paycom, peoplesoft;
+`scripts/build_level_corpus.py`), blind-labeled for the level the **title** conveys (the extractor,
+`LevelExtractor.extract`, is title-only — the years→level relevel is a separate build step).
+Gate: `tests/test_level_recall.py` (accuracy + macro-F1; multi-class).
+
+| Metric | Result |
+|---|---|
+| **accuracy** | **0.820** (from 0.809 first-measure) |
+| **macro-F1** (gold classes) | **0.736** (from 0.703) |
+| accuracy on non-`unknown` gold | 0.703 |
+
+**Honest finding — enterprise titles are materially harder than the old 0.954 gold.** The gap is
+genuine title ambiguity, not simple bugs: bare "Associate" (entry in consulting, mid in banking),
+IC-"X Manager" (Product/Treasury/Change Manager), "Supervisor" (first-line manager vs unknown),
+dual-rank "Analyst/Sr Analyst" postings (one req, two levels), and numeric ladders ("Level 4",
+"SPEC 3") — cases where blind human labelers and a deterministic classifier reasonably differ. Per
+the repo labeling guide, unmarked titles → `unknown`, which the classifier follows.
+
+**Fixes the corpus forced (clean, real gaps):** +intern forms (Student Assistant, V.I.E, Working
+Student, Student Position), "Princ" abbreviation → principal, +IC-manager (Business Development /
+Case Manager). intern F1 0.62→0.82, principal 0.55→0.67.
+
+**Consequence for the fit rubric:** `level` is usable but weaker than comp/yoe — weight it lower and
+never let an ambiguous level flip a pass/fail (same caution as `degree_required`). **Last extractor
+to benchmark: `geo.py`.**
