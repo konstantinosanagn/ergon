@@ -217,6 +217,8 @@ _ROMAN_STAFF = re.compile(r"\bV\b")  # level 5 (checked after VI; \bV\b can't ma
 _ROMAN_SENIOR = re.compile(r"\b(?:III|IV)\b")
 _ROMAN_MID = re.compile(r"\bII\b")
 _ROMAN_ENTRY = re.compile(r"\bI\b")
+# A multi-rung range ("I/II", "II/III", "I/II/III", "I - III") — spans levels, so not one rung.
+_ROMAN_RANGE = re.compile(r"\b(?:I{1,3}|IV|V)\s*[/\-–]\s*(?:I{1,3}|IV|V)(?:\s*[/\-–]\s*(?:I{1,3}|IV|V))?\b")
 _ARABIC = re.compile(r"\b([1-4])\b")
 
 _LADDER_MAP: dict[int, JobLevel] = {
@@ -241,6 +243,11 @@ _ARABIC_MAP: dict[int, JobLevel] = {
 
 def _parse_level_token(title: str) -> JobLevel | None:
     """Parse an explicit/numeric level token (returns None when absent)."""
+    # A multi-rung ladder RANGE ("Engineer I/II/III", "Analyst I / II", "Technician I-III") spans
+    # levels, so no single rung is the role's level — leave it to the rest of the title (usually
+    # -> unknown). Without this, the roman matcher below would pick the top rung ("III" -> senior).
+    if _ROMAN_RANGE.search(title):
+        return None
     if _TOK_EARLY.search(title):
         return JobLevel.ENTRY
     if _TOK_MID.search(title):
