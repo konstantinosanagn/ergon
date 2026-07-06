@@ -61,12 +61,32 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bd\.?v\.?m\.?\b(?=[\s,./)]|$)", re.I), "phd_md"),
     (re.compile(r"\bj\.d\.?(?=[\s,/)]|$)", re.I), "phd_md"),
     (re.compile(r"\bjuris\s+doctor\b", re.I), "phd_md"),
-    # master's ("master" needs its 's or of/degree so "Scrum Master" can never match)
-    (re.compile(r"\bmaster(?:'|’)?s\b", re.I), "master"),
-    (re.compile(r"\bmaster\s+(?:of|degree)\b", re.I), "master"),
+    # master's ("master" needs its 's or of/degree so "Scrum Master" can never match). The 's form
+    # additionally requires a degree-context follower so "Master's instructions" (a ship's-master
+    # rank), "Master's students" (enrolled, not held) and other possessive idioms don't fire.
+    (
+        re.compile(
+            r"\bmaster(?:'|’)s\b(?=\s*(?:degree|of\b|in\b|or\b|level\b|qualification|"
+            r"required|preferred|strongly|,|/|\.|;|:|\)|-|–|$))",
+            re.I,
+        ),
+        "master",
+    ),
+    # "Master of <academic subject>" — whitelisted so "Master of Schedule/Production/your destiny"
+    # (wordplay) can't match; plus the plain "master(s) degree" phrasing.
+    (
+        re.compile(
+            r"\bmaster\s+of\s+(?:science|arts|business|engineering|public\s+health|fine\s+arts|"
+            r"philosophy|laws?|education|social\s+work|music|architecture|divinity|technology|"
+            r"computer\s+science|data\s+science|research|account(?:ing|ancy)|finance|nursing|"
+            r"management)\b|\bmaster(?:'|’)?s?\s+degree\b",
+            re.I,
+        ),
+        "master",
+    ),
     (re.compile(r"\bmba\b", re.I), "master"),
     (re.compile(r"\bm\.\s?(?:sc|eng|s|a)\.?(?=[\s,/)]|$)", re.I), "master"),
-    (re.compile(r"\bmsc\b", re.I), "master"),
+    (re.compile(r"\bMSc\b"), "master"),  # case-sensitive: the academic form, not "MSC" (a company)
     (re.compile(rf"\b(?:MS|MEng){_CTX_MS}"), "master"),
     (re.compile(r"(?<=/)(?:MS|MEng)\b"), "master"),
     (re.compile(r"\b(?:advanced|graduate|post[-\s]?graduate)\s+degree\b", re.I), "master"),
@@ -74,11 +94,12 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bbachelor(?:'|’)?s?\b", re.I), "bachelor"),
     (re.compile(r"\bbaccalaureate\b", re.I), "bachelor"),
     (re.compile(r"\bb\.\s?(?:sc|eng|s|a)\.?(?=[\s,/)]|$)", re.I), "bachelor"),
-    (re.compile(r"\bbsc\b", re.I), "bachelor"),
+    (re.compile(r"\bBSc\b"), "bachelor"),  # case-sensitive academic form (not an all-caps acronym)
     (re.compile(rf"\b(?:BS|BA|BEng){_CTX_BS}"), "bachelor"),
     (re.compile(r"(?<=/)(?:BS|BA|BEng)\b"), "bachelor"),
-    (re.compile(r"\bundergraduate\s+degree\b", re.I), "bachelor"),
-    (re.compile(r"\b(?:4|four)[-\s]year\s+(?:college\s+)?degree\b", re.I), "bachelor"),
+    (re.compile(r"\b(?:undergraduate|university|college)\s+degree\b", re.I), "bachelor"),
+    # "4-year degree" allowing an intervening field ("4-year computer science degree").
+    (re.compile(r"\b(?:4|four)[-\s]year\s+(?:[A-Za-z][A-Za-z&/]*\s+){0,3}degree\b", re.I), "bachelor"),
     # associate
     (re.compile(r"\bassociate(?:'|’)?s?\s+degree\b", re.I), "associate"),
     (re.compile(r"\ba\.\s?(?:a|s)\.?\s+degree\b", re.I), "associate"),
@@ -100,7 +121,9 @@ _PREFERRED = re.compile(
     re.I,
 )
 _REQUIRED = re.compile(
-    r"\brequired\b|\bmust\s+(?:have|hold|possess)\b|\bminimum\b|\bneeded\b", re.I
+    r"\brequired\b|\bmust\s+(?:have|hold|possess)\b|\bminimum\b|\bneeded\b"
+    r"|\bor\s+(?:above|higher)\b|\bat\s+least\s+an?\b|\bminimum\s+of\s+an?\b",
+    re.I,
 )
 
 # Benefits / tuition context: a degree mentioned here is about perks, not qualifications —
@@ -115,7 +138,9 @@ _BENEFITS = re.compile(
 # Nearest header wins. "Preferred"-flavored headers are checked against the same window.
 _SEC_REQUIRED = re.compile(
     r"(?:minimum|basic)\s+qualifications|requirements?|qualifications"
-    r"|what\s+you.{0,2}ll\s+need|must[-\s]haves?",
+    r"|what\s+you.{0,2}ll\s+need|must[-\s]haves?|who\s+you\s+are"
+    r"|what\s+(?:we.{0,2}re\s+looking\s+for|you\s+bring)|you.{0,2}ll\s+(?:have|bring|need)"
+    r"|\beducation\s*(?:&|and)?\s*(?:experience|requirements?)?\s*[:\n]",
     re.I,
 )
 _SEC_PREFERRED = re.compile(
@@ -130,6 +155,17 @@ _SEGMENT_CAP = 300  # max chars of sentence/bullet examined on each side of a me
 # Sentence/bullet boundary: a newline or bullet always ends a segment; a period only when
 # followed by whitespace + an uppercase start (so "M.D. or Ph.D." doesn't split mid-mention).
 _BOUNDARY = re.compile(r"[\n\r•;]|\.(?=\s+[A-Z])")
+
+# Bare "degree" — only in an unambiguous requirement follower ("Degree in Computer Science",
+# "degree or equivalent", "degree required", "degree from an accredited university", "degree
+# level"). "high degree of autonomy" / "360 degree" can't match ("of"/number is not a follower).
+# Defaults to bachelor (a bare degree requirement is a first degree); it is SUPPRESSED whenever a
+# specific degree word immediately precedes it ("master's degree in X" already counted as master),
+# so the bare arm never double-counts and drags a higher requirement down to bachelor.
+_BARE_DEGREE = re.compile(
+    r"\bdegree\b(?=\s+(?:in\b|or\b|required|preferred|from\b|level\b|is\s+required|is\s+preferred))",
+    re.I,
+)
 
 
 def _segment(text: str, start: int, end: int) -> tuple[str, int]:
@@ -191,13 +227,18 @@ class DegreeExtractor:
             return (None, None)
         # (rank, scope) per surviving mention; the minimum rank is the real barrier.
         mentions: list[tuple[int, bool | None]] = []
+        specific_spans: list[tuple[int, int]] = []
         for pattern, level in _PATTERNS:
             for m in pattern.finditer(text):
-                seg, seg_start = _segment(text, m.start(), m.end())
-                if _BENEFITS.search(seg) or _in_benefits_section(text, m.start()):
-                    continue  # tuition-reimbursement perk, not a qualification
-                scope = self._scope(text, seg, m.start() - seg_start, m.start())
-                mentions.append((_RANK[level], scope))
+                specific_spans.append((m.start(), m.end()))
+                self._add(text, m.start(), m.end(), _RANK[level], mentions)
+        # Guarded bare-degree pass (bachelor). Suppressed when the "degree" token sits inside or
+        # right after a specific degree phrase ("master's degree", "advanced degree", "PhD degree"),
+        # so the bare arm never double-counts and drags a higher requirement down to bachelor.
+        for m in _BARE_DEGREE.finditer(text):
+            if any(s <= m.start() <= e + 15 for s, e in specific_spans):
+                continue
+            self._add(text, m.start(), m.end(), _RANK["bachelor"], mentions)
         if not mentions:
             return (None, None)
         min_rank = min(rank for rank, _ in mentions)
@@ -205,6 +246,15 @@ class DegreeExtractor:
         # Any explicit "required" at the minimum level wins; else any explicit "preferred".
         scope = True if True in scopes else (False if False in scopes else None)
         return (DEGREE_LEVELS[min_rank], scope)
+
+    def _add(
+        self, text: str, start: int, end: int, rank: int, mentions: list[tuple[int, bool | None]]
+    ) -> None:
+        """Process one gazetteer hit: drop benefits/tuition mentions, else record (rank, scope)."""
+        seg, seg_start = _segment(text, start, end)
+        if _BENEFITS.search(seg) or _in_benefits_section(text, start):
+            return  # tuition-reimbursement perk, not a qualification
+        mentions.append((rank, self._scope(text, seg, start - seg_start, start)))
 
     @staticmethod
     def _scope(text: str, segment: str, pos: int, abs_start: int) -> bool | None:

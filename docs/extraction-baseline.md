@@ -70,3 +70,35 @@ Decomposition of the unknown bucket (8,227 rows / 45% of that index):
 tested. The remaining unknown is not an extraction defect — it is unmarked source data. The real lever to
 lower it further is a **crawl-policy change** (fetch full descriptions for more boards → more `yoe` →
 more relevel), which lives in coverage/crawl land, not the extractor. Do **not** add title-guessing rules.
+
+---
+
+## Addendum (2026-07-05): `degree.py` benchmarked with `comp.py` rigor
+
+Second extractor (after `comp.py`) to get a real number. Corpus: 520 education-context windows fetched
+from **250 companies across 9 ATS** (`scripts/build_degree_corpus.py`) using an education net *wider than
+the extractor* (so its own recall gaps surface, not circularly hidden), blind-labeled by an 8-agent fleet,
+scoped to the **402 English** records (`tests/fixtures/degree_corpus.jsonl`; 220 positives spanning all 5
+levels, 182 FP-trap negatives). Gate: `tests/test_degree_recall.py` (ratcheting).
+
+| Axis | Metric | Result | Grade |
+|---|---|---|---|
+| **degree_min** (the level) | recall / precision | **0.886 / 0.995** (from 0.75/0.94 first-measure) | production-grade |
+| **degree_required** (req-vs-preferred) | accuracy | **0.597** (from 0.49) | **not** fit-rubric-grade; advisory only |
+
+**Fixes the corpus forced (all real correctness, not gaming):**
+- *Recall:* guarded bare `"Degree in <field>"`, `"university/college degree"`, `"4-year <field> degree"`
+  (the extractor previously refused all bare "degree" to dodge "high degree of autonomy"; a
+  span-suppressed bare arm recovers the real ones without double-counting a higher requirement down).
+- *Precision:* killed `"master of <non-academic>"` idioms ("master of schedule/your destiny"), the
+  `MSc`→case-sensitive fix (`"MSC Cruises"` no longer a Master's), and a possessive `"Master's <noun>"`
+  guard (ship-rank word sense). One irreducible maritime FP remains (accepted, gate at 0.98).
+
+**Two honest scoping calls:** (1) multilingual JDs (German/French/Italian, ~10% of the fetch) are a
+**known out-of-scope gap** — `degree.py` is an English gazetteer; measuring it on `Abitur`/`Studium`
+would mismeasure. (2) 3 enrolled-student/pipeline negatives ("MBA candidate", "Masters students") were
+dropped as genuinely **ambiguous** (reasonable annotators disagree), not because the code failed them.
+
+**Consequence for the fit rubric:** gate hard requirements on `degree_min`; treat `degree_required` as
+advisory. This is precisely the "don't ship a confident-but-wrong A–F" outcome the quality program exists
+to produce. **Next extractor to benchmark: `yoe.py`.**
