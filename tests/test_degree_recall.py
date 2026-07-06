@@ -33,9 +33,9 @@ from ergon_tracker.extract.degree import DegreeExtractor
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "degree_corpus.jsonl"
 
 # Ratcheting gates — a margin below the measured numbers (2026-07-05, 402-record English corpus:
-# level recall 88.6%, scope 59.7%, precision 99.5%); raise as degree.py improves.
+# level recall 88.6%, scope 61.1%, precision 99.5%); raise as degree.py improves.
 LEVEL_RECALL_GATE = 0.85  # degree_min (the level) — production-grade
-SCOPE_ACC_GATE = 0.55  # degree_required (required-vs-preferred) — the genuinely hard half; honest,
+SCOPE_ACC_GATE = 0.58  # degree_required (required-vs-preferred) — the genuinely hard half; honest,
 # low, ratcheted. NOT yet fit-rubric-grade: consumers should treat degree_required as advisory.
 PRECISION_GATE = 0.98  # one irreducible FP: a maritime "Master's <orders>" (ship-rank word sense)
 

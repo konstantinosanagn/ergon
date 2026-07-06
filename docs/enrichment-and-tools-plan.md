@@ -21,7 +21,7 @@ same as "measured against hundreds of real JDs."
 | Field | Precision/recall (when JD states it) | Coverage (how often populated) | Benchmarked at scale? |
 |---|---|---|---|
 | **salary** (`comp.py`) | ~100% recall / 100% precision | ~35–40% (gated by JD access) | ✅ 227-record real corpus + ratcheting gate (`test_comp_recall.py`) |
-| **degree** (`degree.py`) | **level 88.6% recall / 99.5% precision**; **scope (req-vs-pref) 59.7%** — the hard half | measured on the corpus below | ✅ 402-record real corpus + ratcheting gate (`test_degree_recall.py`) |
+| **degree** (`degree.py`) | **level 88.6% recall / 99.5% precision**; **scope (req-vs-pref) 61.1%** — the hard half | measured on the corpus below | ✅ 402-record real corpus + ratcheting gate (`test_degree_recall.py`) |
 | **yoe** (`yoe.py`) | **97.8% recall**; **87.7% precision** on an adversarial-negative set (field precision higher) | measured on a 539-record real corpus | ✅ 539-record real corpus + ratcheting gate (`test_yoe_recall.py`) |
 | **level** (`level.py`) | **82.0% acc / 0.736 macro-F1** on enterprise titles (title-only) | measured on a 900-posting corpus | ✅ 900-posting real corpus + ratcheting gate (`test_level_recall.py`) |
 | **geo/country** (`geo.py`) | **country 94.8% / city 88.9%** on enterprise location strings | ISO-code + dash-format parsing added | ✅ 800-string real corpus + ratcheting gate (`test_geo_recall.py`) |
@@ -105,7 +105,9 @@ records (multilingual is a separate known gap). Numbers + the fixes they forced:
   guarded bare `"Degree in X"` / `"university degree"` / `"4-year <field> degree"` (recall), and
   killed the `"master of <non-academic>"` idiom, `MSC`-company, and possessive `"Master's <noun>"`
   ship-rank false positives (precision). **This axis is production-grade.**
-- **degree_required (scope): 59.7%** — the genuinely hard half (literature ~74%). The corpus proves
+- **degree_required (scope): 61.1%** — the genuinely hard half (literature ~74%). (2026-07-06: the
+  tight "<degree> or equivalent required" phrase now resolves to True — "HS diploma or GED required"
+  — while "or equivalent *experience* required" stays False. +1.4pt, no regressions.) The corpus proves
   it is **NOT fit-rubric-grade**: the fit rubric must use `degree_min` as the hard filter and treat
   `degree_required` as *advisory only*, never as an authoritative A–F input. **This is exactly the
   "avoid confident-but-wrong" outcome the plan was built to catch.**
