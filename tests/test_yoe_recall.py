@@ -27,11 +27,11 @@ from ergon_tracker.extract.yoe import YoeExtractor
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "yoe_corpus.jsonl"
 
 # Ratcheting gates — a margin below the measured numbers (2026-07-06, 539-record English corpus:
-# recall 97.8%, precision 87.7%); raise as yoe.py improves. NOTE the negative set is *adversarially
+# recall 97.8%, precision 96.9%); raise as yoe.py improves. NOTE the negative set is *adversarially
 # enriched* with company-age/tenure numbers the broad net surfaced, so 87.7% is a worst case — field
 # precision is higher. Recall is the field-representative axis.
 RECALL_GATE = 0.95
-PRECISION_GATE = 0.85
+PRECISION_GATE = 0.92
 
 _EX = YoeExtractor()
 

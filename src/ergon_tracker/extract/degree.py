@@ -61,6 +61,9 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bd\.?v\.?m\.?\b(?=[\s,./)]|$)", re.I), "phd_md"),
     (re.compile(r"\bj\.d\.?(?=[\s,/)]|$)", re.I), "phd_md"),
     (re.compile(r"\bjuris\s+doctor\b", re.I), "phd_md"),
+    # Professional-doctorate degrees named by field ("Medical degree (MD or DO)", "Law degree (JD)")
+    # — the bare MD/DO/JD often lack the dots the abbreviations require, so anchor on the phrase.
+    (re.compile(r"\b(?:medical|law|dental|veterinary)\s+degree\b", re.I), "phd_md"),
     # master's ("master" needs its 's or of/degree so "Scrum Master" can never match). The 's form
     # additionally requires a degree-context follower so "Master's instructions" (a ship's-master
     # rank), "Master's students" (enrolled, not held) and other possessive idioms don't fire.
@@ -98,6 +101,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(rf"\b(?:BS|BA|BEng){_CTX_BS}"), "bachelor"),
     (re.compile(r"(?<=/)(?:BS|BA|BEng)\b"), "bachelor"),
     (re.compile(r"\b(?:undergraduate|university|college)\s+degree\b", re.I), "bachelor"),
+    (re.compile(r"\bdegree[-\s]+(?:educated|qualified)\b", re.I), "bachelor"),  # British "degree educated"
     # "4-year degree" allowing an intervening field ("4-year computer science degree").
     (re.compile(r"\b(?:4|four)[-\s]year\s+(?:[A-Za-z][A-Za-z&/]*\s+){0,3}degree\b", re.I), "bachelor"),
     # associate
