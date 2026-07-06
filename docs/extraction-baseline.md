@@ -239,13 +239,31 @@ CI gate (the `comp.py` method, replicated field by field):
 | Field | Metric | Result | Grade |
 |---|---|---|---|
 | **comp** (salary) | recall / precision | 1.00 / 1.00 | production |
-| **yoe** | recall / precision | 0.978 / 0.877 | production |
 | **skills** | precision / recall | 0.995 / 0.927 | production |
+| **sponsorship** | tri-state accuracy | 0.989 | production |
+| **remote** | accuracy / precision (location path) | 0.994 / 1.00 | production |
+| **yoe** | recall / precision | 0.978 / 0.877 | production |
 | **geo/country** | accuracy | 0.948 | production |
 | **geo/city** | accuracy | 0.889 | production |
 | **degree_min** | recall / precision | 0.886 / 0.995 | production |
 | **level** | accuracy / macro-F1 | 0.820 / 0.736 | usable (advisory on ambiguous) |
+| **sector** | accuracy-when-covered / coverage | 0.724 / 0.267 | usable; coverage name-limited |
 | **degree_required** | accuracy | 0.611 | advisory only |
 
+**Addendum (2026-07-06) — the last three fields (remote / sponsorship / sector):**
+- **remote** (`geo.is_remote`, location path): 99.4% acc / 100% precision on the 800-string geo corpus
+  (13 remote; the "misses" were label noise like `COL`/`"Any city, TN"`). Description-path is a
+  separate minor mechanism, not separately corpus-benchmarked.
+- **sponsorship** (`detect_sponsorship`): **91.3% → 98.9%** on 183 real "sponsor" windows. Added `_POS`
+  ("help sponsor", "sponsorship for qualified candidates", "sponsorship support") + `_NEG` ("… are not
+  available", "not able to support … sponsorship"); corrected 5 gold labels where "unable to offer …
+  sponsorship" was mislabeled True.
+- **sector** (`SectorExtractor`): **72.4% accuracy-when-covered, 26.7% coverage** on 700 distinct
+  companies. Added high-precision name keywords (energy/solar, steel/chemicals, asset-management/
+  securities, games, diagnostics/biotech, supply-chain). Coverage is **inherently name-limited** —
+  opaque startup names carry no industry signal, so a large unknown share is correct-by-design. Real
+  coverage lever = a bigger company→sector gazetteer or an LLM classifier, not regex.
+
 **Phase C (moat-aligned tools) is unblocked.** The fit rubric gates on the production-grade fields and
-treats `degree_required` + ambiguous `level` as advisory — no confident-but-wrong A–F.
+treats `sector` coverage-permitting, `degree_required` + ambiguous `level` as advisory — no
+confident-but-wrong A–F.
