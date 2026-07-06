@@ -391,16 +391,55 @@ def append_history(history_path: Path, row: dict) -> None:
         fh.write(json.dumps(row) + "\n")
 
 
+def _last_published_rows(history_path: Path) -> int | None:
+    """Row count of the most recent SUCCESSFULLY published build in history.jsonl, else None.
+
+    A durable row-floor basis for when the live prev snapshot is absent: history.jsonl is restored
+    from the release every CI run, so a failed ``index.sqlite.gz`` download can't fool the gate into
+    a cold-start pass. Filters ``published`` so a prior *failed* build's tiny count is never the basis
+    (failed builds append a ``published: false`` row). Last matching row wins (append-chronological).
+    """
+    if not history_path.exists():
+        return None
+    best: int | None = None
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        rows = rec.get("total_jobs")
+        if rec.get("published") and isinstance(rows, int) and rows > 0:
+            best = rows
+    return best
+
+
 def _gated_publish(
-    tmp_db: Path, final_db: Path, out: Path, *, build_id: str, prev_row_count: int | None = None
+    tmp_db: Path,
+    final_db: Path,
+    out: Path,
+    *,
+    build_id: str,
+    prev_row_count: int | None = None,
+    last_known_rows: int | None = None,
 ) -> bool:
     """Good-or-nothing publish: gate the temp build, promote+publish only if it passes.
 
     Writes gates.json always. On failure the previous snapshot (final_db) is left untouched.
+    ``ERGON_ALLOW_COLD_START`` (env) permits publishing below the historical floor for a genuine
+    first build / intentional reset.
     """
     from ergon_tracker.index.gates import evaluate_gates
 
-    rep = evaluate_gates(tmp_db, prev_row_count=prev_row_count)
+    allow_cold_start = os.environ.get("ERGON_ALLOW_COLD_START", "").lower() in ("1", "true", "yes")
+    rep = evaluate_gates(
+        tmp_db,
+        prev_row_count=prev_row_count,
+        last_known_rows=last_known_rows,
+        allow_cold_start=allow_cold_start,
+    )
     out.mkdir(parents=True, exist_ok=True)
     (out / "gates.json").write_text(json.dumps(rep.to_dict(), indent=2))
     if not rep.passed:
@@ -708,6 +747,10 @@ def main(argv: list[str]) -> None:
         cursor = _load_cursor(cursor_path)
         prev_db = db if db.exists() else None
         prev_row_count = _count_jobs(db) if prev_db else None
+        # Durable floor basis: even if the live prev snapshot failed to download, history.jsonl
+        # (restored from the release) still records the last published size — so a collapse can't
+        # sneak past the row_floor gate as a cold start.
+        last_known_rows = _last_published_rows(out / "history.jsonl")
         # Streaming crawl over a rotating window: jobs stream to fresh.sqlite as boards complete.
         fresh_path = out / "fresh.sqlite"
         outcome, next_cursor = anyio.run(
@@ -748,7 +791,14 @@ def main(argv: list[str]) -> None:
         if prev_db is not None and db.exists():
             prev_snap = out / "index.prev.sqlite"
             db.replace(prev_snap)
-        ok = _gated_publish(db_tmp, db, out, build_id=build_id, prev_row_count=prev_row_count)
+        ok = _gated_publish(
+            db_tmp,
+            db,
+            out,
+            build_id=build_id,
+            prev_row_count=prev_row_count,
+            last_known_rows=last_known_rows,
+        )
         if not ok and prev_snap is not None:
             prev_snap.replace(db)  # gates failed -> restore the previous snapshot
             prev_snap = None
@@ -812,7 +862,15 @@ def main(argv: list[str]) -> None:
     jobs = anyio.run(_crawl, limit, network_pages)
     db_tmp = out / "index.tmp.sqlite"
     n = build_index(jobs, db_tmp, build_id=build_id)
-    if not _gated_publish(db_tmp, db, out, build_id=build_id):
+    full_prev_rows = _count_jobs(db) if db.exists() else None
+    if not _gated_publish(
+        db_tmp,
+        db,
+        out,
+        build_id=build_id,
+        prev_row_count=full_prev_rows,
+        last_known_rows=_last_published_rows(out / "history.jsonl"),
+    ):
         raise SystemExit(1)
     if sharded:
         ns = build_and_publish_shards(jobs, out, build_id=build_id)
