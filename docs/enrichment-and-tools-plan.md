@@ -23,7 +23,7 @@ same as "measured against hundreds of real JDs."
 | **salary** (`comp.py`) | ~100% recall / 100% precision | ~35–40% (gated by JD access) | ✅ 227-record real corpus + ratcheting gate (`test_comp_recall.py`) |
 | **degree** (`degree.py`) | **level 88.6% recall / 99.5% precision**; **scope (req-vs-pref) 59.7%** — the hard half | measured on the corpus below | ✅ 402-record real corpus + ratcheting gate (`test_degree_recall.py`) |
 | **yoe** (`yoe.py`) | **97.8% recall**; **87.7% precision** on an adversarial-negative set (field precision higher) | measured on a 539-record real corpus | ✅ 539-record real corpus + ratcheting gate (`test_yoe_recall.py`) |
-| **level** (`level.py`) | ~44% unknown after yoe→level default-on | Improved, still gaps | ❌ |
+| **level** (`level.py`) | **82.0% acc / 0.736 macro-F1** on enterprise titles (title-only) | measured on a 900-posting corpus | ✅ 900-posting real corpus + ratcheting gate (`test_level_recall.py`) |
 | **geo/country** (`geo.py`) | NULL-country (Workday placeholder) bug fixed | Improved | ❌ |
 | **skills** (`skills.py`) | **99.5% precision** (deterministic; 5/943 collisions), **92.7% recall** vs human labels | 91→114 skills; +23 gaps added | ✅ 800-window real corpus + ratcheting gate (`test_skills_recall.py`) |
 | **sponsorship** (`sponsorship.py`) | Reliable — extracted from full JD at crawl (caught BTIG's deep "no sponsorship" line) | tri-state, "unknown" common | partial |
@@ -50,7 +50,18 @@ For **each** extractor, replicate the `comp.py` method exactly — it is the tem
 3. **Publish the coverage %** per field in `INDEX_STATUS.md` — *no competitor publishes this*; it's both a
    marketing weapon and a forcing function for honesty.
 
-Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → ~~**yoe**~~ **✅ DONE (2026-07-06)** → ~~**skills**~~ **✅ DONE (2026-07-06)** → **level next** → geo.
+Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → ~~**yoe**~~ **✅ DONE (2026-07-06)** → ~~**skills**~~ **✅ DONE (2026-07-06)** → ~~**level**~~ **✅ DONE (2026-07-06)** → **geo next** (last).
+
+**level.py result (2026-07-06):** same rig — 900 real postings across enterprise ATS (taleo, dejobs,
+apicapture, paycom), blind-labeled for the level the TITLE conveys (the extractor is title-only).
+**Accuracy 82.0%, macro-F1 0.736.** Honest finding: this is materially harder than the old
+startup-heavy 500-row gold (0.954) — **enterprise/formal titles carry ambiguous rungs** the
+deterministic classifier and humans reasonably disagree on: bare "Associate" (entry in consulting,
+mid in banking), IC-"X Manager" (Product/Treasury Manager), "Supervisor", dual-rank "Analyst/Sr
+Analyst" postings, and numeric ladders ("Level 4", "SPEC 3"). Fixes made: +intern forms (Student
+Assistant, V.I.E, Working Student), "Princ" abbreviation → principal, +IC-manager (Business
+Development / Case Manager). **Consequence for the fit rubric:** `level` is usable but weaker than
+comp/yoe — weight it lower and don't let an ambiguous level flip a pass/fail (like `degree_required`).
 
 **skills.py result (2026-07-06):** same rig — 800 requirement/skill-section windows fetched across
 329 companies / 8 ATS (`scripts/build_skills_corpus.py`, anchored on skill-CONTEXT so it surfaces
@@ -115,7 +126,8 @@ Benchmarked so far (all with the same fetch→window→blind-fleet→ratcheting-
 - ~~`degree.py`~~ ✅ (2026-07-05) — `degree_min` 88.6%/99.5% (grade); `degree_required` 59.7% (advisory).
 - ~~`yoe.py`~~ ✅ (2026-07-06) — 97.8% recall / 87.7% precision (grade). Fit rubric can gate on years.
 
-~~Benchmark `skills.py`~~ **✅ done (2026-07-06)** — 99.5% precision / 92.7% recall, +23 skills.
-**Next: benchmark `level.py`** then `geo.py` with the same rig. (Old note kept for context: skills
-needed a normalization pass "React"=="React.js" — that IS the gazetteer alias map, now measured.) Then
+~~Benchmark `skills.py`~~ **✅ done** — 99.5% precision / 92.7% recall, +23 skills.
+~~Benchmark `level.py`~~ **✅ done (2026-07-06)** — 82.0% acc / 0.736 macro-F1 on enterprise titles.
+**Next (last extractor): benchmark `geo.py`** (country/city) with the same rig. After that the whole
+extraction foundation is measured and the fit-rubric tool is unblocked. Then
 `level.py` → `geo.py`. **No tool before its fields have a number.**
