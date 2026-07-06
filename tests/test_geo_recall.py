@@ -22,11 +22,11 @@ from ergon_tracker.models import Location
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "geo_corpus.jsonl"
 
 # Ratcheting gates — a margin below the measured numbers (2026-07-06, 800 distinct enterprise
-# location strings: country 94.8%, city 88.9%); raise as geo.py improves. This corpus is deliberately
+# location strings: country 95.0%, city 96.9% (parsing fixes)); raise as geo.py improves. This corpus is deliberately
 # enterprise-HRIS-heavy (taleo/dejobs/peoplesoft), which is where the ISO-code and dash-format parsing
 # lived; the remaining tail is bare US cities not in the gazetteer + foreign hyphenated region names.
 COUNTRY_ACC_GATE = 0.90
-CITY_ACC_GATE = 0.84
+CITY_ACC_GATE = 0.92
 
 
 def _load() -> list[dict]:

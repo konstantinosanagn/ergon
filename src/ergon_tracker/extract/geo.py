@@ -310,6 +310,61 @@ _NOISE_RE = re.compile(
 )
 _LEADING_COUNT_RE = re.compile(r"^\d+\s+")
 
+# Leading numeric-code prefix on a segment ("35-Xiamen", "14-Kuala Lumpur", "1DBM"): HRIS site
+# codes prepend a facility number before the real place. Strip a leading run of digits followed by
+# a hyphen (never a bare number, which is a whole segment handled by _LEADING_COUNT_RE / noise).
+_LEADING_NUM_DASH_RE = re.compile(r"^\d+\s*-\s*")
+
+# Trailing facility/noise words on an otherwise-clean city segment ("Clarkston Campus", "Worth
+# Branch", "Augusta Temporary", "Fleury-Les-Aubrais Cedex"). Dropped only from the END so the
+# leading real city survives ("Clarkston Campus" -> "Clarkston"). "Cedex" is the French
+# poste-restante marker; "Branch"/"Temporary"/"Campus"/"Office"/"HQ" are US HRIS facility tags.
+_TRAILING_NOISE_WORDS = {
+    "campus",
+    "office",
+    "hq",
+    "branch",
+    "temporary",
+    "cedex",
+    "metro",
+    "downtown",
+}
+_TRAILING_NOISE_RE = re.compile(
+    r"(?:\s+(?:" + "|".join(_TRAILING_NOISE_WORDS) + r"))+$",
+    re.IGNORECASE,
+)
+
+# Compound-city place-type suffixes: when a "<City> <Suffix>" segment is a REAL two-word city
+# ("Auburn Hills", "Clifton Park", "Santa Fe Springs", "Lake Worth") the gazetteer often only holds
+# the first word ("Auburn"), so a leading-prefix match would truncate the true city. These suffixes
+# mark the full segment as the intended city, so we KEEP it whole rather than trust a shorter prefix.
+# Curated to genuine settlement suffixes (never facility words like "Drydock"/"Depot"), so
+# "Boston Drydock" -> "Boston" and "Barcelona Gran Vía" -> "Barcelona" are unaffected.
+_COMPOUND_CITY_SUFFIXES = {
+    "hills",
+    "park",
+    "city",
+    "springs",
+    "heights",
+    "airpark",
+}
+
+# Non-city placeholder segments: geocoder / HRIS sentinels that must never emit a city.
+# "Any City" (Workday placeholder), "Remote Work"/"Work" (remote sentinels), "Select"/"University".
+_NON_CITY_SEGMENTS = {
+    "any city",
+    "work",
+    "remote work",
+    "select",
+    "university",
+    "temporary services",
+    "fully",  # residue of "Fully Remote -" prefix; the real city is a later segment
+    "southwest",
+    "northeast",
+    "northwest",
+    "southeast",
+}
+
 # US-signal detection (used by enrich's conservative Workday-US country default).
 _ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
 _US_STATE_NAME_RE = re.compile(
@@ -332,7 +387,9 @@ _STATE_COUNTRY_DASH = re.compile(
 
 # UPPERCASE state/country CODE followed by a hyphen ("CA-Irvine", "USA-WV-Heaters", "MY-Kuala
 # Lumpur"). Case-SENSITIVE + uppercase-only so ordinary hyphenated words ("Co-op", "de-facto",
-# "in-house") are never split — real HRIS location codes are uppercase.
+# "in-house") are never split — real HRIS location codes are uppercase. The lookahead also accepts a
+# numeric site-code run before the next dash ("MY-14-Kuala Lumpur"), so the country code peels off
+# and the leading number is dropped in _clean, leaving the real city.
 _CODE_DASH = re.compile(
     r"\b("
     + "|".join(
@@ -341,7 +398,7 @@ _CODE_DASH = re.compile(
             set(_US_STATES) | set(_ISO2_COUNTRY) | set(_ISO3_COUNTRY), key=len, reverse=True
         )
     )
-    + r")-(?=[A-Za-z])",
+    + r")-(?=[A-Za-z]|\d+-)",
 )
 
 
@@ -435,10 +492,77 @@ def _gaz_match(segment: str, *, prefix: bool) -> tuple[str, str] | None:
 
 
 def _clean(segment: str) -> str:
-    s = _LEADING_COUNT_RE.sub("", segment)
+    s = _LEADING_NUM_DASH_RE.sub("", segment)  # "35-Xiamen" -> "Xiamen"
+    s = _LEADING_COUNT_RE.sub("", s)
     s = _NOISE_RE.sub("", s)
     s = re.sub(r"(?i)^greater\s+", "", s)
     return s.strip(" -,.").strip()
+
+
+def _strip_facility_tail(segment: str) -> str:
+    """Drop a trailing facility/marker tag ("Clarkston Campus" -> "Clarkston", "Worth Branch" ->
+    "Worth", "Fleury-Les-Aubrais Cedex" -> "Fleury-Les-Aubrais") ONLY when the remaining head is a
+    real place: a single word (a bare city name the gazetteer may not hold, e.g. "Clarkston") or an
+    itself-gazetteer city ("Salt Lake City Temporary" -> "Salt Lake City"). A multi-word non-city
+    head is a building name ("Modesto A. Maidique Campus", "Biscayne Bay Campus") and is left intact
+    so it is rejected as a sub-location rather than mistaken for a city."""
+    head = _TRAILING_NOISE_RE.sub("", segment).strip(" -,.").strip()
+    if not head or head == segment:
+        return segment
+    if len(head.split()) == 1 or _gaz_match(head, prefix=False) is not None:
+        return head
+    return segment
+
+
+def _split_place_hyphen(segment: str) -> list[str]:
+    """Split a residual PeopleSoft ``A-B`` segment when it repeats a place or trails a description.
+
+    After the state/country-name and code dashes are turned into commas, some segments still hold a
+    hyphen joining two *word groups* ("Las Vegas-Las Vegas", "Irvine-USA IRVINE CA DEFENSE SYSTEMS",
+    "North Rhine Westphalia-Düsseldorf"). We split such a hyphen only when it separates real word
+    groups — i.e. an adjacent group is multi-word, OR the two single-word sides are identical
+    ("Katy-Katy", "Puebla-Puebla"). Genuine hyphenated names stay intact: "Winston-Salem",
+    "Lapu-Lapu", "Baden-Württemberg" are single tokens on each side and not duplicates.
+    """
+    if "-" not in segment or " - " in segment:
+        return [segment]
+    parts = [p.strip() for p in segment.split("-") if p.strip()]
+    if len(parts) < 2:
+        return [segment]
+    # Split when a part is multi-word (a described PeopleSoft residue such as "Newburgh-Deaconess-
+    # Encompass Health ...", "Irvine-USA IRVINE CA ...") or when a part repeats ("Katy-Katy",
+    # "Lake Worth-Lake Worth-Lake Worth") — the real city is the leading part _resolve_city keeps.
+    multiword = any(" " in p for p in parts)
+    lowered = [p.lower() for p in parts]
+    dup = len(set(lowered)) < len(lowered)
+    # Protect a genuine hyphenated dual-name: exactly two parts, a gazetteer city on the left and a
+    # single-word non-gazetteer tail ("Tel Aviv-Yafo"). "Winston-Salem"/"Fleury-Les-Aubrais" have no
+    # spaces and no duplicate parts, so they never reach the split branch at all.
+    dual_name = (
+        len(parts) == 2
+        and " " not in parts[1]
+        and _gaz_match(parts[0], prefix=False) is not None
+        and _gaz_match(parts[1], prefix=False) is None
+    )
+    if (dup or multiword) and not dual_name:
+        return parts
+    return [segment]
+
+
+# A "<City> <ST>" tail where ST is a bare US state abbreviation ("Oakdale MN", "Corinth MS"):
+# a duplicated state-code suffix that the gazetteer full-match misses. Stripped to recover the city.
+_TRAILING_STATE_ABBR_RE = re.compile(
+    r"\s+(" + "|".join(sorted(_US_STATES, key=len, reverse=True)) + r")$",
+    re.IGNORECASE,
+)
+
+
+def _strip_trailing_state_abbr(segment: str) -> str:
+    """Drop a trailing bare US state abbreviation from a multi-word segment ("Oakdale MN"
+    -> "Oakdale"). Only when >=2 words remain-before, so "MN" alone stays a state, not a city."""
+    if len(segment.split()) < 2:
+        return segment
+    return _TRAILING_STATE_ABBR_RE.sub("", segment).strip()
 
 
 def _has_alpha(s: str) -> bool:
@@ -475,7 +599,12 @@ def normalize_geo(loc: Location) -> Location:
     raw = _STATE_COUNTRY_DASH.sub(r"\1,", raw)
     raw = _CODE_DASH.sub(r"\1,", raw)
     cleaned = re.sub(r"\s+[-–—]\s+", ",", raw)
-    segments = [c for c in (_clean(s) for s in re.split(r"[,/|]", cleaned)) if c]
+    # Split each comma-part on a residual place-hyphen ("Las Vegas-Las Vegas", "Irvine-USA IRVINE
+    # CA ...") BEFORE cleaning, so a duplicated/described city collapses to a resolvable segment.
+    raw_parts = [
+        sub for part in re.split(r"[,/|;]", cleaned) for sub in _split_place_hyphen(part)
+    ]
+    segments = [c for c in (_clean(s) for s in raw_parts) if c]
     if not segments:
         return loc
 
@@ -540,15 +669,55 @@ def normalize_geo(loc: Location) -> Location:
     return loc
 
 
+def _is_compound_city(segment: str) -> bool:
+    """A ``<City> <Suffix>`` segment whose last word is a settlement suffix ("Auburn Hills",
+    "Lake Worth") and whose leading word(s) are themselves a gazetteer city — a real two-word
+    city the gazetteer only holds under its first word, so it must be kept WHOLE, not truncated."""
+    words = segment.split()
+    if len(words) < 2 or words[-1].lower() not in _COMPOUND_CITY_SUFFIXES:
+        return False
+    return _gaz_match(" ".join(words[:-1]), prefix=False) is not None
+
+
 def _resolve_city(segments: list[str], *, known_country: str | None) -> tuple[str, str] | None:
     """Pick the best city for ``segments``; returns ``(city, gazetteer_country|"")``."""
-    # (a) Full-segment gazetteer match, in order.
+    # Normalize each segment: reject known non-city placeholders ("Any City", "Remote Work",
+    # "Select"), drop a trailing facility tag ("Clarkston Campus" -> "Clarkston") and a trailing
+    # bare US state abbreviation ("Oakdale MN" -> "Oakdale").
+    norm: list[str] = []
+    for seg in segments:
+        if seg.lower() in _NON_CITY_SEGMENTS:
+            continue
+        norm.append(_strip_trailing_state_abbr(_strip_facility_tail(seg)))
+    segments = norm or segments
+
+    # (a) Full-segment gazetteer match, in order. Runs before the compound rule so a first bare
+    # gazetteer segment wins ("Spokane - Spokane Valley" -> "Spokane", not "Spokane Valley").
+    # A segment that is ALSO a US state name ("Washington", "Wyoming") is DEFERRED: in the common
+    # "Country, State, City" order ("United States, Washington, Redmond") the state precedes the
+    # real city, so a non-state gazetteer city elsewhere is preferred; the state is used only if it
+    # is the sole gazetteer hit ("New York" alone stays New York).
+    deferred: tuple[str, str] | None = None
     for seg in segments:
         match = _gaz_match(seg, prefix=False)
-        if match is not None:
-            return match[0], match[1]
+        if match is None:
+            continue
+        if seg.lower() in _US_STATE_NAMES:
+            deferred = deferred or (match[0], match[1])
+            continue
+        return match[0], match[1]
+    if deferred is not None:
+        return deferred
 
-    # (b) Leading word-prefix gazetteer match (sub-locations). Guard against false
+    # (b) A real two-word city the gazetteer stores under its first word only ("Auburn Hills",
+    # "Santa Fe Springs"): keep the FULL segment rather than let (c)'s prefix match truncate it.
+    for seg in segments:
+        if _is_compound_city(seg):
+            prefix = _gaz_match(" ".join(seg.split()[:-1]), prefix=False)
+            country = prefix[1] if prefix else ""
+            return seg, country
+
+    # (c) Leading word-prefix gazetteer match (sub-locations). Guard against false
     # friends: when the country is already known, only trust a prefix-city whose
     # gazetteer country agrees with it.
     for seg in segments:
@@ -556,12 +725,19 @@ def _resolve_city(segments: list[str], *, known_country: str | None) -> tuple[st
         if match is not None and (known_country is None or match[1] == known_country):
             return match[0], match[1]
 
-    # (c) First place-like segment that is not a country/state name or a sub-location.
+    # (d) First place-like segment that is not a country/state name or a sub-location.
     for seg in segments:
         low = seg.lower()
         if low in _COUNTRY_ALIASES or low in _US_STATES or low in _US_STATE_NAMES:
             continue
-        if not _has_alpha(seg) or "remote" in low:
+        # A bare ISO-2 country code ("MX", "PL", "JP") is a country, never a city.
+        if low in _ISO2_COUNTRY:
+            continue
+        if low in _NON_CITY_SEGMENTS or not _has_alpha(seg) or "remote" in low:
+            continue
+        # A multi-word segment led by a compass descriptor ("Northeast FA", "Southwest Region")
+        # is a sales-territory tag, not a city — the real city is a later segment.
+        if low.split()[0] in _NON_CITY_SEGMENTS and len(low.split()) > 1:
             continue
         if _is_sublocation(seg):
             continue

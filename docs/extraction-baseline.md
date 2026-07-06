@@ -244,9 +244,9 @@ CI gate (the `comp.py` method, replicated field by field):
 | **remote** | accuracy / precision (location path) | 0.994 / 1.00 | production |
 | **yoe** | recall / precision | 0.978 / 0.877 | production |
 | **geo/country** | accuracy | 0.948 | production |
-| **geo/city** | accuracy | 0.889 | production |
+| **geo/city** | accuracy | 0.969 | production |
 | **degree_min** | recall / precision | 0.886 / 0.995 | production |
-| **level** | accuracy / macro-F1 | 0.820 / 0.736 | usable (advisory on ambiguous) |
+| **level** | accuracy / macro-F1 | 0.822 / 0.738 | usable (advisory on ambiguous) |
 | **sector** | accuracy-when-covered / coverage | 0.724 / 0.267 | usable; coverage name-limited |
 | **degree_required** | accuracy | 0.611 | advisory only |
 

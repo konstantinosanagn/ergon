@@ -23,7 +23,7 @@ from ergon_tracker.extract.level import infer_level
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "level_corpus.jsonl"
 
 # Ratcheting gates — a margin below the measured numbers (2026-07-06, 900-posting ENTERPRISE-title
-# corpus: accuracy 82.0%, macro-F1 0.736). NB this is harder than the old startup-heavy 500-row gold
+# corpus: accuracy 82.2%, macro-F1 0.738). NB this is harder than the old startup-heavy 500-row gold
 # (0.954): enterprise titles carry ambiguous rungs (bare "Associate", IC-"X Manager", "Supervisor",
 # dual-rank "Analyst/Sr Analyst", numeric ladders) where humans and a deterministic classifier
 # reasonably differ. Raise as level.py improves.
