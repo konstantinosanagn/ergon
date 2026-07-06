@@ -585,7 +585,16 @@ def build_delta(
         # upserts: row is new (id not in prev) OR any content-bearing column differs. Per-build
         # bookkeeping (_DELTA_VOLATILE_COLS) is excluded so an unchanged posting isn't re-sent every
         # build just because its build_id/fetched_at advanced. NULL-safe via IS.
-        same = " AND ".join(f"p.{c} IS c.{c}" for c in _JOB_COLS if c not in _DELTA_VOLATILE_COLS)
+        # Schema-tolerant: only compare columns that EXIST in prev — a column added since the prev
+        # snapshot was built (e.g. degree_min in schema v2) isn't there to compare, so referencing
+        # p.<newcol> would raise "no such column" and crash the whole delta (the build's second
+        # schema-v2 regression). New columns are simply not part of the change test for one build.
+        prev_cols = {r[1] for r in con.execute("PRAGMA prev.table_info(jobs)").fetchall()}
+        same = " AND ".join(
+            f"p.{c} IS c.{c}"
+            for c in _JOB_COLS
+            if c not in _DELTA_VOLATILE_COLS and c in prev_cols
+        )
         con.execute(
             f"INSERT INTO delta_upserts({cols}) SELECT {cols} FROM curr.jobs c "  # noqa: S608
             f"WHERE NOT EXISTS (SELECT 1 FROM prev.jobs p WHERE p.id = c.id AND {same})"
