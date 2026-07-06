@@ -1,0 +1,700 @@
+{"company": "Apple", "company_key": "apple", "domain": "jobs.apple.com", "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Kirkland & Ellis", "company_key": "kirklandandellisllp", "domain": "kirkland.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Progressive", "company_key": "progressive", "domain": "progressive.com", "sector": "Insurance", "src": "real"}
+{"company": "Wipro", "company_key": "wipro", "domain": "wipro.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "evergy", "company_key": "evergy", "domain": "evergy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "careers", "company_key": "twosigmainvestmentslp", "domain": null, "sector": null, "src": "real"}
+{"company": "ally", "company_key": "ally", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "cu", "company_key": "universityofcoloradodenver", "domain": "cu.edu", "sector": "Education", "src": "real"}
+{"company": "socgen", "company_key": "sgamericassecurities", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "akkodis", "company_key": "akkodis", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "ARUP Laboratories", "company_key": "aruplaboratories", "domain": "aruplab.com", "sector": "Healthcare", "src": "real"}
+{"company": "Mount Sinai", "company_key": "mountsinaihospital", "domain": "mountsinai.org", "sector": "Healthcare", "src": "real"}
+{"company": "Annapurna Labs (Amazon)", "company_key": "annapurnalabsus", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "Inrika", "company_key": "inrika", "domain": "inrika.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "LER TechForce", "company_key": "lertechforce", "domain": "lertechforce.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Florida International University", "company_key": "floridainternationaluniversity", "domain": "fiu.edu", "sector": "Education", "src": "real"}
+{"company": "Eficens Systems", "company_key": "eficenssystems", "domain": "eficens.ai", "sector": "Software/SaaS", "src": "real"}
+{"company": "BNP Paribas USA", "company_key": "bnpparibassecurities", "domain": "bnpparibas.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "Amazon", "company_key": "amazon", "domain": "amazon.jobs", "sector": "E-commerce/Retail", "src": "real"}
+{"company": "American Airlines", "company_key": "americanairlines", "domain": "aa.com", "sector": "Travel/Hospitality", "src": "real"}
+{"company": "Smurfit Westrock", "company_key": "smurfitwestrock", "domain": "smurfitwestrock.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Siemens Energy", "company_key": "siemensenergy", "domain": "siemens-energy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Dominion Energy", "company_key": "dominionenergy", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Lockheed Martin", "company_key": "lockheedmartin", "domain": "lockheedmartinjobs.com", "sector": "Aerospace/Defense", "src": "real"}
+{"company": "West Pharmaceutical Services", "company_key": "westpharmaceuticalservices", "domain": "westpharma.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Option Care Health", "company_key": "option-care-health", "domain": "Inc.,optioncarehealth.com", "sector": "Healthcare", "src": "real"}
+{"company": "Powell Industries, Inc.", "company_key": "powell-industries-inc", "domain": "powellindustriesinc.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Bank OZK", "company_key": "bank-ozk", "domain": "ozk.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "criver", "company_key": "criver", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "gainwelltechnologies", "company_key": "gainwelltechnologies", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "AdvanSix Inc.", "company_key": "advansix inc.", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "jetblue", "company_key": "jetblue", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "essilorluxottica", "company_key": "essilorluxottica", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "fitch", "company_key": "fitch", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "nexteraenergy", "company_key": "nexteraenergy", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "nrgenergy", "company_key": "nrgenergy", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "ltimindtree", "company_key": "ltimindtree", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "quantumscape", "company_key": "quantumscape", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "lear", "company_key": "lear", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "ltts", "company_key": "ltts", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "qorvo", "company_key": "qorvo", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "volvogroup", "company_key": "volvogroup", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "yash", "company_key": "yash", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "sf2013", "company_key": "zurichamericaninsurance", "domain": null, "sector": null, "src": "real"}
+{"company": "McCormick", "company_key": "mccormick", "domain": "mccormick.com", "sector": "Food/Beverage", "src": "real"}
+{"company": "Aramark", "company_key": "aramark", "domain": "aramark.com", "sector": "Food/Beverage", "src": "real"}
+{"company": "DTE Energy", "company_key": "dteenergy", "domain": "dteenergy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "cms", "company_key": "cmsenergy", "domain": "cmsenergy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Ingersoll Rand", "company_key": "ingersollrand", "domain": "irco.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Union Pacific", "company_key": "unionpacific", "domain": "up.com", "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "ALNYLAM PHARMACEUTICALS, INC.", "company_key": "alnylam pharmaceuticals, inc.", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "ACCO BRANDS Corp", "company_key": "acco brands corp", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "BOK FINANCIAL CORP", "company_key": "bok financial corp", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "CONSUMERS ENERGY CO", "company_key": "consumers energy co", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "CTS CORP", "company_key": "cts corp", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "ENTERGY ARKANSAS, LLC", "company_key": "entergy arkansas, llc", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "ENTERGY LOUISIANA, LLC", "company_key": "entergy louisiana, llc", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "CEMEX SAB DE CV", "company_key": "cemex sab de cv", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Tradeweb", "company_key": "tradewebmarkets", "domain": "tradeweb.com", "sector": "Fintech", "src": "real"}
+{"company": "GroupM", "company_key": "groupmworldwide", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "a16z", "company_key": "a16z", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Scopely", "company_key": "scopely", "domain": "scopely.com", "sector": "Gaming", "src": "real"}
+{"company": "Stripe", "company_key": "stripe", "domain": "stripe.com", "sector": "Fintech", "src": "real"}
+{"company": "Amtech Software", "company_key": "amtechsoftware", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Axiom Talent Platform", "company_key": "axiomtalentplatform", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Bluevine - US", "company_key": "bluevineus", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Cell Signaling Technology", "company_key": "cellsignalingtechnology79", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Cotulla Education", "company_key": "cotullaeducation", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Ahrefs", "company_key": "ahrefs", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Attain Partners", "company_key": "attain-partners", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "dv01", "company_key": "dv01", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Clearway Energy", "company_key": "clearway-energy", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Ennoble Care", "company_key": "ennoble-care", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Flow Traders Campus Partner", "company_key": "flow-traders-campus-partner", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Goody Garage Doors", "company_key": "goody-garage-doors", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Insurify", "company_key": "insurify", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "Impiricus", "company_key": "impiricus", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Alpha FMC Surveys", "company_key": "jobposts", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Crescent Capital BDC, Inc.", "company_key": "crescent capital bdc, inc.", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "vestis", "company_key": "vestis-corp", "domain": "vestis.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "ACV Auctions Inc.", "company_key": "acv auctions inc.", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "regency", "company_key": "regencycenters", "domain": "regencycenters.com", "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "Metronome", "company_key": "metronome", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Northside Veterinary Clinic", "company_key": "northside", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "PDT Partners", "company_key": "pdt-partners", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Qube Research & Technologies", "company_key": "qube-research-technologies", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "RMCI", "company_key": "rmci", "domain": null, "sector": null, "src": "real"}
+{"company": "Shorelight, LLC", "company_key": "shorelight-llc", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Sunnyside*", "company_key": "sunnyside", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "TPR Education, LLC", "company_key": "tpreducationllc", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Ursa Major", "company_key": "ursamajor", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Winrock International", "company_key": "winrock", "domain": null, "sector": "Other", "src": "real"}
+{"company": "Echodyne Corp", "company_key": "echodynecorp", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "May Mobility", "company_key": "maymobility", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Underdog", "company_key": "underdogfantasy", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "Skyryse", "company_key": "skyryse", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Soho House & Co.", "company_key": "sohohouseco", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "Atmosera", "company_key": "atmosera", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Amberelectric", "company_key": "amberelectric", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Court Avenue", "company_key": "court-avenue", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Energeticcapital", "company_key": "energeticcapital", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Bespokepost", "company_key": "bespokepost", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "Frontify", "company_key": "frontify", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Fetchpackage", "company_key": "fetchpackage", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "Hasi", "company_key": "hasi", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Includedhealth", "company_key": "includedhealth", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Lansingschools", "company_key": "lansingschools", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Mahmee", "company_key": "mahmee", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Newzealandtradeandenterprise", "company_key": "newzealandtradeandenterprise", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "Pditechnologies", "company_key": "pditechnologies", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Prominentedge", "company_key": "prominentedge", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Qonto", "company_key": "qonto", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Singerlewak", "company_key": "singerlewak", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Terawattinfrastructure", "company_key": "terawattinfrastructure", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Valdeseng", "company_key": "valdeseng", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Websummit", "company_key": "websummit", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Alimentiv 2", "company_key": "alimentiv", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Beyondcloudconsulting", "company_key": "beyond-cloud-consulting-inc", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Cxnpl", "company_key": "constantinople", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Findhelp", "company_key": "findhelp-a-public-benefit-corporation", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Dodmg", "company_key": "hrl-laboratories", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Ion", "company_key": "ion-group", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Mythic Ai.Com", "company_key": "mythic", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Rocketcommunications", "company_key": "rocket-communications", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Sdatasystems.Com", "company_key": "strategic-data-systems", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Tomjames", "company_key": "tom-james-company", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Ywcaworks", "company_key": "ywca-seattle-king-snohomish", "domain": null, "sector": "Other", "src": "real"}
+{"company": "Ridealso", "company_key": "also-2", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Runlaminar", "company_key": "runlaminar", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "the-exploration-company", "company_key": "the-exploration-company", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "unit", "company_key": "unit", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "aghanim", "company_key": "aghanim", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "astro-mechanica", "company_key": "astro-mechanica", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "bloxd", "company_key": "bloxd", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "cinder", "company_key": "cinder", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "cside", "company_key": "cside", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "eliza", "company_key": "eliza", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "flox", "company_key": "flox", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "gravity", "company_key": "gravity-2", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "inato", "company_key": "inato", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "kyp", "company_key": "kyp-holding-b-v", "domain": null, "sector": null, "src": "real"}
+{"company": "marloo", "company_key": "marloo", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "nen", "company_key": "nen", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "orita", "company_key": "orita", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "polarsteps", "company_key": "polarsteps", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "relevanceai", "company_key": "relevance-ai", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "sentilink", "company_key": "sentilink", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "strava", "company_key": "strava", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "top-hat", "company_key": "top-hat", "domain": null, "sector": "Education", "src": "real"}
+{"company": "vivun", "company_key": "vivun-inc", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "hadrian-automation", "company_key": "hadrian-automation", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "big-leap-health", "company_key": "big-leap-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "faros-ai", "company_key": "faros-ai", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "knox-systems", "company_key": "knox-systems", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "opal-os", "company_key": "opal-os", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "favorited", "company_key": "favorited", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "joinbetter", "company_key": "joinbetter", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "wordsmith", "company_key": "wordsmith", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "messa", "company_key": "messa", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "sim", "company_key": "sim", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "nvidia", "company_key": "nvidia", "domain": "nvidia.com", "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "allina", "company_key": "allina", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "amat", "company_key": "applied-materials", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "cerberus", "company_key": "cerberus", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "cccis", "company_key": "cccis", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "canohealth", "company_key": "cano-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "diptyqueparis", "company_key": "diptyque", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "findlay", "company_key": "findlay", "domain": null, "sector": "Education", "src": "real"}
+{"company": "evotecgroup", "company_key": "evotec", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "geha", "company_key": "geha", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "gici", "company_key": "goodwill-of-central-illinois", "domain": null, "sector": null, "src": "real"}
+{"company": "imh", "company_key": "imh", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "keppel", "company_key": "keppel", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "lifefitness", "company_key": "life-fitness-hammer-strength", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "mimecast", "company_key": "mimecast", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "Uber", "company_key": "uber", "domain": "uber.com", "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Google", "company_key": "google", "domain": "google.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "UST", "company_key": "ustglobal", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "tata consultancy services", "company_key": "tataconsultancyservices", "domain": "tcs.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Balyasny Asset Management", "company_key": "balyasnyassetmanagementlp", "domain": "bam.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "Bain & Company", "company_key": "baincompany", "domain": "careers.bain.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "uab", "company_key": "universityofalabamaatbirmingham", "domain": "uab.edu", "sector": "Education", "src": "real"}
+{"company": "arupjobs", "company_key": "arupus", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Goldman Sachs", "company_key": "goldmansachs", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "emonics", "company_key": "emonics", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "EPAM Systems", "company_key": "epamsystems", "domain": "epam.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "upstart network", "company_key": "upstartnetwork", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "gecareers", "company_key": "greateastern", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "D. E. Shaw", "company_key": "deshawandlp", "domain": "deshaw.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "Verton Solutions", "company_key": "vertonsolutions", "domain": "vertonsolutions.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "UPMC", "company_key": "universityofpittsburghphysicians", "domain": "upmc.com", "sector": "Healthcare", "src": "real"}
+{"company": "valuemomentum", "company_key": "valuemomentum", "domain": "valuemomentum.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Federal Soft Systems", "company_key": "federalsoftsystems", "domain": "api.federalsoftsystems.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Tek Ninjas", "company_key": "tekninjassolutions", "domain": "tekninjasjobs.kinsta.cloud", "sector": "Consulting/Services", "src": "real"}
+{"company": "CBRE", "company_key": "cbre", "domain": "cbre.com", "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "HCA Healthcare", "company_key": "hcahealthcare", "domain": "hcahealthcare.com", "sector": "Healthcare", "src": "real"}
+{"company": "Fujitsu", "company_key": "fujitsunorthamerica", "domain": "fujitsu.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "Southern California Edison", "company_key": "edisoninternational", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "International Paper", "company_key": "internationalpaper", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "NPK International Inc.", "company_key": "npk-international-inc", "domain": "npk.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Vistance Networks", "company_key": "vistance-networks", "domain": "Inc.,vistance.com", "sector": "Telecom", "src": "real"}
+{"company": "Travel + Leisure Co.", "company_key": "travel-leisure-co", "domain": "travelandleisureco.com", "sector": "Travel/Hospitality", "src": "real"}
+{"company": "Zions Bancorporation", "company_key": "zions-bancorporation", "domain": "NATIONAL ASSOCIATION /UT/,zionsbancorporationnationalassociation.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "cintas", "company_key": "cintas", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "farmersinsurance", "company_key": "farmersinsurance", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "danishcrown", "company_key": "danishcrown", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "halliburton", "company_key": "halliburton", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "deere", "company_key": "deere", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "nal", "company_key": "nal", "domain": null, "sector": null, "src": "real"}
+{"company": "nypa", "company_key": "nypa", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "KEY TRONIC CORP", "company_key": "keytronic", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Hoyne Bancorp, Inc.", "company_key": "hoynebancorp", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "owenscorning", "company_key": "owenscorning", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "scotiabank", "company_key": "scotiabank", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "wfs", "company_key": "wfs", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "zurich", "company_key": "zurich", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "tsmc", "company_key": "tsmc", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "Angel Studios, Inc.", "company_key": "angel studios, inc.", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Aflac", "company_key": "aflac", "domain": "aflac.com", "sector": "Insurance", "src": "real"}
+{"company": "LyondellBasell", "company_key": "lyondellbasell", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "PACCAR", "company_key": "paccar", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Erie Insurance", "company_key": "erieindemnity", "domain": "erieinsurance.com", "sector": "Insurance", "src": "real"}
+{"company": "centerpoint", "company_key": "centerpointenergy", "domain": "centerpointenergy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "aps", "company_key": "pinnaclewestcapital", "domain": "pinnaclewest.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Royal Caribbean Group", "company_key": "royalcaribbean", "domain": "jobs.royalcaribbeangroup.com", "sector": "Travel/Hospitality", "src": "real"}
+{"company": "North Dakota State University", "company_key": "northdakotastateuniversity", "domain": "ndsu.edu", "sector": "Education", "src": "real"}
+{"company": "Aecon Group Inc.", "company_key": "aecon group inc.", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "COMMERCIAL METALS Co", "company_key": "commercial metals co", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Bausch & Lomb Corp", "company_key": "bausch & lomb corp", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "CELESTICA INC", "company_key": "celestica inc", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "EDGEWELL PERSONAL CARE Co", "company_key": "edgewell personal care co", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "ENTERGY TEXAS, INC.", "company_key": "entergy texas, inc.", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "GLOBAL INDUSTRIAL Co", "company_key": "global industrial co", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "Hudbay Minerals Inc.", "company_key": "hudbay minerals inc.", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "DTCC", "company_key": "depositorytrustandclearing", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "CRH", "company_key": "crh", "domain": "crh.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Oscar Health", "company_key": "oscar-health", "domain": "Inc.,oscarhealth.com", "sector": "Insurance", "src": "real"}
+{"company": "Guild", "company_key": "guild", "domain": null, "sector": "Education", "src": "real"}
+{"company": "CueBox", "company_key": "applytocuebox", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "FIRST MAJESTIC SILVER CORP", "company_key": "first majestic silver corp", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Breeze", "company_key": "breezecash", "domain": null, "sector": null, "src": "real"}
+{"company": "The City of Fort Worth", "company_key": "cityoffortworth", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "CyberSheath", "company_key": "cybersheath", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "American Capital Group", "company_key": "american-capital-group", "domain": null, "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "Bath Fitter Corporate", "company_key": "bath-fitter-corporate", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Elite Technology", "company_key": "elite-technology", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Cranial Technologies", "company_key": "cranial-technologies", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Eve", "company_key": "eve", "domain": null, "sector": null, "src": "real"}
+{"company": "Four Seasons Garage Doors", "company_key": "four-seasons-garage-doors", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Garner Health", "company_key": "garner-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Hudl", "company_key": "hudl", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Landmark Information Group", "company_key": "lig", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Lokalise", "company_key": "lokalise", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Core Natural Resources, Inc.", "company_key": "core natural resources, inc.", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "El Pollo Loco Holdings, Inc.", "company_key": "el pollo loco holdings, inc.", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "landstar", "company_key": "landstarsystem", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "pca", "company_key": "packagingcorporation", "domain": "packagingcorp.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Mr Apple", "company_key": "mr-apple", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "Oddball", "company_key": "oddball", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Pindrop", "company_key": "pindropsecurity", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "Rebuilt", "company_key": "rebuilt", "domain": null, "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "RZR Global Inc.", "company_key": "rzr", "domain": null, "sector": null, "src": "real"}
+{"company": "SkyePoint Decisions", "company_key": "skyepointdecisionsinc", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "TailorCare", "company_key": "tailorcare", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "The Fork", "company_key": "the-fork", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "VeraData", "company_key": "veradata", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "XPENG", "company_key": "xpeng", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Foley Hoag LLP", "company_key": "foleyhoag", "domain": null, "sector": "Other", "src": "real"}
+{"company": "OLIVER Agency - North America", "company_key": "oliverusa", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "DLH", "company_key": "dlhcorporation", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Veracode", "company_key": "veracode", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "Validation Cloud", "company_key": "validationcloud", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "Akabrands", "company_key": "akabrands", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Bv", "company_key": "bv", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Dronedeploy", "company_key": "dronedeploy", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Egenesisbio", "company_key": "egenesisbio", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Cfgi", "company_key": "cfgi", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Spotify", "company_key": "spotify", "domain": "spotify.com", "sector": "Media/Entertainment", "src": "real"}
+{"company": "Glow.Co", "company_key": "glow.co", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Hevodata", "company_key": "hevodata", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Myob 2", "company_key": "myob-2", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Lifeforce", "company_key": "lifeforce", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Massschoolbuildings", "company_key": "massschoolbuildings", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "Noodle", "company_key": "noodle", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Pingwind", "company_key": "pingwind", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Raine", "company_key": "raine", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Royalambulance", "company_key": "royalambulance", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Spmb", "company_key": "spmb", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Thetrevorproject", "company_key": "thetrevorproject", "domain": null, "sector": "Other", "src": "real"}
+{"company": "Toptal", "company_key": "toptal", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Yuno", "company_key": "yuno", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Animocabrands", "company_key": "animoca-brands-limited", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "Bolster", "company_key": "bolster-inc", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Cygn", "company_key": "cygnal", "domain": null, "sector": null, "src": "real"}
+{"company": "Futurenow", "company_key": "future-now", "domain": null, "sector": null, "src": "real"}
+{"company": "Juneshine", "company_key": "juneshine-brands", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "Kpmgnz", "company_key": "kpmg-new-zealand", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Optimussbr", "company_key": "optimus-sbr", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Quantummetric", "company_key": "quantum-metric", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Synolotx", "company_key": "synolo-therapeutics", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Wilburlabs", "company_key": "wilbur-labs", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Trackoff", "company_key": "trackoff", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "ramp", "company_key": "ramp", "domain": "ramp.com", "sector": "Fintech", "src": "real"}
+{"company": "leavitt", "company_key": "leavitt-group", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "langchain", "company_key": "langchain", "domain": "langchain.com", "sector": "AI/ML", "src": "real"}
+{"company": "Sila", "company_key": "sila-services", "domain": null, "sector": null, "src": "real"}
+{"company": "alohi", "company_key": "alohi-sa", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "avantos", "company_key": "avantos-ai", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "brightwheel", "company_key": "brightwheel", "domain": null, "sector": "Education", "src": "real"}
+{"company": "cloudzero", "company_key": "cloudzero", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "davidenergy", "company_key": "david-energy", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "eventual", "company_key": "eventual-2", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "foundry-robotics", "company_key": "foundry-robotics-inc", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "harperinsure", "company_key": "harper", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "intro", "company_key": "intro", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "legora", "company_key": "legora-ab", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "merge", "company_key": "merge", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "nirvana", "company_key": "nirvana-insurance", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "pano-ai", "company_key": "pano-ai", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "profound", "company_key": "profound-2", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "rhythms", "company_key": "rhythms", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "slash-financial", "company_key": "slash-financial", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "switchboard", "company_key": "switchboard", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "trucksmarter", "company_key": "trucksmarter", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "wetravel", "company_key": "wetravel", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "achira", "company_key": "achira", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "centreforeffectivealtruism", "company_key": "centreforeffectivealtruism", "domain": null, "sector": "Other", "src": "real"}
+{"company": "generalintelligencecompany", "company_key": "generalintelligencecompany", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "lpadesignstudios", "company_key": "lpadesignstudios", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "pavebank", "company_key": "pavebank", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "virtahealth", "company_key": "virtahealth", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "remilia", "company_key": "remilia", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "haydenai", "company_key": "hayden-ai-technologies", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "nasdaq", "company_key": "nasdaq", "domain": "nasdaq.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "amesconstruction", "company_key": "ames-construction", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "athenago", "company_key": "athenago", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "blackriflecoffee", "company_key": "black-rifle-coffee", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "baltimorecity", "company_key": "baltimorecity", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "broadridge", "company_key": "broadridge", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "clarkcountywashington", "company_key": "clarkcountywashington", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "csgi", "company_key": "csgi", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "dechert", "company_key": "dechert", "domain": null, "sector": "Other", "src": "real"}
+{"company": "enbridge", "company_key": "enbridge", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "circlek", "company_key": "circlek", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "gi", "company_key": "global-infrastructure", "domain": null, "sector": null, "src": "real"}
+{"company": "guestservices", "company_key": "gsi", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "leewardenergy", "company_key": "leeward", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "lmu", "company_key": "lmu", "domain": null, "sector": "Education", "src": "real"}
+{"company": "mccoys", "company_key": "mccoy-s", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "verawholehealth", "company_key": "mosaic-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "McKinsey & Company", "company_key": "mckinsey", "domain": "mckinsey.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "targaresources", "company_key": "targaresources", "domain": "targaresources.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Parker Hannifin", "company_key": "parkerhannifin", "domain": "parkercareers.ttcportals.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "EOG Resources", "company_key": "eogresources", "domain": "eogresources.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "lululemon", "company_key": "lululemon", "domain": "careers.lululemon.com", "sector": "E-commerce/Retail", "src": "real"}
+{"company": "Meta", "company_key": "meta", "domain": "metacareers.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "carlyle", "company_key": "carlyle", "domain": "carlyle.com", "sector": "Banking/Finance", "src": "real"}
+{"company": "energytransfer", "company_key": "energytransfer", "domain": "energytransfer.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "encompasshealth", "company_key": "encompass health corp", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Decision Six", "company_key": "decisionsix", "domain": "decisionsix.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "university of virginia", "company_key": "universityofvirginia", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Gandara Mental Health Center", "company_key": "gandaramentalhealthcenter", "domain": "gandaracenter.org", "sector": "Healthcare", "src": "real"}
+{"company": "Regents of University of California at Riverside", "company_key": "regentsofuniversityofcaliforniaatriverside", "domain": "ucr.edu", "sector": "Education", "src": "real"}
+{"company": "KPIT Technologies", "company_key": "kpit", "domain": "kpit.com", "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Kastech Solutions", "company_key": "kastechsolutions", "domain": "kastechssg.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Neo Prism Solutions", "company_key": "neoprismsolutions", "domain": "neoprisminc.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Artifint Technologies", "company_key": "artifint", "domain": "artifint.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "SDH Systems", "company_key": "sdhsystems", "domain": "sdhsystems.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "PPL Corporation", "company_key": "pplcorporation", "domain": "pplweb.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Burns & McDonnell", "company_key": "burnsandmcdonnellengineering", "domain": "burnsmcd.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "EchoStar", "company_key": "echostar", "domain": "echostar.com", "sector": "Telecom", "src": "real"}
+{"company": "Jacobs", "company_key": "jacobs", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Dataquad", "company_key": "dataquad", "domain": "dataqinc.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "DataEdge USA", "company_key": "dataedge", "domain": "dataedgeusa.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "ONE Gas", "company_key": "one-gas", "domain": "Inc.,onegas.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "QXO", "company_key": "qxo", "domain": "Inc.,qxo.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "V2X", "company_key": "v2x", "domain": "Inc.,vx-inc.com", "sector": "Aerospace/Defense", "src": "real"}
+{"company": "McDonalds", "company_key": "mcdonalds", "domain": "mcdonalds.com", "sector": "Food/Beverage", "src": "real"}
+{"company": "duke", "company_key": "duke", "domain": null, "sector": "Education", "src": "real"}
+{"company": "grainger", "company_key": "grainger", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "sap", "company_key": "sap", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "ey", "company_key": "ey", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "dfs", "company_key": "dfs", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "netapp", "company_key": "netapp", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "ornl", "company_key": "ornl", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "AUBURN NATIONAL BANCORPORATION, INC", "company_key": "auburnnationalbancorporation", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "FIDELITY D & D BANCORP INC", "company_key": "fidelitydanddbancorp", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Exzeo Group, Inc.", "company_key": "exzeo group, inc.", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "veritasprime", "company_key": "veritasprime", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "novonordisk", "company_key": "novonordisk", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "sapiens", "company_key": "sapiens", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "First Internet Bancorp", "company_key": "firstinternetbancorp", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "HEALTHSTREAM INC", "company_key": "healthstream inc", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Hershey", "company_key": "hershey", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "Kellanova", "company_key": "kellanova", "domain": "kellanova.com", "sector": "Food/Beverage", "src": "real"}
+{"company": "Eastman", "company_key": "eastmanchemical", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Corning", "company_key": "corning", "domain": "corning.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "expandenergy", "company_key": "expandenergy", "domain": "expandenergy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Hubbell", "company_key": "hubbell", "domain": "hubbell.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Dover", "company_key": "dovercorporation", "domain": "dovercorporation.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "BELDEN INC.", "company_key": "belden inc.", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "BayCom Corp", "company_key": "baycom corp", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Bunge", "company_key": "bungeglobal", "domain": "bunge.com", "sector": "Food/Beverage", "src": "real"}
+{"company": "Centuri Holdings, Inc.", "company_key": "centuri holdings, inc.", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Delek Logistics Partners, LP", "company_key": "delek logistics partners, lp", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Dorman Products, Inc.", "company_key": "dorman products, inc.", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "ENTERGY NEW ORLEANS, LLC", "company_key": "entergy new orleans, llc", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "ENTERGY MISSISSIPPI, LLC", "company_key": "entergy mississippi, llc", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "HAVERTY FURNITURE COMPANIES INC", "company_key": "haverty furniture companies inc", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "HAWAIIAN ELECTRIC INDUSTRIES INC", "company_key": "hawaiian electric industries inc", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Navan", "company_key": "navan", "domain": "Inc.,navan.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "WITHIN", "company_key": "agencywithin", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Cresta", "company_key": "cresta", "domain": "cresta.ai", "sector": "AI/ML", "src": "real"}
+{"company": "Artefact", "company_key": "artefact", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "BCC-NIH", "company_key": "bcc", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "Buynomics", "company_key": "buynomics", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Codal", "company_key": "codalinc", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "DeepMind", "company_key": "deepmind", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Ariel Investments", "company_key": "ariel-investments", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Cedar Rapids Prep", "company_key": "cedar-rapids-prep", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Columbus Humanities, Arts, and Technology Academy", "company_key": "columbus-humanities-arts-and-technology-academy", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Brandtech+", "company_key": "brandtech", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "fal", "company_key": "fal", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Girl Effect", "company_key": "girl-effect", "domain": null, "sector": "Other", "src": "real"}
+{"company": "Ground Logistics", "company_key": "ground-logistics", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "Isidor", "company_key": "isidor", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "KoBold Metals DRC", "company_key": "kobold-metals-drc", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Make-A-Wish America", "company_key": "make-a-wish-america", "domain": null, "sector": "Other", "src": "real"}
+{"company": "ANGIODYNAMICS INC", "company_key": "angiodynamics inc", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "leeenterprises", "company_key": "leeenterprises", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "ETHAN ALLEN INTERIORS INC", "company_key": "ethan allen interiors inc", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "MCG Health", "company_key": "mcg-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Naughty Dog", "company_key": "naughty-dog", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "Onbe", "company_key": "onbe", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Ponderosa Garage Doors", "company_key": "ponderosa-garage-doors", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Renewed Vision", "company_key": "renewed-vision", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "S&B USA", "company_key": "sbusa", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Spot & Tango", "company_key": "spotandtango", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Telix Pharmaceuticals (AMER)", "company_key": "telixus", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Truehold", "company_key": "truehold", "domain": null, "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "Visiting Media", "company_key": "visitingmedia", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Zoo", "company_key": "zoo", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Habitat Health", "company_key": "habitathealth", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Precisely International Jobs", "company_key": "preciselyinternationaljobs", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "IFT", "company_key": "iftother", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "Annexon Biosciences", "company_key": "annexonbioscience", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Abovelending", "company_key": "abovelending", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Carlyriangroup", "company_key": "carlyriangroup", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Lyrahealth", "company_key": "lyra-health", "domain": "lyrahealth.com", "sector": "Healthcare", "src": "real"}
+{"company": "Dempseyuniform 2", "company_key": "dempseyuniform-2", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Cxtsoftware", "company_key": "cxtsoftware", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Swordhealth", "company_key": "sword-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Flashapp", "company_key": "flashapp", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Bounteous", "company_key": "bounteous", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Hso", "company_key": "hso", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Januxrx", "company_key": "januxrx", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Knix", "company_key": "knix", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "Merklescience", "company_key": "merklescience", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "Oliverwyman", "company_key": "oliverwyman", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Ppmi", "company_key": "ppmi", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Rendernetworks", "company_key": "rendernetworks", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Schmidt Entities", "company_key": "schmidt-entities", "domain": null, "sector": "Other", "src": "real"}
+{"company": "Stockpile", "company_key": "stockpile", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Uei", "company_key": "uei", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "Vevo", "company_key": "vevo", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Wishpond", "company_key": "wishpond", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Actionlife", "company_key": "action-property-management", "domain": null, "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "Busaracenter", "company_key": "busara-center-for-behavioral-economics", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Diamondfoundry", "company_key": "diamond-foundry", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Goodamerican", "company_key": "good-american", "domain": null, "sector": "E-commerce/Retail", "src": "real"}
+{"company": "Lyciatherapeutics", "company_key": "lycia-therapeutics", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Metergysolutions", "company_key": "metergy-solutions", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Penrodsoftware", "company_key": "penrod", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Sapling", "company_key": "sapling-partner", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Heritagevt", "company_key": "the-heritage-automotive-group", "domain": null, "sector": "Other", "src": "real"}
+{"company": "Wachter", "company_key": "wachter-inc", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "quora", "company_key": "quora", "domain": "quora.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "creatify", "company_key": "creatify-lab", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "relay", "company_key": "relay-technologies", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "commonroom", "company_key": "common-room", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "abundant", "company_key": "abundant", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "ansiblehealth", "company_key": "ansiblehealth-inc", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "basis-ai", "company_key": "basis-ai", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "cbai", "company_key": "cambridge-boston-alignment-initiative", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "compscience", "company_key": "compscience", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "directive", "company_key": "directive", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "faction", "company_key": "faction", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "gallatin", "company_key": "gallatin-ai", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "hilberts", "company_key": "hilbert-s-ai", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "jump-app", "company_key": "jump-2", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "liquid", "company_key": "liquid", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "moego", "company_key": "moego", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "numeral", "company_key": "numeral", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "pear-vc", "company_key": "pear-vc", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "qualified-health-pbc", "company_key": "qualified-health-pbc", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "runna", "company_key": "runna", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "sonio", "company_key": "sonio", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "tapcart", "company_key": "tapcart-inc", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "unlimitedindustries", "company_key": "unlimited", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "zettabyte-space", "company_key": "zettabyte", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "anglehealth", "company_key": "anglehealth", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "constellationspace", "company_key": "constellationspace", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "healthtech-1", "company_key": "healthtech-1", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "meridio", "company_key": "meridio", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "popl", "company_key": "popl", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "sigp", "company_key": "sigp", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "startplaying", "company_key": "startplaying", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "archy", "company_key": "archy", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "acrt", "company_key": "acrt-services", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "susteon", "company_key": "susteon", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "airasia", "company_key": "airasia", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "vwr", "company_key": "avantor", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "boseallaboutme", "company_key": "boseallaboutme", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "pressganey", "company_key": "company-description-press-ganey", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "chaucergroup", "company_key": "chaucer", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "ecu", "company_key": "ecu", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "covestro", "company_key": "covestro", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "eriks", "company_key": "eriks", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "gresearch", "company_key": "g-research", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "hamiltoncountyindiana", "company_key": "hamiltoncountyindiana", "domain": null, "sector": "Government/Public", "src": "real"}
+{"company": "intelogix", "company_key": "intelogix", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "husqvarnagroup", "company_key": "husqvarnagroup", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "hoganlovells", "company_key": "hogan-lovells", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "juliusbaer", "company_key": "julius-baer", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "martin", "company_key": "martin-s-point-health-care", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "SAIC", "company_key": "saic", "domain": "jobs.saic.com", "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Microsoft", "company_key": "microsoft", "domain": "careers.microsoft.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "weyerhaeuser", "company_key": "weyerhaeuser", "domain": "weyerhaeuser.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "jackhenry", "company_key": "jackhenryassociates", "domain": "jackhenry.com", "sector": "Fintech", "src": "real"}
+{"company": "synopsys", "company_key": "synopsys", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "gsu", "company_key": "georgiastateuniversity", "domain": "gsu.edu", "sector": "Education", "src": "real"}
+{"company": "aa083", "company_key": "universityoftexasmedicalbranch", "domain": "aa083.taleo.net", "sector": "Education", "src": "real"}
+{"company": "textron", "company_key": "textron", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "TikTok USDS", "company_key": "tiktokusdatasecurity", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Fuyao Glass America", "company_key": "fuyaoglassamerica", "domain": "fuyaogroupna.com", "sector": "Automotive/Mobility", "src": "real"}
+{"company": "trinet usa", "company_key": "trinetusa", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Caresoft Global Technologies", "company_key": "caresoftglobal", "domain": "caresoftglobal.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Compunnel", "company_key": "compunnelsoftware", "domain": "compunnel.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "ventois", "company_key": "ventois", "domain": "ventois.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "Experis", "company_key": "experisus", "domain": "experis.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "VistalTech", "company_key": "vistaltech", "domain": "vistaltech.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "University of Missouri System", "company_key": "curatorsofuniversityofmissouri", "domain": "umsystem.edu", "sector": "Education", "src": "real"}
+{"company": "HL Mando America", "company_key": "hlmandoamerica", "domain": "hlmando.com", "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Boston University", "company_key": "trusteesofbostonuniversity", "domain": "bu.edu", "sector": "Education", "src": "real"}
+{"company": "Tractor Supply Company", "company_key": "tractorsupply", "domain": "tractorsupply.com", "sector": "E-commerce/Retail", "src": "real"}
+{"company": "COOLSOFT", "company_key": "coolsoft", "domain": "coolsoftllc.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "CGI Technologies and Solutions, Inc.", "company_key": "cgitechnologiesandsolutions", "domain": "cgi.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "Omnicell", "company_key": "omnicell", "domain": "INC.,omnicell.com", "sector": "Healthcare", "src": "real"}
+{"company": "NGL Energy Partners LP", "company_key": "ngl-energy-partners-lp", "domain": "nglenergylp.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Nutanix", "company_key": "nutanix", "domain": "Inc.,nutanix.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "Savers | Value Village", "company_key": "savers-value-village", "domain": "Inc.,saversvaluevillage.com", "sector": "E-commerce/Retail", "src": "real"}
+{"company": "Wyndham Hotels & Resorts", "company_key": "wyndham-hotels-resorts", "domain": "INC.,wyndhamhotelsandresorts.com", "sector": "Travel/Hospitality", "src": "real"}
+{"company": "ExxonMobil", "company_key": "exxonmobil", "domain": "exxonmobil.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "ebscoind", "company_key": "ebscoind", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "BASSETT FURNITURE INDUSTRIES INC", "company_key": "bassett furniture industries inc", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "gulfstream", "company_key": "gulfstream", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "birlasoft", "company_key": "birlasoft", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "lincolnfinancial", "company_key": "lincolnfinancial", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "mahindracareers", "company_key": "mahindracareers", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "nomura", "company_key": "nomura", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Atlanticus Holdings Corp", "company_key": "atlanticus holdings corp", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "pge", "company_key": "pge", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "supermicro", "company_key": "supermicro", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "teradyne", "company_key": "teradyne", "domain": null, "sector": "Semiconductors/Hardware", "src": "real"}
+{"company": "swissre", "company_key": "swissre", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "Black & Veatch", "company_key": "blackandveatch", "domain": "bv.com", "sector": "Consulting/Services", "src": "real"}
+{"company": "zf", "company_key": "zf", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Amtrak", "company_key": "nationalrailroadpassenger", "domain": "amtrak.com", "sector": "Travel/Hospitality", "src": "real"}
+{"company": "phillips66", "company_key": "phillips66", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "Ball Corporation", "company_key": "ballcorporation", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Entergy", "company_key": "entergy", "domain": "entergy.com", "sector": "Energy/Climate", "src": "real"}
+{"company": "Nucor", "company_key": "nucor", "domain": "jobs.nucor.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "HII", "company_key": "huntingtoningalls", "domain": "hii.com", "sector": "Aerospace/Defense", "src": "real"}
+{"company": "ametek", "company_key": "ametek", "domain": "ametek.com", "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "ARMSTRONG WORLD INDUSTRIES INC", "company_key": "armstrong world industries inc", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "AURORA CANNABIS INC", "company_key": "aurora cannabis inc", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "COLUMBUS MCKINNON CORP", "company_key": "columbus mckinnon corp", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "CHART INDUSTRIES INC", "company_key": "chart industries inc", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "CORNING INC /NY", "company_key": "corning inc /ny", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Delek US Holdings, Inc.", "company_key": "delek us holdings, inc.", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "EASTMAN KODAK CO", "company_key": "eastman kodak co", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "CONSTELLIUM SE", "company_key": "constellium se", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "IBM", "company_key": "ibm", "domain": "ibm.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "GXO Logistics, Inc.", "company_key": "gxo logistics, inc.", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "ACT Power Services", "company_key": "actpowerservices", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Figma", "company_key": "figma", "domain": "figma.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "A-LIGN External", "company_key": "align", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "EnerSys", "company_key": "enersys", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "attn:", "company_key": "attn", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "BILL", "company_key": "billcom", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "CaptiveAire", "company_key": "captiveaire", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Connections Health Solutions", "company_key": "connectionshealthsolutions", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Acacia Animal Hospital - Pompano Beach", "company_key": "acacia-animal-hospital-pompano-beach", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Augusta University", "company_key": "borusgaoboaugustauniversity", "domain": "augusta.edu", "sector": "Education", "src": "real"}
+{"company": "CALIFORNIA AUTISM CENTER", "company_key": "california-autism-center", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Defense Unicorns", "company_key": "defense-unicorns", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "DLR Group", "company_key": "dlr-group", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Fingerprint", "company_key": "fingerprint", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "Kasisto", "company_key": "kasisto", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Highdive", "company_key": "highdive", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "Harrow, Inc.", "company_key": "harrow-inc", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "LawZero", "company_key": "lawzero", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "GBank Financial Holdings Inc.", "company_key": "gbank financial holdings inc.", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Calumet, Inc. /DE", "company_key": "calumet, inc. /de", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "ALTA EQUIPMENT GROUP INC.", "company_key": "alta equipment group inc.", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "lifetime", "company_key": "lifetimebrands", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "i80gold", "company_key": "i80gold", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "Newsela", "company_key": "newsela", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Pagaya", "company_key": "pagaya", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Pronto", "company_key": "pronto", "domain": null, "sector": "Automotive/Mobility", "src": "real"}
+{"company": "Optiver - Trading Academy", "company_key": "optiver-trading-academy", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "Sensei Ag", "company_key": "senseiag", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "StepStone Group", "company_key": "stepstone", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "think-cell", "company_key": "think-cell", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Ultragenyx Pharmaceutical", "company_key": "ultragenyxpharmaceutical", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Wayvia", "company_key": "wayvia", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Carta Healthcare", "company_key": "cartahealthcare", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "iSpot", "company_key": "ispottv", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "SciLeads", "company_key": "scileads", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Oxford Dental Clinic", "company_key": "oxforddentalclinic", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "EOS", "company_key": "eositsolutions", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "Aerostrat", "company_key": "aerostrat", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Anyroad", "company_key": "anyroad", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Commencis", "company_key": "commencis", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Arbitrumfoundation", "company_key": "arbitrumfoundation", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "Esper", "company_key": "esper", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Dlocal", "company_key": "dlocal", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Get Vocal Pbc", "company_key": "get-vocal-pbc", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Grailbio", "company_key": "grailbio", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Instrument", "company_key": "instrument", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Kapta Space", "company_key": "kapta-space", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Lrdgonline", "company_key": "lrdgonline", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Miteksystems 2", "company_key": "miteksystems-2", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "Outsourcedstaff", "company_key": "outsourcedstaff", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Pointb", "company_key": "pointb", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Rezolutebio", "company_key": "rezolutebio", "domain": null, "sector": "Biotech/Pharma", "src": "real"}
+{"company": "Sfgiants", "company_key": "sfgiants", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Sofarsounds", "company_key": "sofarsounds", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "True Environmental", "company_key": "true-environmental", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "Voxy Engen", "company_key": "voxy-engen", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Zoyi", "company_key": "zoyi", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Argonaut", "company_key": "argonaut-inc", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "Cbtnuggets", "company_key": "cbt-nuggets", "domain": null, "sector": "Education", "src": "real"}
+{"company": "Enter Rcm Llc", "company_key": "enter", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Healthmark Group", "company_key": "healthmark-group-trial", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Limitbreak", "company_key": "limit-break", "domain": null, "sector": "Gaming", "src": "real"}
+{"company": "Nomadmktg", "company_key": "nomad-marketing", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "Researchinnovations.Com", "company_key": "research-innovations", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Spacesystemsintegration", "company_key": "space-systems-integration", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "Ultrahealthproviders", "company_key": "ultra-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "Bcipkg", "company_key": "bcipkg", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "faculty", "company_key": "faculty", "domain": "faculty.ai", "sector": "AI/ML", "src": "real"}
+{"company": "gigaml", "company_key": "giga-ai", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "Ontic", "company_key": "ontic", "domain": null, "sector": "Cybersecurity", "src": "real"}
+{"company": "phantom", "company_key": "phantom", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "Nevados", "company_key": "nevados", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "arcade-ai", "company_key": "arcade-3", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "bifrost", "company_key": "bifrost-ai", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "castletontower", "company_key": "castleton-tower", "domain": null, "sector": "RealEstate/PropTech", "src": "real"}
+{"company": "cortea", "company_key": "cortea-ai", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "duck-duck-go", "company_key": "duckduckgo", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "firebirdmusic", "company_key": "firebird-music", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "glow25", "company_key": "glow25", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "hud", "company_key": "hud", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "kinship", "company_key": "kinship", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "luxor", "company_key": "luxor-technology-corporation", "domain": null, "sector": "Crypto/Web3", "src": "real"}
+{"company": "mudflap", "company_key": "mudflap", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "omniscient", "company_key": "omniscient", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "pivotal-health", "company_key": "pivotal-health", "domain": null, "sector": "Healthcare", "src": "real"}
+{"company": "ravenna", "company_key": "ravenna", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "scarlet", "company_key": "scarlet", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "stable", "company_key": "stable", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "terraai", "company_key": "terra-ai", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "velocity", "company_key": "velocity", "domain": null, "sector": "Fintech", "src": "real"}
+{"company": "xds", "company_key": "xds", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "aurorasolar", "company_key": "aurorasolar", "domain": null, "sector": "Energy/Climate", "src": "real"}
+{"company": "distyl", "company_key": "distyl", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "inscribeai", "company_key": "inscribeai", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "neuroscale", "company_key": "neuroscale", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "red6", "company_key": "red6", "domain": null, "sector": "Aerospace/Defense", "src": "real"}
+{"company": "broccoli", "company_key": "broccoli", "domain": null, "sector": "AI/ML", "src": "real"}
+{"company": "tesslcareers", "company_key": "tesslcareers", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "cisco", "company_key": "cisco", "domain": "cisco.com", "sector": "Telecom", "src": "real"}
+{"company": "revin", "company_key": "revin", "domain": null, "sector": "Software/SaaS", "src": "real"}
+{"company": "aesop", "company_key": "aesop", "domain": null, "sector": "Consumer/Lifestyle", "src": "real"}
+{"company": "awe", "company_key": "art-and-wellness-enterprises-awe", "domain": null, "sector": "Media/Entertainment", "src": "real"}
+{"company": "beneva", "company_key": "beneva", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "bcbst", "company_key": "bcbst", "domain": null, "sector": "Insurance", "src": "real"}
+{"company": "chg", "company_key": "c-h-guenther", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "workday", "company_key": "workday", "domain": "workday.com", "sector": "Software/SaaS", "src": "real"}
+{"company": "coke", "company_key": "coca-cola-company", "domain": null, "sector": "Food/Beverage", "src": "real"}
+{"company": "dssmith", "company_key": "dssmith", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "fednav", "company_key": "fednav", "domain": null, "sector": "Logistics/SupplyChain", "src": "real"}
+{"company": "franklintempleton", "company_key": "franklintempleton", "domain": null, "sector": "Banking/Finance", "src": "real"}
+{"company": "folkehjelp", "company_key": "folkehjelp", "domain": null, "sector": "Other", "src": "real"}
+{"company": "heidrick", "company_key": "heidrick-struggles", "domain": null, "sector": "Consulting/Services", "src": "real"}
+{"company": "irsc", "company_key": "irsc", "domain": null, "sector": "Education", "src": "real"}
+{"company": "ksb", "company_key": "ksb", "domain": null, "sector": "Manufacturing/Industrial", "src": "real"}
+{"company": "mainsailhotels", "company_key": "mainsail-lodging-development", "domain": null, "sector": "Travel/Hospitality", "src": "real"}
+{"company": "newbraunfels", "company_key": "new-braunfels", "domain": null, "sector": "Government/Public", "src": "real"}

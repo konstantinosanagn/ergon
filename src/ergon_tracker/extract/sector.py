@@ -126,8 +126,33 @@ _NAME_SECTOR: dict[str, str] = {
     "consultants": "Consulting/Services",
     # Gaming
     "esports": "Gaming",
+    "games": "Gaming",
+    "gaming": "Gaming",
     # Fintech
     "fintech": "Fintech",
+    # --- gaps surfaced by the 700-company sector benchmark (2026-07-06), high-precision keywords ---
+    # Energy/Climate: "Siemens Energy", "Dominion Energy", "NextEra Energy", "NRG Energy", ...
+    "energy": "Energy/Climate",
+    "solar": "Energy/Climate",
+    "renewables": "Energy/Climate",
+    "renewable energy": "Energy/Climate",
+    # Manufacturing/Industrial. NB "industries"/"industrial" are deliberately NOT here — too broad
+    # ("Anduril Industries" is Defense, many "X Industries" span sectors); only concrete materials.
+    "steel": "Manufacturing/Industrial",
+    "chemicals": "Manufacturing/Industrial",
+    "packaging": "Manufacturing/Industrial",
+    "plastics": "Manufacturing/Industrial",
+    # Banking/Finance: asset managers, hedge funds, securities houses ("capital"/"partners" omitted —
+    # too ambiguous with VC / consulting).
+    "asset management": "Banking/Finance",
+    "securities": "Banking/Finance",
+    "investments": "Banking/Finance",
+    "capital markets": "Banking/Finance",
+    # Biotech/Pharma
+    "diagnostics": "Biotech/Pharma",
+    "biotech": "Biotech/Pharma",
+    # Logistics/SupplyChain
+    "supply chain": "Logistics/SupplyChain",
 }
 # Longest tokens first so "real estate" / "credit union" win over any substring word match.
 _NAME_RE = re.compile(
