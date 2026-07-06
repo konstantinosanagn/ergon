@@ -133,3 +133,39 @@ the field-representative axis.
 
 **Consequence for the fit rubric:** `years_min`/`years_max` are production-grade — usable as a hard
 filter. **Next extractor to benchmark: `skills.py`.**
+
+---
+
+## Addendum (2026-07-06): `skills.py` benchmarked (set-valued)
+
+Fourth extractor. Corpus: 800 requirement/skill-section windows fetched from **329 companies across 8
+ATS** (`scripts/build_skills_corpus.py`, anchored on skill-CONTEXT cues so windows can contain skills
+the gazetteer doesn't know yet), blind-labeled by an 8-agent fleet for the SET of concrete technical
+skills present (`tests/fixtures/skills_corpus.jsonl`; 315 windows carry ≥1 skill). Gate:
+`tests/test_skills_recall.py`.
+
+| Axis | Result | How measured |
+|---|---|---|
+| **precision** | **0.995** (5/943 extractions are collisions) | word-sense collision rate — a deterministic matcher can't hallucinate, so raw "unlabeled extractions" are human UNDER-listing, not errors |
+| **recall** | **0.927** vs human labels | of labeler-named in-vocab skills, fraction found |
+
+**Why precision is a collision rate, not raw agreement:** `skills.py` matches literal surface forms,
+so every extraction is genuinely in the text. Of 943 extractions only **5** were word-sense
+collisions (`rest`, `excel`, `rails`, `sap`, `ruby`); the other 108 "unlabeled" extractions are real
+skills the human labeler simply didn't list (javascript, aws, github…). Gating raw precision would
+fail the suite every time we add a legitimate skill, so the gate scores the collision rate instead.
+
+**Fixes the corpus forced:**
+- *Precision:* an `excel`-verb guard ("excel at/in", "to excel") and dropping bare `rest` (kept
+  `rest api`/`restful`) removed the top collisions. The pre-existing omission of bare
+  `go`/`c`/`r`/`spring`/`swift` was validated — **zero** collisions from them.
+- *Recall:* `llm` plurals ("LLMs", "large language models").
+- *Coverage:* **+23 skills** the labelers surfaced (crm, powerpoint, microsoft office, github,
+  gitlab, hubspot, devops, databricks, redshift, clickhouse, google analytics/ads/sheets, photoshop,
+  illustrator, after effects, ios, android, erp, cad, revit, sas), 91→114. Collision-prone tokens
+  labelers named (word, outlook, notion, slack, confluence) were deliberately NOT added.
+
+**Consequence for the skills-gap tool:** the gazetteer's alias map IS the normalization pass the tool
+needs, and it's now measured-good. **Deferred gap worklist** (vaguer/collision-prone): saas,
+generative-ai, cloud, distributed-systems, data-modeling/pipelines/viz, business-intelligence,
+claude/chatgpt/gemini. **Next extractor to benchmark: `level.py`.**
