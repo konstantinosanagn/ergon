@@ -102,3 +102,34 @@ dropped as genuinely **ambiguous** (reasonable annotators disagree), not because
 **Consequence for the fit rubric:** gate hard requirements on `degree_min`; treat `degree_required` as
 advisory. This is precisely the "don't ship a confident-but-wrong A–F" outcome the quality program exists
 to produce. **Next extractor to benchmark: `yoe.py`.**
+
+---
+
+## Addendum (2026-07-06): `yoe.py` benchmarked with the same rig
+
+Third extractor to earn a measured number. Corpus: 540 "<number> years/months" windows fetched from
+**237 companies across 8 ATS** (`scripts/build_yoe_corpus.py`, a net wider than the extractor so recall
+gaps show), blind-labeled by an 8-agent fleet, 539 English records (`tests/fixtures/yoe_corpus.jsonl`;
+409 positives, 130 FP-trap negatives). Gate: `tests/test_yoe_recall.py`.
+
+| Axis | Result | Grade |
+|---|---|---|
+| **recall** (exact min/max) | **0.978** (from 0.944) | production-grade |
+| **precision** (adversarial negatives) | **0.877** (from 0.646) | worst-case; field precision higher |
+
+**Bugs the corpus forced (all real correctness):**
+- *Recall:* **"N–M+ years" now opens the upper bound** — `yoe.py` silently dropped the trailing `+`
+  and reported `(N, M)`; "6–10+ years" means "6 or more" → `(6, None)`. Biggest single win.
+- *Precision:* company/product **age & tenure** vetoes — before-framing ("for over 35 years"),
+  after-tenure phrases ("N year track record", "N years of success/excellence"), and same-sentence
+  company-achievement verbs ("30+ years of expertise, we combine"); plus **month-denominated noise**
+  (contracts/training/timelines/probation) now requires a real experience cue.
+- 5 systematic gold-label slips fixed against the rubric ("6–10+ years" mislabeled `(6,10)`;
+  "less than 2 years" mislabeled `(2,None)`).
+
+**Note on the 0.877:** the negative set is *adversarially enriched* — the broad net specifically
+surfaces company-age numbers, which are far rarer in random JDs; field precision is higher. Recall is
+the field-representative axis.
+
+**Consequence for the fit rubric:** `years_min`/`years_max` are production-grade — usable as a hard
+filter. **Next extractor to benchmark: `skills.py`.**

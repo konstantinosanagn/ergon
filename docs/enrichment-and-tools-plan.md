@@ -22,7 +22,7 @@ same as "measured against hundreds of real JDs."
 |---|---|---|---|
 | **salary** (`comp.py`) | ~100% recall / 100% precision | ~35–40% (gated by JD access) | ✅ 227-record real corpus + ratcheting gate (`test_comp_recall.py`) |
 | **degree** (`degree.py`) | **level 88.6% recall / 99.5% precision**; **scope (req-vs-pref) 59.7%** — the hard half | measured on the corpus below | ✅ 402-record real corpus + ratcheting gate (`test_degree_recall.py`) |
-| **yoe** (`yoe.py`) | Conservative, precision-first | Unknown | ❌ |
+| **yoe** (`yoe.py`) | **97.8% recall**; **87.7% precision** on an adversarial-negative set (field precision higher) | measured on a 539-record real corpus | ✅ 539-record real corpus + ratcheting gate (`test_yoe_recall.py`) |
 | **level** (`level.py`) | ~44% unknown after yoe→level default-on | Improved, still gaps | ❌ |
 | **geo/country** (`geo.py`) | NULL-country (Workday placeholder) bug fixed | Improved | ❌ |
 | **skills** (`skills.py`) | Gazetteer; never audited | Unknown | ❌ |
@@ -50,7 +50,17 @@ For **each** extractor, replicate the `comp.py` method exactly — it is the tem
 3. **Publish the coverage %** per field in `INDEX_STATUS.md` — *no competitor publishes this*; it's both a
    marketing weapon and a forcing function for honesty.
 
-Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → **yoe next** → skills → level → geo.
+Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → ~~**yoe**~~ **✅ DONE (2026-07-06)** → **skills next** → level → geo.
+
+**yoe.py result (2026-07-06):** same rig — 540 "<number> years/months" windows fetched across 237
+companies / 8 ATS (`scripts/build_yoe_corpus.py`, a net wider than the extractor), blind-labeled by
+an 8-agent fleet, 539 English records. **Recall 94.4%→97.8%, precision 64.6%→87.7%** (the negatives
+are adversarially enriched with company-age numbers, so field precision is higher). Real bugs the
+corpus forced: **"6–10+ years" now opens the top** (was capping at 10 — the biggest recall win),
+company/product-age vetoes ("for over 35 years, we've…", "45 year track record", "30+ years of
+expertise, we combine"), and **month-denominated noise** (contracts/training/timelines) now needs a
+real experience cue. Also fixed 5 systematic gold-label slips against the rubric. **This axis is
+production-grade** — the fit rubric can use `years_min`/`years_max` as a hard filter.
 
 **degree.py result (2026-07-05):** benchmarked with `comp.py` rigor — 520 real education windows
 fetched across 250 companies / 9 ATS (`scripts/build_degree_corpus.py`, a net *wider* than the
@@ -87,8 +97,11 @@ crowded, 58.6k-star incumbent, and off our data moat. **Stay the substrate.** Ex
 tools that *use* our data; aim to be the enriched-index/MCP/QUERY backend those apply-layer tools plug into.
 
 ## Immediate next step
-~~Benchmark `degree.py`~~ **✅ done (2026-07-05)** — see the degree result above. Verdict: `degree_min`
-is production-grade (88.6%/99.5%); `degree_required` (59.7%) is not, so the fit rubric gates on the
-level and treats scope as advisory. **Next: benchmark `yoe.py`** with the same rig (reuse
-`scripts/build_degree_corpus.py`'s fetch+window+fleet pattern, retargeted to years-of-experience
-cues). **No tool before its fields have a number.**
+Benchmarked so far (all with the same fetch→window→blind-fleet→ratcheting-gate rig):
+- ~~`comp.py`~~ ✅ (salary) — 100%/100% on a 227-record corpus.
+- ~~`degree.py`~~ ✅ (2026-07-05) — `degree_min` 88.6%/99.5% (grade); `degree_required` 59.7% (advisory).
+- ~~`yoe.py`~~ ✅ (2026-07-06) — 97.8% recall / 87.7% precision (grade). Fit rubric can gate on years.
+
+**Next: benchmark `skills.py`** (the gazetteer — never audited) with the same rig, retargeted to skill
+mentions; it needs a normalization pass ("React" == "React.js") before the skills-gap tool. Then
+`level.py` → `geo.py`. **No tool before its fields have a number.**
