@@ -21,7 +21,7 @@ same as "measured against hundreds of real JDs."
 | Field | Precision/recall (when JD states it) | Coverage (how often populated) | Benchmarked at scale? |
 |---|---|---|---|
 | **salary** (`comp.py`) | ~100% recall / 100% precision | ~35–40% (gated by JD access) | ✅ 227-record real corpus + ratcheting gate (`test_comp_recall.py`) |
-| **degree** (`degree.py`) | Unknown — required-vs-preferred scope is the hard half (~74% in the literature) | Unknown | ❌ 78 unit tests + 2 real JDs only |
+| **degree** (`degree.py`) | **level 88.6% recall / 99.5% precision**; **scope (req-vs-pref) 59.7%** — the hard half | measured on the corpus below | ✅ 402-record real corpus + ratcheting gate (`test_degree_recall.py`) |
 | **yoe** (`yoe.py`) | Conservative, precision-first | Unknown | ❌ |
 | **level** (`level.py`) | ~44% unknown after yoe→level default-on | Improved, still gaps | ❌ |
 | **geo/country** (`geo.py`) | NULL-country (Workday placeholder) bug fixed | Improved | ❌ |
@@ -50,14 +50,28 @@ For **each** extractor, replicate the `comp.py` method exactly — it is the tem
 3. **Publish the coverage %** per field in `INDEX_STATUS.md` — *no competitor publishes this*; it's both a
    marketing weapon and a forcing function for honesty.
 
-Order (impact × how-unproven): **degree first** (newest, least validated, the fit rubric's biggest
-dependency, scope-detection is genuinely hard) → yoe → skills → level → geo.
+Order (impact × how-unproven): ~~**degree first**~~ **✅ DONE (2026-07-05)** → **yoe next** → skills → level → geo.
+
+**degree.py result (2026-07-05):** benchmarked with `comp.py` rigor — 520 real education windows
+fetched across 250 companies / 9 ATS (`scripts/build_degree_corpus.py`, a net *wider* than the
+extractor so recall gaps show), blind-labeled by an 8-agent fleet, scoped to the 402 English
+records (multilingual is a separate known gap). Numbers + the fixes they forced:
+- **degree_min (level): 88.6% recall / 99.5% precision** (from 75%/94% at first measure). Fixes:
+  guarded bare `"Degree in X"` / `"university degree"` / `"4-year <field> degree"` (recall), and
+  killed the `"master of <non-academic>"` idiom, `MSC`-company, and possessive `"Master's <noun>"`
+  ship-rank false positives (precision). **This axis is production-grade.**
+- **degree_required (scope): 59.7%** — the genuinely hard half (literature ~74%). The corpus proves
+  it is **NOT fit-rubric-grade**: the fit rubric must use `degree_min` as the hard filter and treat
+  `degree_required` as *advisory only*, never as an authoritative A–F input. **This is exactly the
+  "avoid confident-but-wrong" outcome the plan was built to catch.**
 
 ### Phase C — Moat-aligned tools (each ships only after its fields pass Phase B)
 1. **Fit rubric** in `assess_fit` — A–F over weighted dims + a don't-bother threshold. Hard requirements
    (degree, yoe, salary, location) scored **deterministically** from our columns (cheap/consistent),
    soft fit via model. **Depends on:** degree, yoe, salary, level, geo all benchmark-passing. Each score
    carries provenance (`extracted` vs `unknown`); unknown fields are not scored, never imputed.
+   **Degree caveat (measured 2026-07-05):** gate on `degree_min` (88.6%/99.5% — solid); `degree_required`
+   is only 59.7%, so it may narrow/annotate but must **not** flip a pass/fail on its own.
 2. **Skills-gap tool** — aggregate required skills across matching roles vs. a résumé. **Depends on:**
    skills extractor benchmarked + a normalization pass ("React" == "React.js").
 3. **Salary-benchmark tool** — percentiles by role/geo. **Depends on:** salary (done) + role/geo quality.
@@ -73,7 +87,8 @@ crowded, 58.6k-star incumbent, and off our data moat. **Stay the substrate.** Ex
 tools that *use* our data; aim to be the enriched-index/MCP/QUERY backend those apply-layer tools plug into.
 
 ## Immediate next step
-Benchmark **`degree.py`** with `comp.py` rigor (real corpus, hand-labeled incl. required-vs-preferred
-scope, precision/recall, ratcheting gate). If it clears ~95%, the fit rubric has earned its foundation;
-if it's ~78%, we just avoided shipping confident-but-wrong fit scores. **No tool before its fields have a
-number.**
+~~Benchmark `degree.py`~~ **✅ done (2026-07-05)** — see the degree result above. Verdict: `degree_min`
+is production-grade (88.6%/99.5%); `degree_required` (59.7%) is not, so the fit rubric gates on the
+level and treats scope as advisory. **Next: benchmark `yoe.py`** with the same rig (reuse
+`scripts/build_degree_corpus.py`'s fetch+window+fleet pattern, retargeted to years-of-experience
+cues). **No tool before its fields have a number.**
