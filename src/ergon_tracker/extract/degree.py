@@ -115,6 +115,12 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 _OR_EQUIV = re.compile(
     r"\bor\s+equivalent\b|\bor\s+comparable\b|\bequivalent\s+(?:work\s+)?experience\b", re.I
 )
+# The tight "<degree> or equivalent required" phrase — a real requirement (equivalent credential is
+# accepted, but something is required). The negative lookahead excludes "or equivalent EXPERIENCE
+# required" (experience substitutes for the degree -> preferred-only, stays False).
+_EQUIV_REQUIRED = re.compile(
+    r"\bor\s+(?:equivalent|comparable)\b(?!\s+(?:work\s+)?experience)[^.\n;]{0,12}\brequired\b", re.I
+)
 _PREFERRED = re.compile(
     r"\bpreferred\b|\ba\s+plus\b|\bnice\s+to\s+have\b|\bideally\b|\bdesir(?:ed|able)\b"
     r"|\badvantageous\b|\bbonus\b|\bnot\s+required\b",
@@ -261,11 +267,19 @@ class DegreeExtractor:
         """Required(True) / preferred-only(False) / unstated(None) for one mention.
 
         ``pos`` is the mention's offset within ``segment``; ``abs_start`` its offset in ``text``.
-        When a sentence carries BOTH cues ("BS required, MS preferred") the cue NEAREST the
-        mention wins, so each degree gets its own scope. "or equivalent" counts as preferred-only
-        (a degree-less candidate is not excluded) and, being adjacent to its degree, naturally
-        outranks a trailing "required".
+        When a sentence carries BOTH cues ("BS required, MS preferred") the cue NEAREST the mention
+        wins, so each degree gets its own scope. "or equivalent" counts as preferred-only (a
+        degree-less candidate is not excluded) and, being adjacent to its degree, naturally outranks
+        a trailing "required".
+
+        Exception — the tight "<degree> or equivalent required" construction ("High school diploma
+        or equivalent required", "... or equivalent (GED) required") IS a real requirement: the
+        explicit "required" modifies the whole "degree-or-equivalent" phrase. This does NOT apply to
+        "or equivalent EXPERIENCE required" (work experience substitutes for the degree -> still
+        preferred-only), which the lookahead excludes.
         """
+        if _EQUIV_REQUIRED.search(segment):
+            return True
         hits: list[tuple[int, bool]] = []
         for pat, verdict in ((_OR_EQUIV, False), (_PREFERRED, False), (_REQUIRED, True)):
             for m in pat.finditer(segment):

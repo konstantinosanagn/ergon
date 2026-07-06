@@ -84,7 +84,7 @@ levels, 182 FP-trap negatives). Gate: `tests/test_degree_recall.py` (ratcheting)
 | Axis | Metric | Result | Grade |
 |---|---|---|---|
 | **degree_min** (the level) | recall / precision | **0.886 / 0.995** (from 0.75/0.94 first-measure) | production-grade |
-| **degree_required** (req-vs-preferred) | accuracy | **0.597** (from 0.49) | **not** fit-rubric-grade; advisory only |
+| **degree_required** (req-vs-preferred) | accuracy | **0.611** (from 0.49; +tight "or equivalent required") | **not** fit-rubric-grade; advisory only |
 
 **Fixes the corpus forced (all real correctness, not gaming):**
 - *Recall:* guarded bare `"Degree in <field>"`, `"university/college degree"`, `"4-year <field> degree"`
@@ -245,7 +245,7 @@ CI gate (the `comp.py` method, replicated field by field):
 | **geo/city** | accuracy | 0.889 | production |
 | **degree_min** | recall / precision | 0.886 / 0.995 | production |
 | **level** | accuracy / macro-F1 | 0.820 / 0.736 | usable (advisory on ambiguous) |
-| **degree_required** | accuracy | 0.597 | advisory only |
+| **degree_required** | accuracy | 0.611 | advisory only |
 
 **Phase C (moat-aligned tools) is unblocked.** The fit rubric gates on the production-grade fields and
 treats `degree_required` + ambiguous `level` as advisory — no confident-but-wrong A–F.
