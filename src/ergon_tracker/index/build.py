@@ -208,6 +208,20 @@ def append_jobs(con: object, jobs: Iterable[JobPosting], *, build_id: str) -> in
     return after - before
 
 
+def _shared_cols(con: object, table: str, wanted: tuple[str, ...] | list[str]) -> str:
+    """Comma-joined subset of ``wanted`` that also exists in the ATTACHed ``prev.<table>``.
+
+    Makes carry-forward schema-tolerant: columns added since the prev snapshot was built are
+    dropped from the copy (they default to NULL for carried rows) instead of raising and aborting
+    the whole merge. ``con`` must already have the prev DB attached as ``prev``.
+    """
+    import sqlite3
+
+    assert isinstance(con, sqlite3.Connection)
+    prev_cols = {r[1] for r in con.execute(f"PRAGMA prev.table_info({table})").fetchall()}
+    return ",".join(c for c in wanted if c in prev_cols)
+
+
 def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str]) -> int:
     """Copy prior-index rows for companies we did NOT crawl into ``con`` (SQL ATTACH, no objects).
 
@@ -233,15 +247,26 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
         )
         return 0
     try:
-        cols = ",".join(_JOB_COLS)
+        # Carry-forward must tolerate an OLDER-schema prev snapshot: columns added since it was
+        # built (e.g. degree_min/degree_required in schema v2) do not exist in prev.jobs. Copy only
+        # the columns the two schemas SHARE; newer columns default to NULL for carried rows (they
+        # get populated when the board is next re-crawled). Without this, the fixed-column SELECT
+        # raises "no such column", the whole ~1.4M backlog is dropped, the row_floor gate rejects
+        # the fresh-only build and keeps the stale snapshot -> a permanent deadlock the index can
+        # never self-heal from (exactly what froze the daily build on the 2026-07-05 schema-v2 bump).
+        jobs_cols = _shared_cols(con, "jobs", _JOB_COLS)
         before = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
         con.execute(
-            f"INSERT OR IGNORE INTO jobs({cols}) SELECT {cols} FROM prev.jobs "  # noqa: S608 - fixed cols
+            f"INSERT OR IGNORE INTO jobs({jobs_cols}) SELECT {jobs_cols} FROM prev.jobs "  # noqa: S608 - introspected cols
             "WHERE company_key IS NULL OR company_key NOT IN (SELECT k FROM _crawled)"
         )
+        # Same intersection for job_sources so a future source-schema change can't silently drop
+        # sources (replaces the positional `SELECT s.*`, which breaks the instant the schema drifts).
+        src_names = [r[1] for r in con.execute("PRAGMA table_info(job_sources)").fetchall()]
+        src_cols = _shared_cols(con, "job_sources", src_names)
         con.execute(
-            "INSERT OR IGNORE INTO job_sources SELECT s.* FROM prev.job_sources s "
-            "WHERE s.job_id IN (SELECT id FROM jobs)"
+            f"INSERT OR IGNORE INTO job_sources({src_cols}) SELECT {src_cols} FROM prev.job_sources "  # noqa: S608 - introspected cols
+            "WHERE job_id IN (SELECT id FROM jobs)"
         )
         after = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
         con.commit()
