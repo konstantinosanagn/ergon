@@ -267,3 +267,38 @@ CI gate (the `comp.py` method, replicated field by field):
 **Phase C (moat-aligned tools) is unblocked.** The fit rubric gates on the production-grade fields and
 treats `sector` coverage-permitting, `degree_required` + ambiguous `level` as advisory — no
 confident-but-wrong A–F.
+
+### Sector — Stage-1 ML PoC (2026-07-07) — NEGATIVE, pivot to data-join
+
+Per `docs/superpowers/specs/2026-07-06-hybrid-sector-classifier-design.md` /
+`docs/superpowers/plans/2026-07-06-sector-classifier-stage1-poc.md`, we built and benchmarked the
+**Tier-2 embedding classifier** (bge-small + CL2N + TLD one-hot → L2 logreg, per-class Platt,
+3-gate abstention) on the existing 687-labeled / 27-class corpus.
+
+**Result — Tier-2 ML does NOT beat the deterministic baseline (72.4% acc @ 26.7% cov).** The honest
+**held-out 5-fold CV** read (train-set eval was a leak — see below):
+
+| operating point | ML (held-out) | baseline |
+| --- | --- | --- |
+| full coverage | 100% cov / **29.8%** acc (macro-F1 0.175) | — |
+| ≈ baseline coverage | ~26.7% cov / **~55%** acc | 26.7% cov / **72.4%** acc |
+| ≈ baseline accuracy | **~16.7%** cov / ~74.8% acc | 26.7% cov / 72.4% acc |
+
+At every comparable point the curated gazetteer wins: it holds exact company→sector mappings, whereas
+bge-small must generalize from weak inputs (name + domain-label + example title) and reaches only ~30%
+raw accuracy across 27 classes. This is exactly the spec's predicted failure mode ("company NAME is a
+weak feature; it's a weak-*input* problem, not a weak-model problem").
+
+**Methodology note (defect caught):** the first eval scored the saved model on its own training
+corpus and reported an inflated **93.2% acc / 51.2% cov / "ML BEATS"** — a data leak. Fixed by an
+honest stratified-CV eval (`scripts/eval_sector_classifier.py`, default path; the leaked scoring now
+lives behind `--score-model` under a warning). Runtime peak RSS 441–563 MB, single-process embedding
+(laptop-safe); stress gate passed before the full run.
+
+**Go/no-go → PIVOT (spec's pre-authorized fallback):** do **not** ship Tier-2 ML as designed. Invest
+Stage-2 in the **Tier-1 data-join gazetteer** — the real coverage lever — which is already partly
+built (`scripts/merge_sectors.py`, `sector_edgar.py`, `sector_wikidata.py`, `build_sector_naics.py`,
+`classify_sectors.py`; `sectors.json` already holds ~22k companies). Tier-2 could be revisited later
+only if given a materially stronger input signal (e.g. company descriptions), which is out of scope
+now. The PoC code (`sector_features.py`, `sector_clf.py`, the train/eval scripts) is retained as the
+harness for any future re-test but is **not wired into `SectorExtractor`** and ships nothing.

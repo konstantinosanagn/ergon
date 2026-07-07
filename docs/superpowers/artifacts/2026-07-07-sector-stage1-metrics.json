@@ -1,0 +1,27 @@
+{
+  "stage": "sector-classifier-stage-1-poc",
+  "date": "2026-07-07",
+  "corpus": "tests/fixtures/sector_corpus.jsonl",
+  "n_labeled": 687,
+  "n_classes": 27,
+  "features": "bge-small (384d) + CL2N + TLD one-hot",
+  "head": "L2 logistic regression, class_weight=balanced, per-class Platt, 3-gate abstention",
+  "runtime": {"single_process": true, "peak_rss_mb_full": 562.8, "embed_wall_s": 1.1},
+  "baseline": {"accuracy_when_covered": 0.724, "coverage": 0.267},
+  "honest_held_out_cv": {
+    "folds": 5,
+    "full_coverage": {"coverage": 1.0, "accuracy_when_covered": 0.298, "macro_f1": 0.175},
+    "risk_coverage_curve": [
+      {"tau_prob": 0.0,  "coverage": 1.000, "accuracy_when_covered": 0.298},
+      {"tau_prob": 0.15, "coverage": 0.936, "accuracy_when_covered": 0.311},
+      {"tau_prob": 0.20, "coverage": 0.700, "accuracy_when_covered": 0.360},
+      {"tau_prob": 0.25, "coverage": 0.476, "accuracy_when_covered": 0.437},
+      {"tau_prob": 0.30, "coverage": 0.333, "accuracy_when_covered": 0.511},
+      {"tau_prob": 0.40, "coverage": 0.167, "accuracy_when_covered": 0.748},
+      {"tau_prob": 0.50, "coverage": 0.080, "accuracy_when_covered": 0.855}
+    ]
+  },
+  "leaked_train_set_eval_do_not_use": {"accuracy_when_covered": 0.932, "coverage": 0.512, "note": "scored model on its training corpus; inflated; fixed"},
+  "verdict": "ML does NOT beat deterministic baseline; pivot to Stage-2 Tier-1 data-join gazetteer",
+  "shipped_to_runtime": false
+}
