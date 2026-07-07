@@ -309,3 +309,28 @@ ships): (1) `load_sector_model` must assert the artifact's `tld_vocab` equals th
 thresholds on `predict_proba` softmax while inference uses Platt-normalized probs, and its OOF sweep
 hard-codes `C=1.0` instead of the CV-selected `best_c` — make the sweep calibration-consistent and
 thread `best_c` so the shipped operating point matches inference.
+
+### Sector — Stage-2 PDL name-join probe (2026-07-07) — NO-GO on the bar, precision-gated subset viable
+
+Per `docs/superpowers/specs/2026-07-07-stage2-pdl-namejoin-probe-design.md` /
+`…/plans/2026-07-07-stage2-pdl-namejoin-probe.md`, we measured whether name-joining the 58,078-company
+registry against the **PDL Free 7M Company Dataset** (LinkedIn `industry` → 27-label crosswalk) clears
+the bar (≥35% projected coverage AND ≥72.4% accuracy). Full artifact:
+`docs/superpowers/artifacts/2026-07-07-stage2-pdl-probe.md`.
+
+**Result — NO-GO.** Full crosswalk: registry projected coverage **43.2%** (16.2% → +15,637 companies,
+clears 35%) but gold accuracy-when-covered only **46.2%** (fails 72.4%). The accuracy–coverage frontier
+is monotonic: max coverage at ≥72.4% accuracy ≈ **22.7%** (< 35%); reaching 35%+ coverage forces
+accuracy to ~47%. **No operating point clears both bars** — LinkedIn's coarse industry enum can't
+resolve our fine 27-label taxonomy (huge "internet"/"IT services"/"financial services" buckets are
+50–55%/29% accurate). Probe ran in **14.5 s at 111 MB** on 7.17M rows (env-gated parallel streaming,
+deterministic; stress gate passed first).
+
+**Decision → PIVOT (spec's pre-authorized fallback):** do **not** build the full standalone PDL
+pipeline. Two follow-ons: (1) **precision-gated PDL as an additive merge source** — restrict PDL to the
+high-accuracy industries (gold-acc ≥ ~0.8: biotech, banking, insurance, medical devices, energy,
+chemicals, mining, utilities, hospital) → ~**1,460 net-new companies at ~96% accuracy**, above the
+current per-source quality (edgar 71% / wikidata 58% / slug 74%); fold into `scripts/merge_sectors.py`
+below curated/edgar. (2) Automate/refresh the existing edgar+wikidata+slug pipeline, lift Wikidata's
+58%, and job-weighted brand curation. The probe (`scripts/probe_pdl_sectors.py` + crosswalk) is
+retained as the harness but ships nothing and does not touch `SectorExtractor`/`sectors.json`.
