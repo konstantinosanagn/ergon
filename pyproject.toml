@@ -105,3 +105,4 @@ follow_imports_for_stubs = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra"
+pythonpath = ["."]
