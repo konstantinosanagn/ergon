@@ -45,6 +45,9 @@ scripts/.h1b_cache/
 # wikidata harvester scratch
 scripts/.sector_wd_*.json
 
+# Stage-2 PDL probe download cache (regenerated per run)
+scripts/.probe_cache/
+
 # residual-giants discovery/maintenance scripts (exploration tooling, kept local)
 scripts/aggregator_scan.py
 scripts/audit_completeness.py
