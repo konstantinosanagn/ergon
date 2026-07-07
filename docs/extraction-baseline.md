@@ -302,3 +302,10 @@ built (`scripts/merge_sectors.py`, `sector_edgar.py`, `sector_wikidata.py`, `bui
 only if given a materially stronger input signal (e.g. company descriptions), which is out of scope
 now. The PoC code (`sector_features.py`, `sector_clf.py`, the train/eval scripts) is retained as the
 harness for any future re-test but is **not wired into `SectorExtractor`** and ships nothing.
+
+**If Tier-2 is ever revived, two known gaps must be closed first** (deferred now because nothing
+ships): (1) `load_sector_model` must assert the artifact's `tld_vocab` equals the runtime `TLD_VOCAB`
+(else silent-wrong-features if the vocab drifts); (2) `train_sector_classifier.main` tunes abstention
+thresholds on `predict_proba` softmax while inference uses Platt-normalized probs, and its OOF sweep
+hard-codes `C=1.0` instead of the CV-selected `best_c` — make the sweep calibration-consistent and
+thread `best_c` so the shipped operating point matches inference.
