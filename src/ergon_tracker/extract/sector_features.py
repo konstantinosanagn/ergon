@@ -9,6 +9,10 @@ runtime inference (``sector_clf.py``) — identical features on both sides, by c
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # keep numpy out of the import-time path
+    import numpy as np
 
 # TLD group -> the suffixes that map to it. Small, high-signal industry priors on the domain TLD.
 SECTOR_TLD_GROUPS: dict[str, tuple[str, ...]] = {
@@ -58,3 +62,33 @@ def tld_features(domain: str | None) -> list[float]:
             vec[i] = 1.0
             break  # one group max — keeps the feature a clean indicator
     return vec
+
+
+def FEATURE_DIM(embed_dim: int) -> int:
+    """Total feature width = embedding dims + the TLD one-hot block."""
+    return embed_dim + len(TLD_VOCAB)
+
+
+def cl2n(mat: "np.ndarray", mean: "np.ndarray | None" = None) -> "tuple[np.ndarray, np.ndarray]":  # noqa: UP037
+    """CL2N: mean-center (using ``mean`` if given, else the batch mean) then L2-normalize each row.
+
+    CL2N is the standard preprocessing for frozen-embedding classifiers (SimpleShot 1911.04623):
+    centering removes the shared component; unit-normalizing makes the logreg see direction, not scale.
+    """
+    import numpy as np
+
+    x = np.asarray(mat, dtype=np.float32)
+    m = x.mean(axis=0) if mean is None else np.asarray(mean, dtype=np.float32)
+    c = x - m
+    norms = np.linalg.norm(c, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return (c / norms).astype(np.float32), m.astype(np.float32)
+
+
+def assemble(mat: "np.ndarray", domains: "list[str | None]", mean: "np.ndarray") -> "np.ndarray":  # noqa: UP037
+    """CL2N the embeddings (with the frozen training ``mean``) and append per-row TLD one-hot."""
+    import numpy as np
+
+    normed, _ = cl2n(mat, mean)
+    tld = np.asarray([tld_features(d) for d in domains], dtype=np.float32)
+    return np.hstack([normed, tld]).astype(np.float32)
