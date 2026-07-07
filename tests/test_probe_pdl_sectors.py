@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 
@@ -167,3 +168,23 @@ def test_measure_and_verdict() -> None:
     m2 = probe.measure({"acme": "banking", "globex": "banking"}, idx, crosswalk, total_registry=3)
     assert m2["gold_accuracy"] == 0.5
     assert probe.verdict(m2) is False
+
+
+def test_open_dump_reads_plain_and_gz(tmp_path) -> None:
+    p = tmp_path / "d.ndjson"
+    p.write_text('{"name":"Acme","industry":"internet"}\n')
+    with probe.open_dump(p) as it:
+        assert sum(1 for _ in it) == 1
+    g = tmp_path / "d.ndjson.gz"
+    with gzip.open(g, "wt") as f:
+        f.write('{"name":"Acme","industry":"internet"}\n')
+    with probe.open_dump(g) as it:
+        assert sum(1 for _ in it) == 1
+
+
+def test_resolve_dump_missing_exits(tmp_path, capsys) -> None:
+    import argparse
+
+    args = argparse.Namespace(dump=str(tmp_path / "nope.ndjson"))
+    with pytest.raises(SystemExit):
+        probe.resolve_dump(args)

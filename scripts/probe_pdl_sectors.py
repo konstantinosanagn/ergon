@@ -218,3 +218,107 @@ def verdict(metrics: dict, *, min_coverage: float = 0.35, min_accuracy: float = 
     return (
         metrics["projected_coverage"] >= min_coverage and metrics["gold_accuracy"] >= min_accuracy
     )
+
+
+import argparse  # noqa: E402
+import gzip  # noqa: E402
+import time  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+
+CACHE_DIR = ROOT / "scripts" / ".probe_cache"
+PDL_INFO = (
+    "PDL Free Company Dataset (CC-BY-4.0): download the newline-delimited JSON dump "
+    "(name+industry),\n"
+    "place it at scripts/.probe_cache/pdl_free.ndjson.gz, and re-run with --dump <that path>.\n"
+    "Fallback: BigPicture free company dataset (ODC-BY), same LinkedIn industry enum."
+)
+
+
+def _peak_rss_mb() -> float:
+    import resource
+
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return peak / (1024 * 1024) if sys.platform == "darwin" else peak / 1024
+
+
+@contextmanager
+def open_dump(path: Path):
+    p = Path(path)
+    fh = (
+        gzip.open(p, "rt", encoding="utf-8")  # noqa: SIM115
+        if p.suffix == ".gz"
+        else p.open(encoding="utf-8")
+    )
+    try:
+        yield fh
+    finally:
+        fh.close()
+
+
+def resolve_dump(args) -> Path:
+    if args.dump:
+        p = Path(args.dump)
+        if p.exists():
+            return p
+        print(f"--dump path not found: {p}\n\n{PDL_INFO}")
+        raise SystemExit(2)
+    for name in ("pdl_free.ndjson.gz", "pdl_free.ndjson"):
+        cand = CACHE_DIR / name
+        if cand.exists():
+            return cand
+    print(f"no dump found in {CACHE_DIR}\n\n{PDL_INFO}")
+    raise SystemExit(2)
+
+
+def main(argv: list[str]) -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dump")
+    ap.add_argument("--sample", type=int, default=0)
+    ap.add_argument("--chunk-size", type=int, default=20000)
+    args = ap.parse_args(argv)
+
+    dump = resolve_dump(args)
+    seed, sectors, gold = load_inputs()
+    idx = build_target_index(seed, sectors, gold)
+    crosswalk = load_crosswalk()
+    targets = frozenset(idx.registry_norms | set(idx.gold_norm_to_sector))
+    workers = _workers()
+    print(f"[probe] registry={len(seed)} targets={len(targets)} workers={workers} dump={dump.name}")
+
+    t0 = time.monotonic()
+    with open_dump(dump) as fh:
+        it = fh
+        if args.sample:
+            import itertools
+
+            it = itertools.islice(fh, args.sample)
+        matches, collisions = run_join(it, targets, workers=workers, chunk_size=args.chunk_size)
+    wall = time.monotonic() - t0
+
+    if args.sample:
+        print(
+            f"[stress] sample={args.sample} matches={len(matches)} collisions={collisions} "
+            f"peakRSS={_peak_rss_mb():.0f}MB wall={wall:.1f}s — full run is safe."
+        )
+        return
+
+    m = measure(matches, idx, crosswalk, total_registry=len(seed))
+    print(
+        f"[join] matches={len(matches)} w/sector={m['matched_with_sector']} "
+        f"collisions={collisions} peakRSS={_peak_rss_mb():.0f}MB wall={wall:.1f}s"
+    )
+    print("\n=== Stage-2 PDL name-join probe ===")
+    print(f"  gold accuracy-when-covered : {m['gold_accuracy']:.1%}  (bar 72.4%)")
+    print(f"  gold coverage              : {m['gold_coverage']:.1%}")
+    print(f"  registry current coverage  : {m['current_coverage']:.1%}")
+    print(f"  registry net-new companies : {m['net_new_keys']}")
+    print(f"  registry projected coverage: {m['projected_coverage']:.1%}  (bar 35%)")
+    go = verdict(m)
+    print(
+        f"  VERDICT: "
+        f"{'GO — build full Stage-2 pipeline' if go else 'NO-GO — pivot to squeeze-existing'}"
+    )
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
