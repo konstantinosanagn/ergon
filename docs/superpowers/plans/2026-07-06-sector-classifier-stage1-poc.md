@@ -511,33 +511,40 @@ def load_sector_model(path: "str | Path") -> SectorClassifier | None:
 Run: `.venv/bin/pytest tests/test_sector_clf_roundtrip.py -v`
 Expected: PASS (3 passed).
 
-- [ ] **Step 5: Add the sklearn-parity check (guarded)**
+- [ ] **Step 5: Add the sklearn class-parity check (guarded)**
+
+The meaningful invariant: with abstention disabled and identity Platt, our numpy predicted **class** must equal sklearn's predicted class on the *same assembled features*. This holds exactly — per-class sigmoid and sum-normalization are both monotonic/positive, so they preserve the argmax of the logits, which is what sklearn's softmax also selects. (We do NOT assert probability equality: our sigmoid-then-normalize calibration is deliberately not softmax.) The multi-class case is exercised (3 classes), and features are built through our own `assemble()` so the test rides the real feature path.
 
 ```python
 # append to tests/test_sector_clf_roundtrip.py
-def test_matches_sklearn_logreg(tmp_path) -> None:
-    sklearn = pytest.importorskip("sklearn")
+from ergon_tracker.extract.sector_features import assemble, cl2n  # noqa: E402
+
+
+def test_predicted_class_matches_sklearn(tmp_path) -> None:
+    pytest.importorskip("sklearn")
     from sklearn.linear_model import LogisticRegression
 
     rng = np.random.default_rng(0)
-    X = rng.normal(size=(60, 9)).astype(np.float32)  # 3 embed dims already CL2N'd + 6 TLD = 9 feats
-    y = (X[:, 0] + X[:, 1] > 0).astype(int)
-    lr = LogisticRegression().fit(X, y)
-    # export with identity mean (X already in feature space) and no Platt (a=1,b=0) → raw softmax path
+    embed_dim = 8
+    emb = rng.normal(size=(90, embed_dim)).astype(np.float32)
+    y = (emb[:, 0] * 2 + emb[:, 1] - emb[:, 2]).astype(int) % 3  # 3 classes
+    labels = np.array(["A", "B", "C"])
+    _, mean = cl2n(emb)
+    feats = assemble(emb, [None] * len(emb), mean)  # real feature path (embed_dim + TLD block)
+
+    lr = LogisticRegression(max_iter=2000).fit(feats, y)
     p = tmp_path / "sk.npz"
     save_sector_model(
-        p, labels=np.array(["A", "B"]), mean=np.zeros(3, dtype=np.float32),
-        W=lr.coef_ if lr.coef_.shape[0] == 2 else np.vstack([-lr.coef_[0], lr.coef_[0]]),
-        b=lr.intercept_ if lr.intercept_.shape[0] == 2 else np.array([-lr.intercept_[0], lr.intercept_[0]]),
-        platt_a=np.ones(2, dtype=np.float32), platt_b=np.zeros(2, dtype=np.float32),
-        centroids=np.zeros((2, 9), dtype=np.float32),
-        tau_prob=0.0, tau_margin=0.0, tau_sim=-1.0, embed_dim=3,
+        p, labels=labels, mean=mean, W=lr.coef_, b=lr.intercept_,
+        platt_a=np.ones(3, dtype=np.float32), platt_b=np.zeros(3, dtype=np.float32),
+        centroids=np.zeros((3, feats.shape[1]), dtype=np.float32),
+        tau_prob=0.0, tau_margin=0.0, tau_sim=-1.0, embed_dim=embed_dim,  # never abstain
     )
     load_sector_model.cache_clear()
     clf = load_sector_model(p)
-    # feed already-featurized rows by using mean=0 and letting the 6 TLD dims be the last 6 cols:
-    got = [clf.predict_batch(X[i, :3], [None])[0][0] for i in range(5)]
-    assert all(g in ("A", "B") for g in got)  # smoke parity: exported model runs & decides
+    got = [lab for lab, _ in clf.predict_batch(emb, [None] * len(emb))]
+    want = [labels[i] for i in lr.predict(feats)]
+    assert got == want  # exact class parity through the real feature + inference path
 ```
 
 - [ ] **Step 6: Run, lint, type-check, commit**
@@ -738,7 +745,11 @@ def test_sweep_thresholds_hits_target_precision() -> None:
     centroids = np.array([[1.0, 0, 0, 0, 0, 0], [0, 1.0, 0, 0, 0, 0]], dtype=np.float32)
     y_idx = np.array([0, 0, 1, 1])  # last one is a confident error
     tp, tm, ts, rep = train.sweep_thresholds(probs, feats, centroids, y_idx, target_precision=0.85)
-    assert 0.0 <= tp <= 1.0 and rep["precision"] >= 0.85 - 1e-9 or rep["coverage"] == 0.0
+    # a precision-meeting point WITH positive coverage exists (fire only the 0.95-prob correct row),
+    # so the sweep must return it — not the empty fallback.
+    assert rep["precision"] >= 0.85 - 1e-9
+    assert rep["coverage"] > 0.0
+    assert 0.0 <= tp <= 1.0
 ```
 
 - [ ] **Step 2: Run to verify failure**
