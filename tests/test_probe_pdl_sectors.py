@@ -140,3 +140,30 @@ def test_run_join_equal_completeness_tie_is_deterministic() -> None:
     m2, c2 = probe.run_join(iter(lines), targets, workers=2, chunk_size=1)
     assert m1 == m2 == {"acme": "banking"}  # "banking" < "internet"
     assert c1 == c2 == 1  # one collision detected on both paths
+
+
+def test_measure_and_verdict() -> None:
+    idx = probe.TargetIndex(
+        registry_norms={"acme", "globex", "initech"},
+        norm_to_keys={"acme": ["acme"], "globex": ["globex"], "initech": ["initech"]},
+        covered_keys={"acme"},
+        gold_norm_to_sector={"acme": "Software/SaaS", "globex": "Banking/Finance"},
+    )
+    crosswalk = {
+        "internet": "Software/SaaS",
+        "banking": "Banking/Finance",
+        "retail": "E-commerce/Retail",
+    }
+    # acme→internet (correct vs gold), globex→banking (correct), initech→retail (net-new registry)
+    matches = {"acme": "internet", "globex": "banking", "initech": "retail"}
+    m = probe.measure(matches, idx, crosswalk, total_registry=3)
+    assert m["gold_accuracy"] == 1.0  # 2/2 gold correct
+    assert m["gold_coverage"] == 1.0  # 2/2 gold matched w/ a sector
+    assert m["net_new_keys"] == 2  # globex + initech newly sectored (acme already covered)
+    assert m["projected_coverage"] == pytest.approx(3 / 3)  # acme,globex,initech all covered now
+    assert probe.verdict(m) is True
+
+    # a wrong crosswalk drags accuracy below the bar → NO-GO
+    m2 = probe.measure({"acme": "banking", "globex": "banking"}, idx, crosswalk, total_registry=3)
+    assert m2["gold_accuracy"] == 0.5
+    assert probe.verdict(m2) is False

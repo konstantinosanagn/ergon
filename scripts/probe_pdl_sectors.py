@@ -175,3 +175,46 @@ def run_join(
             for f in pending:
                 _merge(acc, collisions, f.result())
     return {n: industry for n, (industry, _) in acc.items()}, len(collisions)
+
+
+def measure(
+    matches: dict[str, str], idx: TargetIndex, crosswalk: dict[str, str], *, total_registry: int
+) -> dict:
+    # crosswalk each matched industry → sector (or None = abstain)
+    sectored = {n: crosswalk.get(ind) for n, ind in matches.items()}
+    sectored = {n: s for n, s in sectored.items() if s}  # keep only those with a real label
+
+    # gold accuracy + coverage (measured on the gold display-name overlap)
+    gold_hits = gold_total = 0
+    for n, gold_sector in idx.gold_norm_to_sector.items():
+        s = sectored.get(n)
+        if s is None:
+            continue
+        gold_total += 1
+        if s == gold_sector:
+            gold_hits += 1
+    gold_accuracy = gold_hits / gold_total if gold_total else 0.0
+    gold_coverage = gold_total / len(idx.gold_norm_to_sector) if idx.gold_norm_to_sector else 0.0
+
+    # registry net-new: keys whose norm got a sector AND that key isn't already covered
+    newly = set()
+    for n in sectored:
+        for key in idx.norm_to_keys.get(n, []):
+            if key not in idx.covered_keys:
+                newly.add(key)
+    projected = len(idx.covered_keys | newly) / total_registry if total_registry else 0.0
+
+    return {
+        "gold_accuracy": gold_accuracy,
+        "gold_coverage": gold_coverage,
+        "matched_with_sector": len(sectored),
+        "net_new_keys": len(newly),
+        "current_coverage": len(idx.covered_keys) / total_registry if total_registry else 0.0,
+        "projected_coverage": projected,
+    }
+
+
+def verdict(metrics: dict, *, min_coverage: float = 0.35, min_accuracy: float = 0.724) -> bool:
+    return (
+        metrics["projected_coverage"] >= min_coverage and metrics["gold_accuracy"] >= min_accuracy
+    )
