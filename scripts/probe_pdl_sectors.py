@@ -105,7 +105,7 @@ def join_chunk(lines: list[str], targets: frozenset[str]) -> dict[str, tuple[str
         if n not in targets:
             continue
         prev = out.get(n)
-        if prev is None or comp > prev[1]:
+        if prev is None or comp > prev[1] or (comp == prev[1] and industry < prev[0]):
             out[n] = (industry, comp)
     return out
 
@@ -133,7 +133,7 @@ def _merge(
         else:
             if prev[0] != industry:
                 collisions.add(n)
-            if comp > prev[1]:
+            if comp > prev[1] or (comp == prev[1] and industry < prev[0]):
                 dst[n] = (industry, comp)
 
 

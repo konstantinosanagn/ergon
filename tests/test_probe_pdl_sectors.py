@@ -126,3 +126,17 @@ def test_run_join_memory_bounded_on_large_stream() -> None:
 
     matches, _ = probe.run_join(gen(), targets, workers=1, chunk_size=10_000)
     assert matches == {"acme": "computer software"}
+
+
+def test_run_join_equal_completeness_tie_is_deterministic() -> None:
+    # same normalized name in two chunks, EQUAL completeness, different industries →
+    # deterministic winner (lexicographically smaller industry), inline == parallel.
+    targets = frozenset({"acme"})
+    lines = [
+        json.dumps({"name": "Acme", "industry": "internet"}),
+        json.dumps({"name": "Acme", "industry": "banking"}),
+    ]
+    m1, c1 = probe.run_join(iter(lines), targets, workers=1, chunk_size=1)
+    m2, c2 = probe.run_join(iter(lines), targets, workers=2, chunk_size=1)
+    assert m1 == m2 == {"acme": "banking"}  # "banking" < "internet"
+    assert c1 == c2 == 1  # one collision detected on both paths
