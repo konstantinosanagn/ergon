@@ -144,11 +144,6 @@ def fit_model(feats: np.ndarray, y: list[str], *, folds: int, jobs: int) -> dict
     }
 
 
-def _apply(probs, platt_a, platt_b):
-    cal = 1.0 / (1.0 + np.exp(-(platt_a * probs + platt_b)))
-    return cal / cal.sum(axis=1, keepdims=True)
-
-
 def sweep_thresholds(probs, feats, centroids, y_idx, *, target_precision: float):
     """Vectorized grid over (tau_prob, tau_margin, tau_sim); pick max-coverage point meeting precision."""
     order = np.argsort(-probs, axis=1)
