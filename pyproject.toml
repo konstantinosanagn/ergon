@@ -40,6 +40,8 @@ semantic = ["fastembed>=0.3"]
 serve = ["uvicorn>=0.30"]
 # Offline-only: the Tier-2 token-mint shell (scripts/token_mint.py). Never on the runtime/request path.
 browser = ["playwright>=1.40"]
+# Offline-only: training the sector classifier (scripts/train_sector_classifier.py). Never at runtime.
+sector-train = ["scikit-learn>=1.4", "numpy>=1.26"]
 dev = [
   "pytest>=8",
   "pytest-asyncio>=0.23",
@@ -49,6 +51,7 @@ dev = [
   "ruff>=0.5",
   "mypy>=1.10",
   "openpyxl>=3.1",
+  "numpy>=1.26",
 ]
 
 [project.urls]
