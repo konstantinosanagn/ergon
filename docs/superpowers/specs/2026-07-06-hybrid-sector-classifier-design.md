@@ -97,6 +97,32 @@ sees the prior tier's misses.
   Rebuilt periodically like `sectors.json` — **not per daily build**; multi-GB dumps are downloaded to
   a cache, processed, discarded; only compact artifacts are committed.
 
+## Optimization & stress-testing (cross-cutting, mandatory in EVERY stage)
+Every step is built concurrency-first and memory-bounded, and **stress-tested on a small sample
+before any full run** (the recurring session lesson: the rich-tier OOM came from `fetchall()` on a
+large table + per-worker model copies; the fix was chunked streaming + single-process embedding +
+CI-gated parallelism). Applied here:
+- **Tier 1 data pipeline (`build_sector_gazetteer.py`):** the source dumps are 7–24M rows / multi-GB.
+  **Never load a dump fully into memory** — stream/iterate in chunks (`fetchmany`/line-iterate),
+  join against *our* bounded company set via an in-memory index of just our ~60–100k
+  domains/names (small), and parallelize the independent per-source parse+crosswalk with a bounded
+  `ProcessPoolExecutor` (CI-gated worker count, laptop-safe local default). Downloads run
+  concurrently (bounded). Output is the compact committed artifact; dumps are discarded.
+- **Tier 2 embedding:** batch through fastembed with a bounded batch size, **single-process**
+  embedding (no per-worker model copies), reusing the rich-tier's proven memory-safe pattern; embed
+  only the residual/labeled set, not the world.
+- **Training:** the logreg + CV is cheap; the cost is embedding the labeled set — batch it. Threshold
+  tuning sweeps are vectorized (numpy), not Python loops over records.
+- **Stress-test gates (before any "full" run):** (1) run the data pipeline on a **small sample**
+  (a few thousand rows per source) and assert join/crosswalk correctness + a bounded peak-RSS before
+  the full multi-GB pass; (2) stress the embedding at target scale with a memory watch (assert peak
+  RSS stays bounded, mirroring the rich-tier validation); (3) validate the classifier on the
+  held-out split + 5-fold CV *before* committing to a full retrain on the upgraded labels. Each
+  heavy step logs peak memory + wall time and fails fast if it exceeds a laptop-safe budget.
+- **Laptop safety:** all heavy work (multi-GB joins, at-scale embedding) is **offline/one-time or
+  CI-gated**, never in the per-daily build; local defaults are conservative, aggressive parallelism
+  is env-gated (same pattern as `ERGON_SHARD_WORKERS`/`ERGON_CRAWL_CONCURRENCY`).
+
 ## Constraints honored
 Free · offline · CPU-at-runtime · laptop-safe (heavy data/embedding work is offline/one-time, not in
 the daily build) · deterministic-first (ML is Tier 2, after rules + data-join) · license-clean for
