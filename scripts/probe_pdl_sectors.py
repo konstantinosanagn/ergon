@@ -63,3 +63,115 @@ def load_inputs() -> tuple[dict, dict, list[dict]]:
     sectors = json.loads(SECTORS_PATH.read_text()).get("companies", {})
     gold = [json.loads(ln) for ln in GOLD_PATH.read_text().splitlines() if ln.strip()]
     return seed, sectors, gold
+
+
+import os  # noqa: E402
+from concurrent.futures import ProcessPoolExecutor  # noqa: E402
+
+
+def _workers() -> int:
+    env = os.environ.get("ERGON_PROBE_WORKERS")
+    if env:
+        return int(env)
+    if os.environ.get("CI"):
+        return max(2, (os.cpu_count() or 4) - 2)
+    return 1
+
+
+def record_industry(
+    rec: dict, name_field: str = "name", industry_field: str = "industry"
+) -> tuple[str, str, int] | None:
+    n = norm(rec.get(name_field))
+    if not n:
+        return None
+    completeness = sum(1 for v in rec.values() if v not in (None, "", [], {}))
+    return n, (rec.get(industry_field) or ""), completeness
+
+
+def join_chunk(lines: list[str], targets: frozenset[str]) -> dict[str, tuple[str, int]]:
+    out: dict[str, tuple[str, int]] = {}
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        got = record_industry(rec)
+        if got is None:
+            continue
+        n, industry, comp = got
+        if n not in targets:
+            continue
+        prev = out.get(n)
+        if prev is None or comp > prev[1]:
+            out[n] = (industry, comp)
+    return out
+
+
+# module-level target set for worker processes (set via initializer; avoids re-pickling per chunk)
+_WORKER_TARGETS: frozenset[str] = frozenset()
+
+
+def _init_worker(targets: frozenset[str]) -> None:
+    global _WORKER_TARGETS
+    _WORKER_TARGETS = targets
+
+
+def _join_chunk_worker(lines: list[str]) -> dict[str, tuple[str, int]]:
+    return join_chunk(lines, _WORKER_TARGETS)
+
+
+def _merge(
+    dst: dict[str, tuple[str, int]], collisions: set[str], src: dict[str, tuple[str, int]]
+) -> None:
+    for n, (industry, comp) in src.items():
+        prev = dst.get(n)
+        if prev is None:
+            dst[n] = (industry, comp)
+        else:
+            if prev[0] != industry:
+                collisions.add(n)
+            if comp > prev[1]:
+                dst[n] = (industry, comp)
+
+
+def _chunks(line_iter, size: int):
+    buf: list[str] = []
+    for ln in line_iter:
+        buf.append(ln)
+        if len(buf) >= size:
+            yield buf
+            buf = []
+    if buf:
+        yield buf
+
+
+def run_join(
+    line_iter, targets: frozenset[str], *, workers: int, chunk_size: int = 20000
+) -> tuple[dict[str, str], int]:
+    acc: dict[str, tuple[str, int]] = {}
+    collisions: set[str] = set()
+    if workers <= 1:
+        for chunk in _chunks(line_iter, chunk_size):
+            _merge(acc, collisions, join_chunk(chunk, targets))
+    else:
+        # bounded in-flight submission so we never hold the whole file in pending futures
+        from concurrent.futures import FIRST_COMPLETED, wait
+
+        with ProcessPoolExecutor(
+            max_workers=workers, initializer=_init_worker, initargs=(targets,)
+        ) as pool:
+            gen = _chunks(line_iter, chunk_size)
+            pending: set = set()
+            cap = workers * 2
+            for chunk in gen:
+                pending.add(pool.submit(_join_chunk_worker, chunk))
+                if len(pending) >= cap:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for f in done:
+                        _merge(acc, collisions, f.result())
+            for f in pending:
+                _merge(acc, collisions, f.result())
+    return {n: industry for n, (industry, _) in acc.items()}, len(collisions)

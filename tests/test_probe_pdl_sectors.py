@@ -82,3 +82,47 @@ def test_build_target_index() -> None:
     assert idx.norm_to_keys["acme"] == ["acme"]
     assert idx.covered_keys == {"acme"}  # only acme has a non-null sector
     assert idx.gold_norm_to_sector == {"acme": "Software/SaaS"}  # null-sector gold dropped
+
+
+def test_record_industry_extracts_and_scores() -> None:
+    rec = {"name": "Acme, Inc.", "industry": "computer software", "size": "11-50", "x": ""}
+    out = probe.record_industry(rec)
+    assert out == ("acme", "computer software", 3)  # 3 non-empty values
+    assert probe.record_industry({"industry": "x"}) is None  # no name → None
+
+
+def test_join_chunk_filters_and_keeps_most_complete() -> None:
+    targets = frozenset({"acme", "globex"})
+    lines = [
+        json.dumps({"name": "Acme", "industry": "internet"}),
+        json.dumps({"name": "Acme Inc", "industry": "computer software", "size": "1", "hq": "SF"}),
+        json.dumps({"name": "Nope", "industry": "banking"}),
+    ]
+    got = probe.join_chunk(lines, targets)
+    assert set(got) == {"acme"}  # globex absent, Nope filtered out
+    assert got["acme"][0] == "computer software"  # higher completeness wins
+
+
+def test_run_join_inline_and_parallel_agree() -> None:
+    targets = frozenset({"acme", "globex"})
+    lines = [
+        json.dumps({"name": "Acme", "industry": "internet"}),
+        json.dumps({"name": "Globex", "industry": "banking"}),
+        json.dumps({"name": "Other", "industry": "retail"}),
+    ]
+    m1, c1 = probe.run_join(iter(lines), targets, workers=1, chunk_size=2)
+    m2, c2 = probe.run_join(iter(lines), targets, workers=2, chunk_size=1)
+    assert m1 == m2 == {"acme": "internet", "globex": "banking"}
+
+
+def test_run_join_memory_bounded_on_large_stream() -> None:
+    # 200k synthetic rows, only a few match; peak matches stays tiny (memory-bounded).
+    targets = frozenset({"acme"})
+
+    def gen():
+        for i in range(200_000):
+            yield json.dumps({"name": f"co{i}", "industry": "internet"})
+        yield json.dumps({"name": "Acme", "industry": "computer software"})
+
+    matches, _ = probe.run_join(gen(), targets, workers=1, chunk_size=10_000)
+    assert matches == {"acme": "computer software"}
