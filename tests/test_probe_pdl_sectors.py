@@ -3,8 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CROSSWALK = ROOT / "scripts" / "linkedin_industry_to_sector.json"
+
+probe = pytest.importorskip("scripts.probe_pdl_sectors")
 
 VALID_SECTORS = {
     "AI/ML",
@@ -58,3 +62,23 @@ def test_crosswalk_covers_high_frequency_industries() -> None:
     assert data["semiconductors"] == "Semiconductors/Hardware"
     assert data["hospital & health care"] == "Healthcare"
     assert data["computer games"] == "Gaming"
+
+
+def test_norm_wraps_normalize_company() -> None:
+    assert probe.norm("Acme, Inc.") == "acme"
+    assert probe.norm("") == ""
+    assert probe.norm(None) == ""
+
+
+def test_build_target_index() -> None:
+    seed = {"acme": {"ats": "greenhouse"}, "globex": {"ats": "lever"}, "initech": {"ats": "ashby"}}
+    sectors = {"acme": {"sector": "Software/SaaS"}, "globex": {"sector": None}}
+    gold = [
+        {"company": "Acme Inc", "company_key": "acme", "sector": "Software/SaaS"},
+        {"company": "Globex", "company_key": "globex", "sector": None},
+    ]
+    idx = probe.build_target_index(seed, sectors, gold)
+    assert "acme" in idx.registry_norms and "globex" in idx.registry_norms
+    assert idx.norm_to_keys["acme"] == ["acme"]
+    assert idx.covered_keys == {"acme"}  # only acme has a non-null sector
+    assert idx.gold_norm_to_sector == {"acme": "Software/SaaS"}  # null-sector gold dropped
