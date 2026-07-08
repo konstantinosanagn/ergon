@@ -24,7 +24,7 @@ from ergon_tracker.extract.sector import SectorExtractor
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "sector_corpus.jsonl"
 
 ACCURACY_GATE = 0.68  # accuracy when the extractor returns a sector (measured 0.724)
-COVERAGE_GATE = 0.22  # low floor — coverage is name-limited by design (measured 0.267)
+COVERAGE_GATE = 0.34  # ratcheted after pdl+slug gap-fill merge (measured 0.366)
 
 _EX = SectorExtractor()
 

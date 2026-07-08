@@ -334,3 +334,23 @@ current per-source quality (edgar 71% / wikidata 58% / slug 74%); fold into `scr
 below curated/edgar. (2) Automate/refresh the existing edgar+wikidata+slug pipeline, lift Wikidata's
 58%, and job-weighted brand curation. The probe (`scripts/probe_pdl_sectors.py` + crosswalk) is
 retained as the harness but ships nothing and does not touch `SectorExtractor`/`sectors.json`.
+
+### Sector — precision-gated PDL source SHIPPED (2026-07-08)
+
+Per `docs/superpowers/specs/2026-07-07-precision-gated-pdl-source-design.md` /
+`…/plans/2026-07-07-precision-gated-pdl-source.md`, we shipped the precision-gated lever from the probe:
+`scripts/sector_pdl.py` reuses the probe name-join, keeps only a **curated 13-industry allow-list**
+(biotechnology, pharmaceuticals, banking, insurance, medical devices, hospital & health care,
+oil & energy, utilities, chemicals, mining & metals, mechanical/industrial engineering, semiconductors,
+higher education), and writes committed `scripts/sector_pdl.json` (2,041 entries, **93% gold accuracy**
+on the allow-list overlap). `merge_sectors.py` gained a pure `apply_priority` and adds `pdl` **last**
+(gap-fill: never overrides curated/edgar/wikidata/slug).
+
+**Result — shipped into `sectors.json`.** Re-running the merge (which re-derives all deterministic
+sources) lifted the table **9,430 → 13,624 companies (16.2% → 23% of the 58,078 registry)**: pdl added
+1,343, and slug added 2,851 gap-fills the prior (stale) table lacked. **All additive** — no existing
+label changed (`apply_priority` skips curated keys). On the 700-gold benchmark the merged table is a
+**strict improvement**: accuracy-when-covered **72.4% → 73.4%** (still ≥ 0.68 gate) and coverage
+**26.7% → 36.6%**. `COVERAGE_GATE` ratcheted 0.22 → **0.34** to lock the gain. Build ran single-process
+at **112 MB / 13.8 s** on 7.17M rows (stress gate passed first). Every pdl entry is auditable in
+`sector_pdl.json` with its source LinkedIn industry.
