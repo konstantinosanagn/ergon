@@ -27,6 +27,27 @@ def _load(name: str) -> dict[str, str]:
     return {k: v["sector"] for k, v in data.items() if v.get("sector")}
 
 
+def apply_priority(
+    seed: dict, curated: dict, sources: dict, priority: list[str]
+) -> dict[str, dict]:
+    """Gap-fill non-curated keys: first source in ``priority`` order that has the key wins.
+    ``pdl`` is last, so it only fills keys no higher source covered — it never overrides."""
+    out: dict[str, dict] = {}
+    for key in seed:
+        if key in curated:
+            continue
+        for src in priority:
+            val = sources[src].get(key)
+            if val:
+                out[key] = {
+                    "sector": val,
+                    "domain": seed[key].get("domain"),
+                    "source": src,
+                }
+                break
+    return out
+
+
 def main() -> None:
     apply = "--apply" in sys.argv
     seed = json.loads(SEED.read_text())["companies"]
@@ -37,10 +58,9 @@ def main() -> None:
         "wikidata": _load("sector_wikidata.json"),
         "edgar": _load("sector_edgar.json"),
         "naics": _load("sector_naics.json"),
+        "pdl": _load("sector_pdl.json"),
     }
-    sources["slug"] = {
-        k: s for k in seed if (s := slug_classify(k, seed[k].get("domain")))
-    }
+    sources["slug"] = {k: s for k in seed if (s := slug_classify(k, seed[k].get("domain")))}
 
     # accuracy vs curated gold (overlap)
     print("source     coverage(22k)  acc-vs-curated(overlap)")
@@ -50,22 +70,14 @@ def main() -> None:
         print(f"  {name:9s} {len(m):>7d}        {acc:.0%} (n={len(overlap)})")
 
     # priority merge for companies not already curated. NAICS excluded (36% exact — its
-    # taxonomy can't express tech sectors; would pollute). Data sources before slug heuristic.
-    priority = ["edgar", "wikidata", "slug"]
-    added = {s: 0 for s in priority}
-    for key in seed:
-        if key in curated:
-            continue
-        for src in priority:
-            val = sources[src].get(key)
-            if val:
-                sec["companies"][key] = {
-                    "sector": val,
-                    "domain": seed[key].get("domain"),
-                    "source": src,
-                }
-                added[src] += 1
-                break
+    # taxonomy can't express tech sectors; would pollute). Data sources before slug heuristic;
+    # pdl is LAST (gap-fill only — it fills a key only if no higher source did, never overrides).
+    priority = ["edgar", "wikidata", "slug", "pdl"]
+    filled = apply_priority(seed, curated, sources, priority)
+    sec["companies"].update(filled)
+    added = dict.fromkeys(priority, 0)
+    for rec in filled.values():
+        added[rec["source"]] += 1
 
     total = len(sec["companies"])
     print(f"\nadded by source: {added}")
