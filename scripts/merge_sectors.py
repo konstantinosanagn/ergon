@@ -1,8 +1,10 @@
-"""Merge the deterministic sector sources into sectors.json with priority.
+"""Merge the deterministic sector sources into sectors.json (re-derivable).
 
-Priority: curated (existing sectors.json) > wikidata > edgar > naics > slug-heuristic.
-Reports each source's accuracy vs the curated gold (on overlap) + cross-source agreement
-(a precision proxy on companies the curated set doesn't cover), then fills unclassified.
+Only HAND-CURATED entries (a truthy ``sector`` and NO ``source`` field) are locked; every
+source-tagged entry is re-derived each run from the committed ``sector_*.json`` files, by priority
+``edgar > wikidata > slug > pdl`` (pdl last = gap-fill; naics loaded for the report but excluded from
+the merge — 36% exact). Output is key-sorted so ``--apply`` is byte-idempotent. Reports each source's
+accuracy vs the hand-curated set (on overlap), then rebuilds the table.
 """
 
 from __future__ import annotations
