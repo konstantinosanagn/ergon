@@ -48,11 +48,27 @@ def apply_priority(
     return out
 
 
+def rebuild_table(
+    companies: dict, seed: dict, sources: dict, priority: list[str]
+) -> dict[str, dict]:
+    """Rebuild the sectors table: lock ONLY hand-curated (sourceless) entries and re-derive
+    every source-tagged entry fresh from the sources, so a source correction (e.g. a purged
+    wikidata entry) actually takes effect. Idempotent given the same inputs."""
+    hand = {k: v for k, v in companies.items() if v.get("sector") and not v.get("source")}
+    curated = {k: v["sector"] for k, v in hand.items()}
+    filled = apply_priority(seed, curated, sources, priority)
+    return {**hand, **filled}
+
+
 def main() -> None:
     apply = "--apply" in sys.argv
     seed = json.loads(SEED.read_text())["companies"]
     sec = json.loads(SECTORS.read_text())
-    curated = {k: v["sector"] for k, v in sec["companies"].items() if v.get("sector")}
+    curated = {
+        k: v["sector"]
+        for k, v in sec["companies"].items()
+        if v.get("sector") and not v.get("source")
+    }
 
     sources = {
         "wikidata": _load("sector_wikidata.json"),
@@ -73,11 +89,12 @@ def main() -> None:
     # taxonomy can't express tech sectors; would pollute). Data sources before slug heuristic;
     # pdl is LAST (gap-fill only — it fills a key only if no higher source did, never overrides).
     priority = ["edgar", "wikidata", "slug", "pdl"]
-    filled = apply_priority(seed, curated, sources, priority)
-    sec["companies"].update(filled)
+    sec["companies"] = rebuild_table(sec["companies"], seed, sources, priority)
     added = dict.fromkeys(priority, 0)
-    for rec in filled.values():
-        added[rec["source"]] += 1
+    for v in sec["companies"].values():
+        s = v.get("source")
+        if s in added:
+            added[s] += 1
 
     total = len(sec["companies"])
     print(f"\nadded by source: {added}")
