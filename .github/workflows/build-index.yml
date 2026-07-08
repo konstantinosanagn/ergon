@@ -106,12 +106,13 @@ jobs:
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
           # per-worker model copies), and bounds the cold start via ERGON_RICH_MAX_EMBED — deferred
           # rows count as `missing` and ramp in over subsequent daily runs via sig comparison.
-          # --rich is now opt-in (workflow_dispatch input, default off) so the ~2.4h cold-start
-          # embedding doesn't gate the core-index publish. The daily schedule runs lean until the
-          # core index is confirmed healthy and the rich default is flipped back on.
+          # --rich runs on every SCHEDULED build (core index confirmed healthy; reconcile is
+          # memory-safe + ramp-capped) and stays opt-in for manual workflow_dispatch (rich input,
+          # default off) for controlled testing. The rich tier is a non-fatal add-on: the core index
+          # publishes first and a rich failure never blocks it.
           uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
-            ${{ github.event.inputs.rich == 'true' && '--rich' || '' }}
+            ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }}
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
