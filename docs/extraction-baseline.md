@@ -354,3 +354,26 @@ label changed (`apply_priority` skips curated keys). On the 700-gold benchmark t
 **26.7% → 36.6%**. `COVERAGE_GATE` ratcheted 0.22 → **0.34** to lock the gain. Build ran single-process
 at **112 MB / 13.8 s** on 7.17M rows (stress gate passed first). Every pdl entry is auditable in
 `sector_pdl.json` with its source LinkedIn industry.
+
+### Sector — Wikidata cleanup + re-derivable merge (2026-07-08)
+
+Per `docs/superpowers/specs/2026-07-08-wikidata-cleanup-rederivable-merge-design.md`. A diagnostic found
+the Wikidata source's errors are junk **label-pass** matches (short/generic slugs → unrelated entities),
+headlined by **113 `pornography industry`** hits. Two changes:
+
+1. **Re-derivable merge (the durable win).** `merge_sectors.py` now locks **only the 1,453 hand-curated
+   (sourceless) entries** and re-derives every source-tagged entry (edgar/wikidata/slug/pdl) from the
+   committed source files each run (`rebuild_table`), with **canonical key-sorted output** so `--apply`
+   is byte-**idempotent** from any starting order. Previously every label was frozen as "curated," so no
+   source could ever be corrected; now any source fix takes effect and the table is fully reproducible
+   from (hand-curation + source files). Hand-curation is never touched.
+2. **Wikidata junk purge (`scripts/clean_sector_wikidata.py`, offline).** Drops only the unambiguous
+   junk-industry blacklist (`pornography industry`, 113 entries). **A length-based short-slug guard was
+   evaluated and rejected at runtime** — length can't separate junk (`hud`, `zoo`) from legitimate short
+   names (`2k`=2K Games, `3m`=3M, `abc`=ABC), and it would have wrongly dropped ~484 mostly-correct
+   entries. Deeper label-pass gating needs a Wikidata re-query (out of scope).
+
+**Result.** Table **13,624 → 13,532** (wikidata 1,912 → 1,817; the porn-industry matches drop, ~21
+recovered by lower sources, ~92 correctly fall to unknown). 700-gold **held**: accuracy-when-covered
+73.4% → **73.7%**, coverage 36.6% → **36.4%** (both above gate). The merge's accuracy report is now an
+honest **vs-hand-curated** proxy (was inflated by comparing sources against themselves).
