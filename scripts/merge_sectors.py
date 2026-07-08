@@ -89,7 +89,9 @@ def main() -> None:
     # taxonomy can't express tech sectors; would pollute). Data sources before slug heuristic;
     # pdl is LAST (gap-fill only — it fills a key only if no higher source did, never overrides).
     priority = ["edgar", "wikidata", "slug", "pdl"]
-    sec["companies"] = rebuild_table(sec["companies"], seed, sources, priority)
+    # Canonical (key-sorted) order so the rebuild is byte-deterministic regardless of the input
+    # file's order — makes `--apply` idempotent from any starting point and keeps diffs readable.
+    sec["companies"] = dict(sorted(rebuild_table(sec["companies"], seed, sources, priority).items()))
     added = dict.fromkeys(priority, 0)
     for v in sec["companies"].values():
         s = v.get("source")
