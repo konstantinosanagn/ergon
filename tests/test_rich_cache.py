@@ -81,6 +81,13 @@ def test_rich_cache_rejects_future_schema_version(tmp_path):
     remote = tmp_path / "remote"
     remote.mkdir()
     _publish_rich(remote, tmp_path)
+
+    # Pin BOTH sides of the guard. Asserting only the reject would also pass a guard that rejects
+    # every manifest (e.g. a misspelled `remote.get("shcema_version")` key, which always misses and
+    # falls through to the default) -- so first prove the current version is accepted.
+    ok = RichCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache-ok")
+    assert ok.ensure_fresh() is not None  # current schema_version -> downloaded
+
     man = json.loads((remote / "manifest-vectors.json").read_text())
     man["schema_version"] = RICH_SCHEMA_VERSION + 1  # newer than this client understands
     (remote / "manifest-vectors.json").write_text(json.dumps(man))
