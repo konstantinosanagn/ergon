@@ -107,15 +107,25 @@ jobs:
           # Stable model cache dir (matches the cache step). Explicit path: env values are not
           # shell-expanded, so `~` would be taken literally by fastembed.
           FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
-          ERGON_RICH_MAX_EMBED: "120000"             # rich cold-start ramp: embed budget per run
+          ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
         run: |
           # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
           # per-worker model copies), and bounds the cold start via ERGON_RICH_MAX_EMBED — deferred
           # rows count as `missing` and ramp in over subsequent daily runs via sig comparison.
-          # --rich is MANUAL-ONLY again. The per-run rich cost grows O(total rows): the reconcile
-          # does a FULL FTS5 rebuild every run (rich.py: INSERT INTO job_text_fts VALUES('rebuild'))
-          # plus a growing gz round-trip. Measured 201->243->304 min as the sidecar grew; run 4 would
+          #
+          # The old O(total-rows) growth term is GONE: the sidecar is vectors-only, so there is no
+          # FTS5 'rebuild' rescanning job_text every run. Measured, run 29030371451 (vectors-only,
+          # migrated the legacy sidecar in place): 137 min for the same 120k embeds, against a fitted
+          # 352 min for the FTS-era run 4 — which would have blown the 330-min timeout and, because a
+          # timeout kills the job BEFORE the publish step, taken the CORE index down with it.
+          #
+          # Cap raised 120k -> 250k from that measurement, not a guess. Non-rich baseline F (crawl +
+          # build + publish) = 90 min mean / 111 max over 13 runs; embedding measures ~36 rows/s, so
+          # 250k costs ~116 min: ~207 min typical, ~251 min worst case (F_max + 20% rate pessimism),
+          # inside the 270-min target and well under the 330-min timeout. 300k would breach 270 in the
+          # worst case and 400k would breach 330 — i.e. risk the core publish to save one run.
+          # --rich stays MANUAL-ONLY until the ramp reaches missing == 0.
           # exceed timeout-minutes: 330. A timeout kills the job BEFORE the publish step, so the CORE
           # index would stop publishing too. Re-enable on schedule only after the FTS rebuild is made
           # incremental and the sidecar size is addressed (approaches GitHub's 2GB asset cap).
