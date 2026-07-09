@@ -75,6 +75,33 @@ def test_rich_cache_warm_hit_does_not_redownload(tmp_path):
     assert path2 is not None and path2.read_bytes() == raw1  # untouched -> no re-download happened
 
 
+def test_rich_cache_rejects_future_schema_version(tmp_path):
+    # Forward-compat: when a future build bumps RICH_SCHEMA_VERSION, an older client must fall
+    # back to query-time reranking (None), never crash trying to open a sidecar it can't read.
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _publish_rich(remote, tmp_path)
+    man = json.loads((remote / "manifest-vectors.json").read_text())
+    man["schema_version"] = RICH_SCHEMA_VERSION + 1  # newer than this client understands
+    (remote / "manifest-vectors.json").write_text(json.dumps(man))
+    cache = RichCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
+    assert cache.ensure_fresh() is None  # graceful fallback, no exception
+    assert not cache.db_path.exists()  # never wrote/replaced the local db
+
+
+def test_rich_cache_rejects_corrupt_asset_no_prior_cache(tmp_path):
+    # Manifest is valid but the .sqlite.gz asset is corrupt (bad gzip / partial upload / 404 body).
+    # With no previously-cached good db to fall back to, ensure_fresh must return None and must
+    # not raise or write a local db.
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _publish_rich(remote, tmp_path)
+    (remote / "index-vectors.sqlite.gz").write_bytes(b"not-a-gzip-file")
+    cache = RichCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
+    assert cache.ensure_fresh() is None  # no exception, no fallback available
+    assert not cache.db_path.exists()
+
+
 def test_rich_cache_stale_build_id_triggers_redownload(tmp_path):
     remote = tmp_path / "remote"
     remote.mkdir()

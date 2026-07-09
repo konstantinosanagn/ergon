@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import SCHEMA_VERSION
+from .rich import RICH_SCHEMA_VERSION
 
 log = logging.getLogger("ergon_tracker.index")
 _REPO = "konstantinosanagn/ergon-tracker"
@@ -338,8 +339,6 @@ class RichCache:
 
     def ensure_fresh(self) -> Path | None:
         """Return a verified vectors-sidecar path, or None (caller reranks at query time)."""
-        from .rich import RICH_SCHEMA_VERSION
-
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             fetch = _asset_fetcher(self.base_url, self.repo, self.tag)
