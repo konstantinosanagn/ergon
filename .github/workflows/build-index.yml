@@ -4,7 +4,11 @@ name: build-index
 # SQLite/FTS5 snapshot to the stable `index-latest` release; the SDK downloads + queries it.
 on:
   schedule:
-    - cron: "17 4 * * *"   # 04:17 UTC daily (off-peak minute, not :00)
+    # TEMPORARY rich-ramp burst: every 4h (00:17,04:17,...,20:17 UTC) so the rich sidecar fills.
+    # Measured run = 201 min (crawl + core build + 120k embeds + shards); 4h spacing leaves ~39 min
+    # headroom so runs NEVER overlap — concurrent runs would each carry forward a stale sidecar and
+    # clobber index-rich.sqlite.gz. REVERT to `17 4 * * *` (daily) once reconcile reports missing=0.
+    - cron: "17 */4 * * *"
   workflow_dispatch:
     inputs:
       limit_companies:
