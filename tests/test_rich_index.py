@@ -17,6 +17,7 @@ from ergon_tracker.index.rich import (
     _sig,
     build_rich_tier,
     dequantize_int8,
+    migrate_legacy_rich,
     open_rich,
     quantize_int8,
     reconcile_rich_tier,
@@ -504,3 +505,76 @@ def test_reconcile_from_fresh_handles_missing_capture(tmp_path):
     assert (
         stats["embedded"] == 0 and stats["missing"] == 1
     )  # a is live but uncaptured -> ramps in later
+
+
+# --- legacy-schema migration (Task 2): existing pre-vectors-only sidecars upgrade in place ----------
+def test_migrate_legacy_preserves_vectors_and_is_idempotent(tmp_path):
+    import sqlite3
+
+    p = tmp_path / "legacy.sqlite"
+    con = sqlite3.connect(p)
+    con.executescript(
+        "CREATE TABLE job_text (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, sig TEXT, description TEXT);"
+        "CREATE VIRTUAL TABLE job_text_fts USING fts5(description, content='job_text', content_rowid='rowid');"
+        "CREATE TABLE job_vectors (id TEXT PRIMARY KEY, scale REAL NOT NULL, vec BLOB NOT NULL);"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);"
+    )
+    con.execute("INSERT INTO job_text(id, sig, description) VALUES('x','sig-x','hello')")
+    con.execute("INSERT INTO job_vectors(id, scale, vec) VALUES('x', 0.5, ?)", (b"\x01" * 384,))
+    con.commit()
+
+    moved = migrate_legacy_rich(con)
+    assert moved == 1
+    names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "job_text" not in names and "job_text_fts" not in names
+    row = con.execute("SELECT id, sig, scale, vec FROM job_vectors").fetchone()
+    assert row == ("x", "sig-x", 0.5, b"\x01" * 384)  # vector + sig preserved, nothing recomputed
+    assert migrate_legacy_rich(con) == 0  # idempotent
+
+
+def test_reconcile_from_fresh_migrates_legacy_sidecar_preserves_vectors(tmp_path):
+    """Critical regression: reconcile_rich_tier_from_fresh must not crash on a legacy (pre-Task-1)
+    sidecar — sig-less job_vectors alongside job_text + job_text_fts — and must carry the
+    already-computed vector forward byte-for-byte (never re-embedded) while dropping the legacy
+    tables. This is the end-to-end path a real CI runner hits on its first run after the schema
+    change, not just migrate_legacy_rich() in isolation."""
+    import sqlite3
+
+    a = _job("a", "Python Engineer", "python kubernetes")
+    main = tmp_path / "main.sqlite"
+    build_index([a], main, build_id="b1")
+
+    # hand-build a LEGACY sidecar: old 3-column job_vectors (no sig), job_text, job_text_fts
+    rich = tmp_path / "legacy_rich.sqlite"
+    con = sqlite3.connect(rich)
+    con.executescript(
+        "CREATE TABLE job_text (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, sig TEXT, description TEXT);"
+        "CREATE VIRTUAL TABLE job_text_fts USING fts5(description, content='job_text', content_rowid='rowid');"
+        "CREATE TABLE job_vectors (id TEXT PRIMARY KEY, scale REAL NOT NULL, vec BLOB NOT NULL);"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);"
+    )
+    legacy_sig = _sig(a)
+    legacy_vec = b"\x02" * 384
+    con.execute(
+        "INSERT INTO job_text(id, sig, description) VALUES(?, ?, ?)",
+        (a.id, legacy_sig, a.description_text),
+    )
+    con.execute("INSERT INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", (a.id, 0.5, legacy_vec))
+    con.commit()
+    con.close()
+
+    # fresh capture this run: same job, unchanged sig -> nothing should be re-embedded
+    fresh = tmp_path / "fresh.sqlite"
+    con = sqlite3.connect(fresh)
+    write_fresh_rich(con, [a])
+    con.commit()
+    con.close()
+
+    stats = reconcile_rich_tier_from_fresh(rich, main, fresh, build_id="b2", reranker=FAKE)
+    assert stats == {"pruned": 0, "embedded": 0, "missing": 0}  # carried forward, not re-embedded
+
+    con = open_rich(rich)
+    names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "job_text" not in names and "job_text_fts" not in names  # legacy tables dropped
+    row = con.execute("SELECT id, sig, scale, vec FROM job_vectors").fetchone()
+    assert tuple(row) == (a.id, legacy_sig, 0.5, legacy_vec)  # vector preserved byte-for-byte

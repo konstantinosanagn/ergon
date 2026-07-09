@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 __all__ = [
     "RICH_SCHEMA",
     "build_rich_tier",
+    "migrate_legacy_rich",
     "reconcile_rich_tier",
     "reconcile_rich_tier_from_fresh",
     "write_fresh_rich",
@@ -100,7 +101,7 @@ def build_rich_tier(
     p.unlink(missing_ok=True)
     con = sqlite3.connect(str(p))
     try:
-        con.executescript(RICH_SCHEMA)
+        _ensure_schema(con)
         dim, model = _embed_rows_into(
             con,
             [(j.id, _sig(j), _job_text(j)) for j in jobs],
@@ -157,6 +158,7 @@ def reconcile_rich_tier(
 
     con = sqlite3.connect(str(rich_path))
     try:
+        _ensure_schema(con)  # migrates a legacy (sig-less) sidecar in place before the SELECT below
         have = dict(con.execute("SELECT id, sig FROM job_vectors"))
         orphans = [i for i in have if i not in live_ids]
         _delete_ids(con, orphans)  # the cascade: drop everything the main index dropped
@@ -317,8 +319,7 @@ def reconcile_rich_tier_from_fresh(
 
     con = sqlite3.connect(str(rich_path))
     try:
-        if not Path(rich_path).exists() or not _has_schema(con):
-            con.executescript(RICH_SCHEMA)
+        _ensure_schema(con)  # fresh DB -> create; legacy (sig-less) sidecar -> migrate in place
         # id→sig for every row already in the sidecar. Held in memory by design: ~150MB at 1.4M rows
         # (two short strings each) buys O(1) new/changed detection per fresh row (see docstring).
         have = dict(con.execute("SELECT id, sig FROM job_vectors"))
@@ -391,6 +392,49 @@ def _has_schema(con: sqlite3.Connection) -> bool:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='job_vectors'"
         ).fetchone()
     )
+
+
+def migrate_legacy_rich(con: sqlite3.Connection) -> int:
+    """Upgrade a legacy sidecar (job_text + FTS + sig-less job_vectors) to the vectors-only schema.
+
+    Carries every already-computed embedding forward — sigs come from ``job_text`` when present — so a
+    ramp that cost hours of CI embedding is never recomputed. The ``sig`` column is added whenever it's
+    missing from ``job_vectors``, independent of whether ``job_text`` exists (``_has_schema`` matches on
+    the table name alone, so a legacy DB with no ``sig`` column would otherwise slip past the schema
+    guard and blow up on ``SELECT id, sig FROM job_vectors``). Idempotent: returns 0 once migrated.
+    Runs on the CI runner as part of the reconcile; never on a developer machine."""
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "job_vectors" not in tables:
+        return 0
+    has_sig = "sig" in {r[1] for r in con.execute("PRAGMA table_info(job_vectors)")}
+    if not has_sig:
+        con.execute("ALTER TABLE job_vectors ADD COLUMN sig TEXT")
+    moved = 0
+    if "job_text" in tables:
+        moved = con.execute(
+            "UPDATE job_vectors SET sig = (SELECT t.sig FROM job_text t WHERE t.id = job_vectors.id) "
+            "WHERE sig IS NULL"
+        ).rowcount
+        con.execute("DROP TABLE IF EXISTS job_text_fts")
+        con.execute("DROP TABLE IF EXISTS job_text")
+        con.execute("DROP INDEX IF EXISTS idx_job_text_sig")
+        con.commit()
+        con.execute("VACUUM")  # reclaim the ~87% the text+FTS occupied
+    elif not has_sig:
+        con.commit()  # bare ALTER TABLE on a schema with no job_text to backfill from
+    return moved
+
+
+def _ensure_schema(con: sqlite3.Connection) -> None:
+    """Create the vectors-only schema if absent, else migrate a legacy sidecar in place.
+
+    ``_has_schema`` only checks that a ``job_vectors`` table exists by name — it can't tell a fresh
+    vectors-only DB from a legacy sig-less one — so every builder must route through here rather than
+    trusting that check alone."""
+    if not _has_schema(con):
+        con.executescript(RICH_SCHEMA)
+        return
+    migrate_legacy_rich(con)
 
 
 class VectorIndex:
