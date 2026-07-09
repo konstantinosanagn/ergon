@@ -619,7 +619,18 @@ Update the two print lines (`:833`, `:884`) to say `index-vectors.sqlite.gz`.
 - [ ] **Step 2: Update the workflow**
 
 In `.github/workflows/build-index.yml`:
-- Download step (`:67`) and decompress (`:71`): change the pattern/filename from `index-rich.sqlite.gz` to `index-vectors.sqlite.gz`, and add a `manifest-vectors.json` download.
+- Download step (`:67`) and decompress (`:71`): fetch the new name, and **fall back to the legacy name once** so the existing 360k-row sidecar is picked up on the runner and migrated in place (no local download/re-upload of a 421 MB asset). Replace the rich download+decompress lines with:
+```bash
+          gh release download index-latest --dir dist --pattern 'index-vectors.sqlite.gz' || \
+            gh release download index-latest --dir dist --pattern 'index-rich.sqlite.gz' || echo "no prev rich tier"
+          gh release download index-latest --dir dist --pattern 'manifest-vectors.json' || echo "no prev vectors manifest"
+          # One-time back-compat: the legacy asset carries the pre-migration schema (job_text + FTS).
+          # Rename it into place; `_ensure_schema` detects the legacy tables and migrates on the runner,
+          # preserving every already-computed embedding. Drop this fallback once missing==0.
+          [ -f dist/index-rich.sqlite.gz ] && [ ! -f dist/index-vectors.sqlite.gz ] && \
+            mv dist/index-rich.sqlite.gz dist/index-vectors.sqlite.gz || true
+          [ -f dist/index-vectors.sqlite.gz ] && gunzip -kf dist/index-vectors.sqlite.gz || true
+```
 - ASSETS list (`:135`): replace `index-rich.sqlite.gz` with `index-vectors.sqlite.gz manifest-vectors.json`.
 
 - [ ] **Step 3: Verify locally (no CI spend, no embedding)**
@@ -653,16 +664,11 @@ Expected: all PASS. These use `FAKE = FakeReranker()` — **no real embedding, n
 
 - [ ] **Step 2: CI migration dry-run against the real sidecar**
 
-Trigger one manual rich build:
+Trigger one manual rich build **from this branch** (`workflow_dispatch` runs the workflow file at the given ref; without `--ref` it would run main's old workflow, which looks for the legacy asset name):
 ```bash
-gh workflow run build-index.yml -f rich=true
+gh workflow run build-index.yml --ref rich-vectors-only -f rich=true
 ```
-It downloads the legacy 421.9 MB `index-rich.sqlite.gz`… which no longer matches the new download pattern. **Therefore, before triggering:** manually seed the new asset name once, on the runner's behalf, by renaming the release asset:
-```bash
-gh release download index-latest --pattern 'index-rich.sqlite.gz' --dir /tmp/richmig
-gh release upload index-latest /tmp/richmig/index-rich.sqlite.gz#index-vectors.sqlite.gz --clobber
-```
-The build then downloads it as `index-vectors.sqlite.gz`, `_ensure_schema` detects the legacy `job_text` table, `migrate_legacy_rich` carries the 360k vectors + sigs forward, drops the text/FTS tables, and `VACUUM`s. Confirm from the run log:
+The workflow's back-compat download (Task 5) fetches the legacy 421.9 MB asset and renames it into place on the runner. `_ensure_schema` detects the legacy `job_text` table, `migrate_legacy_rich` carries the 360k vectors + sigs forward, drops the text/FTS tables, and `VACUUM`s. **No asset is downloaded to or uploaded from the developer machine.** Confirm from the run log:
 - `rich tier (pruned=… embedded=… missing=…)` printed, **and** the resulting `index-vectors.sqlite.gz` is far smaller (expect ~150–200 MB gz, down from 421.9 MB — the text was 87%).
 - The **core index still published** (`gh release view index-latest` shows a fresh `index.sqlite.gz`).
 
@@ -696,7 +702,7 @@ If Task 6's run shows peak RSS comfortably under the runner's limit and duration
 
 - [ ] **Step 3: Run the remaining passes, one at a time**
 
-For each pass: `gh workflow run build-index.yml -f rich=true`, wait for completion, then verify `missing` decreased by ≈N and the core index published. **Halt immediately** if `missing` fails to drop, a run exceeds 270 min, or the core index does not publish. Repeat until `missing == 0`.
+For each pass: `gh workflow run build-index.yml --ref rich-vectors-only -f rich=true` (use `--ref main` once the branch is merged), wait for completion, then verify `missing` decreased by ≈N and the core index published. **Halt immediately** if `missing` fails to drop, a run exceeds 270 min, or the core index does not publish. Repeat until `missing == 0`.
 
 - [ ] **Step 4: Re-enable rich on the daily schedule**
 
