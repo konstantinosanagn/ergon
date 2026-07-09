@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from ..models import JobPosting, SearchQuery
+from ..semantic import get_semantic_reranker
 from .backend import ShardedIndexBackend, SqliteIndexBackend
-from .cache import IndexCache, ShardCache, SlimCache
+from .cache import IndexCache, RichCache, ShardCache, SlimCache
 
 log = logging.getLogger("ergon_tracker.index")
 
@@ -79,6 +81,47 @@ def try_index(query: SearchQuery) -> list[JobPosting] | None:
         return None
 
 
+def _rich_path() -> Path | None:
+    """Path to the cached vectors sidecar, or None (caller reranks at query time)."""
+    return RichCache().ensure_fresh()
+
+
+def _vector_rerank(
+    query: SearchQuery, pool: list[JobPosting], want: int
+) -> list[JobPosting] | None:
+    """Rank ``pool`` by cosine against PRE-STORED vectors; embed only the uncovered remainder.
+
+    One query embedding instead of ~200 document embeddings. ``vector_search`` silently drops ids the
+    sidecar doesn't cover, so during the ramp the uncovered remainder is embedded at query time and
+    scored by cosine against the SAME query vector — both score sets share one cosine scale and sort
+    together, so an uncovered job is interleaved by its true similarity (never dropped, never forced
+    to an arbitrary end). Returns None when no sidecar is available (caller falls back to query-time
+    rerank / lexical order). Never builds ``VectorIndex`` — the candidate-restricted ``vector_search``
+    reads only the pool's rows, whereas ``VectorIndex`` would materialize every vector as float32
+    (~2.26 GB at 1.47M jobs).
+    """
+    path = _rich_path()
+    if path is None:
+        return None
+    from ..semantic import _cosine
+    from .rich import open_rich, vector_search
+
+    reranker = get_semantic_reranker()
+    qvec = reranker.embed_query(query.keywords or "")
+    con = open_rich(path)
+    try:
+        scored = dict(vector_search(con, qvec, limit=len(pool), candidate_ids=[j.id for j in pool]))
+    finally:
+        con.close()
+    uncovered = [j for j in pool if j.id not in scored]
+    if uncovered:  # ramp not finished: embed the remainder at query time (same cosine scale)
+        for j, dv in zip(uncovered, reranker.embed_jobs(uncovered), strict=True):
+            scored[j.id] = _cosine(qvec, dv)
+    for j in pool:
+        j.score = scored.get(j.id, 0.0)
+    return sorted(pool, key=lambda j: j.score if j.score is not None else 0.0, reverse=True)[:want]
+
+
 def try_index_ranked(query: SearchQuery) -> list[JobPosting] | None:
     """try_index + semantic rerank when query.semantic — the full index serving path.
 
@@ -91,14 +134,21 @@ def try_index_ranked(query: SearchQuery) -> list[JobPosting] | None:
     if indexed is None:
         return None
     if query.semantic and query.keywords and len(indexed) > 1:
-        # Rerank a WIDER candidate pool from the index by embedding similarity, then truncate.
+        # Rerank a WIDER candidate pool. Prefer PRE-STORED vectors (one query embedding); fall back
+        # to query-time document embedding, then to the index's lexical order.
         try:
             from ..ranking import rank
-            from ..semantic import get_semantic_reranker
+            from ..semantic import get_semantic_reranker  # local re-lookup: the fallback stays
+            # patchable via the semantic module (see test_try_index_ranked_semantic_degrades_gracefully)
 
             want = query.limit or 20
             pool = try_index(query.model_copy(update={"limit": max(want * 10, 200)})) or indexed
-            indexed = rank(pool, query.keywords, reranker=get_semantic_reranker())[:want]
+            ranked = _vector_rerank(query, pool, want)
+            indexed = (
+                ranked
+                if ranked is not None
+                else rank(pool, query.keywords, reranker=get_semantic_reranker())[:want]
+            )
         except Exception as exc:  # noqa: BLE001 - reranker optional; lexical order is fine
             log.warning("semantic rerank on index unavailable (%s); lexical order", exc)
     return indexed
