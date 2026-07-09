@@ -4,11 +4,13 @@ name: build-index
 # SQLite/FTS5 snapshot to the stable `index-latest` release; the SDK downloads + queries it.
 on:
   schedule:
-    # TEMPORARY rich-ramp burst: every 4h (00:17,04:17,...,20:17 UTC) so the rich sidecar fills.
-    # Measured run = 201 min (crawl + core build + 120k embeds + shards); 4h spacing leaves ~39 min
-    # headroom so runs NEVER overlap — concurrent runs would each carry forward a stale sidecar and
-    # clobber index-rich.sqlite.gz. REVERT to `17 4 * * *` (daily) once reconcile reports missing=0.
-    - cron: "17 */4 * * *"
+    # TEMPORARY rich-ramp burst: every 3h so the rich sidecar fills back-to-back.
+    # Overlap is impossible regardless of spacing — the `concurrency: build-index` group below
+    # serializes runs (a new run stays *pending* until the in-flight one finishes, then starts
+    # immediately). Measured run = 201 min, so a 3h cron keeps exactly one run pending at all times
+    # => continuous execution, zero idle gap, and no stale-sidecar clobbering.
+    # REVERT to `17 4 * * *` (daily) once reconcile reports missing=0.
+    - cron: "17 */3 * * *"
   workflow_dispatch:
     inputs:
       limit_companies:
