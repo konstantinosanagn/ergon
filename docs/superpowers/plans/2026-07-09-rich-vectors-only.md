@@ -631,7 +631,14 @@ In `.github/workflows/build-index.yml`:
             mv dist/index-rich.sqlite.gz dist/index-vectors.sqlite.gz || true
           [ -f dist/index-vectors.sqlite.gz ] && gunzip -kf dist/index-vectors.sqlite.gz || true
 ```
-- ASSETS list (`:135`): replace `index-rich.sqlite.gz` with `index-vectors.sqlite.gz manifest-vectors.json`.
+- ASSETS list (`:135`): replace `index-rich.sqlite.gz` with `manifest-vectors.json`, and add
+  `index-vectors.sqlite.gz` only when `dist/manifest-vectors.json` also exists.
+  **Why the guard:** `--rich` is manual-only, so every *scheduled* run is non-rich. It renames the
+  legacy `index-rich.sqlite.gz` to `index-vectors.sqlite.gz` on the runner (so a later rich run can
+  migrate it) but never regenerates it and never writes `manifest-vectors.json`. Listing the db
+  unconditionally would publish a legacy schema-v2 database under a name promising
+  `RICH_SCHEMA_VERSION = 3`. Only a rich build writes db and manifest together, so pair them at
+  publish. (Found in the Task-5 review; the original plan text mandated the unguarded list.)
 
 - [ ] **Step 3: Verify locally (no CI spend, no embedding)**
 
