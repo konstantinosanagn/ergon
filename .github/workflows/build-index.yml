@@ -64,11 +64,18 @@ jobs:
           gh release download index-latest --dir dist --pattern 'crawl_cursor.json' || echo "no cursor"
           gh release download index-latest --dir dist --pattern 'deltas.json' || echo "no deltas window"
           gh release download index-latest --dir dist --pattern 'spec_health.json' || echo "no spec health"
-          gh release download index-latest --dir dist --pattern 'index-rich.sqlite.gz' || echo "no prev rich tier"
+          gh release download index-latest --dir dist --pattern 'index-vectors.sqlite.gz' || \
+            gh release download index-latest --dir dist --pattern 'index-rich.sqlite.gz' || echo "no prev rich tier"
+          gh release download index-latest --dir dist --pattern 'manifest-vectors.json' || echo "no prev vectors manifest"
           [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
-          # decompress the persisted rich sidecar so the incremental reconcile carries forward its
-          # text+vectors (only new/changed postings re-embed); absent on first run -> built cold.
-          [ -f dist/index-rich.sqlite.gz ] && gunzip -kf dist/index-rich.sqlite.gz || true
+          # decompress the persisted vectors sidecar so the incremental reconcile carries forward its
+          # embeddings (only new/changed postings re-embed); absent on first run -> built cold.
+          # One-time back-compat: the legacy asset carries the pre-migration schema (job_text + FTS).
+          # Rename it into place; `_ensure_schema` detects the legacy tables and migrates on the runner,
+          # preserving every already-computed embedding. Drop this fallback once missing==0.
+          [ -f dist/index-rich.sqlite.gz ] && [ ! -f dist/index-vectors.sqlite.gz ] && \
+            mv dist/index-rich.sqlite.gz dist/index-vectors.sqlite.gz || true
+          [ -f dist/index-vectors.sqlite.gz ] && gunzip -kf dist/index-vectors.sqlite.gz || true
 
       # Stream B Tier-2: re-mint expired/near-expiry session tokens BEFORE the crawl, so token_ref
       # apicapture specs replay with a fresh token. Opt-in (only when a validated tier2_mint.json
@@ -132,7 +139,7 @@ jobs:
           # some), so one missing file never fails the whole publish.
           ASSETS=""
           for f in index.sqlite.gz manifest.json index-slim.sqlite.gz manifest-slim.json \
-                   index-rich.sqlite.gz \
+                   index-vectors.sqlite.gz manifest-vectors.json \
                    index-delta.sqlite.gz manifest-delta.json deltas.json \
                    gates.json board_state.json history.jsonl spec_health.json rediscover_queue.json \
                    shards.json coverage.json INDEX_STATUS.md crawl_cursor.json; do
