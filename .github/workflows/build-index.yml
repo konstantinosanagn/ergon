@@ -4,13 +4,7 @@ name: build-index
 # SQLite/FTS5 snapshot to the stable `index-latest` release; the SDK downloads + queries it.
 on:
   schedule:
-    # TEMPORARY rich-ramp burst: every 3h so the rich sidecar fills back-to-back.
-    # Overlap is impossible regardless of spacing — the `concurrency: build-index` group below
-    # serializes runs (a new run stays *pending* until the in-flight one finishes, then starts
-    # immediately). Measured run = 201 min, so a 3h cron keeps exactly one run pending at all times
-    # => continuous execution, zero idle gap, and no stale-sidecar clobbering.
-    # REVERT to `17 4 * * *` (daily) once reconcile reports missing=0.
-    - cron: "17 */3 * * *"
+    - cron: "17 4 * * *"   # 04:17 UTC daily (off-peak minute, not :00)
   workflow_dispatch:
     inputs:
       limit_companies:
@@ -112,13 +106,15 @@ jobs:
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
           # per-worker model copies), and bounds the cold start via ERGON_RICH_MAX_EMBED — deferred
           # rows count as `missing` and ramp in over subsequent daily runs via sig comparison.
-          # --rich runs on every SCHEDULED build (core index confirmed healthy; reconcile is
-          # memory-safe + ramp-capped) and stays opt-in for manual workflow_dispatch (rich input,
-          # default off) for controlled testing. The rich tier is a non-fatal add-on: the core index
-          # publishes first and a rich failure never blocks it.
+          # --rich is MANUAL-ONLY again. The per-run rich cost grows O(total rows): the reconcile
+          # does a FULL FTS5 rebuild every run (rich.py: INSERT INTO job_text_fts VALUES('rebuild'))
+          # plus a growing gz round-trip. Measured 201->243->304 min as the sidecar grew; run 4 would
+          # exceed timeout-minutes: 330. A timeout kills the job BEFORE the publish step, so the CORE
+          # index would stop publishing too. Re-enable on schedule only after the FTS rebuild is made
+          # incremental and the sidecar size is addressed (approaches GitHub's 2GB asset cap).
           uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
-            ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }}
+            ${{ github.event.inputs.rich == 'true' && '--rich' || '' }}
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
