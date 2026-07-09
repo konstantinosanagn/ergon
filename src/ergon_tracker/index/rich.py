@@ -1,18 +1,19 @@
-"""Rich index tier — full descriptions (FTS) + pre-stored quantized embeddings (vector search).
+"""Rich index tier — vectors-only sidecar: pre-stored quantized embeddings for vector search at scale.
 
 The default index stores only a 300-char ``snippet`` and embeds at query time. This **sidecar tier**,
-keyed by job id and built alongside the main index, closes two gaps:
+keyed by job id and built alongside the main index, pre-stores **one embedding per job**, computed once
+at build time and **int8-quantized** (cosine is scale-invariant, so int8 holds fidelity within ~1e-3
+while cutting a 384-dim vector from 1536 B float32 → ~389 B). Query time embeds only the query and does
+a single numpy mat-vec over stored vectors — no per-result model inference.
 
-1. **Full-text over whole job descriptions** — the complete ``description_text`` in its own FTS5 table,
-   so a keyword search matches the entire posting, not just the first 300 chars.
-2. **Pre-stored embeddings (vector search at scale)** — one embedding per job, computed once at build
-   time and **int8-quantized** (cosine is scale-invariant, so int8 holds fidelity within ~1e-3 while
-   cutting a 384-dim vector from 1536 B float32 → ~389 B). Query time embeds only the query and does a
-   single numpy mat-vec over stored vectors — no per-result model inference.
+**Heavy + opt-in**: published as ``index-rich.sqlite.gz``, downloaded only when a query needs semantic
+depth, joined to the main index by ``id``. This never bloats the default/slim index and needs no
+migration of the main ``jobs`` schema.
 
-Both are **heavy + opt-in**: published as ``index-rich.sqlite.gz``, downloaded only when a query needs
-full-text/semantic depth, joined to the main index by ``id``. This never bloats the default/slim index
-and needs no migration of the main ``jobs`` schema.
+(Previously this tier also stored full descriptions in an FTS5 table for full-text search. That was
+dropped — the FTS5 ``'rebuild'`` command is O(total rows) *every run*, which grew CI build time
+201→243→304 min and would have exceeded the timeout. ``sig`` moved onto ``job_vectors`` so
+change-detection survives without it.)
 """
 
 from __future__ import annotations
@@ -31,7 +32,6 @@ __all__ = [
     "reconcile_rich_tier",
     "reconcile_rich_tier_from_fresh",
     "write_fresh_rich",
-    "fulltext_search",
     "vector_search",
     "VectorIndex",
     "quantize_int8",
@@ -40,15 +40,10 @@ __all__ = [
     "rich_meta",
 ]
 
+RICH_SCHEMA_VERSION = 3  # 3 = vectors-only (job_text/FTS removed); bump to reject stale assets
 RICH_SCHEMA = """
-CREATE TABLE job_text (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, sig TEXT, description TEXT);
-CREATE VIRTUAL TABLE job_text_fts USING fts5(
-  description, content='job_text', content_rowid='rowid',
-  tokenize="porter unicode61 remove_diacritics 2"
-);
-CREATE TABLE job_vectors (id TEXT PRIMARY KEY, scale REAL NOT NULL, vec BLOB NOT NULL);
+CREATE TABLE job_vectors (id TEXT PRIMARY KEY, sig TEXT, scale REAL NOT NULL, vec BLOB NOT NULL);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
-CREATE INDEX idx_job_text_sig ON job_text(sig);
 """
 
 
@@ -95,20 +90,23 @@ def build_rich_tier(
     reranker: SemanticReranker | None = None,
     batch: int = 256,
 ) -> int:
-    """Build the rich sidecar: full descriptions + FTS + pre-stored int8 embeddings. Returns row count.
+    """Build the rich sidecar: pre-stored int8 embeddings, keyed by id with ``sig``. Returns row count.
 
     ``reranker`` is injectable (tests pass a fake to avoid loading the ONNX model); production uses the
     memoized :func:`ergon_tracker.semantic.get_semantic_reranker`. Embedding is batched to bound memory."""
+    from ..semantic import _job_text
+
     p = Path(path)
     p.unlink(missing_ok=True)
     con = sqlite3.connect(str(p))
     try:
         con.executescript(RICH_SCHEMA)
-        _upsert_text(con, jobs)
-        con.execute(
-            "INSERT INTO job_text_fts(job_text_fts) VALUES('rebuild')"
-        )  # external-content FTS
-        dim, model = _embed_into(con, jobs, reranker=reranker, batch=batch)
+        dim, model = _embed_rows_into(
+            con,
+            [(j.id, _sig(j), _job_text(j)) for j in jobs],
+            reranker=reranker,
+            batch=batch,
+        )
         for k, v in (
             ("build_id", build_id),
             ("dim", str(dim)),
@@ -139,7 +137,7 @@ def reconcile_rich_tier(
       • **re-embed only NEW or CHANGED jobs** (``sig`` differs — sig folds content_hash + the full
         description, so a description-only edit re-embeds too), reusing every carried-forward vector.
     ``fresh_jobs`` = this build's crawled postings (the only ids that can be new/changed; carried-forward
-    ids are unchanged by definition, so their stored text+vector stay valid). Returns
+    ids are unchanged by definition, so their stored vector stays valid). Returns
     ``{pruned, embedded, missing}`` (``missing`` = live ids in the main index that this tier still can't
     represent because they weren't in ``fresh_jobs`` — a coverage gap worth alerting on)."""
     main = sqlite3.connect(f"file:{main_index_path}?mode=ro", uri=True)
@@ -155,19 +153,24 @@ def reconcile_rich_tier(
         build_rich_tier(keep, rich_path, build_id=build_id, reranker=reranker, batch=batch)
         return {"pruned": 0, "embedded": len(keep), "missing": len(live_ids - {j.id for j in keep})}
 
+    from ..semantic import _job_text
+
     con = sqlite3.connect(str(rich_path))
     try:
-        have = dict(con.execute("SELECT id, sig FROM job_text"))
+        have = dict(con.execute("SELECT id, sig FROM job_vectors"))
         orphans = [i for i in have if i not in live_ids]
         _delete_ids(con, orphans)  # the cascade: drop everything the main index dropped
 
         # re-embed crawled jobs that are live AND new-or-changed (sig folds content_hash + description,
-        # so a description-only edit re-embeds too); carried-forward ids keep their stored text+vector.
+        # so a description-only edit re-embeds too); carried-forward ids keep their stored vector.
         rebuild = [j for j in fresh_jobs if j.id in live_ids and have.get(j.id) != _sig(j)]
         _delete_ids(con, [j.id for j in rebuild])  # clear stale rows before re-inserting
-        _upsert_text(con, rebuild)
-        _embed_into(con, rebuild, reranker=reranker, batch=batch)
-        con.execute("INSERT INTO job_text_fts(job_text_fts) VALUES('rebuild')")
+        _embed_rows_into(
+            con,
+            [(j.id, _sig(j), _job_text(j)) for j in rebuild],
+            reranker=reranker,
+            batch=batch,
+        )
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('build_id', ?)", (build_id,))
         con.commit()
 
@@ -181,13 +184,6 @@ def reconcile_rich_tier(
         }
     finally:
         con.close()
-
-
-def _upsert_text(con: sqlite3.Connection, jobs: list[JobPosting]) -> None:
-    con.executemany(
-        "INSERT OR REPLACE INTO job_text(id, sig, description) VALUES(?, ?, ?)",
-        [(j.id, _sig(j), j.description_text or "") for j in jobs],
-    )
 
 
 _PARALLEL_MIN = 2000  # below this, multiprocessing spawn overhead outweighs the parallelism
@@ -204,79 +200,38 @@ def _auto_parallel(n: int) -> int | None:
     return 0 if os.environ.get("CI") else None
 
 
-def _embed_into(
-    con: sqlite3.Connection,
-    jobs: list[JobPosting],
-    *,
-    reranker: SemanticReranker | None,
-    batch: int,
-    parallel: int | None = None,
-) -> tuple[int, str]:
-    """Data-parallel embed + STREAM-quantize-store int8 vectors (memory-bounded). Returns (dim, model).
-
-    Concurrency: embedding is the CPU-bound cost; we hand the whole corpus to fastembed with
-    ``parallel`` (auto = all cores for a sizable build, single for small/test sets) so ONNX inference
-    fans across worker processes, and we consume the result stream — never materializing all vectors."""
-    if not jobs:
-        return 0, getattr(reranker, "model_name", "?")
-    if reranker is None:
-        from ..semantic import get_semantic_reranker
-
-        reranker = get_semantic_reranker()
-    par = parallel if parallel is not None else _auto_parallel(len(jobs))
-    dim = 0
-    buf: list[tuple[str, float, bytes]] = []
-    for job, vec in reranker.embed_jobs_iter(jobs, batch_size=batch, parallel=par):
-        scale, blob = quantize_int8(vec)
-        dim = dim or len(vec)
-        buf.append((job.id, scale, blob))
-        if len(buf) >= 1000:  # bounded write batches -> bounded memory regardless of corpus size
-            con.executemany(
-                "INSERT OR REPLACE INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", buf
-            )
-            buf = []
-    if buf:
-        con.executemany("INSERT OR REPLACE INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", buf)
-    return dim, getattr(reranker, "model_name", "?")
-
-
-# --- incremental (streaming cron) path: capture fresh text on disk, reconcile from it -------------
+# --- incremental (streaming cron) path: capture fresh embed text on disk, reconcile from it --------
 FRESH_RICH_SCHEMA = (
-    "CREATE TABLE IF NOT EXISTS fresh_rich "
-    "(id TEXT PRIMARY KEY, sig TEXT, description TEXT, embed_text TEXT)"
+    "CREATE TABLE IF NOT EXISTS fresh_rich (id TEXT PRIMARY KEY, sig TEXT, embed_text TEXT)"
 )
 
 
 def write_fresh_rich(con: sqlite3.Connection, jobs: list[JobPosting]) -> None:
-    """Capture ``(id, sig, description, embed_text)`` for freshly-crawled jobs into the streaming fresh
-    DB. The main index truncates to a 300-char snippet, so this is how the incremental rich reconcile
-    gets FULL descriptions — on disk, bounded to the crawl window, never holding jobs in memory.
-    ``embed_text`` is the exact representation :func:`semantic._job_text` embeds, so a stored vector
-    matches a query-time rerank."""
+    """Capture ``(id, sig, embed_text)`` for freshly-crawled jobs into the streaming fresh DB — on
+    disk, bounded to the crawl window, never holding jobs in memory. ``embed_text`` is the exact
+    representation :func:`semantic._job_text` embeds, so a stored vector matches a query-time rerank.
+    (``description`` was only ever FTS input; dropping it shrinks the fresh DB's I/O per run.)"""
     from ..semantic import _job_text
 
     con.execute(FRESH_RICH_SCHEMA)
     con.executemany(
-        "INSERT OR REPLACE INTO fresh_rich(id, sig, description, embed_text) VALUES(?, ?, ?, ?)",
-        [(j.id, _sig(j), j.description_text or "", _job_text(j)) for j in jobs],
+        "INSERT OR REPLACE INTO fresh_rich(id, sig, embed_text) VALUES(?, ?, ?)",
+        [(j.id, _sig(j), _job_text(j)) for j in jobs],
     )
 
 
 def _embed_rows_into(
     con: sqlite3.Connection,
-    rows: list[tuple[str, str]],
+    rows: list[tuple[str, str, str]],
     *,
     reranker: SemanticReranker | None,
     batch: int,
     single_process: bool = False,
 ) -> tuple[int, str]:
-    """Embed ``(id, embed_text)`` rows (streamed) → upsert int8 vectors. Returns (dim, model).
+    """Embed ``(id, sig, embed_text)`` rows (streamed) → upsert int8 vectors. Returns (dim, model).
 
-    ``single_process=True`` hardwires ``parallel=None`` — no fastembed worker processes, ever
-    (each worker loads its own ~67MB ONNX model; on a memory-constrained CI runner 8-16 workers
-    is ~0.5GB+ of pure model copies). ONNX intra-op *threads* still apply, so this keeps most of
-    the throughput without the per-process memory multiplier. The incremental reconcile path
-    always sets it; the standalone full-build path keeps :func:`_auto_parallel`."""
+    ``single_process=True`` hardwires ``parallel=None`` — no fastembed worker processes, ever (each
+    worker loads its own ~67MB ONNX model). The reconcile path always sets it."""
     if not rows:
         return 0, getattr(reranker, "model_name", "?")
     if reranker is None:
@@ -284,23 +239,24 @@ def _embed_rows_into(
 
         reranker = get_semantic_reranker()
     par = None if single_process else _auto_parallel(len(rows))
-    ids = [r[0] for r in rows]
-    texts = [r[1] for r in rows]
+    texts = [r[2] for r in rows]
     dim = 0
-    buf: list[tuple[str, float, bytes]] = []
-    for jid, vec in zip(
-        ids, reranker.embed_texts_iter(texts, batch_size=batch, parallel=par), strict=True
+    buf: list[tuple[str, str, float, bytes]] = []
+    for (jid, sig, _), vec in zip(
+        rows, reranker.embed_texts_iter(texts, batch_size=batch, parallel=par), strict=True
     ):
         scale, blob = quantize_int8(vec)
         dim = dim or len(vec)
-        buf.append((jid, scale, blob))
+        buf.append((jid, sig, scale, blob))
         if len(buf) >= 1000:
             con.executemany(
-                "INSERT OR REPLACE INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", buf
+                "INSERT OR REPLACE INTO job_vectors(id, sig, scale, vec) VALUES(?, ?, ?, ?)", buf
             )
             buf = []
     if buf:
-        con.executemany("INSERT OR REPLACE INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", buf)
+        con.executemany(
+            "INSERT OR REPLACE INTO job_vectors(id, sig, scale, vec) VALUES(?, ?, ?, ?)", buf
+        )
     return dim, getattr(reranker, "model_name", "?")
 
 
@@ -331,22 +287,20 @@ def reconcile_rich_tier_from_fresh(
     max_embed_per_run: int | None | Literal["auto"] = "auto",
 ) -> dict[str, int]:
     """Incremental (cron) cascade — same contract as :func:`reconcile_rich_tier` but reads the freshly-
-    crawled ``(id, sig, description, embed_text)`` from the streaming fresh DB (disk, memory-safe via
+    crawled ``(id, sig, embed_text)`` from the streaming fresh DB (disk, memory-safe via
     :func:`write_fresh_rich`) instead of an in-memory job list. The main index is the source of truth
     for live ids; orphans are pruned; only new/changed fresh rows (``sig`` differs) re-embed; every
-    carried-forward id keeps the text+vector already in the persisted sidecar. Returns
+    carried-forward id keeps the vector already in the persisted sidecar. Returns
     ``{pruned, embedded, missing}`` (``missing`` = live ids not yet represented — they fill in as the
     rotating crawl window reaches them).
 
     **Memory model (the OOM fix for run 28070765535):** ``fresh_rich`` is never ``fetchall()``'d —
-    at ~1.2M rows × ~5-6KB of description+embed_text that is 6-7GB resident. Instead the cursor is
-    drained with ``fetchmany(chunk_size)`` and each chunk is fully processed (filter → delete stale →
-    upsert text → embed via :func:`_embed_rows_into` with ``single_process=True``, so no per-worker
-    model copies) before the next fetch: peak memory is O(chunk), not O(corpus). The ``have``
-    ``{id: sig}`` map *is* held in memory deliberately — two short strings per row is ~150MB at 1.4M
-    ids, a fine trade for O(1) change detection versus a per-row SQL lookup. The FTS index is rebuilt
-    ONCE after all chunks (it scans the whole ``job_text`` table, so per-chunk rebuilds would be
-    quadratic).
+    at ~1.2M rows that would be several GB resident. Instead the cursor is drained with
+    ``fetchmany(chunk_size)`` and each chunk is fully processed (filter → delete stale → embed via
+    :func:`_embed_rows_into` with ``single_process=True``, so no per-worker model copies) before the
+    next fetch: peak memory is O(chunk), not O(corpus). The ``have`` ``{id: sig}`` map *is* held in
+    memory deliberately — two short strings per row is ~150MB at 1.4M ids, a fine trade for O(1)
+    change detection versus a per-row SQL lookup.
 
     **Bounded cold-start ramp:** ``max_embed_per_run`` caps total embedded rows across chunks
     (``"auto"`` → ``ERGON_RICH_MAX_EMBED`` env, else 120k on CI, else unlimited). Once the cap hits,
@@ -367,7 +321,7 @@ def reconcile_rich_tier_from_fresh(
             con.executescript(RICH_SCHEMA)
         # id→sig for every row already in the sidecar. Held in memory by design: ~150MB at 1.4M rows
         # (two short strings each) buys O(1) new/changed detection per fresh row (see docstring).
-        have = dict(con.execute("SELECT id, sig FROM job_text"))
+        have = dict(con.execute("SELECT id, sig FROM job_vectors"))
         orphans = [i for i in have if i not in live_ids]
         _delete_ids(con, orphans)
 
@@ -378,7 +332,7 @@ def reconcile_rich_tier_from_fresh(
         fresh = sqlite3.connect(f"file:{fresh_db_path}?mode=ro", uri=True)
         try:
             try:
-                cur = fresh.execute("SELECT id, sig, description, embed_text FROM fresh_rich")
+                cur = fresh.execute("SELECT id, sig, embed_text FROM fresh_rich")
             except sqlite3.OperationalError:
                 cur = None  # capture was off this run → prune-only reconcile
             while cur is not None:
@@ -398,13 +352,9 @@ def reconcile_rich_tier_from_fresh(
                 if not chunk:
                     continue
                 _delete_ids(con, [r[0] for r in chunk])  # clear stale rows before re-inserting
-                con.executemany(
-                    "INSERT OR REPLACE INTO job_text(id, sig, description) VALUES(?, ?, ?)",
-                    [(r[0], r[1], r[2]) for r in chunk],
-                )
                 d, m = _embed_rows_into(
                     con,
-                    [(r[0], r[3]) for r in chunk],
+                    [(r[0], r[1], r[2]) for r in chunk],
                     reranker=reranker,
                     batch=batch,
                     single_process=True,  # never fork per-chunk model copies on the reconcile path
@@ -415,9 +365,6 @@ def reconcile_rich_tier_from_fresh(
         finally:
             fresh.close()
 
-        con.execute(
-            "INSERT INTO job_text_fts(job_text_fts) VALUES('rebuild')"
-        )  # ONCE, after chunks
         meta = [("build_id", build_id), ("quant", "int8")]
         if dim:
             meta += [("dim", str(dim)), ("model", model)]
@@ -440,7 +387,9 @@ def reconcile_rich_tier_from_fresh(
 
 def _has_schema(con: sqlite3.Connection) -> bool:
     return bool(
-        con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='job_text'").fetchone()
+        con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='job_vectors'"
+        ).fetchone()
     )
 
 
@@ -497,7 +446,6 @@ def _delete_ids(con: sqlite3.Connection, ids: list[str]) -> None:
         chunk = ids[i : i + 500]
         ph = ",".join("?" * len(chunk))
         con.execute(f"DELETE FROM job_vectors WHERE id IN ({ph})", chunk)  # noqa: S608 - ph is placeholders
-        con.execute(f"DELETE FROM job_text WHERE id IN ({ph})", chunk)  # noqa: S608
 
 
 # --- query ----------------------------------------------------------------------------------------
@@ -509,21 +457,6 @@ def open_rich(path: Path | str) -> sqlite3.Connection:
 
 def rich_meta(con: sqlite3.Connection) -> dict[str, str]:
     return dict(con.execute("SELECT key, value FROM meta").fetchall())
-
-
-def fulltext_search(con: sqlite3.Connection, query: str, *, limit: int = 50) -> list[str]:
-    """Job ids whose FULL description matches ``query`` (FTS5 bm25-ranked) — not just the snippet."""
-    from .query import _match_expr
-
-    match = _match_expr(query) if query else ""
-    if not match:
-        return []
-    rows = con.execute(
-        "SELECT t.id FROM job_text_fts f JOIN job_text t ON t.rowid = f.rowid "
-        "WHERE job_text_fts MATCH ? ORDER BY bm25(job_text_fts) LIMIT ?",
-        (match, limit),
-    ).fetchall()
-    return [r[0] for r in rows]
 
 
 def vector_search(
