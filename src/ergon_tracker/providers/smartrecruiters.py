@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -162,6 +163,7 @@ class SmartRecruitersProvider(BaseProvider):
             remote=remote,
             employment_type=employment_type,
             department=department,
+            level=level_from_ats_vocab((p.get("experienceLevel") or {}).get("label")),
             salary=None,  # not exposed by the listing endpoint
             posted_at=_parse_dt(p.get("releasedDate")),
             raw=raw.payload,
