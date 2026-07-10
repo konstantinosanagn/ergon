@@ -23,7 +23,13 @@ import re
 from ..models import JobLevel
 from .base import ExtractInput, register_extractor
 
-__all__ = ["infer_level", "level_from_years", "level_from_description", "LevelExtractor"]
+__all__ = [
+    "infer_level",
+    "level_from_years",
+    "level_from_description",
+    "level_from_ats_vocab",
+    "LevelExtractor",
+]
 
 # Description-level cues — ONLY high-confidence early-career phrases. Job-description prose is
 # noisy (the reason title+desc sector classification was ~24% accurate), so we deliberately infer
@@ -73,6 +79,36 @@ def level_from_years(min_years: int | None, max_years: int | None) -> JobLevel:
     if years <= 4:
         return JobLevel.MID
     return JobLevel.SENIOR
+
+
+# ATS "seniority/experience-level" vocabularies -> JobLevel. Ordered longest-key-first at match
+# time so "mid-senior" wins over "senior"/"mid". Keys are matched against a lowercased, space-and-
+# hyphen-normalized form of the input. Unknown/empty -> UNKNOWN (the text extractor then fills in).
+_ATS_VOCAB: dict[str, JobLevel] = {
+    "internship": JobLevel.INTERN, "intern": JobLevel.INTERN, "trainee": JobLevel.INTERN,
+    "entry level": JobLevel.ENTRY, "entry": JobLevel.ENTRY, "graduate": JobLevel.ENTRY,
+    "junior": JobLevel.JUNIOR, "associate": JobLevel.JUNIOR,
+    "mid senior level": JobLevel.SENIOR, "mid senior": JobLevel.SENIOR,
+    "mid level": JobLevel.MID, "mid": JobLevel.MID, "intermediate": JobLevel.MID,
+    "experienced": JobLevel.MID, "professional": JobLevel.MID,
+    "senior level": JobLevel.SENIOR, "senior": JobLevel.SENIOR,
+    "staff": JobLevel.STAFF, "principal": JobLevel.PRINCIPAL,
+    "lead": JobLevel.LEAD, "team lead": JobLevel.LEAD,
+    "manager supervisor": JobLevel.MANAGER, "manager": JobLevel.MANAGER, "management": JobLevel.MANAGER,
+    "director": JobLevel.DIRECTOR, "vp": JobLevel.EXECUTIVE, "executive": JobLevel.EXECUTIVE,
+}
+_ATS_KEYS = sorted(_ATS_VOCAB, key=len, reverse=True)  # longest-first: "mid senior" before "senior"
+
+
+def level_from_ats_vocab(value: str | None) -> JobLevel:
+    """Map an ATS seniority/experience-level string to JobLevel. Unknown/empty -> UNKNOWN."""
+    if not value:
+        return JobLevel.UNKNOWN
+    norm = " ".join(value.replace("-", " ").replace("/", " ").lower().split())
+    for key in _ATS_KEYS:
+        if key in norm:
+            return _ATS_VOCAB[key]
+    return JobLevel.UNKNOWN
 
 
 # --- Individual-contributor "Manager" functions -----------------------------
