@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import SCHEMA_VERSION
+from .rich import RICH_SCHEMA_VERSION
 
 log = logging.getLogger("ergon_tracker.index")
 _REPO = "konstantinosanagn/ergon-tracker"
@@ -41,7 +42,12 @@ def cached_index_build_id(cache_dir: Path | None = None) -> str | None:
     any one answers 'how fresh is the data I just served'.
     """
     d = Path(cache_dir or _default_cache_dir())
-    for rel in ("manifest.json", "manifest-slim.json", "shards/shards.json"):
+    for rel in (
+        "manifest.json",
+        "manifest-slim.json",
+        "manifest-vectors.json",
+        "shards/shards.json",
+    ):
         p = d / rel
         if p.exists():
             try:
@@ -308,6 +314,56 @@ class SlimCache:
         tmp.replace(self.db_path)  # atomic
         self.local_manifest.write_text(json.dumps(remote))
         log.info("slim index updated to build %s (%d bytes)", remote.get("build_id"), len(raw))
+        return self.db_path
+
+
+class RichCache:
+    """Download the vectors sidecar (``index-vectors.sqlite.gz``): pre-stored int8 job embeddings.
+
+    Same shape as SlimCache. Absence is a non-event — the caller falls back to query-time reranking.
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        cache_dir: Path | None = None,
+        repo: str = _REPO,
+        tag: str = _TAG,
+    ) -> None:
+        self.base_url = (base_url or _DEFAULT_BASE).rstrip("/")
+        self.cache_dir = Path(cache_dir or _default_cache_dir())
+        self.repo = repo
+        self.tag = tag
+        self.db_path = self.cache_dir / "index-vectors.sqlite"
+        self.local_manifest = self.cache_dir / "manifest-vectors.json"
+
+    def ensure_fresh(self) -> Path | None:
+        """Return a verified vectors-sidecar path, or None (caller reranks at query time)."""
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            fetch = _asset_fetcher(self.base_url, self.repo, self.tag)
+            remote = json.loads(fetch("manifest-vectors.json"))
+        except Exception as exc:  # noqa: BLE001 - no vectors published -> query-time rerank
+            log.debug("no vectors manifest (%s); query-time rerank", exc)
+            return None
+        if int(remote.get("schema_version", -1)) != RICH_SCHEMA_VERSION:
+            return None
+        local = json.loads(self.local_manifest.read_text()) if self.local_manifest.exists() else {}
+        if local.get("build_id") == remote.get("build_id") and self.db_path.exists():
+            return self.db_path  # already current
+        try:
+            raw = gzip.decompress(fetch("index-vectors.sqlite.gz"))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("vectors download failed (%s)", exc)
+            return self.db_path if self.db_path.exists() else None
+        if hashlib.sha256(raw).hexdigest() != remote.get("sha256"):
+            log.warning("vectors sha256 mismatch; rejecting download")
+            return None
+        tmp = self.db_path.with_suffix(".tmp")
+        tmp.write_bytes(raw)
+        tmp.replace(self.db_path)  # atomic
+        self.local_manifest.write_text(json.dumps(remote))
+        log.info("vectors sidecar updated to build %s (%d bytes)", remote.get("build_id"), len(raw))
         return self.db_path
 
 

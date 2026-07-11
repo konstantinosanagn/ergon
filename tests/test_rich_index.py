@@ -1,4 +1,4 @@
-"""Rich index tier: full-JD FTS + pre-stored int8 embeddings + the cascade reconcile + stress.
+"""Rich index tier: vectors-only sidecar (pre-stored int8 embeddings) + the cascade reconcile + stress.
 
 A fake 384-dim embedder keeps tests fast/deterministic (no ONNX model). The first dims encode a small
 vocab so vector ranking is checkable; the rest are deterministic padding so dim/quantization/matmul are
@@ -14,14 +14,17 @@ import pytest
 from ergon_tracker.index.build import build_index
 from ergon_tracker.index.rich import (
     VectorIndex,
+    _sig,
     build_rich_tier,
     dequantize_int8,
-    fulltext_search,
+    migrate_legacy_rich,
     open_rich,
     quantize_int8,
     reconcile_rich_tier,
+    reconcile_rich_tier_from_fresh,
     rich_meta,
     vector_search,
+    write_fresh_rich,
 )
 from ergon_tracker.models import JobPosting, Location, RemoteType
 
@@ -91,6 +94,21 @@ def _build_rich(tmp_path, jobs, name="rich.sqlite"):
     return p
 
 
+def _main_and_fresh(tmp_path, jobs, tag):
+    """Build a main index + a matching ``fresh_rich`` capture DB from the same job list, tagged so
+    repeated calls within one test don't collide on filenames. Returns ``(main_path, fresh_path)``."""
+    import sqlite3
+
+    main = tmp_path / f"main{tag}.sqlite"
+    build_index(jobs, main, build_id=f"b{tag}")
+    fresh = tmp_path / f"fresh{tag}.sqlite"
+    con = sqlite3.connect(fresh)
+    write_fresh_rich(con, jobs)
+    con.commit()
+    con.close()
+    return main, fresh
+
+
 def test_quantize_roundtrip_preserves_direction():
     from ergon_tracker.semantic import _cosine
 
@@ -100,14 +118,17 @@ def test_quantize_roundtrip_preserves_direction():
     assert len(back) == _DIM and _cosine(vec, back) > 0.999  # int8 holds cosine fidelity
 
 
-def test_fulltext_matches_beyond_snippet(tmp_path):
-    far = "x " * 400 + "supercalifragilistic_keyword"  # keyword sits well past char 300
-    j1, j2 = _job("1", "Engineer", desc=far), _job("2", "Analyst", desc="ordinary")
-    con = open_rich(_build_rich(tmp_path, [j1, j2]))
-    assert fulltext_search(con, "supercalifragilistic_keyword", limit=10) == [
-        j1.id
-    ]  # via FULL desc
-    assert len(far) > 300  # sanity: the 300-char snippet would NOT contain it
+def test_schema_is_vectors_only(tmp_path):
+    py = _job("py", "Python Engineer", "python kubernetes")
+    con = open_rich(_build_rich(tmp_path, [py]))
+    names = {
+        r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type IN ('table','index')")
+    }
+    assert "job_vectors" in names and "meta" in names
+    assert "job_text" not in names and "job_text_fts" not in names  # FTS gone => no O(rows) rebuild
+    row = con.execute("SELECT id, sig, scale, vec FROM job_vectors").fetchone()
+    assert row[0] == py.id and row[1]  # sig now lives on the vectors row
+    assert len(row[3]) == 384  # int8 blob
 
 
 def test_vector_search_ranks_and_restricts(tmp_path):
@@ -141,7 +162,7 @@ def test_reconcile_cascades_with_main_index(tmp_path):
     assert stats == {"pruned": 1, "embedded": 2, "missing": 0}  # B pruned; C+D (re)embedded
 
     con = open_rich(rich)
-    assert {r[0] for r in con.execute("SELECT id FROM job_text")} == {
+    assert {r[0] for r in con.execute("SELECT id FROM job_vectors")} == {
         a.id,
         c1.id,
         d.id,
@@ -149,9 +170,8 @@ def test_reconcile_cascades_with_main_index(tmp_path):
     assert (
         con.execute("SELECT count(*) FROM job_vectors").fetchone()[0] == 3
     )  # vectors cascaded too
-    desc = con.execute("SELECT description FROM job_text WHERE id=?", (c0.id,)).fetchone()[0]
-    assert "REWRITTEN" in desc  # C re-embedded with new content
-    assert fulltext_search(con, "REWRITTEN", limit=5) == [c0.id]  # FTS re-synced
+    sig = con.execute("SELECT sig FROM job_vectors WHERE id=?", (c0.id,)).fetchone()[0]
+    assert sig == _sig(c1)  # C re-embedded with new content (sig reflects REWRITTEN description)
 
 
 def test_reconcile_first_run_builds(tmp_path):
@@ -262,7 +282,7 @@ def test_reconcile_from_fresh_cold_then_carryforward(tmp_path):
     s1 = reconcile_rich_tier_from_fresh(rich, main1, fresh1, build_id="b1", reranker=FAKE)
     assert s1 == {"pruned": 0, "embedded": 3, "missing": 0}
     con = open_rich(rich)
-    assert {r[0] for r in con.execute("SELECT id FROM job_text")} == {a.id, b.id, c0.id}
+    assert {r[0] for r in con.execute("SELECT id FROM job_vectors")} == {a.id, b.id, c0.id}
 
     # round 2: B dropped from main, C's description changed, D added. The crawl window this run only
     # touched C and D (A and B were NOT re-crawled) -> fresh_rich has ONLY C',D.
@@ -279,14 +299,26 @@ def test_reconcile_from_fresh_cold_then_carryforward(tmp_path):
     assert s2 == {"pruned": 1, "embedded": 2, "missing": 0}  # B pruned; C'+D embedded
 
     con = open_rich(rich)
-    ids = {r[0] for r in con.execute("SELECT id FROM job_text")}
+    ids = {r[0] for r in con.execute("SELECT id FROM job_vectors")}
     assert ids == {a.id, c1.id, d.id}  # B pruned, D added, A CARRIED FORWARD (not re-crawled)
     assert con.execute("SELECT count(*) FROM job_vectors").fetchone()[0] == 3
-    desc = con.execute("SELECT description FROM job_text WHERE id=?", (c0.id,)).fetchone()[0]
-    assert "REWRITTEN" in desc  # C re-embedded with the new description
+    sig = con.execute("SELECT sig FROM job_vectors WHERE id=?", (c0.id,)).fetchone()[0]
+    assert sig == _sig(c1)  # C re-embedded with the new description (sig moved onto job_vectors)
     # A's vector survived the carry-forward (never re-embedded) — still searchable
     top = vector_search(con, FAKE.embed_query("python kubernetes"), limit=3)
     assert a.id in {i for i, _ in top}
+
+
+def test_reconcile_from_fresh_carries_sig_and_skips_unchanged(tmp_path):
+    a = _job("a", "Python Engineer", "python kubernetes")
+    main1, fresh1 = _main_and_fresh(tmp_path, [a], "1")
+    rich = tmp_path / "rich.sqlite"
+    s1 = reconcile_rich_tier_from_fresh(rich, main1, fresh1, build_id="b1", reranker=FAKE)
+    assert s1 == {"pruned": 0, "embedded": 1, "missing": 0}
+    # same content again -> sig matches -> nothing re-embedded
+    main2, fresh2 = _main_and_fresh(tmp_path, [a], "2")
+    s2 = reconcile_rich_tier_from_fresh(rich, main2, fresh2, build_id="b2", reranker=FAKE)
+    assert s2 == {"pruned": 0, "embedded": 0, "missing": 0}
 
 
 # --- memory-safety rework: chunked streaming reconcile + bounded ramp + single-process ------------
@@ -302,15 +334,15 @@ def _write_fresh(path, jobs):
 
 
 def _dump_rich(path):
-    """Full comparable state: text rows, vector rows (exact bytes), and meta dim/model."""
+    """Full comparable state: vector rows (id, sig, exact vec bytes) and meta dim/model."""
     con = open_rich(path)
-    text = sorted(tuple(r) for r in con.execute("SELECT id, sig, description FROM job_text"))
     vecs = sorted(
-        (r[0], r[1], bytes(r[2])) for r in con.execute("SELECT id, scale, vec FROM job_vectors")
+        (r[0], r[1], r[2], bytes(r[3]))
+        for r in con.execute("SELECT id, sig, scale, vec FROM job_vectors")
     )
     meta = {k: v for k, v in rich_meta(con).items() if k in ("dim", "model", "quant")}
     con.close()
-    return text, vecs, meta
+    return vecs, meta
 
 
 def test_reconcile_from_fresh_chunk_boundaries_match_single_fetch(tmp_path):
@@ -354,12 +386,7 @@ def test_reconcile_from_fresh_chunk_boundaries_match_single_fetch(tmp_path):
     assert (
         sa == sb == {"pruned": 2, "embedded": 8, "missing": 0}
     )  # 4 changed + 4 new; unchanged skip
-    assert _dump_rich(rich_a) == _dump_rich(rich_b)  # byte-identical text+vectors+meta
-    con = open_rich(rich_a)
-    assert fulltext_search(con, "REWRITTEN", limit=10) == fulltext_search(
-        open_rich(rich_b), "REWRITTEN", limit=10
-    )  # FTS re-synced identically across the chunked path
-    assert len(fulltext_search(con, "REWRITTEN", limit=10)) == 4
+    assert _dump_rich(rich_a) == _dump_rich(rich_b)  # byte-identical vectors+sig+meta
 
 
 def test_reconcile_from_fresh_ramp_cap_converges(tmp_path, capsys):
@@ -398,10 +425,8 @@ def test_reconcile_from_fresh_ramp_cap_converges(tmp_path, capsys):
     assert s1 == {"pruned": 0, "embedded": 3, "missing": 3}  # y3 + stale x0,x1 deferred
     assert "rich ramp: embedded 3, deferred 3 to next run" in capsys.readouterr().out
     con = open_rich(rich)
-    assert (
-        con.execute("SELECT description FROM job_text WHERE id=?", (x0_old.id,)).fetchone()[0]
-        == "old zero"
-    )  # deferred stale row keeps its old content until its ramp turn
+    sig = con.execute("SELECT sig FROM job_vectors WHERE id=?", (x0_old.id,)).fetchone()[0]
+    assert sig == _sig(x0_old)  # deferred stale row keeps its old sig until its ramp turn
 
     s2 = reconcile_rich_tier_from_fresh(
         rich, main1, fresh1, build_id="b2", reranker=FAKE, chunk_size=2, max_embed_per_run=3
@@ -480,3 +505,76 @@ def test_reconcile_from_fresh_handles_missing_capture(tmp_path):
     assert (
         stats["embedded"] == 0 and stats["missing"] == 1
     )  # a is live but uncaptured -> ramps in later
+
+
+# --- legacy-schema migration (Task 2): existing pre-vectors-only sidecars upgrade in place ----------
+def test_migrate_legacy_preserves_vectors_and_is_idempotent(tmp_path):
+    import sqlite3
+
+    p = tmp_path / "legacy.sqlite"
+    con = sqlite3.connect(p)
+    con.executescript(
+        "CREATE TABLE job_text (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, sig TEXT, description TEXT);"
+        "CREATE VIRTUAL TABLE job_text_fts USING fts5(description, content='job_text', content_rowid='rowid');"
+        "CREATE TABLE job_vectors (id TEXT PRIMARY KEY, scale REAL NOT NULL, vec BLOB NOT NULL);"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);"
+    )
+    con.execute("INSERT INTO job_text(id, sig, description) VALUES('x','sig-x','hello')")
+    con.execute("INSERT INTO job_vectors(id, scale, vec) VALUES('x', 0.5, ?)", (b"\x01" * 384,))
+    con.commit()
+
+    moved = migrate_legacy_rich(con)
+    assert moved == 1
+    names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "job_text" not in names and "job_text_fts" not in names
+    row = con.execute("SELECT id, sig, scale, vec FROM job_vectors").fetchone()
+    assert row == ("x", "sig-x", 0.5, b"\x01" * 384)  # vector + sig preserved, nothing recomputed
+    assert migrate_legacy_rich(con) == 0  # idempotent
+
+
+def test_reconcile_from_fresh_migrates_legacy_sidecar_preserves_vectors(tmp_path):
+    """Critical regression: reconcile_rich_tier_from_fresh must not crash on a legacy (pre-Task-1)
+    sidecar — sig-less job_vectors alongside job_text + job_text_fts — and must carry the
+    already-computed vector forward byte-for-byte (never re-embedded) while dropping the legacy
+    tables. This is the end-to-end path a real CI runner hits on its first run after the schema
+    change, not just migrate_legacy_rich() in isolation."""
+    import sqlite3
+
+    a = _job("a", "Python Engineer", "python kubernetes")
+    main = tmp_path / "main.sqlite"
+    build_index([a], main, build_id="b1")
+
+    # hand-build a LEGACY sidecar: old 3-column job_vectors (no sig), job_text, job_text_fts
+    rich = tmp_path / "legacy_rich.sqlite"
+    con = sqlite3.connect(rich)
+    con.executescript(
+        "CREATE TABLE job_text (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, sig TEXT, description TEXT);"
+        "CREATE VIRTUAL TABLE job_text_fts USING fts5(description, content='job_text', content_rowid='rowid');"
+        "CREATE TABLE job_vectors (id TEXT PRIMARY KEY, scale REAL NOT NULL, vec BLOB NOT NULL);"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);"
+    )
+    legacy_sig = _sig(a)
+    legacy_vec = b"\x02" * 384
+    con.execute(
+        "INSERT INTO job_text(id, sig, description) VALUES(?, ?, ?)",
+        (a.id, legacy_sig, a.description_text),
+    )
+    con.execute("INSERT INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", (a.id, 0.5, legacy_vec))
+    con.commit()
+    con.close()
+
+    # fresh capture this run: same job, unchanged sig -> nothing should be re-embedded
+    fresh = tmp_path / "fresh.sqlite"
+    con = sqlite3.connect(fresh)
+    write_fresh_rich(con, [a])
+    con.commit()
+    con.close()
+
+    stats = reconcile_rich_tier_from_fresh(rich, main, fresh, build_id="b2", reranker=FAKE)
+    assert stats == {"pruned": 0, "embedded": 0, "missing": 0}  # carried forward, not re-embedded
+
+    con = open_rich(rich)
+    names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "job_text" not in names and "job_text_fts" not in names  # legacy tables dropped
+    row = con.execute("SELECT id, sig, scale, vec FROM job_vectors").fetchone()
+    assert tuple(row) == (a.id, legacy_sig, 0.5, legacy_vec)  # vector preserved byte-for-byte

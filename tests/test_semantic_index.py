@@ -17,6 +17,12 @@ def test_semantic_reranks_index_results(monkeypatch):
         for i, t in enumerate(["Alpha", "Bravo", "Charlie"])
     ]
     monkeypatch.setattr(router, "try_index", lambda q: list(jobs))
+    # Isolate the QUERY-TIME rerank fallback: force no vectors sidecar so _vector_rerank returns
+    # None and try_index_ranked falls through to rank() with the patched reranker below. Without
+    # this, _vector_rerank downloads the real published sidecar and embeds with the real model
+    # (its module-top get_semantic_reranker isn't the one patched here). The sidecar/vector path
+    # has its own coverage in tests/test_router_vectors.py.
+    monkeypatch.setattr(router, "_rich_path", lambda: None)
 
     class _FakeRR:  # scores ascending -> rank() orders desc -> reverses input order
         def rerank(self, query, js):

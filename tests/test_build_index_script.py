@@ -11,6 +11,7 @@ from build_index import (  # noqa: E402
     _crawl_network,
     _fold_network_into_fresh,
     _interleave_by_ats,
+    _write_vectors_manifest,
     publish_artifacts,
 )
 
@@ -257,3 +258,38 @@ def test_deltas_window_accumulates_contiguous_chain_across_builds(tmp_path):
         assert (out / d["file"]).exists()
     # the generic 1-behind delta points at the latest step
     assert json.loads((out / "manifest-delta.json").read_text())["to_build_id"] == "build-3"
+
+
+def test_write_vectors_manifest_satisfies_the_richcache_consumer(tmp_path):
+    """Pin the producer against the real consumer, not a hand-rolled fixture.
+
+    ``_write_vectors_manifest`` and ``RichCache.ensure_fresh`` are a contract split across two files.
+    A field-name drift (or hashing the gz instead of the raw bytes) makes ensure_fresh return None for
+    every user -- silently, because absence of the sidecar is a legitimate non-event that never raises.
+    So publish exactly what build_index.py publishes, then make the actual cache consume it.
+    """
+    from ergon_tracker.index.cache import RichCache
+    from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    raw = b"SQLite format 3\x00 pretend vectors sidecar"
+    (remote / "index-vectors.sqlite.gz").write_bytes(gzip.compress(raw))
+    _write_vectors_manifest(
+        remote,
+        build_id="b-42",
+        sha=hashlib.sha256(raw).hexdigest(),  # sha of RAW bytes, as _gzip_file returns
+        nbytes=len(raw),
+    )
+
+    man = json.loads((remote / "manifest-vectors.json").read_text())
+    assert man == {
+        "build_id": "b-42",
+        "schema_version": RICH_SCHEMA_VERSION,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": len(raw),
+    }
+
+    # The real consumer accepts it end-to-end (schema gate, build_id, sha256 verify, atomic write).
+    got = RichCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache").ensure_fresh()
+    assert got is not None and got.read_bytes() == raw

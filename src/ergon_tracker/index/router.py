@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from ..models import JobPosting, SearchQuery
+from ..semantic import get_semantic_reranker
 from .backend import ShardedIndexBackend, SqliteIndexBackend
-from .cache import IndexCache, ShardCache, SlimCache
+from .cache import IndexCache, RichCache, ShardCache, SlimCache
 
 log = logging.getLogger("ergon_tracker.index")
 
@@ -79,6 +81,72 @@ def try_index(query: SearchQuery) -> list[JobPosting] | None:
         return None
 
 
+def _rich_path() -> Path | None:
+    """Path to the cached vectors sidecar, or None (caller reranks at query time)."""
+    return RichCache().ensure_fresh()
+
+
+# Hard cap on QUERY-TIME document embeddings per rerank. The sidecar covers only ~24% of jobs today,
+# so the uncovered remainder of the pool is embedded live during the ramp. Bounding that at 100 keeps
+# the cost at or below what the pre-change path already paid (``ranking.rank`` embedded its lexical
+# ``top_k = min(len(jobs), 100)``), so this is never a regression, and it falls monotonically toward
+# zero as the sidecar fills. Uncovered jobs past the cap are NOT dropped and NOT given a fake cosine
+# score: they rank after every cosine-scored job in their incoming lexical (BM25) order.
+_UNCOVERED_EMBED_CAP = 100
+
+
+def _vector_rerank(
+    query: SearchQuery, pool: list[JobPosting], want: int
+) -> list[JobPosting] | None:
+    """Rank ``pool`` by cosine against PRE-STORED vectors; embed only a capped uncovered slice.
+
+    One query embedding instead of ~200 document embeddings. ``vector_search`` silently drops ids the
+    sidecar doesn't cover, so during the ramp the uncovered remainder is embedded at query time and
+    cosine-scored against the SAME query vector — the covered and freshly-embedded jobs share one
+    cosine scale and sort together by true similarity. At most ``_UNCOVERED_EMBED_CAP`` uncovered jobs
+    (taken in the pool's incoming lexical/BM25 order) are embedded; any uncovered jobs beyond the cap
+    are kept in lexical order and appended AFTER all cosine-scored jobs (never dropped, never given a
+    fake score). Returns None when no sidecar is available OR anything in the vector path fails — it
+    never raises — so the caller falls back to today's query-time rerank, then lexical order. Never
+    builds ``VectorIndex``: the candidate-restricted ``vector_search`` reads only the pool's rows,
+    whereas ``VectorIndex`` would materialize every vector as float32 (~2.26 GB at 1.47M jobs).
+    """
+    path = _rich_path()
+    if path is None:
+        return None
+    try:
+        from ..semantic import _cosine
+        from .rich import open_rich, vector_search
+
+        reranker = get_semantic_reranker()
+        qvec = reranker.embed_query(query.keywords or "")
+        con = open_rich(path)
+        try:
+            scored = dict(
+                vector_search(con, qvec, limit=len(pool), candidate_ids=[j.id for j in pool])
+            )
+        finally:
+            con.close()
+        # pool is in lexical (BM25) order. Embed at most _UNCOVERED_EMBED_CAP of the uncovered
+        # remainder — in that lexical order — on the same cosine scale as the stored vectors.
+        uncovered = [j for j in pool if j.id not in scored]
+        embed_now, overflow = uncovered[:_UNCOVERED_EMBED_CAP], uncovered[_UNCOVERED_EMBED_CAP:]
+        if embed_now:
+            for j, dv in zip(embed_now, reranker.embed_jobs(embed_now), strict=True):
+                scored[j.id] = _cosine(qvec, dv)
+        # covered + freshly embedded (lexical order preserved) -> stable sort by cosine desc.
+        cosine_jobs = [j for j in pool if j.id in scored]
+        for j in cosine_jobs:
+            j.score = scored[j.id]
+        cosine_jobs.sort(key=lambda j: j.score if j.score is not None else 0.0, reverse=True)
+        for j in overflow:
+            j.score = None  # not vector-scored: ranked after all cosine-scored jobs, lexical order
+        return (cosine_jobs + overflow)[:want]
+    except Exception as exc:  # noqa: BLE001 - vector path is a fast path; None => caller reranks live
+        log.warning("vector rerank unavailable (%s); query-time rerank fallback", exc)
+        return None
+
+
 def try_index_ranked(query: SearchQuery) -> list[JobPosting] | None:
     """try_index + semantic rerank when query.semantic — the full index serving path.
 
@@ -91,14 +159,24 @@ def try_index_ranked(query: SearchQuery) -> list[JobPosting] | None:
     if indexed is None:
         return None
     if query.semantic and query.keywords and len(indexed) > 1:
-        # Rerank a WIDER candidate pool from the index by embedding similarity, then truncate.
+        # Rerank a WIDER candidate pool. _vector_rerank prefers PRE-STORED vectors (one query
+        # embedding) and embeds only a capped slice of the uncovered remainder. If the sidecar is
+        # absent OR anything in the vector path fails it returns None (never raises), so we then fall
+        # back to today's behaviour: a query-time rerank (rank), and only then the index's lexical
+        # order.
         try:
             from ..ranking import rank
-            from ..semantic import get_semantic_reranker
+            from ..semantic import get_semantic_reranker  # local re-lookup: the fallback stays
+            # patchable via the semantic module (see test_try_index_ranked_semantic_degrades_gracefully)
 
             want = query.limit or 20
             pool = try_index(query.model_copy(update={"limit": max(want * 10, 200)})) or indexed
-            indexed = rank(pool, query.keywords, reranker=get_semantic_reranker())[:want]
+            ranked = _vector_rerank(query, pool, want)
+            indexed = (
+                ranked
+                if ranked is not None
+                else rank(pool, query.keywords, reranker=get_semantic_reranker())[:want]
+            )
         except Exception as exc:  # noqa: BLE001 - reranker optional; lexical order is fine
             log.warning("semantic rerank on index unavailable (%s); lexical order", exc)
     return indexed
