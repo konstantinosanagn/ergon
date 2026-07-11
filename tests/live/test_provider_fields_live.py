@@ -45,3 +45,20 @@ def test_smartrecruiters_experiencelevel_populated():
                 filled += 1
     assert tot >= 50, f"too few sampled ({tot})"
     assert filled / tot >= 0.80, f"experienceLevel populated only {filled}/{tot}"
+
+
+@pytest.mark.live
+def test_jazzhr_experience_populated():
+    tot = filled = 0
+    for t in _tokens("jazzhr", 10):
+        try:
+            r = httpx.get(f"https://app.jazz.co/feeds/export/jobs/{t}", headers=_H, timeout=15)
+        except Exception:
+            continue
+        import re
+
+        for m in re.findall(r"<experience>(.*?)</experience>", r.text, re.S):
+            tot += 1
+            if m.replace("<![CDATA[", "").replace("]]>", "").strip():
+                filled += 1
+    assert tot >= 30 and filled / tot >= 0.80, f"jazzhr experience {filled}/{tot}"

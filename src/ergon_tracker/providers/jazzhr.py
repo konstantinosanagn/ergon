@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -184,6 +185,7 @@ class JazzHRProvider(BaseProvider):
             remote=remote,
             employment_type=emp,
             department=department,
+            level=level_from_ats_vocab(p.get("experience")),
             salary=None,  # not exposed in the feed
             posted_at=_posted_from_id(raw.source_job_id),
             updated_at=None,

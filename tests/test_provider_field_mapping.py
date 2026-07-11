@@ -30,3 +30,11 @@ def test_smartrecruiters_unknown_level_stays_unknown():
     p = SmartRecruitersProvider()
     job = p.normalize(_raw({"name": "Engineer"}))
     assert job.level is JobLevel.UNKNOWN
+
+
+def test_jazzhr_maps_experience():
+    from ergon_tracker.providers.jazzhr import JazzHRProvider
+
+    p = JazzHRProvider()
+    job = p.normalize(_raw({"title": "Engineer", "experience": "Experienced"}))
+    assert job.level is JobLevel.MID
