@@ -110,3 +110,22 @@ def test_join_salary_amount_populated():
             elif isinstance(o, list):
                 stack.extend(o)
     assert tot >= 30 and filled / tot >= 0.30, f"join salaryAmountFrom {filled}/{tot}"
+
+
+@pytest.mark.live
+def test_breezy_salary_populated():
+    # Deviation from the brief's 12-token sample: widened to 18 tokens so tot>=100
+    # is reliably cleared even if 1-2 boards are dead/empty, per the flaky-sample
+    # lesson from the join gate above. Ratio bar (>=0.30) unchanged from the brief.
+    tot = filled = 0
+    for t in _tokens("breezy", 18):
+        try:
+            arr = httpx.get(f"https://{t}.breezy.hr/json", headers=_H, timeout=15).json()
+        except Exception:
+            continue
+        for p in arr:
+            tot += 1
+            s = p.get("salary")
+            if isinstance(s, str) and s.strip():
+                filled += 1
+    assert tot >= 100 and filled / tot >= 0.30, f"breezy salary {filled}/{tot}"

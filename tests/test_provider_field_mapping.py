@@ -82,3 +82,18 @@ def test_join_no_amount_stays_none():
 
     p = JoinProvider()
     assert p.normalize(_raw({"title": "Eng"})).salary is None
+
+
+def test_breezy_parses_freetext_salary():
+    from ergon_tracker.providers.breezy import BreezyProvider
+
+    p = BreezyProvider()
+    job = p.normalize(_raw({"name": "Eng", "salary": "$78,000 / year"}))
+    assert job.salary is not None and job.salary.min_amount == 78000.0
+
+
+def test_breezy_empty_salary_stays_none():
+    from ergon_tracker.providers.breezy import BreezyProvider
+
+    p = BreezyProvider()
+    assert p.normalize(_raw({"name": "Eng", "salary": ""})).salary is None

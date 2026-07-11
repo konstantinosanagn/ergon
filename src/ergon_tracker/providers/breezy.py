@@ -12,6 +12,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import parse_salary
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -141,7 +142,7 @@ class BreezyProvider(BaseProvider):
             remote=remote,
             employment_type=_employment(p.get("type")),
             department=department,
-            salary=None,  # present in feed as a free-text string, not normalized here
+            salary=parse_salary(p.get("salary") if isinstance(p.get("salary"), str) else None),
             posted_at=_parse_dt(p.get("published_date") or p.get("creation_date")),
             description_html=description_html,
             description_text=description_text,
