@@ -38,3 +38,19 @@ def test_jazzhr_maps_experience():
     p = JazzHRProvider()
     job = p.normalize(_raw({"title": "Engineer", "experience": "Experienced"}))
     assert job.level is JobLevel.MID
+
+
+def test_workable_maps_experience():
+    from ergon_tracker.providers.workable import WorkableProvider
+
+    p = WorkableProvider()
+    job = p.normalize(_raw({"title": "Engineer", "experience": "Entry level"}))
+    assert job.level is JobLevel.ENTRY
+
+
+def test_workable_unknown_experience_stays_unknown():
+    from ergon_tracker.providers.workable import WorkableProvider
+
+    p = WorkableProvider()
+    job = p.normalize(_raw({"title": "Engineer"}))
+    assert job.level is JobLevel.UNKNOWN

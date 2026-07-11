@@ -62,3 +62,20 @@ def test_jazzhr_experience_populated():
             if m.replace("<![CDATA[", "").replace("]]>", "").strip():
                 filled += 1
     assert tot >= 30 and filled / tot >= 0.80, f"jazzhr experience {filled}/{tot}"
+
+
+@pytest.mark.live
+def test_workable_experience_populated():
+    tot = filled = 0
+    for t in _tokens("workable", 24):
+        try:
+            d = httpx.get(f"https://apply.workable.com/api/v1/widget/accounts/{t}",
+                          headers=_H, timeout=15).json()
+        except Exception:
+            continue
+        for p in d.get("jobs", []):
+            tot += 1
+            if p.get("experience"):
+                filled += 1
+    assert tot >= 200, f"too few sampled ({tot})"
+    assert filled / tot >= 0.55, f"workable experience {filled}/{tot}"
