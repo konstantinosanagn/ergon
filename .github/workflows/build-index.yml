@@ -125,13 +125,14 @@ jobs:
           # 250k costs ~116 min: ~207 min typical, ~251 min worst case (F_max + 20% rate pessimism),
           # inside the 270-min target and well under the 330-min timeout. 300k would breach 270 in the
           # worst case and 400k would breach 330 — i.e. risk the core publish to save one run.
-          # --rich stays MANUAL-ONLY until the ramp reaches missing == 0.
-          # exceed timeout-minutes: 330. A timeout kills the job BEFORE the publish step, so the CORE
-          # index would stop publishing too. Re-enable on schedule only after the FTS rebuild is made
-          # incremental and the sidecar size is addressed (approaches GitHub's 2GB asset cap).
+          # --rich is now ON for the daily schedule (and manual rich=true). The old O(total-rows)
+          # FTS-rebuild growth term is gone (vectors-only sidecar), so runs measure ~106-137 min at
+          # the 250k cap — well under the 330-min timeout. Coverage was ramped to ~84% via manual
+          # bursts; daily runs drain the remaining tail (~40-60k/run) then maintain it (only new/
+          # changed sigs re-embed). Rich stays a non-fatal add-on: the core index publishes first.
           uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
-            ${{ github.event.inputs.rich == 'true' && '--rich' || '' }}
+            ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }}
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
