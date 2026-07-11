@@ -352,8 +352,8 @@ Note: workable `education` (→ degree) is deferred to Task 10 — its vocabular
 @pytest.mark.live
 def test_workable_experience_populated():
     tot = filled = 0
-    for t in _tokens("workable", 12):
-        try:
+    for t in _tokens("workable", 24):  # 24 (not 12): the field is ~66% populated but a small
+        try:                             # sample swings on 1-2 fully-empty boards (flaky gate)
             d = httpx.get(f"https://apply.workable.com/api/v1/widget/accounts/{t}",
                           headers=_H, timeout=15).json()
         except Exception:
@@ -362,7 +362,8 @@ def test_workable_experience_populated():
             tot += 1
             if p.get("experience"):
                 filled += 1
-    assert tot >= 40 and filled / tot >= 0.55, f"workable experience {filled}/{tot}"
+    assert tot >= 200, f"too few sampled ({tot})"
+    assert filled / tot >= 0.55, f"workable experience {filled}/{tot}"  # true rate ~66%
 ```
 
 Run: `ERGON_LIVE_TESTS=1 uv run pytest tests/live/test_provider_fields_live.py::test_workable_experience_populated -q`
