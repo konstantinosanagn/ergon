@@ -54,3 +54,31 @@ def test_workable_unknown_experience_stays_unknown():
     p = WorkableProvider()
     job = p.normalize(_raw({"title": "Engineer"}))
     assert job.level is JobLevel.UNKNOWN
+
+
+def test_join_maps_structured_salary():
+    from ergon_tracker.models import SalaryInterval
+    from ergon_tracker.providers.join import JoinProvider
+
+    p = JoinProvider()
+    job = p.normalize(
+        _raw(
+            {
+                "title": "Eng",
+                "salaryAmountFrom": {"amount": 18000000, "currency": "USD"},
+                "salaryAmountTo": {"amount": 32000000, "currency": "USD"},
+                "salaryFrequency": "PER_YEAR",
+                "settings": {"showSalary": False},
+            }
+        )
+    )
+    assert job.salary is not None
+    assert job.salary.min_amount == 180000.0 and job.salary.max_amount == 320000.0
+    assert job.salary.currency == "USD" and job.salary.interval is SalaryInterval.YEAR
+
+
+def test_join_no_amount_stays_none():
+    from ergon_tracker.providers.join import JoinProvider
+
+    p = JoinProvider()
+    assert p.normalize(_raw({"title": "Eng"})).salary is None

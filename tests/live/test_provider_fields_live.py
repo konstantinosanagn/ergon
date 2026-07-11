@@ -79,3 +79,34 @@ def test_workable_experience_populated():
                 filled += 1
     assert tot >= 200, f"too few sampled ({tot})"
     assert filled / tot >= 0.55, f"workable experience {filled}/{tot}"
+
+
+@pytest.mark.live
+def test_join_salary_amount_populated():
+    # Deviation from the brief's 8-token sample: join boards carry very few
+    # salary-bearing postings each (~0.5/token measured), so 8 tokens gave tot=5 (<30) on
+    # two independent runs against real 200 responses -- a genuine small-sample shortfall,
+    # not a network flake. 80 tokens reliably clears tot>=30 (measured tot=40, 100% filled)
+    # while leaving the >=0.30 ratio bar untouched.
+    import re
+
+    tot = filled = 0
+    for t in _tokens("join", 80):
+        try:
+            r = httpx.get(f"https://join.com/companies/{t}", headers=_H, timeout=15)
+            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
+            d = json.loads(m.group(1))
+        except Exception:
+            continue
+        stack = [d]
+        while stack:
+            o = stack.pop()
+            if isinstance(o, dict):
+                if o.get("title") and "salaryAmountFrom" in o:
+                    tot += 1
+                    if o.get("salaryAmountFrom"):
+                        filled += 1
+                stack.extend(o.values())
+            elif isinstance(o, list):
+                stack.extend(o)
+    assert tot >= 30 and filled / tot >= 0.30, f"join salaryAmountFrom {filled}/{tot}"
