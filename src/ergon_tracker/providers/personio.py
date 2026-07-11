@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -83,6 +84,24 @@ def _employment(value: str | None) -> EmploymentType:
     if not value:
         return EmploymentType.UNKNOWN
     return _EMPLOYMENT.get(value.strip().lower(), EmploymentType.UNKNOWN)
+
+
+def _years_range(v: str | None) -> tuple[int | None, int | None]:
+    """Personio yearsOfExperience: 'lt-1'->(0,1), '1-2'->(1,2), '5-10'->(5,10), 'gt-10'->(10,None)."""
+    if not v:
+        return (None, None)
+    s = v.strip().lower()
+    if s.startswith("lt"):
+        return (0, 1)
+    if s.startswith("gt"):
+        m = re.search(r"\d+", s)
+        return ((int(m.group()) if m else None), None)
+    nums = [int(n) for n in re.findall(r"\d+", s)]
+    if len(nums) >= 2:
+        return (nums[0], nums[1])
+    if len(nums) == 1:
+        return (nums[0], nums[0])
+    return (None, None)
 
 
 @register("personio")
@@ -170,6 +189,8 @@ class PersonioProvider(BaseProvider):
         job_id = raw.source_job_id
         apply_url = _APPLY.format(token=token, id=job_id) if job_id else None
 
+        ymin, ymax = _years_range(p.get("yearsOfExperience"))
+
         return JobPosting.create(
             source=self.name,
             source_job_id=job_id,
@@ -181,6 +202,9 @@ class PersonioProvider(BaseProvider):
             remote=remote,
             employment_type=_employment(p.get("employmentType")),
             department=p.get("department") or None,
+            level=level_from_ats_vocab(p.get("seniority")),
+            years_experience_min=ymin,
+            years_experience_max=ymax,
             salary=None,  # not exposed by the feed
             posted_at=_parse_dt(p.get("createdAt")),
             description_html=description_html,

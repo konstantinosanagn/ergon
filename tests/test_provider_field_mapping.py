@@ -84,6 +84,35 @@ def test_join_no_amount_stays_none():
     assert p.normalize(_raw({"title": "Eng"})).salary is None
 
 
+def test_personio_promotes_seniority_and_years():
+    from ergon_tracker.providers.personio import PersonioProvider
+
+    p = PersonioProvider()
+    job = p.normalize(_raw({"name": "Eng", "seniority": "senior", "yearsOfExperience": "1-2"}))
+    assert job.level is JobLevel.SENIOR
+    assert job.years_experience_min == 1 and job.years_experience_max == 2
+
+
+def test_personio_unknown_seniority_stays_unknown():
+    from ergon_tracker.providers.personio import PersonioProvider
+
+    p = PersonioProvider()
+    job = p.normalize(_raw({"name": "Eng"}))
+    assert job.level is JobLevel.UNKNOWN
+    assert job.years_experience_min is None and job.years_experience_max is None
+
+
+def test_personio_years_range_parsing():
+    from ergon_tracker.providers.personio import _years_range
+
+    assert _years_range("lt-1") == (0, 1)
+    assert _years_range("1-2") == (1, 2)
+    assert _years_range("5-10") == (5, 10)
+    assert _years_range("gt-10") == (10, None)
+    assert _years_range("") == (None, None)
+    assert _years_range(None) == (None, None)
+
+
 def test_breezy_parses_freetext_salary():
     from ergon_tracker.providers.breezy import BreezyProvider
 
