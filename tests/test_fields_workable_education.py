@@ -96,6 +96,9 @@ def test_normalize_maps_education_to_degree_min() -> None:
     job = WorkableProvider().normalize(_raw(payload))
 
     assert job.degree_min == "master"
+    # Workable's "education" is the ATS's own structured minimum-education setting for the
+    # requisition (not free text), so a recognised value IS a stated requirement.
+    assert job.degree_required is True
 
 
 def test_normalize_no_education_field_leaves_degree_min_none() -> None:
@@ -103,6 +106,9 @@ def test_normalize_no_education_field_leaves_degree_min_none() -> None:
     job = WorkableProvider().normalize(_raw(payload))
 
     assert job.degree_min is None
+    # No mapped degree_min -> degree_required stays None too, so the description-based
+    # DegreeExtractor still gets a chance to run (enrich's guard checks both fields).
+    assert job.degree_required is None
 
 
 def test_normalize_ambiguous_education_leaves_degree_min_none() -> None:
@@ -110,3 +116,4 @@ def test_normalize_ambiguous_education_leaves_degree_min_none() -> None:
     job = WorkableProvider().normalize(_raw(payload))
 
     assert job.degree_min is None
+    assert job.degree_required is None

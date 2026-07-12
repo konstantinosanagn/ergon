@@ -108,6 +108,14 @@ class WorkableProvider(BaseProvider):
         telecommuting = bool(p.get("telecommuting"))
         remote = RemoteType.REMOTE if telecommuting else self._remote(locations)
         employment_type = self._employment_type(p.get("employment_type"))
+        degree_min = degree_from_ats_vocab(p.get("education"))
+        # Workable's "education" field is the ATS's own structured minimum-education setting for
+        # the requisition, not free text — so a recognised value IS the posting's stated
+        # requirement (never "preferred"). Setting degree_required=True here lets the enrich degree
+        # guard (`degree_min is None and degree_required is None`) skip the text extractor only when
+        # we actually have a mapped value; when education is absent/unrecognized both stay None so
+        # the extractor still gets a chance to find a requirement in the description.
+        degree_required = True if degree_min is not None else None
 
         return JobPosting.create(
             source=self.name,
@@ -121,7 +129,8 @@ class WorkableProvider(BaseProvider):
             employment_type=employment_type,
             department=p.get("department") or None,
             level=level_from_ats_vocab(p.get("experience")),
-            degree_min=degree_from_ats_vocab(p.get("education")),
+            degree_min=degree_min,
+            degree_required=degree_required,
             salary=None,  # not exposed by the widget endpoint
             posted_at=_parse_date(p.get("published_on")),
             raw=raw.payload,
