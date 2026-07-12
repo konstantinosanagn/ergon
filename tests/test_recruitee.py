@@ -83,7 +83,10 @@ async def test_normalize_maps_every_field() -> None:
     # employment_type_code "fulltime_fixed_term" -> FULL_TIME
     assert job.employment_type is EmploymentType.FULL_TIME
     assert job.department == "Sales"
-    assert job.salary is None
+    # salary is now mapped from the structured recruitee salary object (string amounts + period)
+    assert job.salary is not None
+    assert job.salary.min_amount == 5253.0 and job.salary.max_amount == 6152.0
+    assert job.salary.currency == "EUR"
 
     assert job.posted_at is not None and job.posted_at.tzinfo is not None
     assert (job.posted_at.year, job.posted_at.month, job.posted_at.day) == (2026, 6, 8)
