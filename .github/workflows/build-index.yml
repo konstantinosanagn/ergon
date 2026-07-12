@@ -13,6 +13,9 @@ on:
       rich:
         description: "Build the rich tier (--rich). OFF by default: the cold-start embedding adds ~2.4h. Set 'true' once the core index is publishing cleanly."
         default: "false"
+      detail:
+        description: "Run the Tier-3 detail reconcile + merge (--detail). Manual-only (not on the schedule) until it's proven out."
+        default: "false"
 
 permissions:
   contents: write          # to publish the release asset
@@ -67,7 +70,13 @@ jobs:
           gh release download index-latest --dir dist --pattern 'index-vectors.sqlite.gz' || \
             gh release download index-latest --dir dist --pattern 'index-rich.sqlite.gz' || echo "no prev rich tier"
           gh release download index-latest --dir dist --pattern 'manifest-vectors.json' || echo "no prev vectors manifest"
+          gh release download index-latest --dir dist --pattern 'index-detail.sqlite.gz' || echo "no prev detail tier"
+          gh release download index-latest --dir dist --pattern 'manifest-detail.json' || echo "no prev detail manifest"
           [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
+          # decompress the persisted Tier-3 detail sidecar so a manual --detail run carries forward
+          # already-recovered fields + the retry/cursor state (only new/changed sigs re-fetch);
+          # absent on first run (or every non-detail run, since it's manual-only) -> built cold.
+          [ -f dist/index-detail.sqlite.gz ] && gunzip -kf dist/index-detail.sqlite.gz || true
           # decompress the persisted vectors sidecar so the incremental reconcile carries forward its
           # embeddings (only new/changed postings re-embed); absent on first run -> built cold.
           # One-time back-compat: the legacy asset carries the pre-migration schema (job_text + FTS).
@@ -108,6 +117,7 @@ jobs:
           # shell-expanded, so `~` would be taken literally by fastembed.
           FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
           ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
+          ERGON_DETAIL_MAX: "5000"                   # Tier-3 detail: per-run fetch budget (manual-only)
         run: |
           # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
@@ -130,9 +140,13 @@ jobs:
           # the 250k cap — well under the 330-min timeout. Coverage was ramped to ~84% via manual
           # bursts; daily runs drain the remaining tail (~40-60k/run) then maintain it (only new/
           # changed sigs re-embed). Rich stays a non-fatal add-on: the core index publishes first.
+          # --detail is MANUAL-ONLY (workflow_dispatch with detail=true) -- unlike --rich it is
+          # never folded into the daily schedule condition below, until the Tier-3 fetch path is
+          # proven out over enough manual runs.
           uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
-            ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }}
+            ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }} \
+            ${{ github.event.inputs.detail == 'true' && '--detail' || '' }}
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
@@ -150,7 +164,7 @@ jobs:
           # some), so one missing file never fails the whole publish.
           ASSETS=""
           for f in index.sqlite.gz manifest.json index-slim.sqlite.gz manifest-slim.json \
-                   manifest-vectors.json \
+                   manifest-vectors.json manifest-detail.json \
                    index-delta.sqlite.gz manifest-delta.json deltas.json \
                    gates.json board_state.json history.jsonl spec_health.json rediscover_queue.json \
                    shards.json coverage.json INDEX_STATUS.md crawl_cursor.json; do
@@ -163,6 +177,12 @@ jobs:
           # a name that promises RICH_SCHEMA_VERSION=3. Only a rich build writes both together.
           [ -f dist/manifest-vectors.json ] && [ -f dist/index-vectors.sqlite.gz ] && \
             ASSETS="$ASSETS dist/index-vectors.sqlite.gz" || true
+          # Same paired-asset guard for the Tier-3 detail sidecar: publish index-detail.sqlite.gz
+          # ONLY when manifest-detail.json is also present, so a partial/interrupted download of
+          # the prior pair (or any future schema migration, mirroring the vectors legacy-rename
+          # case above) can never ship an unpaired db under a manifest that doesn't describe it.
+          [ -f dist/manifest-detail.json ] && [ -f dist/index-detail.sqlite.gz ] && \
+            ASSETS="$ASSETS dist/index-detail.sqlite.gz" || true
           ASSETS="$ASSETS $(ls dist/shard-*.sqlite.gz 2>/dev/null)"
           ASSETS="$ASSETS $(ls dist/index-delta-*.sqlite.gz 2>/dev/null)"  # v2.2 chain deltas
           if [ -z "$ASSETS" ]; then echo "no assets to publish"; exit 0; fi
