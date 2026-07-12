@@ -34,7 +34,7 @@ import re
 from ..models import DEGREE_LEVELS, DEGREE_ORDER
 from .base import ExtractInput, register_extractor
 
-__all__ = ["DegreeExtractor"]
+__all__ = ["DegreeExtractor", "degree_from_ats_vocab"]
 
 _RANK = DEGREE_ORDER  # rank in the canonical highschool<associate<bachelor<master<phd_md ladder
 
@@ -111,6 +111,49 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bhigh\s?school\s+(?:diploma|degree|education)\b", re.I), "highschool"),
     (re.compile(r"\bged\b", re.I), "highschool"),
 )
+
+# --- ATS "education" vocabulary -> degree_min --------------------------------
+# Closed set of free-text education values some ATS widgets expose directly (e.g. Workable's
+# "education" field: "High School", "Associate Degree", "Bachelor's Degree", "Master's Degree",
+# "Doctorate"). Matched against a lowercased, punctuation-stripped normal form so "Associate's
+# Degree" / "Associate Degree" / "ASSOCIATE DEGREE" all hit the same key. Deliberately closed:
+# ambiguous ATS values ("Professional", "Vocational", "Certification") have no reliable mapping
+# to a single rung of the highschool<associate<bachelor<master<phd_md ladder, so they resolve to
+# None rather than guess (the description-based DegreeExtractor gets a second chance instead).
+_ATS_EDUCATION_VOCAB: dict[str, str] = {
+    "high school": "highschool",
+    "high school diploma": "highschool",
+    "ged": "highschool",
+    "associate degree": "associate",
+    "associates degree": "associate",
+    "associate": "associate",
+    "bachelor degree": "bachelor",
+    "bachelors degree": "bachelor",
+    "bachelor": "bachelor",
+    "master degree": "master",
+    "masters degree": "master",
+    "master": "master",
+    "mba": "master",
+    "doctorate": "phd_md",
+    "doctoral degree": "phd_md",
+    "phd": "phd_md",
+    "ph d": "phd_md",
+}
+
+
+def degree_from_ats_vocab(value: str | None) -> str | None:
+    """Map an ATS "education" vocabulary string to a ``DEGREE_LEVELS`` value.
+
+    Unknown, empty, or ambiguous values ("Professional", "Vocational", "Certification") return
+    ``None`` — never guess. Case/punctuation-insensitive (apostrophes and periods are stripped
+    before lookup, so "Associate's Degree" and "Ph.D." both match).
+    """
+    if not value:
+        return None
+    norm = re.sub(r"[’'.]", "", value.strip().lower())
+    norm = " ".join(norm.split())
+    return _ATS_EDUCATION_VOCAB.get(norm)
+
 
 # --- scope cues (evaluated on the mention's own sentence/bullet) --------------
 # "or equivalent (experience)" downgrades to preferred-only: the practical semantics is that
