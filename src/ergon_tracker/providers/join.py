@@ -21,13 +21,13 @@ blob under ``salaryAmountFrom``/``salaryAmountTo`` (nested ``{"amount": <minor u
 from __future__ import annotations
 
 import json
-import math
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import anyio
 
+from ..extract.comp import coerce_amount
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -84,6 +84,31 @@ _FREQ = {
     "PER_HOUR": SalaryInterval.HOUR,
 }
 
+# Canonical ISO-4217 zero-decimal currencies (no minor unit) — the standard list used
+# across payments engineering (matches Stripe's published zero-decimal set). join reports
+# every amount in "minor units" divided by 100, but these currencies have no minor unit, so
+# dividing by 100 would understate them 100x; divide by 1 instead.
+_ZERO_DECIMAL_CURRENCIES = frozenset(
+    {
+        "BIF",
+        "CLP",
+        "DJF",
+        "GNF",
+        "JPY",
+        "KMF",
+        "KRW",
+        "MGA",
+        "PYG",
+        "RWF",
+        "UGX",
+        "VND",
+        "VUV",
+        "XAF",
+        "XOF",
+        "XPF",
+    }
+)
+
 
 def _minor_amount(obj: Any) -> tuple[float | None, str | None]:
     """(major-unit amount, currency) from a join salary sub-object, or ``(None, None)``.
@@ -91,24 +116,17 @@ def _minor_amount(obj: Any) -> tuple[float | None, str | None]:
     join nests each bound as ``{"amount": <minor units>, "currency": "USD"}`` rather than a
     bare number -- confirmed against live payloads (a flat-number schema was assumed
     earlier but is not what the API returns). The amount is minor units (cents), so it is
-    divided by 100 to get whole currency units.
+    divided by 100 to get whole currency units -- except for zero-decimal ISO-4217
+    currencies (JPY, KRW, ...), which have no minor unit and so are divided by 1.
     """
     if not isinstance(obj, dict):
         return None, None
-    amount = obj.get("amount")
     currency = obj.get("currency") or None
-    # Guard for parity with the recruitee/teamtailor salary parsers: coerce numeric strings,
-    # reject bool/non-numeric/non-finite/<=0 so no garbage Salary reaches the index.
-    if isinstance(amount, bool):
+    amount = coerce_amount(obj.get("amount"))
+    if amount is None:
         return None, currency
-    if isinstance(amount, str):
-        try:
-            amount = float(amount.strip())
-        except ValueError:
-            return None, currency
-    if not isinstance(amount, (int, float)) or not math.isfinite(amount) or amount <= 0:
-        return None, currency
-    return amount / 100, currency
+    divisor = 1 if (currency or "").strip().upper() in _ZERO_DECIMAL_CURRENCIES else 100
+    return amount / divisor, currency
 
 
 def _salary(p: dict[str, Any]) -> Salary | None:

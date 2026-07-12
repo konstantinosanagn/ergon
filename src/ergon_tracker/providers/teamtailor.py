@@ -16,11 +16,11 @@ client-side.
 
 from __future__ import annotations
 
-import math
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import coerce_amount
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -201,22 +201,7 @@ class TeamtailorProvider(BaseProvider):
         elif isinstance(value, (int, float, str)):
             lo = hi = value
 
-        def _num(v: Any) -> float | None:
-            if isinstance(v, bool):
-                return None
-            if isinstance(v, (int, float)):
-                f = float(v)
-                return f if math.isfinite(f) and f > 0 else None
-            if isinstance(v, str):
-                try:
-                    f = float(v.replace(",", "").strip())
-                except ValueError:
-                    return None
-                # reject "inf"/"nan" (valid float() literals) so no garbage Salary reaches the index
-                return f if math.isfinite(f) and f > 0 else None
-            return None
-
-        lo_n, hi_n = _num(lo), _num(hi)
+        lo_n, hi_n = coerce_amount(lo), coerce_amount(hi)
         if lo_n is None and hi_n is None:
             return None
 
