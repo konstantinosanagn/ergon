@@ -69,15 +69,37 @@ _EMPLOYMENT_PATTERNS: list[tuple[re.Pattern[str], EmploymentType]] = [
     (re.compile(r"\bregular\b", re.I), EmploymentType.FULL_TIME),
 ]
 
+# Single token alternation (same vocabulary as _EMPLOYMENT_PATTERNS, minus the \b anchors) used to
+# require a WHOLE-VALUE match: a div only counts as the employment-type cell if its ENTIRE trimmed
+# text is composed of one or more of these tokens (e.g. "Fulltime Regular", "Part-Time"). A
+# substring match alone is not enough — otherwise a DEPARTMENT div such as "Contract
+# Administration" or "Temp Staffing" would be misclassified as employment_type, starving the real
+# department/location assignment (Stage-1 review finding).
+_EMPLOYMENT_TOKEN = (
+    r"(?:full[\s-]?time|part[\s-]?time|contract(?:or)?|temp(?:orary)?|seasonal"
+    r"|intern(?:ship)?|casual|regular)"
+)
+_EMPLOYMENT_WHOLE_RE = re.compile(
+    rf"^{_EMPLOYMENT_TOKEN}(?:[\s/,&-]+{_EMPLOYMENT_TOKEN})*$", re.I
+)
+
 
 def _clean(text: str) -> str:
     return _html.unescape(_TAG.sub("", text)).strip()
 
 
 def _match_employment(text: str) -> EmploymentType | None:
-    """Map a TBE employment-type div's free text (e.g. "Fulltime Regular") to the taxonomy."""
+    """Map a TBE employment-type div's free text (e.g. "Fulltime Regular") to the taxonomy.
+
+    Requires a WHOLE-VALUE match: every word in the (trimmed) text must itself be one of the
+    controlled employment-vocabulary tokens (``_EMPLOYMENT_WHOLE_RE``). A text like "Fulltime
+    Regular" is entirely made of employment tokens and matches; "Contract Administration" has a
+    trailing word ("Administration") that is NOT an employment token, so the whole-value check
+    fails and it is correctly left unclassified (letting it fall through to department/location
+    classification instead of being misread as an employment-type div).
+    """
     norm = text.strip()
-    if not norm:
+    if not norm or not _EMPLOYMENT_WHOLE_RE.fullmatch(norm):
         return None
     for pattern, val in _EMPLOYMENT_PATTERNS:
         if pattern.search(norm):
@@ -108,6 +130,14 @@ def _classify_divs(texts: list[str]) -> tuple[str, str | None, str | None]:
     With exactly one non-blank div (the common/documented case) it is always the location — this
     preserves the legacy single-div behavior and also correctly handles tenants that pad the card
     with a blank placeholder div alongside the real location (e.g. Sullivan & Cromwell).
+
+    If, after location (and employment-type, when present) are claimed, MORE THAN ONE div is
+    still left over (e.g. a 3-div card where none of the divs matched the employment vocabulary,
+    so only location was claimed and 2 candidates remain) no div is silently dropped: all
+    remaining divs are preserved in the card's original document order and concatenated into
+    ``department`` with " / " as the separator. This is the least-surprising fallback — we have
+    no signal for picking one over the other, so both survive into the single department field
+    rather than one being discarded.
     """
     non_blank = [(i, t) for i, t in enumerate(texts) if t.strip()]
     if not non_blank:
@@ -127,7 +157,10 @@ def _classify_divs(texts: list[str]) -> tuple[str, str | None, str | None]:
         loc_idx = next(iter(remaining), None)
     location = remaining.pop(loc_idx).strip() if loc_idx is not None else ""
 
-    department = next(iter(remaining.values())).strip() if remaining else None
+    # remaining.values() is still in original document order (pop() doesn't reorder the dict) —
+    # join ALL leftover divs rather than keeping only next(iter(...)), so a second/third
+    # department-like div is never silently discarded (Stage-1 review finding).
+    department = " / ".join(t.strip() for t in remaining.values()) if remaining else None
     return location, employment_type_raw, department
 
 

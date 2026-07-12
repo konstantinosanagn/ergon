@@ -96,6 +96,70 @@ def test_single_div_still_treated_as_location() -> None:
     assert department is None
 
 
+def test_department_named_contract_administration_not_misread_as_employment_type() -> None:
+    """A DEPARTMENT div whose text merely CONTAINS an employment-vocabulary word ("Contract") as
+    a substring — e.g. "Contract Administration" — must NOT be classified as the employment_type
+    div. Only a div whose ENTIRE trimmed text is composed of employment-vocabulary tokens (e.g.
+    exactly "Contract") should match. This is the Stage-1 review finding: the old substring
+    ``.search`` match stole department divs like this.
+    """
+    html = f"<html>{_card('39001', 'Paralegal', 'New York, NY', 'Contract Administration')}</html>"
+
+    rows = _parse_rows(html)
+
+    assert len(rows) == 1
+    _, rid, title, location, employment_type_raw, department = rows[0]
+    assert location == "New York, NY"
+    assert employment_type_raw is None
+    assert department == "Contract Administration"
+
+
+def test_temp_staffing_department_not_misread_as_employment_type() -> None:
+    """Same finding, different vocabulary word ("Temp") embedded in a department name."""
+    html = f"<html>{_card('39002', 'Recruiter', 'Chicago, IL', 'Temp Staffing')}</html>"
+
+    rows = _parse_rows(html)
+
+    assert len(rows) == 1
+    _, rid, title, location, employment_type_raw, department = rows[0]
+    assert location == "Chicago, IL"
+    assert employment_type_raw is None
+    assert department == "Temp Staffing"
+
+
+def test_whole_value_employment_match_still_recognizes_real_employment_divs() -> None:
+    """The whole-value requirement must not regress real employment-type divs: a div that IS
+    (only) an employment term — including tenant-real multi-token forms like "Fulltime Regular"
+    — still matches.
+    """
+    assert _match_employment("Contract") == EmploymentType.CONTRACT
+    assert _match_employment("Temporary") == EmploymentType.TEMPORARY
+    assert _match_employment("Regular") == EmploymentType.FULL_TIME
+    assert _match_employment("Fulltime Regular") == EmploymentType.FULL_TIME
+    assert _match_employment("Part-Time") == EmploymentType.PART_TIME
+    # But NOT when the vocabulary word is just a substring of a larger, non-employment phrase.
+    assert _match_employment("Contract Administration") is None
+    assert _match_employment("Temp Staffing") is None
+
+
+def test_three_div_card_with_no_employment_match_drops_no_department() -> None:
+    """A 3-div card where NONE of the divs match the (now whole-value) employment vocabulary: only
+    location is claimed by shape, leaving 2 department-like divs. Neither may be silently dropped
+    — both must land in ``department`` (Stage-1 review finding #2).
+    """
+    html = f"<html>{_card('39003', 'Facilities Coordinator', 'Pasadena, CA', 'Contract Administration', 'Facilities')}</html>"
+
+    rows = _parse_rows(html)
+
+    assert len(rows) == 1
+    _, rid, title, location, employment_type_raw, department = rows[0]
+    assert location == "Pasadena, CA"
+    assert employment_type_raw is None
+    assert department is not None
+    assert "Contract Administration" in department
+    assert "Facilities" in department
+
+
 def test_multiple_cards_in_one_page_dont_bleed_into_each_other() -> None:
     """Ensure the divs-blob for one card doesn't swallow the next card's <h4>/divs."""
     html = (
