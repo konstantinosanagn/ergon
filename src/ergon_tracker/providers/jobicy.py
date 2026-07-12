@@ -109,8 +109,9 @@ class JobicyProvider(BaseProvider):
             remote=RemoteType.REMOTE,
             employment_type=_employment(p.get("jobType")),
             salary=self._salary(p),
-            level=level_from_ats_vocab(p.get("jobLevel")),
-            # jobIndustry is a LIST in the jobicy API (e.g. ["Marketing"]); take the first entry.
+            # Both jobLevel and jobIndustry can be list-or-scalar in the jobicy API; normalize
+            # through _first_str so a list-shaped jobLevel can't crash level_from_ats_vocab.
+            level=level_from_ats_vocab(self._first_str(p.get("jobLevel"))),
             sector=self._first_str(p.get("jobIndustry")),
             apply_url=p.get("url"),
             posted_at=_parse_dt(p.get("pubDate")),
