@@ -78,12 +78,17 @@ class DetailRef:
 RETRY_CAP = 3  # bounded retries for a ref whose fetch keeps failing (never re-fetched forever)
 _DEFAULT_CONCURRENCY = 8  # in-flight fetches; the injected AsyncFetcher bounds per-host rate
 
-_JOBS_COLUMNS = "id, source, board_token, apply_url, listing_url, content_hash, description"
+_JOBS_COLUMNS = "id, source, board_token, apply_url, listing_url, content_hash"
 
 
 def _tier3_rows(idx_con: sqlite3.Connection, sources: Sequence[str] | None) -> list[dict[str, Any]]:
-    """Index rows with no description (Tier-3 candidates), optionally restricted to ``sources``."""
-    sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE (description IS NULL OR TRIM(description) = '')"
+    """Index rows lacking a recovered JD (Tier-3 candidates), optionally restricted to ``sources``.
+
+    The real ``jobs`` schema never stores the full description (discard-after-extract), so ``snippet``
+    is the real-column signal for "no JD captured yet": list-only sources have an empty snippet until a
+    detail fetch + ``merge_detail_into_index`` populates one, which is what makes the drain converge
+    (a fetched+merged row gains a snippet and drops out of this candidate set)."""
+    sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE (snippet IS NULL OR TRIM(snippet) = '')"
     params: list[Any] = []
     if sources:
         placeholders = ",".join("?" for _ in sources)
@@ -327,7 +332,8 @@ async def reconcile_detail_tier(
     sources: Sequence[str] | None = None,
     now: Callable[[], str],
 ) -> dict[str, int]:
-    """Tier-3 reconcile pass: select index rows with no description, fetch their JD via the
+    """Tier-3 reconcile pass: select index rows lacking a recovered JD (empty snippet), fetch their JD
+    via the
     injected ``fetch_detail``, run the extractors over it, and write recovered fields + a snippet
     into the detail sidecar. The JD text itself is discarded immediately after extraction.
 

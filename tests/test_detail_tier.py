@@ -47,12 +47,15 @@ def test_sig_fallback_without_content_hash():
 def _mk_index(tmp_path, rows):
     import sqlite3
 
+    # NOTE: the REAL jobs schema has NO `description` column (discard-after-extract) — only `snippet`.
+    # The reconcile pass selects candidates by EMPTY snippet, so the stub must mirror that: the 5th
+    # tuple element is the row's snippet (None/'' => a Tier-3 candidate; non-empty => already has a JD).
     p = tmp_path / "index.sqlite"
     c = sqlite3.connect(p)
     c.execute("CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
-              "listing_url TEXT, content_hash TEXT, description TEXT, snippet TEXT, "
+              "listing_url TEXT, content_hash TEXT, snippet TEXT, "
               "salary_min REAL, salary_max REAL, years_min INTEGER)")
-    c.executemany("INSERT INTO jobs (id,source,apply_url,content_hash,description) VALUES (?,?,?,?,?)",
+    c.executemany("INSERT INTO jobs (id,source,apply_url,content_hash,snippet) VALUES (?,?,?,?,?)",
                   rows)
     c.commit()
     c.close()
@@ -74,6 +77,23 @@ def test_reconcile_fetches_missing_extracts_and_caps(tmp_path):
     assert got[0][0] == 120000.0 and got[0][1] == 150000.0   # extracted, text discarded
     assert got[0][2] and len(got[0][2]) <= 300               # snippet kept
     assert got[0][3] == "2026-07-12T00:00:00Z"
+
+def test_reconcile_selects_by_empty_snippet_not_description(tmp_path):
+    # Regression: the candidate predicate must use the REAL `snippet` column, not a `description`
+    # column (which does not exist on the real jobs schema). A row that already carries a snippet
+    # (its JD is captured) must be skipped; only the empty-snippet row is fetched.
+    idx = _mk_index(tmp_path, [
+        ("empty", "smartrecruiters", "http://x/empty", "h1", None),
+        ("has_jd", "smartrecruiters", "http://x/has", "h2", "Already has a real snippet."),
+    ])
+    det = str(tmp_path / "detail.sqlite")
+    fetched = []
+    async def fake(ref):
+        fetched.append(ref.id)
+        return "<p>Salary: $100,000 / year</p>"
+    stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
+    assert fetched == ["empty"]          # snippet-bearing row skipped, empty-snippet row fetched
+    assert stats["fetched"] == 1 and stats["missing"] == 0
 
 def test_reconcile_nonfatal_and_retry_budget(tmp_path):
     idx = _mk_index(tmp_path, [("1", "oracle", "http://x/1", "h1", None)])
