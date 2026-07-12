@@ -309,6 +309,18 @@ class EightfoldProvider(BaseProvider):
 
     @staticmethod
     def _locations(p: dict[str, Any]) -> list[Location]:
+        # PCSX-mode tenants expose ``standardizedLocations``: a list of comma-joined
+        # "City, Region, CC" strings (e.g. "Azusa, CA, US") — structured geo we didn't
+        # previously parse. Only some tenants carry it; when present it's strictly better
+        # than the free-text ``locations``/``location`` fields, so it takes priority.
+        # Anything malformed/absent falls straight through to the existing raw-string path
+        # so tenants without it are never regressed.
+        std = p.get("standardizedLocations")
+        if isinstance(std, list):
+            std_labels = [str(loc).strip() for loc in std if str(loc).strip()]
+            if std_labels:
+                return [EightfoldProvider._structured_location(label) for label in std_labels]
+
         labels = [str(loc).strip() for loc in (p.get("locations") or []) if str(loc).strip()]
         if not labels:
             single = str(p.get("location") or "").strip()
@@ -317,6 +329,31 @@ class EightfoldProvider(BaseProvider):
         for label in labels:
             out.append(Location(raw=label, is_remote="remote" in label.lower()))
         return out
+
+    @staticmethod
+    def _structured_location(label: str) -> Location:
+        """Parse one ``standardizedLocations`` entry ("City, Region, CC") into a Location.
+
+        Guarded against every arity we've observed/can anticipate:
+        - 3+ comma-separated parts -> city, region, country (extra middle segments ignored;
+          the last segment is always the country per the observed shape).
+        - 2 parts -> city, country (no region token, e.g. "Berlin, Germany").
+        - 1 part (or unparseable) -> ambiguous (could be "Remote", a bare country, etc.) —
+          never guess; keep only ``raw``/``is_remote`` so we don't mislabel a field.
+        """
+        parts = [seg.strip() for seg in label.split(",") if seg.strip()]
+        city = region = country = None
+        if len(parts) >= 3:
+            city, region, country = parts[0], parts[1], parts[-1]
+        elif len(parts) == 2:
+            city, country = parts[0], parts[1]
+        return Location(
+            city=city,
+            region=region,
+            country=country,
+            raw=label,
+            is_remote="remote" in label.lower(),
+        )
 
     @staticmethod
     def _remote(p: dict[str, Any], locations: list[Location]) -> RemoteType:
