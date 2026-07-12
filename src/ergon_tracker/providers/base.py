@@ -20,6 +20,7 @@ from ..models import JobPosting, RawJob, SearchQuery
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = [
     "Provider",
@@ -145,6 +146,17 @@ class BaseProvider:
     def conditional_url(self, token: str) -> str | None:
         """Default: not cheaply validatable. Providers with a single full-board response and
         ETag/Last-Modified support override this (see conditional-requests plan)."""
+        return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch the full JD detail resource for one posting (Tier-3 detail recovery).
+
+        Default: unsupported — the base provider has no per-posting detail endpoint to call.
+        Providers opt in by overriding this. Must be non-raising: any missing field, shape
+        mismatch, or fetch failure is a ``None`` return, not an exception — the reconcile pass
+        (``index.detail.reconcile_detail_tier``) counts a ``None`` as a failed fetch and treats
+        an exception the same way, but implementations should return ``None`` explicitly rather
+        than rely on that fallback."""
         return None
 
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:

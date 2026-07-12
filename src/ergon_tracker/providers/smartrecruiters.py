@@ -35,10 +35,15 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["SmartRecruitersProvider"]
 
 _API = "https://api.smartrecruiters.com/v1/companies/{token}/postings"
+
+# Per-posting detail resource (Tier-3 JD recovery): the public Posting API's single-item GET,
+# distinct from the paginated listing above. No auth required.
+_DETAIL_API = "https://api.smartrecruiters.com/v1/companies/{token}/postings/{posting_id}"
 
 _PAGE_LIMIT = 100
 
@@ -46,6 +51,12 @@ _PAGE_LIMIT = 100
 _HOST_PATTERNS = (
     re.compile(r"api\.smartrecruiters\.com/v1/companies/([^/?#]+)", re.I),
     re.compile(r"(?:careers|jobs)\.smartrecruiters\.com/([^/?#]+)", re.I),
+)
+
+# Public apply/listing URL shape: jobs.smartrecruiters.com/{token}/{postingId}. Captures both
+# the token (group 1) and the posting id (group 2, the path segment right after the token).
+_DETAIL_URL_PATTERN = re.compile(
+    r"(?:careers|jobs)\.smartrecruiters\.com/([^/?#]+)/([^/?#]+)", re.I
 )
 
 # SmartRecruiters ``typeOfEmployment.id`` / ``.label`` → canonical EmploymentType.
@@ -141,6 +152,38 @@ class SmartRecruitersProvider(BaseProvider):
             )
         return raws
 
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the per-posting detail resource (Tier-3 recovery).
+
+        ``ref.id`` is our internal id (a hash), NOT the SmartRecruiters posting id — the real
+        posting id (and, if ``ref.token`` is unset, the board token) is parsed out of
+        ``ref.apply_url``/``ref.listing_url``. Concatenates ``jobDescription.text`` +
+        ``qualifications.text`` (the latter tends to carry degree/YOE language). Non-raising:
+        any missing field, shape mismatch, unparseable URL, or fetch failure returns ``None``.
+        """
+        parsed = self._parse_posting_ref(ref)
+        if parsed is None:
+            return None
+        token, posting_id = parsed
+        url = _DETAIL_API.format(token=token, posting_id=posting_id)
+        try:
+            data = await fetcher.get_json(url)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        sections = (data.get("jobAd") or {}).get("sections")
+        if not isinstance(sections, dict):
+            return None
+        job_description = (sections.get("jobDescription") or {}).get("text")
+        if not job_description or not isinstance(job_description, str):
+            return None
+        qualifications = (sections.get("qualifications") or {}).get("text")
+        parts = [job_description]
+        if qualifications and isinstance(qualifications, str):
+            parts.append(qualifications)
+        return "\n".join(parts)
+
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
         loc = p.get("location") or {}
@@ -184,6 +227,28 @@ class SmartRecruitersProvider(BaseProvider):
         job_id = posting.get("id")
         if job_id:
             return f"https://jobs.smartrecruiters.com/{token}/{job_id}"
+        return None
+
+    @staticmethod
+    def _parse_posting_ref(ref: DetailRef) -> tuple[str, str] | None:
+        """Derive (token, posting_id) for the detail-resource URL from ``ref``.
+
+        ``ref.token`` is trusted for the board token when present; otherwise it's parsed from
+        the same URL as the posting id. Tries ``apply_url`` then ``listing_url``; returns None
+        if neither yields a recognisable SmartRecruiters posting URL."""
+        for url in (ref.apply_url, ref.listing_url):
+            if not url:
+                continue
+            m = _DETAIL_URL_PATTERN.search(url)
+            if not m:
+                continue
+            posting_id = m.group(2).strip("/")
+            if not posting_id:
+                continue
+            token = ref.token or m.group(1).strip("/")
+            if not token:
+                continue
+            return token, posting_id
         return None
 
     @staticmethod
