@@ -44,12 +44,17 @@ def test_sig_fallback_without_content_hash():
 
 def _mk_index(tmp_path, rows):
     import sqlite3
-    p = tmp_path / "index.sqlite"; c = sqlite3.connect(p)
+
+    p = tmp_path / "index.sqlite"
+    c = sqlite3.connect(p)
     c.execute("CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
               "listing_url TEXT, content_hash TEXT, description TEXT, snippet TEXT, "
               "salary_min REAL, salary_max REAL, years_min INTEGER)")
     c.executemany("INSERT INTO jobs (id,source,apply_url,content_hash,description) VALUES (?,?,?,?,?)",
-                  rows); c.commit(); c.close(); return str(p)
+                  rows)
+    c.commit()
+    c.close()
+    return str(p)
 
 def test_reconcile_fetches_missing_extracts_and_caps(tmp_path):
     idx = _mk_index(tmp_path, [(str(i), "oracle", f"http://x/{i}", f"h{i}", None) for i in range(5)])
@@ -58,7 +63,9 @@ def test_reconcile_fetches_missing_extracts_and_caps(tmp_path):
         return f"<p>Great role. Salary: $120,000 - $150,000 / year. Req {ref.id}.</p>"
     stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, max_details=3,
                                                     now=lambda: "2026-07-12T00:00:00Z"))
-    assert stats["fetched"] == 3 and stats["missing"] == 5   # capped at 3 of 5
+    # capped at 3 of 5 fetched this run; `missing` is the REMAINING drainable backlog after the
+    # pass (the 2 not reached), so it decreases toward 0 as the drain loop runs.
+    assert stats["fetched"] == 3 and stats["missing"] == 2
     con = open_detail(det)
     got = con.execute("SELECT salary_min, salary_max, snippet, fetched_at FROM job_detail").fetchall()
     assert len(got) == 3
@@ -79,7 +86,9 @@ def test_reconcile_sig_skips_unchanged(tmp_path):
     idx = _mk_index(tmp_path, [("1", "oracle", "http://x/1", "h1", None)])
     det = str(tmp_path / "detail.sqlite")
     calls = []
-    async def fake(ref): calls.append(ref.id); return "<p>Salary: $100,000 / year</p>"
+    async def fake(ref):
+        calls.append(ref.id)
+        return "<p>Salary: $100,000 / year</p>"
     anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
     anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))  # 2nd run
     assert calls == ["1"]  # unchanged sig -> not re-fetched

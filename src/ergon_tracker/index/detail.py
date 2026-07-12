@@ -249,10 +249,6 @@ async def reconcile_detail_tier(
         finally:
             idx_con.close()
 
-        # The pass never writes back to the index's `jobs.description`, so this count is the
-        # whole Tier-3 universe (matching `sources`), independent of how many this run resolved.
-        missing = len(tier3_rows)
-
         existing = _load_existing(det_con)
         candidates: list[DetailRef] = []
         for row in tier3_rows:
@@ -288,6 +284,14 @@ async def reconcile_detail_tier(
                 _record_attempt(det_con, ref.id)
                 failed += 1
         det_con.commit()
+
+        # Remaining drainable backlog AFTER this pass: tier-3 rows still eligible (not recovered,
+        # not retry-exhausted). Decreases as the sidecar fills; reaches 0 when every posting is
+        # recovered-or-dead — the drain loop's stop condition (Task 8's "until missing == 0").
+        existing_after = _load_existing(det_con)
+        missing = sum(
+            1 for row in tier3_rows if _eligible(str(row["id"]), detail_sig(row), existing_after)
+        )
 
         return {"fetched": fetched, "failed": failed, "missing": missing}
     finally:
