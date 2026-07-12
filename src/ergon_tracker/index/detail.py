@@ -249,44 +249,46 @@ def merge_detail_into_index(index_con: sqlite3.Connection, detail_path: str) -> 
     Within a sig-matched row, only columns that are currently NULL on the index row are filled
     (a value the list-crawl DID provide is never clobbered); `snippet` is filled the same way
     (NULL/empty only). Returns the count of index rows that were actually changed.
+
+    Scoped to O(sidecar rows), NOT O(all jobs): the sidecar is bounded (<= ERGON_DETAIL_MAX) but
+    the index is not (~1.48M+ rows), so this ATTACHes the sidecar db and INNER JOINs it onto
+    `jobs` -- only rows present in `job_detail` are ever read into memory, never a whole-table
+    `SELECT ... FROM jobs`.
     """
+    open_detail(detail_path).close()  # idempotent: ensure the sidecar schema exists before ATTACH
+
+    jobs_cols = ", ".join(f"j.{c} AS jobs_{c}" for c in _MERGE_COLUMNS)
+    det_cols = ", ".join(f"d.{c} AS det_{c}" for c in _MERGE_COLUMNS)
     prev_factory = index_con.row_factory
     index_con.row_factory = sqlite3.Row
+    index_con.execute("ATTACH DATABASE ? AS det", (detail_path,))
     try:
-        idx_rows = index_con.execute(
-            "SELECT id, content_hash, title, level, snippet, " + ", ".join(_MERGE_COLUMNS)
-            + " FROM jobs"
+        # Exhaust the read cursor (fetchall, bounded by sidecar size) BEFORE any writes below --
+        # never mutate `jobs` while a read cursor from this JOIN is still open on it.
+        rows = index_con.execute(
+            "SELECT j.id AS id, j.content_hash AS content_hash, j.title AS title, "
+            "j.level AS level, j.snippet AS jobs_snippet, " + jobs_cols + ", "
+            "d.sig AS sig, d.snippet AS det_snippet, " + det_cols + " "
+            "FROM jobs j JOIN det.job_detail d ON j.id = d.id"
         ).fetchall()
     finally:
+        index_con.execute("DETACH DATABASE det")
         index_con.row_factory = prev_factory
 
-    det_con = open_detail(detail_path)
-    try:
-        det_con.row_factory = sqlite3.Row
-        det_rows = det_con.execute(
-            "SELECT id, sig, snippet, " + ", ".join(_MERGE_COLUMNS) + " FROM job_detail"
-        ).fetchall()
-    finally:
-        det_con.close()
-    detail_by_id: dict[str, sqlite3.Row] = {r["id"]: r for r in det_rows}
-
     updated = 0
-    for row in idx_rows:
-        d = detail_by_id.get(row["id"])
-        if d is None:
-            continue
+    for row in rows:
         current_sig = detail_sig(
             {"content_hash": row["content_hash"], "title": row["title"], "level": row["level"]}
         )
-        if d["sig"] != current_sig:
+        if row["sig"] != current_sig:
             continue  # posting changed since the detail fetch -- stale sidecar, don't merge
 
         sets: list[str] = []
         params: list[Any] = []
         for col in _MERGE_COLUMNS:
-            if row[col] is not None:
+            if row[f"jobs_{col}"] is not None:
                 continue  # list-crawl already provided this -- never clobber
-            value = d[col]
+            value = row[f"det_{col}"]
             if value is None:
                 continue
             if col in _INT_COLUMNS:
@@ -297,9 +299,9 @@ def merge_detail_into_index(index_con: sqlite3.Connection, detail_path: str) -> 
             sets.append(f"{col} = ?")
             params.append(value)
 
-        if not row["snippet"] and d["snippet"]:
+        if not row["jobs_snippet"] and row["det_snippet"]:
             sets.append("snippet = ?")
-            params.append(d["snippet"])
+            params.append(row["det_snippet"])
 
         if not sets:
             continue
