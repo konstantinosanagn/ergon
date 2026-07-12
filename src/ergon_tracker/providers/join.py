@@ -21,6 +21,7 @@ blob under ``salaryAmountFrom``/``salaryAmountTo`` (nested ``{"amount": <minor u
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -95,7 +96,19 @@ def _minor_amount(obj: Any) -> tuple[float | None, str | None]:
     if not isinstance(obj, dict):
         return None, None
     amount = obj.get("amount")
-    return (amount / 100 if amount else None), (obj.get("currency") or None)
+    currency = obj.get("currency") or None
+    # Guard for parity with the recruitee/teamtailor salary parsers: coerce numeric strings,
+    # reject bool/non-numeric/non-finite/<=0 so no garbage Salary reaches the index.
+    if isinstance(amount, bool):
+        return None, currency
+    if isinstance(amount, str):
+        try:
+            amount = float(amount.strip())
+        except ValueError:
+            return None, currency
+    if not isinstance(amount, (int, float)) or not math.isfinite(amount) or amount <= 0:
+        return None, currency
+    return amount / 100, currency
 
 
 def _salary(p: dict[str, Any]) -> Salary | None:
