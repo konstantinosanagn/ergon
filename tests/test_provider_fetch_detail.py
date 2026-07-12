@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import anyio
 
+from ergon_tracker.http import AsyncFetcher
 from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
+from ergon_tracker.providers.base import BaseProvider, get_provider, load_builtins
 from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
 
 
@@ -144,3 +145,52 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
+
+
+# --- registry-glue dispatch (build_index._reconcile_detail's real path): DetailRef.from_row ->
+# get_provider(ref.source) -> provider.fetch_detail(ref, fetcher). Each half is tested elsewhere
+# in isolation (DetailRef.from_row above, SmartRecruitersProvider.fetch_detail above/via a fake
+# fetcher) but never wired together through the real registry + a real AsyncFetcher -- this proves
+# the seam. Only `AsyncFetcher.get_json` is stubbed; everything else (from_row, get_provider,
+# fetch_detail) is the real production code path.
+
+
+def test_dispatch_glue_from_row_through_registry_to_real_fetch_detail(monkeypatch) -> None:
+    payload = {
+        "jobAd": {
+            "sections": {
+                "jobDescription": {"text": "Full JD text for the dispatch-glue test."},
+                "qualifications": {"text": "BS in CS or equivalent."},
+            }
+        }
+    }
+
+    async def fake_get_json(self, url, **kwargs):  # noqa: ANN001, ARG001
+        return payload
+
+    monkeypatch.setattr(AsyncFetcher, "get_json", fake_get_json)
+
+    # A smartrecruiters-shaped index row, as `_tier3_rows` would select it.
+    row = {
+        "id": "1",
+        "source": "smartrecruiters",
+        "board_token": "acme",
+        "apply_url": "https://jobs.smartrecruiters.com/acme/743999983512345",
+        "listing_url": None,
+        "content_hash": "h1",
+    }
+    ref = DetailRef.from_row(row)
+    assert ref.source == "smartrecruiters" and ref.token == "acme"
+
+    load_builtins()
+    provider = get_provider(ref.source)
+    assert isinstance(provider, SmartRecruitersProvider)  # real registry resolution, not a fake
+
+    async def _run():
+        async with AsyncFetcher() as fetcher:
+            return await provider.fetch_detail(ref, fetcher)
+
+    desc = anyio.run(_run)
+    assert desc is not None
+    assert "Full JD text for the dispatch-glue test." in desc
+    assert "BS in CS" in desc

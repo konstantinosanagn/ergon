@@ -384,6 +384,27 @@ def _write_detail_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -
     )
 
 
+def _rebuild_jobs_fts(db_path: Path) -> None:
+    """Rebuild the external-content ``jobs_fts`` index over the merged ``jobs`` table.
+
+    ``merge_detail_into_index`` writes recovered fields (including ``snippet``) straight into
+    ``jobs`` via plain ``UPDATE`` statements. An external-content FTS5 table is NOT kept in sync
+    by those updates (only triggers on the *content* table would do that, and this schema has
+    none) -- so without an explicit rebuild, a recovered snippet is visible in ``jobs.snippet``
+    but invisible to ``jobs_fts MATCH`` keyword queries. Reuses the exact
+    ``INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')`` idiom the core build uses
+    (``index/build.py``: ``build_index``/``finalize_index``/``build_slim_index``).
+    """
+    from ergon_tracker.index.db import connect
+
+    con = connect(db_path)
+    try:
+        con.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')")
+        con.commit()
+    finally:
+        con.close()
+
+
 async def _reconcile_detail(detail_db: Path, index_db: Path) -> dict:
     """Fetch JD detail for Tier-3 (no-description) postings via each source's registered provider
     (``fetch_detail``), then merge recovered fields into the index db (already-promoted at this
@@ -450,6 +471,11 @@ def build_and_publish_detail(db_path: Path, out: Path, *, build_id: str) -> tupl
 
     detail_db = out / "index-detail.sqlite"
     stats = anyio.run(_reconcile_detail, detail_db, db_path)
+    if stats.get("merged", 0) > 0:
+        # Recovered snippets just landed in `jobs.snippet` via plain UPDATEs, which do NOT
+        # propagate into the external-content `jobs_fts` table -- rebuild it so those postings
+        # become MATCHable before the re-publish below ships them.
+        _rebuild_jobs_fts(db_path)
     sha, nbytes = _gzip_file(detail_db, out / "index-detail.sqlite.gz")
     _write_detail_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
     # Re-publish the core index so the fields merge_detail_into_index just wrote land in the
