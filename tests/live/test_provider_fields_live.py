@@ -129,3 +129,33 @@ def test_breezy_salary_populated():
             if isinstance(s, str) and s.strip():
                 filled += 1
     assert tot >= 100 and filled / tot >= 0.30, f"breezy salary {filled}/{tot}"
+
+
+@pytest.mark.live
+def test_personio_seniority_populated():
+    # Personio serves an XML feed; parse <seniority>/<yearsOfExperience> directly (like the jazzhr
+    # gate) rather than driving the provider's async fetch. 20 tokens so 1-2 dead boards can't flip
+    # the ratio. Controller-measured: seniority 100% (376/376), years 82% across 19 live boards.
+    import re
+
+    tot = filled = 0
+    for t in _tokens("personio", 20):
+        text = None
+        for url in (f"https://{t}.jobs.personio.de/xml", f"https://{t}.jobs.personio.com/xml"):
+            try:
+                r = httpx.get(url, headers=_H, timeout=12)
+            except Exception:
+                continue
+            if r.status_code == 200 and "<position>" in r.text:
+                text = r.text
+                break
+        if not text:
+            continue
+        for pos in re.findall(r"<position>(.*?)</position>", text, re.S):
+            tot += 1
+            m = re.search(r"<seniority>(.*?)</seniority>", pos, re.S)
+            val = (m.group(1).replace("<![CDATA[", "").replace("]]>", "").strip() if m else "")
+            if val:
+                filled += 1
+    assert tot >= 30, f"too few sampled ({tot})"
+    assert filled / tot >= 0.70, f"personio seniority {filled}/{tot}"
