@@ -88,6 +88,40 @@ def test_smartrecruiters_fetch_detail_no_urls_is_none() -> None:
     assert desc is None
 
 
+def test_smartrecruiters_fetch_detail_non_dict_job_ad_is_none() -> None:
+    # ``jobAd`` truthy but not a dict (e.g. an unexpected string shape) must not raise.
+    payload = {"jobAd": "unexpected-string"}
+    ref = DetailRef(
+        id="1",
+        source="smartrecruiters",
+        token="acme",
+        apply_url="https://jobs.smartrecruiters.com/acme/743999983512345",
+        listing_url=None,
+        content_sig="s",
+    )
+    desc = anyio.run(
+        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
+    )
+    assert desc is None
+
+
+def test_smartrecruiters_fetch_detail_non_dict_job_description_is_none() -> None:
+    # ``jobDescription`` truthy but not a dict must not raise.
+    payload = {"jobAd": {"sections": {"jobDescription": "unexpected-string"}}}
+    ref = DetailRef(
+        id="1",
+        source="smartrecruiters",
+        token="acme",
+        apply_url="https://jobs.smartrecruiters.com/acme/743999983512345",
+        listing_url=None,
+        content_sig="s",
+    )
+    desc = anyio.run(
+        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
+    )
+    assert desc is None
+
+
 def test_smartrecruiters_fetch_detail_derives_token_from_apply_url_when_ref_token_missing() -> None:
     payload = _sr_payload()
     ref = DetailRef(

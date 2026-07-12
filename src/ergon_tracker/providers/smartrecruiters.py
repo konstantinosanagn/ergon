@@ -172,13 +172,20 @@ class SmartRecruitersProvider(BaseProvider):
             return None
         if not isinstance(data, dict):
             return None
-        sections = (data.get("jobAd") or {}).get("sections")
+        job_ad = data.get("jobAd")
+        sections = job_ad.get("sections") if isinstance(job_ad, dict) else None
         if not isinstance(sections, dict):
             return None
-        job_description = (sections.get("jobDescription") or {}).get("text")
+        job_description_obj = sections.get("jobDescription")
+        job_description = (
+            job_description_obj.get("text") if isinstance(job_description_obj, dict) else None
+        )
         if not job_description or not isinstance(job_description, str):
             return None
-        qualifications = (sections.get("qualifications") or {}).get("text")
+        qualifications_obj = sections.get("qualifications")
+        qualifications = (
+            qualifications_obj.get("text") if isinstance(qualifications_obj, dict) else None
+        )
         parts = [job_description]
         if qualifications and isinstance(qualifications, str):
             parts.append(qualifications)
