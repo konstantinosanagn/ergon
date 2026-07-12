@@ -230,3 +230,38 @@ def test_merge_guards_bad_int_casts_for_degree_and_sponsorship(tmp_path):
     assert row[0] == 75000.0
     assert row[1] is None       # bad cast guarded -- column left untouched, no crash
     assert row[2] == 1
+
+
+def test_merge_is_per_row_atomic_check_violation_does_not_discard_good_merges(tmp_path):
+    """Reproduces the reviewer-found bug: a single sidecar row whose merged values trip a
+    DB-level CHECK (salary_min <= salary_max) must not sink an EARLIER, already-clean merge in
+    the same call -- the whole point of Task 4's durability guarantee. Row 'A' merges cleanly;
+    row 'B' has an existing salary_min=90000 with the sidecar filling salary_max=50000 (NULL-guard
+    still applies since salary_max was NULL on the index row), tripping the CHECK."""
+    good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "mid"})
+    idx_path = tmp_path / "real_index.sqlite"
+    idx = _mk_real_index(tmp_path, [
+        {"id": "A", "content_hash": "h1", "title": "Engineer"},                       # clean target
+        {"id": "B", "content_hash": "h1", "title": "Engineer", "salary_min": 90000.0},  # CHECK trap
+    ])
+    det = _mk_detail_sidecar(tmp_path, [
+        {"id": "A", "sig": good_sig, "salary_min": 60000.0, "salary_max": 80000.0},
+        {"id": "B", "sig": good_sig, "salary_max": 50000.0},  # 90000 <= 50000 violates the CHECK
+    ])
+
+    n = merge_detail_into_index(idx, det)  # must not raise
+    assert n == 1  # only A's merge counted; B was skipped, not applied
+
+    rowA = idx.execute("SELECT salary_min, salary_max FROM jobs WHERE id='A'").fetchone()
+    assert rowA[0] == 60000.0 and rowA[1] == 80000.0  # A's merge WAS applied
+
+    rowB = idx.execute("SELECT salary_min, salary_max FROM jobs WHERE id='B'").fetchone()
+    assert rowB[0] == 90000.0 and rowB[1] is None  # B left completely untouched
+
+    # Reconnect fresh to prove A's merge actually persisted (single final commit fast path),
+    # not just visible within the same still-open, possibly-uncommitted connection.
+    idx.close()
+    idx2 = sqlite3.connect(str(idx_path))
+    persisted = idx2.execute("SELECT salary_min, salary_max FROM jobs WHERE id='A'").fetchone()
+    idx2.close()
+    assert persisted == (60000.0, 80000.0)

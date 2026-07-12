@@ -300,7 +300,18 @@ def merge_detail_into_index(index_con: sqlite3.Connection, detail_path: str) -> 
             continue
 
         params.append(row["id"])
-        index_con.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", params)
+        # Per-row SAVEPOINT: a single row whose merged values trip a DB-level CHECK constraint
+        # (e.g. filling salary_max below an existing salary_min, or a bad enum value) must not
+        # discard every other row's already-computed UPDATE in this same call -- only the one
+        # bad row's partial write is rolled back; everything else keeps the single final commit.
+        index_con.execute("SAVEPOINT detail_merge_row")
+        try:
+            index_con.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", params)
+        except sqlite3.IntegrityError:
+            index_con.execute("ROLLBACK TO detail_merge_row")
+            index_con.execute("RELEASE detail_merge_row")
+            continue
+        index_con.execute("RELEASE detail_merge_row")
         updated += 1
 
     index_con.commit()
