@@ -70,7 +70,9 @@ def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     sha, nbytes = _gzip_file(db_path, out_dir / "index.sqlite.gz")
     (out_dir / "manifest.json").write_text(
-        json.dumps({"build_id": build_id, "schema_version": SCHEMA_VERSION, "sha256": sha, "bytes": nbytes})
+        json.dumps(
+            {"build_id": build_id, "schema_version": SCHEMA_VERSION, "sha256": sha, "bytes": nbytes}
+        )
     )
 
 
@@ -302,35 +304,56 @@ def _update_deltas_window(out: Path, entry: dict) -> list[str]:
     return pruned
 
 
+def _write_vectors_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
+    """Write ``manifest-vectors.json`` alongside the gz — the exact fields ``RichCache.ensure_fresh``
+    reads (schema_version gate, build_id freshness key, sha256 of the RAW bytes). Mirrors the slim
+    manifest producer; a field-name drift here silently disables the sidecar for every user."""
+    from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
+
+    (out / "manifest-vectors.json").write_text(
+        json.dumps(
+            {
+                "build_id": build_id,
+                "schema_version": RICH_SCHEMA_VERSION,
+                "sha256": sha,
+                "bytes": nbytes,
+            },
+            indent=2,
+        )
+    )
+
+
 def build_and_publish_rich(
     db_path: Path, jobs: list, out: Path, *, build_id: str
 ) -> tuple[dict, int]:
-    """Reconcile the rich sidecar (full-JD FTS + pre-stored int8 embeddings) to the freshly-built main
-    index, then gzip-publish it as ``index-rich.sqlite.gz``.
+    """Reconcile the vectors sidecar (pre-stored int8 embeddings) to the freshly-built main index,
+    then gzip-publish it as ``index-vectors.sqlite.gz`` + ``manifest-vectors.json``.
 
     Uses the in-memory ``jobs`` (which still carry FULL descriptions — the main index truncates to a
     snippet) and the main index's live ids, so the cascade prunes anything the build dropped and
     re-embeds only new/changed postings. Needs the ``semantic`` extra (the embedding model)."""
     from ergon_tracker.index.rich import reconcile_rich_tier
 
-    rich_db = out / "index-rich.sqlite"
+    rich_db = out / "index-vectors.sqlite"
     stats = reconcile_rich_tier(rich_db, db_path, jobs, build_id=build_id)
-    _, nbytes = _gzip_file(rich_db, out / "index-rich.sqlite.gz")
+    sha, nbytes = _gzip_file(rich_db, out / "index-vectors.sqlite.gz")
+    _write_vectors_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
     return stats, nbytes
 
 
 def build_and_publish_rich_incremental(
     db_path: Path, fresh_db_path: Path, out: Path, *, build_id: str
 ) -> tuple[dict, int]:
-    """Incremental (cron) rich publish: reconcile the persisted sidecar against the freshly-built main
-    index using the crawl window's ``fresh_rich`` rows (full descriptions captured on disk), then gzip-
-    publish ``index-rich.sqlite.gz``. Carried-forward ids keep the text+vectors already in the sidecar,
-    so only new/changed postings re-embed. Needs the ``semantic`` extra."""
+    """Incremental (cron) vectors publish: reconcile the persisted sidecar against the freshly-built
+    main index using the crawl window's ``fresh_rich`` rows (full descriptions captured on disk), then
+    gzip-publish ``index-vectors.sqlite.gz`` + ``manifest-vectors.json``. Carried-forward ids keep the
+    vectors already in the sidecar, so only new/changed postings re-embed. Needs the ``semantic`` extra."""
     from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
 
-    rich_db = out / "index-rich.sqlite"
+    rich_db = out / "index-vectors.sqlite"
     stats = reconcile_rich_tier_from_fresh(rich_db, db_path, fresh_db_path, build_id=build_id)
-    _, nbytes = _gzip_file(rich_db, out / "index-rich.sqlite.gz")
+    sha, nbytes = _gzip_file(rich_db, out / "index-vectors.sqlite.gz")
+    _write_vectors_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
     return stats, nbytes
 
 
@@ -348,7 +371,13 @@ def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
     slim.unlink(missing_ok=True)
     (out / "manifest-slim.json").write_text(
         json.dumps(
-            {"build_id": build_id, "schema_version": SCHEMA_VERSION, "sha256": sha, "bytes": nbytes, "rows": n}
+            {
+                "build_id": build_id,
+                "schema_version": SCHEMA_VERSION,
+                "sha256": sha,
+                "bytes": nbytes,
+                "rows": n,
+            }
         )
     )
     return n
@@ -830,7 +859,7 @@ def main(argv: list[str]) -> None:
                 )
                 print(
                     f"  + rich tier (pruned={rstats['pruned']} embedded={rstats['embedded']} "
-                    f"missing={rstats['missing']}) -> index-rich.sqlite.gz ({rbytes // 1024} KB)"
+                    f"missing={rstats['missing']}) -> index-vectors.sqlite.gz ({rbytes // 1024} KB)"
                 )
             except Exception as exc:  # noqa: BLE001 - never let the rich tier break the core build
                 print(f"  ! rich tier skipped (non-fatal): {type(exc).__name__}: {exc}")
@@ -881,7 +910,7 @@ def main(argv: list[str]) -> None:
         stats, nbytes = build_and_publish_rich(db, jobs, out, build_id=build_id)
         print(
             f"  + published rich tier (pruned={stats['pruned']} embedded={stats['embedded']} "
-            f"missing={stats['missing']}) -> index-rich.sqlite.gz ({nbytes // 1024} KB)"
+            f"missing={stats['missing']}) -> index-vectors.sqlite.gz ({nbytes // 1024} KB)"
         )
     print(f"built index: {n} jobs -> {out}/index.sqlite.gz (+manifest.json)")
 
