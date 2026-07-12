@@ -17,13 +17,41 @@ swapped for a trained model behind the same ``FieldExtractor`` seam.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from ..models import Salary, SalaryInterval
 from .base import ExtractInput, register_extractor
 
-__all__ = ["CompExtractor", "parse_salary"]
+__all__ = ["CompExtractor", "coerce_amount", "parse_salary"]
+
+
+def coerce_amount(value: Any) -> float | None:
+    """Coerce a salary amount (number or numeric string) to a positive finite float, or None.
+
+    Shared by providers whose structured payloads carry a min/max salary bound as either a
+    number or a string (recruitee, teamtailor, join). Rejects ``bool`` (a ``bool`` is an
+    ``int`` subclass and would otherwise silently coerce to 0.0/1.0), non-numeric strings,
+    ``NaN``/``Inf`` (valid ``float()`` literals), and non-positive values, so no garbage
+    ``Salary`` ever reaches the index.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        f = float(value)
+        return f if math.isfinite(f) and f > 0 else None
+    if isinstance(value, str):
+        stripped = value.strip().replace(",", "")
+        if not stripped:
+            return None
+        try:
+            f = float(stripped)
+        except ValueError:
+            return None
+        return f if math.isfinite(f) and f > 0 else None
+    return None
 
 
 # --- currency -----------------------------------------------------------------

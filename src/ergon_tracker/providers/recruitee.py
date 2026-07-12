@@ -8,11 +8,11 @@ board and the orchestrator applies ``SearchQuery.matches`` client-side.
 
 from __future__ import annotations
 
-import math
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import coerce_amount
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -60,38 +60,14 @@ _INTERVAL_BY_PERIOD = {
 }
 
 
-def _to_amount(value: Any) -> float | None:
-    """Coerce a recruitee salary amount (string or number) to float.
-
-    Recruitee reports ``min``/``max`` as strings (e.g. ``"5200"``) on some boards and as
-    numbers on others. Non-numeric or empty values yield ``None`` rather than raising.
-    """
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        f = float(value)
-        return f if math.isfinite(f) and f > 0 else None
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        try:
-            f = float(stripped)
-        except ValueError:
-            return None
-        # reject "nan"/"inf"/"-inf" (valid float literals) so a garbage Salary never reaches the index
-        return f if math.isfinite(f) and f > 0 else None
-    return None
-
-
 def _salary(p: dict[str, Any]) -> Salary | None:
+    """Recruitee reports ``salary.min``/``salary.max`` as strings (e.g. ``"5200"``) on some
+    boards and as numbers on others; ``coerce_amount`` handles both."""
     raw_salary = p.get("salary")
     if not isinstance(raw_salary, dict):
         return None
-    min_amount = _to_amount(raw_salary.get("min"))
-    max_amount = _to_amount(raw_salary.get("max"))
+    min_amount = coerce_amount(raw_salary.get("min"))
+    max_amount = coerce_amount(raw_salary.get("max"))
     if min_amount is None and max_amount is None:
         return None
     period = (raw_salary.get("period") or "").strip().lower() or None

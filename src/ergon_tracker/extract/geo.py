@@ -586,7 +586,15 @@ def normalize_geo(loc: Location) -> Location:
     # not fragment "US" vs "United States". Applied to the explicit field only — segment
     # parsing below keeps its own state-collision-aware resolution (e.g. "CA" = California).
     if loc.country:
-        loc.country = _COUNTRY_ALIASES.get(loc.country.strip().lower(), loc.country)
+        _explicit_key = loc.country.strip().lower()
+        _explicit_country = _COUNTRY_ALIASES.get(_explicit_key)
+        if _explicit_country is None and len(_explicit_key) == 2:
+            # ISO alpha-2 fallback ("GB" -> United Kingdom, "DE" -> Germany): _COUNTRY_ALIASES
+            # only covers the codes that double as common aliases (us/uk/uae); the rest live in
+            # _ISO2_COUNTRY. Safe here because this field is an EXPLICIT country (not a bare
+            # segment), so there's no US-state collision risk to guard against.
+            _explicit_country = _ISO2_COUNTRY.get(_explicit_key)
+        loc.country = _explicit_country if _explicit_country is not None else loc.country
     if not loc.raw:
         return loc
     raw = loc.raw.strip()
