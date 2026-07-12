@@ -84,10 +84,13 @@ _FREQ = {
     "PER_HOUR": SalaryInterval.HOUR,
 }
 
-# Canonical ISO-4217 zero-decimal currencies (no minor unit) — the standard list used
-# across payments engineering (matches Stripe's published zero-decimal set). join reports
-# every amount in "minor units" divided by 100, but these currencies have no minor unit, so
-# dividing by 100 would understate them 100x; divide by 1 instead.
+# Zero-decimal currencies (no minor unit) — Stripe's published zero-decimal set. join reports
+# amounts in "minor units" divided by 100, but these have no minor unit, so dividing by 100 would
+# understate them 100x; divide by 1 instead.
+# CAVEAT: this is Stripe's list, not strictly ISO-4217. ISK is genuinely zero-decimal under ISO-4217
+# (Amendment 137, 2007) but Stripe excludes it for card-network reasons — so an ISK salary from join
+# would be divided by 100 here. Left as-is because join's ISK amount convention is unverified (no
+# Icelandic sample) and such postings are vanishingly rare; revisit if ISK salaries appear wrong.
 _ZERO_DECIMAL_CURRENCIES = frozenset(
     {
         "BIF",
