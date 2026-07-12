@@ -126,3 +126,27 @@ def test_breezy_empty_salary_stays_none():
 
     p = BreezyProvider()
     assert p.normalize(_raw({"name": "Eng", "salary": ""})).salary is None
+
+
+def test_coveo_direct_mode_reads_correct_keys():
+    """Direct-mode (UST-style) raw items key description under 'data' and department under
+    'obu' — not the proxy-mode 'description'/'category' keys. normalize() must read both."""
+    from ergon_tracker.providers.coveo import CoveoProvider
+
+    p = CoveoProvider()
+    job = p.normalize(_raw({"title": "Eng", "data": "<p>Build things.</p>", "obu": "Engineering"}))
+    assert job.description_html is not None and "Build things" in job.description_html
+    assert job.department == "Engineering"
+
+
+def test_coveo_proxy_mode_still_reads_original_keys():
+    """Proxy-mode (SLB-style) raw items key description/department under 'description'/'category'.
+    Fixing direct-mode must not regress proxy-mode, and the proxy key must take precedence."""
+    from ergon_tracker.providers.coveo import CoveoProvider
+
+    p = CoveoProvider()
+    job = p.normalize(
+        _raw({"title": "Eng", "description": "<p>Ship code.</p>", "category": "Product"})
+    )
+    assert job.description_html is not None and "Ship code" in job.description_html
+    assert job.department == "Product"
