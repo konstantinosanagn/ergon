@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -108,11 +109,22 @@ class JobicyProvider(BaseProvider):
             remote=RemoteType.REMOTE,
             employment_type=_employment(p.get("jobType")),
             salary=self._salary(p),
+            # Both jobLevel and jobIndustry can be list-or-scalar in the jobicy API; normalize
+            # through _first_str so a list-shaped jobLevel can't crash level_from_ats_vocab.
+            level=level_from_ats_vocab(self._first_str(p.get("jobLevel"))),
+            sector=self._first_str(p.get("jobIndustry")),
             apply_url=p.get("url"),
             posted_at=_parse_dt(p.get("pubDate")),
             fetched_at=raw.fetched_at,
             raw=raw.payload,
         )
+
+    @staticmethod
+    def _first_str(v: Any) -> str | None:
+        """jobicy list-or-scalar fields (e.g. jobIndustry) -> first non-empty trimmed string."""
+        if isinstance(v, (list, tuple)):
+            v = v[0] if v else None
+        return v.strip() or None if isinstance(v, str) and v.strip() else None
 
     @staticmethod
     def _salary(p: dict[str, Any]) -> Salary | None:

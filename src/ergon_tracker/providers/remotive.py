@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import parse_salary
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -92,6 +93,7 @@ class RemotiveProvider(BaseProvider):
             remote=RemoteType.REMOTE,  # every Remotive posting is remote.
             employment_type=_employment(p.get("job_type")),
             department=p.get("category") or None,
+            salary=parse_salary(p.get("salary") if isinstance(p.get("salary"), str) else None),
             apply_url=p.get("url"),
             posted_at=_parse_dt(p.get("publication_date")),
             fetched_at=raw.fetched_at,

@@ -16,6 +16,7 @@ client-side.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -26,6 +27,8 @@ from ..models import (
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -42,6 +45,22 @@ _HOST_PATTERNS = (re.compile(r"([^/.\s]+)\.teamtailor\.com", re.I),)
 
 # Subdomains that are not company boards.
 _RESERVED = {"www", "api"}
+
+# schema.org QuantitativeValue.unitText -> our interval enum (baseSalary is rare in this feed,
+# but when present it follows the standard schema.org MonetaryAmount shape).
+_INTERVAL_BY_UNIT = {
+    "YEAR": SalaryInterval.YEAR,
+    "YEARLY": SalaryInterval.YEAR,
+    "ANNUAL": SalaryInterval.YEAR,
+    "MONTH": SalaryInterval.MONTH,
+    "MONTHLY": SalaryInterval.MONTH,
+    "WEEK": SalaryInterval.WEEK,
+    "WEEKLY": SalaryInterval.WEEK,
+    "DAY": SalaryInterval.DAY,
+    "DAILY": SalaryInterval.DAY,
+    "HOUR": SalaryInterval.HOUR,
+    "HOURLY": SalaryInterval.HOUR,
+}
 
 # schema.org employmentType values -> our enum (the feed rarely sets these).
 _EMPLOYMENT_BY_CODE = {
@@ -150,8 +169,60 @@ class TeamtailorProvider(BaseProvider):
             posted_at=posted_at,
             description_html=description_html,
             description_text=description_text,
+            salary=self._salary(jp),
             raw=raw.payload,
         )
+
+    @staticmethod
+    def _salary(jp: dict[str, Any]) -> Salary | None:
+        """Map the embedded schema.org ``baseSalary`` (a ``MonetaryAmount``) to ``Salary``.
+
+        Rare in this feed (~12% fill per the field-inventory), but when present it follows the
+        standard shape: ``{"currency": "USD", "value": {"minValue": N, "maxValue": N,
+        "unitText": "YEAR"}}`` (a bare numeric ``value`` is also tolerated). Returns None
+        (never a zero-amount shell) unless at least one amount is present.
+        """
+        base = jp.get("baseSalary")
+        if not isinstance(base, dict):
+            return None
+        currency = (base.get("currency") or "").strip() or None
+        value = base.get("value")
+
+        lo: Any = None
+        hi: Any = None
+        unit: Any = None
+        if isinstance(value, dict):
+            lo = value.get("minValue")
+            hi = value.get("maxValue")
+            unit = value.get("unitText")
+            single = value.get("value")
+            if lo is None and hi is None and single is not None:
+                lo = hi = single
+        elif isinstance(value, (int, float, str)):
+            lo = hi = value
+
+        def _num(v: Any) -> float | None:
+            if isinstance(v, bool):
+                return None
+            if isinstance(v, (int, float)):
+                f = float(v)
+                return f if math.isfinite(f) and f > 0 else None
+            if isinstance(v, str):
+                try:
+                    f = float(v.replace(",", "").strip())
+                except ValueError:
+                    return None
+                # reject "inf"/"nan" (valid float() literals) so no garbage Salary reaches the index
+                return f if math.isfinite(f) and f > 0 else None
+            return None
+
+        lo_n, hi_n = _num(lo), _num(hi)
+        if lo_n is None and hi_n is None:
+            return None
+
+        interval = _INTERVAL_BY_UNIT.get(str(unit or "").strip().upper())
+
+        return Salary(min_amount=lo_n, max_amount=hi_n, currency=currency, interval=interval)
 
     @staticmethod
     def _locations(jp: dict[str, Any]) -> list[Location]:

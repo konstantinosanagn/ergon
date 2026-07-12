@@ -22,7 +22,7 @@ import re
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
-from ..models import JobPosting, Location, RawJob, RemoteType
+from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -34,6 +34,22 @@ __all__ = ["PaycomProvider"]
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 _CK_RE = re.compile(r"[0-9A-Fa-f]{32}")
 _PAGE = 50
+# Paycom ``positionType`` (filter facet ``positionTypes`` in the search body) -> canonical
+# EmploymentType. Confirmed value from a live sample: "Full Time"; the rest mirror the other
+# payroll/HCM-vendor ATSes (paylocity, bamboohr) in this codebase.
+_EMPLOYMENT = {
+    "full time": EmploymentType.FULL_TIME,
+    "full-time": EmploymentType.FULL_TIME,
+    "fulltime": EmploymentType.FULL_TIME,
+    "part time": EmploymentType.PART_TIME,
+    "part-time": EmploymentType.PART_TIME,
+    "parttime": EmploymentType.PART_TIME,
+    "contract": EmploymentType.CONTRACT,
+    "temporary": EmploymentType.TEMPORARY,
+    "seasonal": EmploymentType.TEMPORARY,
+    "intern": EmploymentType.INTERNSHIP,
+    "internship": EmploymentType.INTERNSHIP,
+}
 # In-page: re-issue the app's own search request (captured auth header) with our paging.
 _JS = """async (a) => {
   const out = []; const seen = {};
@@ -176,6 +192,17 @@ class PaycomProvider(BaseProvider):
             if "hybrid" in rt
             else RemoteType.UNKNOWN
         )
+        employment = _EMPLOYMENT.get(
+            str(p.get("positionType") or "").strip().lower(), EmploymentType.UNKNOWN
+        )
+        # NOTE: the ``job-posting-previews/search`` endpoint's ``description`` is a HARD-TRUNCATED
+        # ~153-char teaser (confirmed by sampling: every non-empty value observed was exactly 153
+        # chars, cut off mid-word), NOT the full job description — Paycom only serves the complete
+        # JD from a separate per-job detail page/endpoint this provider doesn't fetch. We still
+        # store the teaser in ``description_html`` (it's short plain text, not HTML) because a
+        # short snippet still aids keyword search/dedup and won't false-positive against the
+        # precision-oriented degree/comp/yoe extractors run over it -- but it must never be
+        # treated as a complete JD by downstream consumers.
         desc = p.get("description")
         return JobPosting.create(
             source=self.name,
@@ -186,5 +213,6 @@ class PaycomProvider(BaseProvider):
             apply_url=raw.url,
             locations=[loc] if loc else [],
             remote=remote,
+            employment_type=employment,
             description_html=desc if isinstance(desc, str) and desc.strip() else None,
         )

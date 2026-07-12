@@ -11,13 +11,17 @@ pages are fetched with ``?page=N`` (SSR re-renders the slice). We fetch page 1 t
 count, then fetch the remaining pages **concurrently**, bounded by ``MAX_PAGES`` and
 ``query.limit``.
 
-The list blob has no job description or salary amount (those live on the per-job detail page),
-so ``description``/``salary`` are ``None`` here — never invented.
+The list blob has no job description (that lives on the per-job detail page), so
+``description`` is ``None`` here — never invented. Salary amounts *are* present in the list
+blob under ``salaryAmountFrom``/``salaryAmountTo`` (nested ``{"amount": <minor units>,
+"currency": ...}`` objects, divided by 100 for whole-currency units) even when
+``settings.showSalary`` is ``false`` — see ``_salary()``.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -30,6 +34,8 @@ from ..models import (
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -68,6 +74,56 @@ _WORKPLACE = {
     "remote": RemoteType.REMOTE,
     "hybrid": RemoteType.HYBRID,
 }
+
+# join.com ``salaryFrequency`` vocabulary -> our enum.
+_FREQ = {
+    "PER_YEAR": SalaryInterval.YEAR,
+    "PER_MONTH": SalaryInterval.MONTH,
+    "PER_WEEK": SalaryInterval.WEEK,
+    "PER_DAY": SalaryInterval.DAY,
+    "PER_HOUR": SalaryInterval.HOUR,
+}
+
+
+def _minor_amount(obj: Any) -> tuple[float | None, str | None]:
+    """(major-unit amount, currency) from a join salary sub-object, or ``(None, None)``.
+
+    join nests each bound as ``{"amount": <minor units>, "currency": "USD"}`` rather than a
+    bare number -- confirmed against live payloads (a flat-number schema was assumed
+    earlier but is not what the API returns). The amount is minor units (cents), so it is
+    divided by 100 to get whole currency units.
+    """
+    if not isinstance(obj, dict):
+        return None, None
+    amount = obj.get("amount")
+    currency = obj.get("currency") or None
+    # Guard for parity with the recruitee/teamtailor salary parsers: coerce numeric strings,
+    # reject bool/non-numeric/non-finite/<=0 so no garbage Salary reaches the index.
+    if isinstance(amount, bool):
+        return None, currency
+    if isinstance(amount, str):
+        try:
+            amount = float(amount.strip())
+        except ValueError:
+            return None, currency
+    if not isinstance(amount, (int, float)) or not math.isfinite(amount) or amount <= 0:
+        return None, currency
+    return amount / 100, currency
+
+
+def _salary(p: dict[str, Any]) -> Salary | None:
+    """Join carries amounts in the list blob under salaryAmountFrom/To; present even when
+    settings.showSalary is false."""
+    lo, lo_currency = _minor_amount(p.get("salaryAmountFrom"))
+    hi, hi_currency = _minor_amount(p.get("salaryAmountTo"))
+    if lo is None and hi is None:
+        return None
+    return Salary(
+        min_amount=lo,
+        max_amount=hi,
+        currency=lo_currency or hi_currency,
+        interval=_FREQ.get(str(p.get("salaryFrequency") or "").upper()),
+    )
 
 
 def _parse_initial_state(html: str) -> dict[str, Any]:
@@ -182,7 +238,7 @@ class JoinProvider(BaseProvider):
             remote=remote,
             employment_type=_employment(p),
             department=department,
-            salary=None,  # amounts not exposed in the list blob
+            salary=_salary(p),
             posted_at=_parse_dt(p.get("createdAt")),
             description_html=None,  # description lives on the per-job detail page
             description_text=None,

@@ -151,8 +151,18 @@ class LeverProvider(BaseProvider):
         if not all_locations and categories.get("location"):
             all_locations = [categories["location"]]
         is_remote = workplace == "remote"
+        # Lever reports the posting's ISO country separately from the free-text location
+        # segments in `categories`; carry it onto each Location so geo filtering doesn't
+        # depend solely on parsing the raw string. `normalize_geo` (extract/geo.py)
+        # canonicalizes an already-set `country` via its alias table, so passing the raw
+        # ISO code through here is sufficient.
+        top_country = str(p.get("country") or "").strip() or None
         locations = [
-            Location(raw=loc, is_remote=is_remote or "remote" in str(loc).lower())
+            Location(
+                raw=loc,
+                country=top_country,
+                is_remote=is_remote or "remote" in str(loc).lower(),
+            )
             for loc in all_locations
             if loc
         ]

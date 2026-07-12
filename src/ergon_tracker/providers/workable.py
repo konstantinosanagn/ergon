@@ -16,6 +16,8 @@ import re
 from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING, Any
 
+from ..extract.degree import degree_from_ats_vocab
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -118,6 +120,8 @@ class WorkableProvider(BaseProvider):
             remote=remote,
             employment_type=employment_type,
             department=p.get("department") or None,
+            level=level_from_ats_vocab(p.get("experience")),
+            degree_min=degree_from_ats_vocab(p.get("education")),
             salary=None,  # not exposed by the widget endpoint
             posted_at=_parse_date(p.get("published_on")),
             raw=raw.payload,

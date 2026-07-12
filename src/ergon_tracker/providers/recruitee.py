@@ -8,6 +8,7 @@ board and the orchestrator applies ``SearchQuery.matches`` client-side.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,8 @@ from ..models import (
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -46,6 +49,60 @@ _EMPLOYMENT_BY_PREFIX = {
 
 # Recruitee timestamps look like "2026-06-08 13:03:54 UTC".
 _DT_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})")
+
+# Recruitee's ``salary.period`` (e.g. "month", "year") -> SalaryInterval.
+_INTERVAL_BY_PERIOD = {
+    "year": SalaryInterval.YEAR,
+    "month": SalaryInterval.MONTH,
+    "week": SalaryInterval.WEEK,
+    "day": SalaryInterval.DAY,
+    "hour": SalaryInterval.HOUR,
+}
+
+
+def _to_amount(value: Any) -> float | None:
+    """Coerce a recruitee salary amount (string or number) to float.
+
+    Recruitee reports ``min``/``max`` as strings (e.g. ``"5200"``) on some boards and as
+    numbers on others. Non-numeric or empty values yield ``None`` rather than raising.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        f = float(value)
+        return f if math.isfinite(f) and f > 0 else None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            f = float(stripped)
+        except ValueError:
+            return None
+        # reject "nan"/"inf"/"-inf" (valid float literals) so a garbage Salary never reaches the index
+        return f if math.isfinite(f) and f > 0 else None
+    return None
+
+
+def _salary(p: dict[str, Any]) -> Salary | None:
+    raw_salary = p.get("salary")
+    if not isinstance(raw_salary, dict):
+        return None
+    min_amount = _to_amount(raw_salary.get("min"))
+    max_amount = _to_amount(raw_salary.get("max"))
+    if min_amount is None and max_amount is None:
+        return None
+    period = (raw_salary.get("period") or "").strip().lower() or None
+    interval = _INTERVAL_BY_PERIOD.get(period) if period else None
+    currency = (raw_salary.get("currency") or "").strip() or None
+    return Salary(
+        min_amount=min_amount,
+        max_amount=max_amount,
+        currency=currency,
+        interval=interval,
+    )
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -129,7 +186,7 @@ class RecruiteeProvider(BaseProvider):
             remote=remote,
             employment_type=_employment(p.get("employment_type_code")),
             department=p.get("department") or None,
-            salary=None,  # present in feed but not normalized here (kept in raw)
+            salary=_salary(p),
             posted_at=_parse_dt(p.get("published_at") or p.get("created_at")),
             updated_at=_parse_dt(p.get("updated_at")),
             description_html=description_html,

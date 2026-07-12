@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 
-from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
+from ..extract.level import level_from_ats_vocab
+from ..models import EmploymentType, JobLevel, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -152,6 +153,7 @@ class TheMuseProvider(BaseProvider):
             remote=self._remote(p),
             employment_type=self._employment_type(p.get("type")),
             department=self._department(p),
+            level=self._level(p),
             apply_url=apply_url,
             posted_at=_parse_dt(p.get("publication_date")),
             fetched_at=raw.fetched_at,
@@ -195,3 +197,10 @@ class TheMuseProvider(BaseProvider):
         if cats and isinstance(cats[0], dict):
             return cats[0].get("name")
         return None
+
+    @staticmethod
+    def _level(p: dict[str, Any]) -> JobLevel:
+        levels = p.get("levels") or []
+        if levels and isinstance(levels[0], dict):
+            return level_from_ats_vocab(levels[0].get("name"))
+        return JobLevel.UNKNOWN

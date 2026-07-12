@@ -255,9 +255,12 @@ class CoveoProvider(BaseProvider):
             apply_url=raw.url,
             locations=locations,
             remote=remote,
-            department=self._clean(p.get("category")),
+            # proxy mode keys these "category"/"description"; direct mode (UST-style boards)
+            # keys them "obu"/"data" instead — read proxy first, direct as fallback so both
+            # modes populate department/description_html from this one shared normalize().
+            department=self._clean(p.get("category") or p.get("obu")),
             posted_at=self._date(p.get("date")),
-            description_html=self._clean(p.get("description")),
+            description_html=self._clean(p.get("description") or p.get("data")),
             raw=raw.payload,
         )
 

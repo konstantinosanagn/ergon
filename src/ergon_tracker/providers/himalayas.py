@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -96,6 +97,8 @@ class HimalayasProvider(BaseProvider):
             locations=self._locations(p),
             remote=RemoteType.REMOTE,
             employment_type=_employment(p.get("employmentType")),
+            level=level_from_ats_vocab(self._first_seniority(p)),
+            department=self._department(p),
             salary=self._salary(p),
             apply_url=p.get("applicationLink") or p.get("guid"),
             posted_at=_parse_epoch(p.get("pubDate")),
@@ -107,6 +110,28 @@ class HimalayasProvider(BaseProvider):
     def _job_id(job: dict[str, Any]) -> str:
         # No stable numeric id is exposed; the guid/applicationLink is the canonical identifier.
         return str(job.get("guid") or job.get("applicationLink") or job.get("title") or "")
+
+    @staticmethod
+    def _first_seniority(p: dict[str, Any]) -> str | None:
+        # `seniority` is a list of strings, e.g. ["Senior"]; take the first entry.
+        values = p.get("seniority")
+        first = values[0] if isinstance(values, list) and values else None
+        return first if isinstance(first, str) else None
+
+    @staticmethod
+    def _department(p: dict[str, Any]) -> str | None:
+        # `categories` is normally a list of strings; be defensive in case an entry is an
+        # object (e.g. {"name": ...}) instead, matching the shape other aggregators use.
+        categories = p.get("categories")
+        if not isinstance(categories, list) or not categories:
+            return None
+        first = categories[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict):
+            name = first.get("name")
+            return name if isinstance(name, str) else None
+        return None
 
     @staticmethod
     def _locations(p: dict[str, Any]) -> list[Location]:
