@@ -223,6 +223,90 @@ def _record_success(
     )
 
 
+# --- build merge ------------------------------------------------------------------------------
+
+# Recovered columns, named identically in `job_detail` and the real index `jobs` table (see
+# index/schema.sql) -- no name mapping needed between the sidecar and the index.
+_MERGE_COLUMNS: tuple[str, ...] = (
+    "salary_min", "salary_max", "salary_currency", "salary_interval",
+    "years_min", "years_max", "degree_min", "degree_required", "sponsorship_offered",
+)
+_INT_COLUMNS = {"degree_required", "sponsorship_offered"}
+
+
+def merge_detail_into_index(index_con: sqlite3.Connection, detail_path: str) -> int:
+    """Build-time merge: apply the Tier-3 detail sidecar's recovered fields onto the matching
+    index `jobs` row, but ONLY when the sidecar's `sig` still matches the row's CURRENT sig
+    (recomputed from the index row's own content_hash/title/level, not trusted from the sidecar).
+    A posting that materially changed since its detail fetch is left untouched -- this is what
+    stops a re-crawl from stale-merging a recovered field onto a since-changed posting.
+
+    Within a sig-matched row, only columns that are currently NULL on the index row are filled
+    (a value the list-crawl DID provide is never clobbered); `snippet` is filled the same way
+    (NULL/empty only). Returns the count of index rows that were actually changed.
+    """
+    prev_factory = index_con.row_factory
+    index_con.row_factory = sqlite3.Row
+    try:
+        idx_rows = index_con.execute(
+            "SELECT id, content_hash, title, level, snippet, " + ", ".join(_MERGE_COLUMNS)
+            + " FROM jobs"
+        ).fetchall()
+    finally:
+        index_con.row_factory = prev_factory
+
+    det_con = open_detail(detail_path)
+    try:
+        det_con.row_factory = sqlite3.Row
+        det_rows = det_con.execute(
+            "SELECT id, sig, snippet, " + ", ".join(_MERGE_COLUMNS) + " FROM job_detail"
+        ).fetchall()
+    finally:
+        det_con.close()
+    detail_by_id: dict[str, sqlite3.Row] = {r["id"]: r for r in det_rows}
+
+    updated = 0
+    for row in idx_rows:
+        d = detail_by_id.get(row["id"])
+        if d is None:
+            continue
+        current_sig = detail_sig(
+            {"content_hash": row["content_hash"], "title": row["title"], "level": row["level"]}
+        )
+        if d["sig"] != current_sig:
+            continue  # posting changed since the detail fetch -- stale sidecar, don't merge
+
+        sets: list[str] = []
+        params: list[Any] = []
+        for col in _MERGE_COLUMNS:
+            if row[col] is not None:
+                continue  # list-crawl already provided this -- never clobber
+            value = d[col]
+            if value is None:
+                continue
+            if col in _INT_COLUMNS:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    continue
+            sets.append(f"{col} = ?")
+            params.append(value)
+
+        if not row["snippet"] and d["snippet"]:
+            sets.append("snippet = ?")
+            params.append(d["snippet"])
+
+        if not sets:
+            continue
+
+        params.append(row["id"])
+        index_con.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", params)
+        updated += 1
+
+    index_con.commit()
+    return updated
+
+
 async def reconcile_detail_tier(
     detail_path: str,
     index_path: str,
