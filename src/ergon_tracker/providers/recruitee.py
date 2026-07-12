@@ -8,6 +8,7 @@ board and the orchestrator applies ``SearchQuery.matches`` client-side.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -70,15 +71,18 @@ def _to_amount(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return float(value)
+        f = float(value)
+        return f if math.isfinite(f) and f > 0 else None
     if isinstance(value, str):
         stripped = value.strip()
         if not stripped:
             return None
         try:
-            return float(stripped)
+            f = float(stripped)
         except ValueError:
             return None
+        # reject "nan"/"inf"/"-inf" (valid float literals) so a garbage Salary never reaches the index
+        return f if math.isfinite(f) and f > 0 else None
     return None
 
 

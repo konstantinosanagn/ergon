@@ -16,6 +16,7 @@ client-side.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -203,14 +204,16 @@ class TeamtailorProvider(BaseProvider):
         def _num(v: Any) -> float | None:
             if isinstance(v, bool):
                 return None
-            if isinstance(v, (int, float)) and v > 0:
-                return float(v)
+            if isinstance(v, (int, float)):
+                f = float(v)
+                return f if math.isfinite(f) and f > 0 else None
             if isinstance(v, str):
                 try:
                     f = float(v.replace(",", "").strip())
                 except ValueError:
                     return None
-                return f if f > 0 else None
+                # reject "inf"/"nan" (valid float() literals) so no garbage Salary reaches the index
+                return f if math.isfinite(f) and f > 0 else None
             return None
 
         lo_n, hi_n = _num(lo), _num(hi)
