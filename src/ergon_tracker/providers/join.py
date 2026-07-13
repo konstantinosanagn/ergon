@@ -42,6 +42,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["JoinProvider"]
 
@@ -50,6 +51,13 @@ _JOB_URL = "https://join.com/companies/{token}/jobs/{id_param}"
 
 # Hosts/paths we recognise, capturing the company token (slug) as group 1.
 _HOST_PATTERNS = (re.compile(r"join\.com/companies/([^/?#\s]+)", re.IGNORECASE),)
+
+# Per-job detail page shape (Tier-3 JD recovery): ``join.com/companies/{token}/jobs/{id_param}``
+# — same as ``_JOB_URL`` above but matched loosely to validate an already-built apply/listing URL
+# without needing to re-derive the token/id_param from it.
+_JOB_DETAIL_RE = re.compile(
+    r"join\.com/companies/[^/?#\s]+/jobs/[^/?#\s]+", re.IGNORECASE
+)
 
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.IGNORECASE | re.DOTALL
@@ -235,6 +243,42 @@ class JoinProvider(BaseProvider):
             url=_JOB_URL.format(token=token, id_param=id_param) if id_param else None,
             payload=job,
         )
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the per-job detail page (Tier-3 JD recovery).
+
+        ``ref.apply_url`` (falling back to ``ref.listing_url``) is already the
+        ``join.com/companies/{token}/jobs/{id_param}`` shape built by :meth:`_to_raw` — no
+        token/id reconstruction needed, just validate the shape and fetch it. The detail page
+        embeds the full JD in the same ``__NEXT_DATA__`` blob the careers-listing page uses
+        (see :func:`_parse_initial_state`), at ``initialState.job.schemaDescription`` (genuine
+        HTML) with a fallback to ``initialState.job.description`` (Markdown-flavored plain
+        text) when ``schemaDescription`` is empty. ``initialState.job.unifiedDescription`` is a
+        bool flag, not content — never read for JD text. Non-raising: any unparseable URL,
+        fetch failure, non-JSON payload, or shape mismatch (including a truthy non-dict at
+        ``job``) returns ``None``, never an exception."""
+        url: str | None = None
+        for candidate in (ref.apply_url, ref.listing_url):
+            if candidate and _JOB_DETAIL_RE.search(candidate):
+                url = candidate
+                break
+        if url is None:
+            return None
+        try:
+            html = await fetcher.get_text(url)
+        except Exception:
+            return None
+        state = _parse_initial_state(html)
+        job = state.get("job")
+        if not isinstance(job, dict):
+            return None
+        schema_description = job.get("schemaDescription")
+        if isinstance(schema_description, str) and schema_description.strip():
+            return schema_description
+        description = job.get("description")
+        if isinstance(description, str) and description.strip():
+            return description
+        return None
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

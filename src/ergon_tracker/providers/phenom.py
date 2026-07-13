@@ -35,6 +35,7 @@ a plain-text summary (the full description lives only on the detail page, not fe
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
@@ -48,9 +49,12 @@ from ..models import (
     SearchQuery,
 )
 from .base import BaseProvider, register
+from .successfactors import SuccessFactorsProvider
+from .workday import WorkdayProvider
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["PhenomProvider"]
 
@@ -210,6 +214,47 @@ class PhenomProvider(BaseProvider):
                 if trimmed:
                     return trimmed
         return seg
+
+    # --- detail (Tier-3 JD recovery, re-route to the underlying ATS) --------
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Re-route to the ATS that actually hosts the JD (Tier-3 recovery).
+
+        11,414 of 11,831 phenom rows are AGGREGATED listings whose ``apply_url`` points at
+        Workday (11,083) or SuccessFactors (331) — ATSes we already have working
+        ``fetch_detail`` for. Rather than build a phenom-native detail fetcher, dispatch by the
+        ``apply_url`` (falling back to ``listing_url``) host to the matching provider.
+
+        Genuine-phenom postings (canonical ``/job/{seq}``, fountain, driverapponline, ... —
+        ~400 rows) have no re-route target and return ``None`` (out of scope here).
+
+        Non-raising: any parse/dispatch/delegate failure returns ``None``, never an exception.
+        """
+        try:
+            url = ref.apply_url or ref.listing_url
+            if not url:
+                return None
+            candidate = url if "//" in url else "//" + url
+            host = urlsplit(candidate).netloc.split("@")[-1].split(":")[0].lower()
+            if not host:
+                return None
+
+            if host.endswith("myworkdayjobs.com"):
+                # Phenom's Workday apply_urls carry a trailing "/apply" segment that direct-Workday
+                # URLs never have and which breaks _cxs_detail_url (422) -- strip it before delegating.
+                cleaned = url.rstrip("/")
+                if cleaned.lower().endswith("/apply"):
+                    cleaned = cleaned[: -len("/apply")]
+                cleaned = cleaned.rstrip("/")
+                modified_ref = replace(ref, apply_url=cleaned, listing_url=cleaned)
+                return await WorkdayProvider().fetch_detail(modified_ref, fetcher)
+
+            if "successfactors.com" in host or "sapsf.com" in host:
+                return await SuccessFactorsProvider().fetch_detail(ref, fetcher)
+
+            return None
+        except Exception:
+            return None
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
