@@ -569,6 +569,14 @@ def build_detail_shard_only(index_db: Path, out: Path, *, shard: int, num_shards
     ``index_db`` must already exist (the drain workflow downloads+gunzips the prior
     ``index.sqlite.gz`` first, purely for Tier-3 candidate selection -- it is opened read-only in
     spirit, never written to here).
+
+    NOTE on the sidecar at ``detail_db``: the drain workflow (``.github/workflows/drain-detail.yml``)
+    pre-seeds this exact path by ``cp``-ing the FULL prior combined ``index-detail.sqlite`` into it
+    before this function runs, so this shard's reconcile can skip rows it already recovered without
+    re-fetching them. ``reconcile_detail_tier`` (see its docstring / ``_prune_sidecar_to_shard`` in
+    ``index/detail.py``) prunes that seed back down to ONLY this shard's own rows before returning,
+    so the sidecar this function leaves on disk -- and thus the artifact uploaded for the drain
+    workflow's ``merge`` job -- is scoped to this shard alone (disjoint from every other shard's).
     """
     import anyio
 

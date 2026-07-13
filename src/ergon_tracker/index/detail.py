@@ -283,6 +283,40 @@ async def _run_fetches(
     return results
 
 
+def _prune_sidecar_to_shard(
+    det_con: sqlite3.Connection, refs: Sequence[DetailRef], shard: int, num_shards: int
+) -> None:
+    """Restrict the sidecar's OUTPUT to rows whose id belongs to ``shard`` (of ``num_shards``),
+    among the given ``refs`` (the current Tier-3 candidate set, i.e. every row still lacking a
+    recovered JD in the index — a row that's already been merged elsewhere has dropped out of
+    Tier-3 entirely and doesn't need to be carried in this sidecar at all).
+
+    THE BUG THIS CLOSES: the drain matrix seeds each shard's sidecar from the FULL prior combined
+    ``index-detail.sqlite`` (see ``.github/workflows/drain-detail.yml``) so a shard can skip rows
+    it already recovered — but that means the sidecar walks in carrying every OTHER shard's rows
+    too. Without this prune, each shard's OUTPUT artifact would contain the whole backlog (mostly
+    untouched carry-forward): ``merge_detail_shards.py``'s union across (say) 20 shards would then
+    be ~20x the real unique row count, AND a later shard's STALE carried-forward copy of a row
+    could ``INSERT OR REPLACE`` over an earlier shard's FRESHLY-fetched copy of that SAME row on
+    merge — silently discarding real work.
+
+    Keeps every row belonging to THIS shard (whether freshly (re-)fetched this pass or an
+    untouched, still-valid carry-forward) and drops every row belonging to a DIFFERENT shard.
+    Uses a temp table rather than a giant parameterized ``IN (...)`` so this scales past SQLite's
+    bound-variable ceiling for large backlogs.
+    """
+    det_con.execute("CREATE TEMP TABLE _shard_ids (id TEXT PRIMARY KEY)")
+    try:
+        det_con.executemany(
+            "INSERT OR IGNORE INTO _shard_ids(id) VALUES (?)",
+            ((ref.id,) for ref in refs if _ref_in_shard(ref, shard, num_shards)),
+        )
+        det_con.execute("DELETE FROM job_detail WHERE id NOT IN (SELECT id FROM _shard_ids)")
+    finally:
+        det_con.execute("DROP TABLE _shard_ids")
+    det_con.commit()
+
+
 def _record_attempt(det_con: sqlite3.Connection, id_: str) -> None:
     det_con.execute(
         "INSERT INTO job_detail(id, attempts) VALUES (?, 1) "
@@ -467,6 +501,14 @@ async def reconcile_detail_tier(
     drain" section above) hashes to ``shard`` of ``num_shards`` -- the fan-out primitive behind
     the drain matrix (``.github/workflows/drain-detail.yml``). Leaving both ``None`` (the default)
     is the ORIGINAL, byte-identical non-sharded path: no filtering happens at all.
+
+    When sharded, the OUTPUT sidecar (``detail_path``) is pruned at the end of the pass to contain
+    ONLY rows belonging to ``shard`` (see ``_prune_sidecar_to_shard``) -- even though the caller
+    may have SEEDED ``detail_path`` from a full prior combined sidecar (the drain matrix's
+    carry-forward, so this shard can skip rows it already recovered). This keeps every shard's
+    output disjoint by id from every other shard's, so ``merge_detail_shards.py``'s union is a
+    clean, ~1x-sized combine with no possibility of a stale carry-forward clobbering a fresher
+    fetch from another shard.
     """
     if (shard is None) != (num_shards is None):
         raise ValueError("shard and num_shards must be given together (or neither)")
@@ -489,11 +531,8 @@ async def reconcile_detail_tier(
             idx_con.close()
 
         existing = _load_existing(det_con)
-        candidates: list[DetailRef] = []
-        for row in tier3_rows:
-            ref = DetailRef.from_row(row)
-            if _eligible(ref.id, ref.content_sig, existing):
-                candidates.append(ref)
+        all_refs = [DetailRef.from_row(row) for row in tier3_rows]
+        candidates = [ref for ref in all_refs if _eligible(ref.id, ref.content_sig, existing)]
 
         if sharded:
             candidates = [c for c in candidates if _ref_in_shard(c, shard_i, num_shards_i)]
@@ -527,6 +566,13 @@ async def reconcile_detail_tier(
                 failed += 1
         det_con.commit()
 
+        if sharded:
+            # Scope the OUTPUT sidecar down to just this shard's own rows (see
+            # `_prune_sidecar_to_shard`'s docstring) -- must happen AFTER the fetch/record loop
+            # above (so this shard's own fresh writes are in the db to be kept) and BEFORE the
+            # `missing` count below (which re-reads the sidecar's post-prune state).
+            _prune_sidecar_to_shard(det_con, all_refs, shard_i, num_shards_i)
+
         # Remaining drainable backlog AFTER this pass: tier-3 rows still eligible (not recovered,
         # not retry-exhausted). Decreases as the sidecar fills; reaches 0 when every posting is
         # recovered-or-dead — the drain loop's stop condition (Task 8's "until missing == 0").
@@ -535,9 +581,9 @@ async def reconcile_detail_tier(
         existing_after = _load_existing(det_con)
         missing = sum(
             1
-            for row in tier3_rows
-            if (not sharded or _ref_in_shard(DetailRef.from_row(row), shard_i, num_shards_i))
-            and _eligible(str(row["id"]), detail_sig(row), existing_after)
+            for ref in all_refs
+            if (not sharded or _ref_in_shard(ref, shard_i, num_shards_i))
+            and _eligible(ref.id, ref.content_sig, existing_after)
         )
 
         return {"fetched": fetched, "failed": failed, "missing": missing}

@@ -60,10 +60,20 @@ def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
     """Union every shard's ``job_detail`` rows into ``out_path`` (schema ensured via
     ``open_detail``). Returns ``{shard_filename: rows_merged, ..., "_total": total_rows_merged}``.
 
-    Row union: shard candidate sets are DISJOINT by construction (each posting's politeness bucket
-    hashes to exactly one shard), so ``INSERT OR REPLACE`` never actually resolves a real conflict
-    between two DIFFERENT shards' rows -- it's just the simplest idempotent write, safe to re-run
-    the merge (e.g. after a retry) without double-counting or erroring on a re-processed shard.
+    Row union: as of the ``_prune_sidecar_to_shard`` fix in ``index/detail.py``, each shard's
+    OUTPUT sidecar is scoped to contain ONLY that shard's own rows, so shard candidate sets are
+    DISJOINT by construction (each posting's politeness bucket hashes to exactly one shard) and
+    this union never resolves a real conflict between two DIFFERENT shards' rows for the SAME id.
+
+    Belt-and-suspenders anyway: the write below is a prefer-freshest UPSERT, not a blind
+    ``INSERT OR REPLACE`` -- an incoming row only overwrites an existing one when the incoming
+    ``fetched_at`` is non-NULL and is not older than what's already there (``existing IS NULL OR
+    incoming >= existing``). This is deliberately order-independent (merging shard A then B gives
+    the same result as B then A) and guards correctness even if the disjointness invariant above
+    is ever violated by a future change -- a later shard's STALE carried-forward copy of a row
+    (``fetched_at`` NULL, or an older ``fetched_at``) can never clobber an earlier shard's FRESHLY
+    -fetched copy of the same id. Also safe to re-run the merge (e.g. after a retry) without
+    double-counting or erroring on a re-processed shard.
 
     Meta-cursor handling: each shard sidecar carries its OWN rotating ``detail_cursor`` (see
     ``index/detail.py::_select_window``), scoped to that shard's own candidate subset -- these
@@ -80,6 +90,19 @@ def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
     stats: dict[str, int] = {}
     total = 0
     cols = ", ".join(_JOB_DETAIL_COLUMNS)
+    placeholders = ", ".join("?" for _ in _JOB_DETAIL_COLUMNS)
+    update_set = ", ".join(f"{c} = excluded.{c}" for c in _JOB_DETAIL_COLUMNS if c != "id")
+    # NOTE: SQLite's upsert-clause grammar does not accept an `INSERT ... SELECT ... ON CONFLICT`
+    # form (the parser treats the `ON` as a join constraint on the FROM'd table and chokes on the
+    # following `DO`) -- only the VALUES form is accepted. So each shard's rows are pulled into
+    # Python and re-inserted via a parameterized, per-row VALUES upsert (mirrors the exact pattern
+    # `index/detail.py::_record_success` already uses). Bounded by one shard's own row count.
+    upsert_sql = (
+        f"INSERT INTO job_detail ({cols}) VALUES ({placeholders}) "
+        f"ON CONFLICT(id) DO UPDATE SET {update_set} "
+        "WHERE excluded.fetched_at IS NOT NULL "
+        "AND (job_detail.fetched_at IS NULL OR excluded.fetched_at >= job_detail.fetched_at)"
+    )
     try:
         for shard_path in shard_paths:
             # Ensure the shard file itself has the schema (defensive; a truncated/empty artifact
@@ -87,14 +110,12 @@ def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
             open_detail(str(shard_path)).close()
             con.execute("ATTACH DATABASE ? AS shard", (str(shard_path),))
             try:
-                cur = con.execute(
-                    f"INSERT OR REPLACE INTO job_detail ({cols}) "
-                    f"SELECT {cols} FROM shard.job_detail"
-                )
-                n = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+                rows = con.execute(f"SELECT {cols} FROM shard.job_detail").fetchall()
+                before = con.total_changes
+                con.executemany(upsert_sql, rows)
+                n = con.total_changes - before
                 stats[shard_path.name] = n
                 total += n
-                cur.close()
                 # Best-effort meta carry: last-shard-wins (see docstring above).
                 meta_cur = con.execute("SELECT value FROM shard.meta WHERE key = 'detail_cursor'")
                 cursor_row = meta_cur.fetchone()

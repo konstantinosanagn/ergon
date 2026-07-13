@@ -257,6 +257,70 @@ def test_reconcile_non_sharded_path_is_unaffected_by_shard_default(tmp_path):
     assert got_a == got_b
 
 
+def test_reconcile_shard_only_output_excludes_foreign_shard_rows(tmp_path):
+    """Regression for the drain-matrix merge-correctness bug: the drain workflow seeds each
+    shard's sidecar by `cp`-ing the FULL prior combined ``index-detail.sqlite`` (see
+    ``.github/workflows/drain-detail.yml``), so a shard's carry-forward SEED legitimately contains
+    every OTHER shard's rows too (it's just there so this shard can skip refs it already
+    recovered). Without the ``_prune_sidecar_to_shard`` fix, that seed leaked straight into the
+    OUTPUT artifact -- so a 20-shard merge produced ~20x the real row count, and a later shard's
+    stale carried-forward copy could clobber an earlier shard's fresh fetch of the same id.
+
+    This test simulates that seed directly (pre-populating the shard's own sidecar file with
+    fully-"recovered" rows for EVERY id, not just this shard's, exactly like the workflow's `cp`
+    step would) and asserts the sidecar this shard WRITES back out after reconcile contains ONLY
+    ids that actually belong to this shard.
+    """
+    hosts = [
+        "smartrecruiters.com",
+        "workable.com",
+        "acme.myworkdayjobs.com",
+        "other.myworkdayjobs.com",
+    ]
+    rows = [
+        (str(i), "src", f"https://{hosts[i % len(hosts)]}/job/{i}", f"h{i}", None)
+        for i in range(40)
+    ]
+    idx = _mk_index(tmp_path, rows)
+
+    # Ground truth: which shard each id actually belongs to.
+    shard_of_id = {
+        row[0]: _shard_of(_rate_bucket_for_ref(_ref(row[0], "src", row[2])), NUM_SHARDS)
+        for row in rows
+    }
+    target_shard = 0
+    expected_ids = {id_ for id_, s in shard_of_id.items() if s == target_shard}
+    assert expected_ids and len(expected_ids) < 40  # sanity: a real, proper subset
+
+    det = str(tmp_path / "detail-0.sqlite")
+    # Simulate the workflow's carry-forward seed: pre-populate shard 0's sidecar with an
+    # already-"recovered" row for EVERY id (every shard's, not just shard 0's) -- as if `cp`'d
+    # straight from a prior combined db.
+    con = open_detail(det)
+    for i in range(40):
+        con.execute(
+            "INSERT INTO job_detail (id, sig, fetched_at, attempts, snippet) "
+            "VALUES (?, 'stale-sig', '2026-07-01T00:00:00Z', 0, 'carried forward')",
+            (str(i),),
+        )
+    con.commit()
+    con.close()
+
+    async def fake(ref):
+        return "<p>Salary: $100,000 / year</p>"
+
+    anyio.run(
+        lambda: reconcile_detail_tier(
+            det, idx, fetch_detail=fake, now=lambda: "t", shard=target_shard, num_shards=NUM_SHARDS
+        )
+    )
+
+    con = open_detail(det)
+    out_ids = {r[0] for r in con.execute("SELECT id FROM job_detail").fetchall()}
+    con.close()
+    assert out_ids == expected_ids  # only this shard's own ids remain -- no foreign-shard leakage
+
+
 def test_reconcile_shard_requires_both_shard_and_num_shards(tmp_path):
     idx = _mk_index(tmp_path, [("1", "oracle", "https://oraclecloud.com/1", "h1", None)])
     det = str(tmp_path / "detail.sqlite")
