@@ -358,9 +358,17 @@ def build_and_publish_rich_incremental(
 
 
 _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
-    "smartrecruiters", "workday",
-    "oracle", "icims", "successfactors", "eightfold", "rippling", "radancy",
-    "workable", "join", "phenom",  # phenom re-routes to workday/successfactors by apply_url host
+    "smartrecruiters",
+    "workday",
+    "oracle",
+    "icims",
+    "successfactors",
+    "eightfold",
+    "rippling",
+    "radancy",
+    "workable",
+    "join",
+    "phenom",  # phenom re-routes to workday/successfactors by apply_url host
 ]
 
 
@@ -409,15 +417,42 @@ def _rebuild_jobs_fts(db_path: Path) -> None:
         con.close()
 
 
-async def _reconcile_detail(detail_db: Path, index_db: Path) -> dict:
+def _detail_shard() -> tuple[int | None, int | None]:
+    """(shard, num_shards) from env (``ERGON_DETAIL_SHARD``/``ERGON_DETAIL_NUM_SHARDS``), used by
+    the drain matrix (``.github/workflows/drain-detail.yml``) when ``--shard``/``--num-shards``
+    aren't passed explicitly on the command line. ``(None, None)`` (the default) is the original
+    non-sharded path."""
+    shard = os.environ.get("ERGON_DETAIL_SHARD")
+    num_shards = os.environ.get("ERGON_DETAIL_NUM_SHARDS")
+    if shard is None or num_shards is None:
+        return None, None
+    return int(shard), int(num_shards)
+
+
+async def _reconcile_detail(
+    detail_db: Path,
+    index_db: Path,
+    *,
+    shard: int | None = None,
+    num_shards: int | None = None,
+    merge: bool = True,
+) -> dict:
     """Fetch JD detail for Tier-3 (no-description) postings via each source's registered provider
-    (``fetch_detail``), then merge recovered fields into the index db (already-promoted at this
-    point) in place. Returns the reconcile stats plus a ``merged`` row count.
+    (``fetch_detail``), then (unless ``merge=False``) merge recovered fields into the index db
+    (already-promoted at this point) in place. Returns the reconcile stats plus, when merged, a
+    ``merged`` row count.
 
     ``fetch_detail`` dispatch: look up the provider by ``ref.source`` in the registry and call its
     (possibly-unimplemented — defaults to returning ``None``) ``fetch_detail(ref, fetcher)``. One
     real ``AsyncFetcher`` is shared across the whole reconcile window (bounded concurrency handled
     inside ``reconcile_detail_tier``).
+
+    ``shard``/``num_shards`` (both-or-neither) restrict this pass to one shard of the drain matrix
+    (see ``reconcile_detail_tier``'s docstring in ``index/detail.py`` for the shard-key design).
+    ``merge=False`` is used by ``--detail-shard-only`` (the drain matrix's per-shard job): it must
+    NOT touch/merge/republish the core index -- the drain workflow's separate merge job combines
+    every shard's sidecar first, and the next daily ``build-index.yml`` run merges the combined
+    sidecar into the core index via the existing carry-forward path.
     """
     from datetime import datetime, timezone
 
@@ -451,7 +486,12 @@ async def _reconcile_detail(detail_db: Path, index_db: Path) -> dict:
             max_details=_detail_max(),
             sources=_TIER3_DETAIL_SOURCES,
             now=lambda: datetime.now(timezone.utc).isoformat(),
+            shard=shard,
+            num_shards=num_shards,
         )
+
+    if not merge:
+        return stats
 
     index_con = connect(index_db)
     try:
@@ -461,7 +501,14 @@ async def _reconcile_detail(detail_db: Path, index_db: Path) -> dict:
     return stats
 
 
-def build_and_publish_detail(db_path: Path, out: Path, *, build_id: str) -> tuple[dict, int]:
+def build_and_publish_detail(
+    db_path: Path,
+    out: Path,
+    *,
+    build_id: str,
+    shard: int | None = None,
+    num_shards: int | None = None,
+) -> tuple[dict, int]:
     """Tier-3 reconcile + merge against the ALREADY-PUBLISHED core index, then re-publish
     ``index.sqlite.gz``/``manifest.json`` so the recovered fields actually reach users, and
     publish the detail sidecar itself (``index-detail.sqlite.gz`` + ``manifest-detail.json``).
@@ -478,11 +525,18 @@ def build_and_publish_detail(db_path: Path, out: Path, *, build_id: str) -> tupl
     would silently strand every recovered field in the sidecar and never reach a user. This whole
     call is wrapped in try/except by the caller (non-fatal: a detail failure must never undo or
     block the already-succeeded core publish).
+
+    ``shard``/``num_shards`` are plumbed through to ``_reconcile_detail`` for completeness (both
+    default ``None`` -- the ordinary daily/manual ``--detail`` path here always reconciles the
+    WHOLE backlog, unsharded). The drain matrix uses the separate ``--detail-shard-only`` path
+    (``build_detail_shard_only`` below) instead, which skips the merge/republish entirely.
     """
     import anyio
 
     detail_db = out / "index-detail.sqlite"
-    stats = anyio.run(_reconcile_detail, detail_db, db_path)
+    stats = anyio.run(
+        lambda: _reconcile_detail(detail_db, db_path, shard=shard, num_shards=num_shards)
+    )
     if stats.get("merged", 0) > 0:
         # Recovered snippets just landed in `jobs.snippet` via plain UPDATEs, which do NOT
         # propagate into the external-content `jobs_fts` table -- rebuild it so those postings
@@ -494,6 +548,38 @@ def build_and_publish_detail(db_path: Path, out: Path, *, build_id: str) -> tupl
     # gzip/manifest a downloading user actually fetches (see ORDERING above).
     publish_artifacts(db_path, out, build_id=build_id)
     return stats, nbytes
+
+
+def build_detail_shard_only(index_db: Path, out: Path, *, shard: int, num_shards: int) -> dict:
+    """Drain-matrix entry point (``--detail-shard-only``): run ONLY the sharded Tier-3 reconcile
+    for shard ``shard`` of ``num_shards``, writing its sidecar to
+    ``out / f"index-detail-shard-{shard}.sqlite"``. Never touches, merges into, or republishes the
+    core index -- that decoupling is deliberate:
+
+    - The drain workflow's separate ``merge`` job combines every shard's sidecar
+      (``scripts/merge_detail_shards.py``) into one ``index-detail.sqlite`` and publishes it
+      alongside its manifest, but publishes NOTHING for ``index.sqlite`` itself.
+    - The next daily ``build-index.yml`` run downloads that combined sidecar as its carry-forward
+      ``index-detail.sqlite.gz`` and merges it into the core index via the EXISTING
+      ``build_and_publish_detail`` path -- its reconcile finds every already-drained row's sig
+      still current (0 refetch needed) and just applies ``merge_detail_into_index``.
+
+    This means the drain run never races the daily build's core-index publish, at the cost of a
+    day's latency before recovered fields actually reach the published ``index.sqlite.gz``.
+    ``index_db`` must already exist (the drain workflow downloads+gunzips the prior
+    ``index.sqlite.gz`` first, purely for Tier-3 candidate selection -- it is opened read-only in
+    spirit, never written to here).
+    """
+    import anyio
+
+    out.mkdir(parents=True, exist_ok=True)
+    detail_db = out / f"index-detail-shard-{shard}.sqlite"
+    stats = anyio.run(
+        lambda: _reconcile_detail(
+            detail_db, index_db, shard=shard, num_shards=num_shards, merge=False
+        )
+    )
+    return stats
 
 
 def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
@@ -874,8 +960,13 @@ def main(argv: list[str]) -> None:
     rich = (
         False  # opt-in: also build/reconcile the rich sidecar (full-JD FTS + pre-stored embeddings)
     )
-    detail = False  # opt-in: also run the Tier-3 detail reconcile + merge (manual-only; see workflow)
+    detail = (
+        False  # opt-in: also run the Tier-3 detail reconcile + merge (manual-only; see workflow)
+    )
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
+    detail_shard_only = False  # drain-matrix mode: sharded reconcile only, no crawl/build/merge
+    shard: int | None = None
+    num_shards: int | None = None
     i = 0
     while i < len(argv):
         if argv[i] == "--limit-companies":
@@ -899,12 +990,47 @@ def main(argv: list[str]) -> None:
         elif argv[i] == "--detail":
             detail = True
             i += 1
+        elif argv[i] == "--detail-shard-only":
+            detail_shard_only = True
+            i += 1
+        elif argv[i] == "--shard":
+            shard = int(argv[i + 1])
+            i += 2
+        elif argv[i] == "--num-shards":
+            num_shards = int(argv[i + 1])
+            i += 2
         else:
             print(f"unknown flag: {argv[i]}")
             return
+    if shard is None and num_shards is None:
+        shard, num_shards = (
+            _detail_shard()
+        )  # fall back to ERGON_DETAIL_SHARD/ERGON_DETAIL_NUM_SHARDS
     out.mkdir(parents=True, exist_ok=True)
     db = out / "index.sqlite"
     build_id = _build_id()
+
+    if detail_shard_only:
+        # Drain-matrix mode (see .github/workflows/drain-detail.yml): ONLY the sharded Tier-3
+        # reconcile against the already-downloaded prior index db -- no crawl, no core build, no
+        # merge/republish. See build_detail_shard_only's docstring for the decoupling rationale.
+        if shard is None or num_shards is None:
+            print(
+                "--detail-shard-only requires --shard/--num-shards (or ERGON_DETAIL_SHARD/ERGON_DETAIL_NUM_SHARDS)"
+            )
+            raise SystemExit(2)
+        if not db.exists():
+            print(
+                f"--detail-shard-only requires an existing index db at {db} (download+gunzip the prior index.sqlite.gz first)"
+            )
+            raise SystemExit(2)
+        stats = build_detail_shard_only(db, out, shard=shard, num_shards=num_shards)
+        print(
+            f"detail shard {shard}/{num_shards}: fetched={stats['fetched']} "
+            f"failed={stats['failed']} missing={stats['missing']} -> "
+            f"{out / f'index-detail-shard-{shard}.sqlite'}"
+        )
+        return
 
     if incremental:
         from ergon_tracker.index.build import (
@@ -1012,7 +1138,9 @@ def main(argv: list[str]) -> None:
             # The main index is already gated + promoted, so a fetch-dispatcher/merge failure must
             # NOT crash the build or undo the core publish — log it and carry on.
             try:
-                dstats, dbytes = build_and_publish_detail(db, out, build_id=build_id)
+                dstats, dbytes = build_and_publish_detail(
+                    db, out, build_id=build_id, shard=shard, num_shards=num_shards
+                )
                 print(
                     f"  + detail tier (fetched={dstats['fetched']} failed={dstats['failed']} "
                     f"missing={dstats['missing']} merged={dstats['merged']}) -> "

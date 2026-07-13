@@ -1,0 +1,176 @@
+name: drain-detail
+
+# Sharded parallel Tier-3 JD-detail drain (~990k postings across a 20-job matrix so the drain
+# finishes in ~1 run instead of ~40 daily-cron runs of build-index.yml's unsharded --detail pass).
+#
+# THE CORRECTNESS INVARIANT: politeness is enforced per `_rate_key(host)` (see http.py / the
+# "sharded drain" section of src/ergon_tracker/index/detail.py) -- every rate-bucket lives on
+# exactly ONE shard by construction, so no two shards independently rate-limit the same collapsed
+# backend. This is exactly as polite as the existing unsharded daily --detail pass: same per-host
+# token-bucket + circuit breaker, same ERGON_DETAIL_CONCURRENCY-governed global cap PER SHARD (not
+# per host), just fanned out over 20 jobs instead of one.
+#
+# DECOUPLED FROM THE CORE INDEX PUBLISH: this workflow ONLY publishes the combined Tier-3 detail
+# sidecar (index-detail.sqlite.gz + manifest-detail.json). It never touches/republishes
+# index.sqlite. The next daily build-index.yml run downloads the freshly-combined sidecar as its
+# carry-forward and merges its recovered fields into the core index via the EXISTING
+# build_and_publish_detail path (unsharded reconcile finds every already-drained row's sig still
+# current -> 0 refetch, just merges). Sharing `concurrency: group: build-index` with build-index.yml
+# means the two workflows never run simultaneously, so there is no index/asset race either way.
+on:
+  workflow_dispatch:
+    inputs:
+      detail_max:
+        description: "Per-shard Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Big by design -- each shard should drain its ENTIRE slice in one run, not a small window."
+        default: "200000"
+      detail_concurrency:
+        description: "Per-shard in-flight fetch concurrency (ERGON_DETAIL_CONCURRENCY). Politeness is unaffected -- enforced per-host by AsyncFetcher's token-bucket regardless of this figure."
+        default: "50"
+  # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
+  # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
+  # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
+  # e.g.  schedule: [ { cron: "30 9 * * *" } ]  (09:30 UTC, off build-index.yml's 04:17 slot; the shared
+  # concurrency group below already serializes the two so they never race).
+
+permissions:
+  contents: write   # to publish the combined detail sidecar as a release asset (merge job)
+
+concurrency:
+  group: build-index   # SAME group as build-index.yml -- never runs simultaneously with the daily build
+  cancel-in-progress: false
+
+env:
+  NUM_SHARDS: 20
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # under the 6h hosted-runner ceiling
+    strategy:
+      fail-fast: false     # one shard's failure (dead host, runner OOM, etc.) must not cancel the other 19
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add swap (headroom -- Tier-3 candidate selection loads the whole jobs table's id/source/url columns into memory before shard-filtering)
+        continue-on-error: true   # best-effort insurance; never block the drain on swap setup
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          sudo fallocate -l 16G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=16384
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install package
+        run: uv venv && uv pip install -e "."
+
+      - name: Download previous snapshot (best-effort; first run has none)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          # index.sqlite.gz: needed for Tier-3 candidate SELECTion (the `jobs` table this shard's
+          # refs are drawn from). index-detail.sqlite.gz: the combined sidecar from the LAST drain
+          # (or the daily build's carry-forward) -- seeded below into this shard's own sidecar so
+          # already-recovered, sig-current rows for this shard's candidates are never re-fetched.
+          gh release download index-latest --dir dist --pattern 'index.sqlite.gz' || echo "no prev index"
+          gh release download index-latest --dir dist --pattern 'index-detail.sqlite.gz' || echo "no prev detail sidecar"
+          [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
+          [ -f dist/index-detail.sqlite.gz ] && gunzip -kf dist/index-detail.sqlite.gz || true
+          # Seed THIS shard's sidecar from the combined prior sidecar (best-effort carry-forward).
+          # Harmless to seed with the FULL combined db: reconcile_detail_tier only ever reads/
+          # writes the rows it selects for this shard, so another shard's rows just ride along
+          # unused in this copy.
+          [ -f dist/index-detail.sqlite ] && cp dist/index-detail.sqlite "dist/index-detail-shard-${{ matrix.shard }}.sqlite" || true
+
+      - name: Drain shard ${{ matrix.shard }} of ${{ env.NUM_SHARDS }}
+        env:
+          ERGON_DETAIL_CONCURRENCY: "${{ github.event.inputs.detail_concurrency || '50' }}"
+          ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '200000' }}"
+        run: |
+          if [ ! -f dist/index.sqlite ]; then
+            echo "no prior index.sqlite available -- nothing to drain yet (first-ever run before build-index.yml has published once)"
+            exit 0
+          fi
+          uv run python scripts/build_index.py --detail-shard-only \
+            --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} --out dist
+
+      - name: Upload shard sidecar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-shard-${{ matrix.shard }}
+          path: dist/index-detail-shard-${{ matrix.shard }}.sqlite
+          if-no-files-found: warn   # e.g. the "nothing to drain yet" early-exit above
+
+  merge:
+    needs: drain
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
+        run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
+
+      - name: Install package
+        run: uv venv && uv pip install -e "."
+
+      - name: Download all shard sidecar artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: detail-shard-*
+          path: dist/shards
+          merge-multiple: true
+
+      - name: Merge shard sidecars into one combined index-detail.sqlite
+        run: |
+          mkdir -p dist
+          uv run python scripts/merge_detail_shards.py --shards-dir dist/shards --out dist/index-detail.sqlite
+
+      - name: Gzip + write manifest-detail.json
+        # Reuses build_index.py's own `_gzip_file`/`_write_detail_manifest`/`_build_id` (no
+        # duplicated gzip/manifest logic) -- `scripts` is importable as a namespace package when
+        # run from the repo root (same convention the test suite uses: `pythonpath = ["."]`).
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+
+          from scripts.build_index import _build_id, _gzip_file, _write_detail_manifest
+
+          out = Path("dist")
+          db = out / "index-detail.sqlite"
+          build_id = _build_id()
+          sha, nbytes = _gzip_file(db, out / "index-detail.sqlite.gz")
+          _write_detail_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
+          print(f"index-detail.sqlite.gz: build_id={build_id} sha256={sha} bytes={nbytes}")
+          PY
+
+      - name: Publish the combined detail sidecar to the stable index-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Paired-asset guard (mirrors build-index.yml): publish index-detail.sqlite.gz ONLY
+          # together with manifest-detail.json, so a partial/interrupted merge never ships an
+          # unpaired db under a manifest that doesn't describe it (or vice versa). Deliberately
+          # does NOT touch index.sqlite/manifest.json -- see the decoupling note at the top of
+          # this file.
+          if [ ! -f dist/index-detail.sqlite.gz ] || [ ! -f dist/manifest-detail.json ]; then
+            echo "missing index-detail.sqlite.gz or manifest-detail.json -- refusing to publish an unpaired asset"
+            exit 1
+          fi
+          ASSETS="dist/index-detail.sqlite.gz dist/manifest-detail.json"
+          if gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest $ASSETS --clobber
+          else
+            gh release create index-latest $ASSETS --title index-latest \
+              --notes "Daily ergon-tracker search-index snapshot."
+          fi

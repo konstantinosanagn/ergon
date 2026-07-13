@@ -1,5 +1,6 @@
 """Tier-3 detail sidecar: recovered structured fields + snippet from per-posting JD detail fetches,
 keyed by posting id with a sig for re-crawl-safe carry-forward. The JD text itself is never stored."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,11 +10,13 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import anyio
 
 from ..enrich import enrich_in_place
 from ..extract.base import html_to_text
+from ..http import _rate_key
 from ..models import JobPosting
 
 DETAIL_SCHEMA_VERSION = 1
@@ -35,8 +38,10 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
 def ensure_detail_schema(con: sqlite3.Connection) -> None:
     con.executescript(DETAIL_SCHEMA)
-    con.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)",
-                (str(DETAIL_SCHEMA_VERSION),))
+    con.execute(
+        "INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)",
+        (str(DETAIL_SCHEMA_VERSION),),
+    )
     con.commit()
 
 
@@ -72,6 +77,90 @@ class DetailRef:
             listing_url=row.get("listing_url"),
             content_sig=detail_sig(row),
         )
+
+
+# --- sharded drain -----------------------------------------------------------------------------
+#
+# The drain is fanned across a GitHub Actions matrix (20 shards, see .github/workflows/
+# drain-detail.yml) so ~990k Tier-3 candidates drain in ~1 run instead of ~40 daily-cron runs.
+# THE CORRECTNESS INVARIANT: politeness (AsyncFetcher's per-host token-bucket + circuit breaker,
+# see http.py) is enforced per ``_rate_key(host)`` — subdomains collapse to the registrable domain
+# EXCEPT the per-tenant hosts (Workday). If two shards independently rate-limited the same
+# collapsed backend, each shard's own token-bucket would think it owns the full request budget,
+# so the backend would see up to N shards' worth of traffic simultaneously — silently N-xing the
+# real load against it. So the shard key MUST be ``_rate_key(host)``, never a raw hostname: every
+# rate-bucket lives on exactly ONE shard, by construction (a pure function of the bucket string).
+
+
+def rate_key_for_host(host: str) -> str:
+    """Thin public wrapper around ``http._rate_key`` (private) — reused, not duplicated, so the
+    shard boundary and AsyncFetcher's actual politeness boundary can never drift apart."""
+    return _rate_key(host)
+
+
+def _host_for_ref(ref: DetailRef) -> str | None:
+    """Best-effort FETCH host a provider's ``fetch_detail`` would hit for this ref.
+
+    Every current Tier-3 provider (see ``providers/*.py``) derives its detail URL from
+    ``ref.apply_url`` (falling back to ``ref.listing_url``) — e.g. workday/oracle/icims/
+    successfactors/radancy/smartrecruiters/workable/join/rippling/eightfold/phenom all follow this
+    ``ref.apply_url or ref.listing_url`` pattern. Taking the netloc of that URL generically is
+    therefore correct for every registered source without needing per-provider knowledge here. A
+    future provider whose ``fetch_detail`` hits a wholly different host would need this updated.
+    """
+    url = ref.apply_url or ref.listing_url
+    if not url:
+        return None
+    host = urlsplit(url).netloc
+    return host or None
+
+
+def _rate_bucket_for_ref(ref: DetailRef) -> str:
+    """The politeness bucket this ref's fetch will contend on — ``_rate_key`` of its fetch host,
+    or (when no host is derivable) a per-source fallback bucket. Either way this is the SAME
+    string used both to shard candidates and, transitively, to key AsyncFetcher's own rate
+    limiter, so a ref's shard assignment always matches the backend it will actually contend on.
+    """
+    host = _host_for_ref(ref)
+    if host:
+        return rate_key_for_host(host)
+    return f"source:{ref.source}"  # no derivable URL -- bucket by source, still deterministic
+
+
+# Single shared-backend megahosts pinned to a FIXED shard number each, rather than left to the
+# hash, so their (very large, single-bucket) request stream is never split across two matrix jobs
+# purely by hash luck -- keeping them pinned makes the "one bucket, one shard" invariant obvious
+# by inspection instead of by trusting the hash distribution. ``oraclecloud.com`` is included
+# defensively: it is currently one shared bucket build-wide, but is expected to become per-tenant
+# once the Oracle quickwins land (another workstream) -- pinning it now is a safe default either
+# way (a per-tenant key that happens not to be in this dict just falls through to the hash below).
+MEGAHOST_SHARDS: dict[str, int] = {
+    "smartrecruiters.com": 0,
+    "oraclecloud.com": 1,
+    "workable.com": 2,  # apply.workable.com / workable.com both collapse here via _rate_key
+    "join.com": 3,
+    "icims.com": 4,
+}
+
+
+def _shard_of(rate_key: str, num_shards: int) -> int:
+    """Deterministic shard assignment for a politeness bucket.
+
+    Pinned megahosts (``MEGAHOST_SHARDS``) go to their fixed shard (mod ``num_shards``, so this
+    never indexes out of range even if ``num_shards`` is smaller than the pin table). Everything
+    else hashes via ``hashlib.sha1`` -- NOT Python's built-in ``hash()``, which is salted per
+    process (``PYTHONHASHSEED``) and would make shard assignment nondeterministic across runs/
+    processes, breaking the "every bucket lives on exactly one shard" invariant across the matrix.
+    """
+    pinned = MEGAHOST_SHARDS.get(rate_key)
+    if pinned is not None:
+        return pinned % num_shards
+    digest = hashlib.sha1(rate_key.encode("utf-8")).hexdigest()
+    return int(digest, 16) % num_shards
+
+
+def _ref_in_shard(ref: DetailRef, shard: int, num_shards: int) -> bool:
+    return _shard_of(_rate_bucket_for_ref(ref), num_shards) == shard
 
 
 # --- reconcile pass ----------------------------------------------------------------------------
@@ -231,9 +320,19 @@ def _record_success(
             sponsorship_offered = excluded.sponsorship_offered
         """,
         (
-            ref.id, ref.content_sig, fetched_at, snippet, salary_min, salary_max, salary_currency,
-            salary_interval, job.years_experience_min, job.years_experience_max, job.degree_min,
-            degree_required, sponsorship_offered,
+            ref.id,
+            ref.content_sig,
+            fetched_at,
+            snippet,
+            salary_min,
+            salary_max,
+            salary_currency,
+            salary_interval,
+            job.years_experience_min,
+            job.years_experience_max,
+            job.degree_min,
+            degree_required,
+            sponsorship_offered,
         ),
     )
 
@@ -243,8 +342,15 @@ def _record_success(
 # Recovered columns, named identically in `job_detail` and the real index `jobs` table (see
 # index/schema.sql) -- no name mapping needed between the sidecar and the index.
 _MERGE_COLUMNS: tuple[str, ...] = (
-    "salary_min", "salary_max", "salary_currency", "salary_interval",
-    "years_min", "years_max", "degree_min", "degree_required", "sponsorship_offered",
+    "salary_min",
+    "salary_max",
+    "salary_currency",
+    "salary_interval",
+    "years_min",
+    "years_max",
+    "degree_min",
+    "degree_required",
+    "sponsorship_offered",
 )
 _INT_COLUMNS = {"degree_required", "sponsorship_offered"}
 
@@ -343,6 +449,8 @@ async def reconcile_detail_tier(
     max_details: int | None = None,
     sources: Sequence[str] | None = None,
     now: Callable[[], str],
+    shard: int | None = None,
+    num_shards: int | None = None,
 ) -> dict[str, int]:
     """Tier-3 reconcile pass: select index rows lacking a recovered JD (empty snippet), fetch their JD
     via the
@@ -353,7 +461,25 @@ async def reconcile_detail_tier(
     last successfully fetched), retry-budgeted (``RETRY_CAP`` attempts on failure, then left
     alone), and non-fatal (one ref's exception never aborts the others). ``fetch_detail`` and
     ``now`` are both injected for determinism/testability — no network or wall-clock reads here.
+
+    ``shard``/``num_shards`` (both-or-neither) restrict this pass to the candidates whose
+    politeness bucket (``_rate_bucket_for_ref``, keyed via ``_rate_key`` -- see the "sharded
+    drain" section above) hashes to ``shard`` of ``num_shards`` -- the fan-out primitive behind
+    the drain matrix (``.github/workflows/drain-detail.yml``). Leaving both ``None`` (the default)
+    is the ORIGINAL, byte-identical non-sharded path: no filtering happens at all.
     """
+    if (shard is None) != (num_shards is None):
+        raise ValueError("shard and num_shards must be given together (or neither)")
+    if num_shards is not None and (shard is None or not (0 <= shard < num_shards)):
+        raise ValueError(
+            f"shard must be in [0, num_shards); got shard={shard}, num_shards={num_shards}"
+        )
+    # Plain-int locals (never Optional) once validated above, so the filtering below reads clean
+    # regardless of whether sharding is active -- `sharded=False` makes them dead/unused.
+    sharded = num_shards is not None
+    shard_i: int = shard if shard is not None else 0
+    num_shards_i: int = num_shards if num_shards is not None else 0
+
     det_con = open_detail(detail_path)
     try:
         idx_con = sqlite3.connect(index_path)
@@ -368,6 +494,9 @@ async def reconcile_detail_tier(
             ref = DetailRef.from_row(row)
             if _eligible(ref.id, ref.content_sig, existing):
                 candidates.append(ref)
+
+        if sharded:
+            candidates = [c for c in candidates if _ref_in_shard(c, shard_i, num_shards_i)]
 
         interleaved = _interleave_by_source(candidates)
         window, next_cursor = _select_window(det_con, interleaved, max_details)
@@ -401,9 +530,14 @@ async def reconcile_detail_tier(
         # Remaining drainable backlog AFTER this pass: tier-3 rows still eligible (not recovered,
         # not retry-exhausted). Decreases as the sidecar fills; reaches 0 when every posting is
         # recovered-or-dead — the drain loop's stop condition (Task 8's "until missing == 0").
+        # When sharded, this is scoped to just THIS shard's own candidates (mirroring the
+        # filtering above) so a shard's ``missing`` reflects its own backlog, not the whole index's.
         existing_after = _load_existing(det_con)
         missing = sum(
-            1 for row in tier3_rows if _eligible(str(row["id"]), detail_sig(row), existing_after)
+            1
+            for row in tier3_rows
+            if (not sharded or _ref_in_shard(DetailRef.from_row(row), shard_i, num_shards_i))
+            and _eligible(str(row["id"]), detail_sig(row), existing_after)
         )
 
         return {"fetched": fetched, "failed": failed, "missing": missing}
