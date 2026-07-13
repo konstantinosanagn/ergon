@@ -52,8 +52,11 @@ _RETRYABLE_STATUS = {500, 502, 503, 504}
 
 # Hosts whose subdomains are INDEPENDENT backends -> rate-limit per full host, not per domain.
 # (Workday tenants live in separate data centers; collapsing them would serialize multi-tenant
-# searches.)
-_PER_TENANT_HOSTS = ("myworkdayjobs.com",)
+# searches.) Oracle Fusion/ORC and iCIMS are the same shape: each tenant is a separate customer's
+# careers site on separate infra, so collapsing to the registrable domain creates a false
+# bottleneck (e.g. Oracle's 109 tenants all sharing one ``oraclecloud.com`` bucket) instead of
+# unblocking real parallel draining across tenants.
+_PER_TENANT_HOSTS = ("myworkdayjobs.com", "oraclecloud.com", "icims.com")
 # Shared backends with stricter limits than the default — (max_rate, period_seconds).
 # These always win over the constructor's per_host_rate. The workable/bamboohr/smartrecruiters
 # caps were added after a clustered crawl window threw a 2,181x-429 storm against them

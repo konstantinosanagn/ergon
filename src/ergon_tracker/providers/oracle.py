@@ -15,8 +15,9 @@ the career URL (``.../sites/{site}/requisitions``). Two structural quirks matter
   when ``expand=requisitionList`` is sent.
 * The true count is ``items[0].TotalJobsCount``; the top-level ``totalResults`` is always 1.
 
-There's a per-request cap (~50-70) regardless of a high ``limit``, so we page with
-``limit=25`` and walk ``offset`` to ``TotalJobsCount``.
+There's a per-request cap of 200 regardless of a higher ``limit`` (live-verified: ``limit=500``
+returned exactly 200 rows), so we page with ``limit=200`` and walk ``offset`` to
+``TotalJobsCount``.
 
 Token shape: ``"{host}|{siteNumber}"`` (e.g. ``"eeho.fa.us2.oraclecloud.com|CX_1"``). A bare
 host token defaults the site to ``CX_1`` (the common default).
@@ -77,8 +78,10 @@ def _parse_date(value: Any) -> datetime | None:
 class OracleProvider(BaseProvider):
     name = "oracle"
 
-    PER_PAGE = 25  # ORC caps a single request well below high limits; 25 = site default
-    MAX_PAGES = 200  # bound full pulls (=5000 jobs)
+    # Live-verified: recruitingCEJobRequisitions serves up to 200/page (limit=500 returned
+    # exactly 200) -- 8x fewer LISTING pagination requests than the old 25/page default.
+    PER_PAGE = 200
+    MAX_PAGES = 200  # bound full pulls (=40,000 jobs at PER_PAGE=200)
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
