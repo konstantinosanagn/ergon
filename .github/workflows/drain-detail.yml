@@ -26,12 +26,11 @@ on:
       detail_concurrency:
         description: "Per-shard in-flight fetch concurrency (ERGON_DETAIL_CONCURRENCY). Politeness is unaffected -- enforced per-host by AsyncFetcher's token-bucket regardless of this figure."
         default: "50"
-  schedule:
-    # 09:30 UTC -- deliberately NOT build-index.yml's 04:17 UTC slot. Even if a long build-index
-    # run is still going (it can take up to its 330-min timeout, i.e. as late as ~09:47 UTC on a
-    # worst-case day), the shared `concurrency: group: build-index` below means this run simply
-    # queues behind it rather than racing it -- the cron gap is a courtesy, not the safety net.
-    - cron: "30 9 * * *"
+  # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
+  # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
+  # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
+  # e.g.  schedule: [ { cron: "30 9 * * *" } ]  (09:30 UTC, off build-index.yml's 04:17 slot; the shared
+  # concurrency group below already serializes the two so they never race).
 
 permissions:
   contents: write   # to publish the combined detail sidecar as a release asset (merge job)
