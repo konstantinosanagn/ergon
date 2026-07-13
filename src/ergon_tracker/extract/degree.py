@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 
 from ..models import DEGREE_LEVELS, DEGREE_ORDER
-from .base import ExtractInput, register_extractor
+from .base import ExtractInput, _vocab, register_extractor
 
 __all__ = ["DegreeExtractor", "degree_from_ats_vocab"]
 
@@ -111,6 +111,99 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bhigh\s?school\s+(?:diploma|degree|education)\b", re.I), "highschool"),
     (re.compile(r"\bged\b", re.I), "highschool"),
 )
+
+# --- German (DE) gazetteer -----------------------------------------------------
+# Deliberately does NOT include Ausbildung/Berufsausbildung/Lehre/Meister/Techniker: these are
+# VOCATIONAL qualifications, a false friend for "degree" in English, and the ``DEGREE_LEVELS``
+# ladder (highschool<associate<bachelor<master<phd_md`) has no vocational rung to put them on —
+# so they are simply left unmatched, which resolves to ``(None, None)`` rather than leaking into
+# "bachelor". "Doktorand" (a PhD *candidate*, not a holder) is excluded from the doctorate match
+# via a negative lookahead.
+_PATTERNS_DE: tuple[tuple[re.Pattern[str], str], ...] = (
+    # doctoral
+    (re.compile(r"\bpromotion\b", re.I), "phd_md"),
+    (re.compile(r"\bdoktor(?!and)\w*\b", re.I), "phd_md"),
+    (re.compile(r"\bdr\.(?:\s?(?:rer|med|jur|phil)\.)?", re.I), "phd_md"),
+    # master's (incl. the false-friend "Diplom"/"Dipl.-Ing.", which is a master's-equivalent)
+    (re.compile(r"\bmaster(?:studium|abschluss|s)?\b", re.I), "master"),
+    (re.compile(r"\bm\.\s?(?:sc|a|eng)\.?(?=[\s,/)]|$)", re.I), "master"),
+    (re.compile(r"\bmagister\b", re.I), "master"),
+    (re.compile(r"\bdiplom(?:studium)?\b", re.I), "master"),
+    (re.compile(r"\bdipl\.?[-\s]?ing\.?\b", re.I), "master"),
+    # bachelor's / Studium (bare "Studium" defaults to a first degree = bachelor). The boundary is
+    # loosened to also match compound field-prefixed forms ("Jurastudium", "Informatikstudium")
+    # — any run of word characters ending in "studium" — plus "Studienabschluss" (a first-degree
+    # completion, distinct from the "studium" stem above).
+    (re.compile(r"\bbachelor(?:studium|abschluss)?\b", re.I), "bachelor"),
+    (re.compile(r"\bb\.\s?(?:sc|a|eng)\.?(?=[\s,/)]|$)", re.I), "bachelor"),
+    (re.compile(r"\bhochschulabschluss\b", re.I), "bachelor"),
+    (re.compile(r"\bfh-abschluss\b", re.I), "bachelor"),
+    # negative lookahead excludes "master"/"diplom"/"bachelor"-prefixed compounds — those already
+    # have their own dedicated (higher-level, or explicitly-bachelor) patterns above, so letting
+    # this broad arm match them too would add a spurious duplicate *bachelor*-rank mention that
+    # could wrongly drag e.g. a "Masterstudium"-only posting's minimum down to bachelor.
+    (re.compile(r"\b(?!master|diplom|bachelor)\w*studium\b", re.I), "bachelor"),
+    (re.compile(r"\bstudienabschluss\w*\b", re.I), "bachelor"),
+    # high school
+    (re.compile(r"\babitur\b", re.I), "highschool"),
+    (re.compile(r"\bfachabitur\b", re.I), "highschool"),
+    (re.compile(r"\bhauptschulabschluss\b", re.I), "highschool"),
+    (re.compile(r"\bmittlere\s+reife\b", re.I), "highschool"),
+    (re.compile(r"\brealschulabschluss\b", re.I), "highschool"),
+)
+
+_PATTERNS_TABLE: dict[str, tuple[tuple[re.Pattern[str], str], ...]] = {
+    "en": _PATTERNS,
+    "de": _PATTERNS_DE,
+}
+
+# German "or equivalent qualification" escape — softens scope the same way the English
+# ``_OR_EQUIV`` does; reused by ``_scope`` below.
+_OR_EQUIV_DE = re.compile(r"\boder\s+vergleichbare\s+qualifikation\w*\b", re.IGNORECASE)
+
+# Vocational (Ausbildung/Lehre/Berufsausbildung) offered as an "oder"-alternative to the academic
+# degree ("Ausbildung oder Studium", "Studium ... oder eine vergleichbare Berufsausbildung",
+# "Physiotherapie-Ausbildung oder Bachelor"): the posting is satisfiable WITHOUT the degree, so
+# the academic-degree mention is dropped entirely (no degree_min), mirroring how English's
+# ``_OR_EQUIV`` softens scope but going one step further, matching this benchmark's
+# reconciliation (a vocational-satisfiable posting is scored as "no degree stated").
+# "neben Deinem Studium erste beruflich Eindrücke sammeln" / "nach Deinem Studium
+# weiterarbeiten" — a Werkstudent(-style) ad describing the CANDIDATE's own current/future
+# studies (concurrent with or after this job), not a completed-degree requirement. Scoped tightly
+# to "neben|nach" immediately before the possessive so a genuine requirement like "hast dein
+# Studium kürzlich ... abgeschlossen" (present-perfect: studies already completed) is untouched.
+_CURRENT_STUDENT_DE = re.compile(r"\b(?:neben|nach)\s+dein\w*\s+studium\b", re.IGNORECASE)
+
+_VOC_TOKEN_DE = re.compile(r"\b(?:berufs)?ausbildung\w*\b", re.IGNORECASE)
+_DEGREE_TOKEN_DE = re.compile(r"\b(?:studium|bachelor)\w*\b", re.IGNORECASE)
+_ODER_TOKEN_DE = re.compile(r"\boder\b", re.IGNORECASE)
+_VOC_OR_GAP = 220  # max chars between the vocational and academic tokens
+
+
+def _vocational_alternative_de(segment: str) -> bool:
+    """True when ``segment`` offers a vocational alternative to the academic degree via "oder"."""
+    voc_spans = [m.span() for m in _VOC_TOKEN_DE.finditer(segment)]
+    if not voc_spans:
+        return False
+    deg_spans = [m.span() for m in _DEGREE_TOKEN_DE.finditer(segment)]
+    if not deg_spans:
+        return False
+    oder_starts = [m.start() for m in _ODER_TOKEN_DE.finditer(segment)]
+    if not oder_starts:
+        return False
+    for v_start, v_end in voc_spans:
+        for d_start, d_end in deg_spans:
+            if v_end <= d_start:
+                lo, hi = v_end, d_start
+            elif d_end <= v_start:
+                lo, hi = d_end, v_start
+            else:
+                continue  # overlapping/nested tokens — not a real pairing
+            if hi - lo > _VOC_OR_GAP:
+                continue
+            if any(lo <= o < hi for o in oder_starts):
+                return True
+    return False
 
 # --- ATS "education" vocabulary -> degree_min --------------------------------
 # Closed set of free-text education values some ATS widgets expose directly (e.g. Workable's
@@ -278,20 +371,25 @@ class DegreeExtractor:
         text = inp.description_text
         if not text:
             return (None, None)
+        lang = inp.language or "en"
+        patterns = _vocab(lang, _PATTERNS_TABLE)
         # (rank, scope) per surviving mention; the minimum rank is the real barrier.
         mentions: list[tuple[int, bool | None]] = []
         specific_spans: list[tuple[int, int]] = []
-        for pattern, level in _PATTERNS:
+        for pattern, level in patterns:
             for m in pattern.finditer(text):
                 specific_spans.append((m.start(), m.end()))
-                self._add(text, m.start(), m.end(), _RANK[level], mentions)
-        # Guarded bare-degree pass (bachelor). Suppressed when the "degree" token sits inside or
-        # right after a specific degree phrase ("master's degree", "advanced degree", "PhD degree"),
-        # so the bare arm never double-counts and drags a higher requirement down to bachelor.
-        for m in _BARE_DEGREE.finditer(text):
-            if any(s <= m.start() <= e + 15 for s, e in specific_spans):
-                continue
-            self._add(text, m.start(), m.end(), _RANK["bachelor"], mentions)
+                self._add(text, m.start(), m.end(), _RANK[level], mentions, lang)
+        # Guarded bare-degree ("degree" the English word) pass, bachelor-default — English only;
+        # German's bare-first-degree default is the "Studium" gazetteer entry above instead.
+        # Suppressed when the "degree" token sits inside or right after a specific degree phrase
+        # ("master's degree", "advanced degree", "PhD degree"), so the bare arm never double-counts
+        # and drags a higher requirement down to bachelor.
+        if lang == "en":
+            for m in _BARE_DEGREE.finditer(text):
+                if any(s <= m.start() <= e + 15 for s, e in specific_spans):
+                    continue
+                self._add(text, m.start(), m.end(), _RANK["bachelor"], mentions, lang)
         if not mentions:
             return (None, None)
         min_rank = min(rank for rank, _ in mentions)
@@ -301,16 +399,26 @@ class DegreeExtractor:
         return (DEGREE_LEVELS[min_rank], scope)
 
     def _add(
-        self, text: str, start: int, end: int, rank: int, mentions: list[tuple[int, bool | None]]
+        self,
+        text: str,
+        start: int,
+        end: int,
+        rank: int,
+        mentions: list[tuple[int, bool | None]],
+        lang: str = "en",
     ) -> None:
         """Process one gazetteer hit: drop benefits/tuition mentions, else record (rank, scope)."""
         seg, seg_start = _segment(text, start, end)
         if _BENEFITS.search(seg) or _in_benefits_section(text, start):
             return  # tuition-reimbursement perk, not a qualification
-        mentions.append((rank, self._scope(text, seg, start - seg_start, start)))
+        if lang == "de" and _vocational_alternative_de(seg):
+            return  # "Ausbildung oder Studium" — the academic degree isn't actually required
+        if lang == "de" and _CURRENT_STUDENT_DE.search(seg):
+            return  # "neben/nach Deinem Studium" — candidate's own ongoing studies, not a requirement
+        mentions.append((rank, self._scope(text, seg, start - seg_start, start, lang)))
 
     @staticmethod
-    def _scope(text: str, segment: str, pos: int, abs_start: int) -> bool | None:
+    def _scope(text: str, segment: str, pos: int, abs_start: int, lang: str = "en") -> bool | None:
         """Required(True) / preferred-only(False) / unstated(None) for one mention.
 
         ``pos`` is the mention's offset within ``segment``; ``abs_start`` its offset in ``text``.
@@ -327,8 +435,15 @@ class DegreeExtractor:
         """
         if _EQUIV_REQUIRED.search(segment):
             return True
+        checks: tuple[tuple[re.Pattern[str], bool], ...] = (
+            (_OR_EQUIV, False),
+            (_PREFERRED, False),
+            (_REQUIRED, True),
+        )
+        if lang == "de":
+            checks = (*checks, (_OR_EQUIV_DE, False))  # "oder vergleichbare Qualifikation" -> soft
         hits: list[tuple[int, bool]] = []
-        for pat, verdict in ((_OR_EQUIV, False), (_PREFERRED, False), (_REQUIRED, True)):
+        for pat, verdict in checks:
             for m in pat.finditer(segment):
                 hits.append((min(abs(m.start() - pos), abs(m.end() - pos)), verdict))
         if hits:

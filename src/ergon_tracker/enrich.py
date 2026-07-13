@@ -14,6 +14,7 @@ from .extract.base import get_extractor, input_from_job
 from .extract.comp import CompExtractor  # noqa: F401
 from .extract.degree import DegreeExtractor  # noqa: F401
 from .extract.geo import has_us_signal, normalize_geo
+from .extract.lang import detect_language
 from .extract.level import (  # noqa: F401
     LevelExtractor,
     infer_level,
@@ -44,6 +45,10 @@ def enrich_in_place(
     keep ``level`` strictly title-based.
     """
     inp = input_from_job(job, company_key=company_key)
+    # Detect the JD's language (stdlib stopword heuristic; fails safe to "en" on anything short,
+    # ambiguous, or genuinely English) so downstream extractors pick the right vocab table. This
+    # is the only place language gets set — extractors never guess it themselves.
+    inp.language = detect_language(inp.description_text)
 
     # years-of-experience first, so the optional level fallback below can use it.
     yoe = get_extractor("yoe")

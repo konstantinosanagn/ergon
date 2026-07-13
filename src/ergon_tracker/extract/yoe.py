@@ -187,6 +187,111 @@ def _arm_key(value: tuple[int | None, int | None]) -> int:
     return n if n is not None else 0  # unreachable: _value never yields (None, None)
 
 
+# --- German (DE) vocab --------------------------------------------------------
+# German gets its own, much smaller, self-contained parse path (rather than being threaded
+# through the elaborate English precision machinery above — the disqualifier/company-tenure/
+# degree-ladder rules were tuned against an English corpus and don't apply here yet). This keeps
+# the English path (``_parse`` below, unchanged) provably byte-identical while still landing
+# real German recall for the documented patterns.
+#
+# unit: "Jahre(n)"; cue: Berufserfahrung|Praxiserfahrung|Erfahrung; qualifiers ("at least/from/
+# over"): mindestens|mind.|min.|ab|über|wenigstens; ranges: "N-M" / "N bis M"; compound:
+# "N-jährige"; vague bands: erste (Berufs)Erfahrung -> (0,2), mehrjährige -> (3,5), fundierte ->
+# (3,None), langjährige -> (5,None).
+_PREFIX_DE = r"mindestens|mind\.|min\.|ab|über|wenigstens"
+_REQUIRE_PREFIXES_DE = {"mindestens", "mind.", "min.", "ab", "über", "wenigstens"}
+
+# Spelled-out German cardinals ("zwei Jahre" -> 2). Scoped to zwei..zehn per the measured gap
+# (small numbers spelled out in a requirement bullet); larger spelled-out numbers are vanishingly
+# rare in this position and "ein(e)" is deliberately excluded (it's the indefinite article far
+# more often than a spelled-out "one", so including it would risk false triggers like "ein Jahr
+# Vertragslaufzeit").
+_WORD_NUMBERS_DE: dict[str, int] = {
+    "zwei": 2,
+    "drei": 3,
+    "vier": 4,
+    "fünf": 5,
+    "sechs": 6,
+    "sieben": 7,
+    "acht": 8,
+    "neun": 9,
+    "zehn": 10,
+}
+_WORD_ALT_DE = "|".join(sorted(_WORD_NUMBERS_DE, key=len, reverse=True))
+_NUM_DE = rf"(?:\d{{1,2}}|\b(?:{_WORD_ALT_DE})\b)"
+
+_PHRASE_DE = re.compile(
+    rf"(?:(?P<prefix>{_PREFIX_DE})\s+)?"
+    rf"(?P<n1>{_NUM_DE})\s*"
+    rf"(?:(?P<sep>-|–|—|bis)\s*(?P<n2>{_NUM_DE})\s*)?"
+    r"\+?\s*"
+    r"(?P<unit>Jahren|Jahre|Jahr)\b",
+    re.IGNORECASE,
+)
+
+_CUE_DE = re.compile(r"\b(?:Berufserfahrung|Praxiserfahrung|Erfahrung)\w*", re.IGNORECASE)
+
+# "5-jährige (Berufs-)Erfahrung" — an adjectival compound, not the prefix+unit shape above.
+_COMPOUND_DE = re.compile(r"(?P<n1>\d{1,2})[-\s]?j[aä]hrige\w*", re.IGNORECASE)
+
+# Disqualifier guards (precision) for the vague/explicit German matches below — mirrors the
+# intent of the English _DQ_*/_COMPANY_* machinery, much more narrowly since the DE path is
+# deliberately small:
+#   * company tenure/age: "seit über 10 Jahren Pionier", "seit 14 Jahren erfolgreichen
+#     Unternehmen", "vor über 50 Jahren gegründet" — the word right before the number/prefix is
+#     "seit" (temporal: since) or "vor" (temporal: ago) framing the ORGANIZATION's age.
+#   * "Mit über 30 Jahren Erfahrung ... legen wir Wert" — a company-scale opener; scoped tightly
+#     to the "mit über" bigram (not "mit mindestens", which is a normal candidate-requirement
+#     opener: "Mit mindestens 3 Jahren Berufserfahrung punktest du").
+#   * candidate age: "mindestens 18 Jahre alt"; residency: "wohnhaft ... seit 5 Jahren" (caught by
+#     the "seit" before-guard already).
+#   * company scale: "über 20 Jahre am Markt".
+_DQ_BEFORE_DE = re.compile(r"\b(?:seit|vor)\s*$", re.IGNORECASE)
+_DQ_AFTER_DE = re.compile(r"^\W*(?:alt|jung)\b|^\W*am\s+markt\b", re.IGNORECASE)
+_COMPANY_MIT_UEBER_DE = re.compile(r"\bmit\s*$", re.IGNORECASE)
+
+# Topic-object guard for the "erste (...) Erfahrung" vague band: "erste Erfahrungen mit
+# CRM-Systemen" reads as tool/skill exposure, not a professional-experience requirement (unlike
+# "erste Erfahrung im digitalen Marketing", "in Schichtplanung", "aus Bereichen wie ..." — all
+# still valid). The differentiator observed in-corpus is specifically the "mit <tool>" object.
+_TOPIC_MIT_DE = re.compile(r"^\s*mit\s+\w", re.IGNORECASE)
+# "mehrere Jahre Erfahrung hast" — part of a rhetorical "whether you already have several years
+# of experience OR are just starting out" concession, not a requirement statement.
+_CONCESSION_HAST_DE = re.compile(r"^\s*(?:hast|habt|haben|hat)\b", re.IGNORECASE)
+
+# Vague experience bands, checked only when no explicit number matched. Each entry is
+# (pattern, band, after-guard-or-None); when the after-guard matches the text right after the
+# match, the band is skipped (not a requirement).
+_VAGUE_DE: tuple[
+    tuple[re.Pattern[str], tuple[int | None, int | None], re.Pattern[str] | None], ...
+] = (
+    # up to 3 intervening adjectives: "Erste relevante praktische Erfahrung".
+    (
+        re.compile(r"erste[nrs]?\s+(?:[a-zäöüß]+\s+){0,3}(?:berufs)?erfahrung\w*", re.IGNORECASE),
+        (0, 2),
+        _TOPIC_MIT_DE,
+    ),
+    # an open-ended floor, not a 3-5 band — the corpus reads "mehrjährige" as "several years and
+    # up", not a capped range.
+    (re.compile(r"mehrjährige\w*", re.IGNORECASE), (3, None), None),
+    (re.compile(r"mehrere\s+jahre\s+erfahrung\w*", re.IGNORECASE), (3, None), _CONCESSION_HAST_DE),
+    # requires the compound "Berufserfahrung", not bare "Erfahrung" — "Fundierte Erfahrung in der
+    # bayerischen Küche" / "... in den Bereichen Haustechnik ..." are topic objects, not a
+    # professional-experience requirement (bare "Erfahrung" never earns this band on its own).
+    (re.compile(r"fundierte\w*\s+berufserfahrung\w*", re.IGNORECASE), (3, None), None),
+    # requires an explicit "Erfahrung" follower — bare "langjährige Tradition"/"langjährige
+    # Kunden" describes the COMPANY or something else entirely, not a candidate requirement.
+    (re.compile(r"langjährige\w*\s+(?:berufs)?erfahrung\w*", re.IGNORECASE), (5, None), None),
+)
+
+
+def _to_int_de(token: str) -> int | None:
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    return _WORD_NUMBERS_DE.get(token)
+
+
 class YoeExtractor:
     """Extract ``(min_years, max_years)`` of required experience from a posting."""
 
@@ -194,15 +299,78 @@ class YoeExtractor:
 
     def extract(self, inp: ExtractInput) -> tuple[int | None, int | None]:
         """Return ``(min_years, max_years)``; ``(None, None)`` when nothing found."""
+        lang = inp.language or "en"
         for text in (inp.description_text, inp.title):
             if not text:
                 continue
-            result = self._parse(text)
+            result = self._parse(text, lang)
             if result != (None, None):
                 return result
         return (None, None)
 
-    def _parse(self, text: str) -> tuple[int | None, int | None]:
+    def _parse(self, text: str, lang: str = "en") -> tuple[int | None, int | None]:
+        if lang == "de":
+            return self._parse_de(text)
+        return self._parse_en(text)
+
+    def _parse_de(self, text: str) -> tuple[int | None, int | None]:
+        for m in _PHRASE_DE.finditer(text):
+            value = self._value_de(m)
+            if value is None:
+                continue
+            if self._is_valid_de(text, m):
+                return value
+        m2 = _COMPOUND_DE.search(text)
+        if m2 is not None:
+            n = _to_int(m2.group("n1"))
+            if n is not None and n <= _MAX_PLAUSIBLE:
+                return (n, None)
+        for pattern, band, after_guard in _VAGUE_DE:
+            m3 = pattern.search(text)
+            if m3 is None:
+                continue
+            if after_guard is not None and after_guard.match(text[m3.end() : m3.end() + 20]):
+                continue
+            return band
+        return (None, None)
+
+    @staticmethod
+    def _value_de(m: re.Match[str]) -> tuple[int | None, int | None] | None:
+        n1 = _to_int_de(m.group("n1"))
+        if n1 is None or n1 > _MAX_PLAUSIBLE:
+            return None
+        raw_n2 = m.group("n2")
+        if raw_n2 is not None:
+            n2 = _to_int_de(raw_n2)
+            if n2 is None or n2 > _MAX_PLAUSIBLE:
+                return None
+            lo, hi = (n1, n2) if n1 <= n2 else (n2, n1)
+            return (lo, hi)
+        return (n1, None)  # every German qualifier here reads as an open-ended minimum
+
+    @staticmethod
+    def _is_valid_de(text: str, m: re.Match[str]) -> bool:
+        before = text[max(0, m.start() - 40) : m.start()]
+        after = text[m.end() : m.end() + 45]
+        # Hard vetoes first — company tenure/age, candidate age, residency — checked before the
+        # prefix short-circuit below, since "über"/"mindestens" are themselves valid requirement
+        # prefixes that would otherwise rescue these ("seit über 10 Jahren", "seit mindestens 5
+        # Jahren", "mindestens 18 Jahre alt").
+        if _DQ_BEFORE_DE.search(before) or _DQ_AFTER_DE.match(after):
+            return False
+        prefix = (m.group("prefix") or "").strip().lower()
+        # "Mit über 30 Jahren Erfahrung ... legen wir" — company-scale opener. Scoped to the
+        # "mit über" bigram so "Mit mindestens 3 Jahren Berufserfahrung" (a normal candidate
+        # requirement) is untouched.
+        if prefix == "über" and _COMPANY_MIT_UEBER_DE.search(before):
+            return False
+        if prefix in _REQUIRE_PREFIXES_DE:
+            return True
+        if m.group("n2") is not None:  # an explicit range reads as a requirement on its own
+            return True
+        return bool(_CUE_DE.search(before) or _CUE_DE.search(after))
+
+    def _parse_en(self, text: str) -> tuple[int | None, int | None]:
         # First valid phrase wins — unless it opens a degree-alternation ladder ("BS + 8 years
         # OR MS + 5 years OR PhD + 2 years"): then every adjacent degree-paired arm is collected
         # and the MINIMUM across arms is returned (the lowest barrier a candidate can clear).
