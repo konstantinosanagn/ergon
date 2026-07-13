@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import SCHEMA_VERSION
+from .detail import DETAIL_SCHEMA_VERSION
 from .rich import RICH_SCHEMA_VERSION
 
 log = logging.getLogger("ergon_tracker.index")
@@ -364,6 +365,58 @@ class RichCache:
         tmp.replace(self.db_path)  # atomic
         self.local_manifest.write_text(json.dumps(remote))
         log.info("vectors sidecar updated to build %s (%d bytes)", remote.get("build_id"), len(raw))
+        return self.db_path
+
+
+class DetailCache:
+    """Download the Tier-3 detail sidecar (``index-detail.sqlite.gz``): recovered structured
+    fields + snippet from per-posting JD fetches, keyed by posting id.
+
+    Same shape as RichCache. Absence is a non-event — the caller just has no recovered detail
+    fields (the core index already carries whatever the list-crawl provided).
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        cache_dir: Path | None = None,
+        repo: str = _REPO,
+        tag: str = _TAG,
+    ) -> None:
+        self.base_url = (base_url or _DEFAULT_BASE).rstrip("/")
+        self.cache_dir = Path(cache_dir or _default_cache_dir())
+        self.repo = repo
+        self.tag = tag
+        self.db_path = self.cache_dir / "index-detail.sqlite"
+        self.local_manifest = self.cache_dir / "manifest-detail.json"
+
+    def ensure_fresh(self) -> Path | None:
+        """Return a verified detail-sidecar path, or None (caller has no recovered detail)."""
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            fetch = _asset_fetcher(self.base_url, self.repo, self.tag)
+            remote = json.loads(fetch("manifest-detail.json"))
+        except Exception as exc:  # noqa: BLE001 - no detail published -> no recovered detail
+            log.debug("no detail manifest (%s); no recovered detail", exc)
+            return None
+        if int(remote.get("schema_version", -1)) != DETAIL_SCHEMA_VERSION:
+            return None
+        local = json.loads(self.local_manifest.read_text()) if self.local_manifest.exists() else {}
+        if local.get("build_id") == remote.get("build_id") and self.db_path.exists():
+            return self.db_path  # already current
+        try:
+            raw = gzip.decompress(fetch("index-detail.sqlite.gz"))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("detail download failed (%s)", exc)
+            return self.db_path if self.db_path.exists() else None
+        if hashlib.sha256(raw).hexdigest() != remote.get("sha256"):
+            log.warning("detail sha256 mismatch; rejecting download")
+            return None
+        tmp = self.db_path.with_suffix(".tmp")
+        tmp.write_bytes(raw)
+        tmp.replace(self.db_path)  # atomic
+        self.local_manifest.write_text(json.dumps(remote))
+        log.info("detail sidecar updated to build %s (%d bytes)", remote.get("build_id"), len(raw))
         return self.db_path
 
 

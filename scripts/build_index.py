@@ -357,6 +357,133 @@ def build_and_publish_rich_incremental(
     return stats, nbytes
 
 
+_TIER3_DETAIL_SOURCES = ["smartrecruiters"]  # sources with a fetch_detail impl (Task 9: more ATS)
+
+
+def _detail_max() -> int:
+    """Per-run bound on Tier-3 detail fetches, ``ERGON_DETAIL_MAX`` (env), default 5000."""
+    return int(os.environ.get("ERGON_DETAIL_MAX", "5000"))
+
+
+def _write_detail_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
+    """Write ``manifest-detail.json`` alongside the gz — the exact fields ``DetailCache.ensure_fresh``
+    reads (schema_version gate, build_id freshness key, sha256 of the RAW bytes). Mirrors the vectors
+    manifest producer; a field-name drift here silently disables the sidecar for every user."""
+    from ergon_tracker.index.detail import DETAIL_SCHEMA_VERSION
+
+    (out / "manifest-detail.json").write_text(
+        json.dumps(
+            {
+                "build_id": build_id,
+                "schema_version": DETAIL_SCHEMA_VERSION,
+                "sha256": sha,
+                "bytes": nbytes,
+            },
+            indent=2,
+        )
+    )
+
+
+def _rebuild_jobs_fts(db_path: Path) -> None:
+    """Rebuild the external-content ``jobs_fts`` index over the merged ``jobs`` table.
+
+    ``merge_detail_into_index`` writes recovered fields (including ``snippet``) straight into
+    ``jobs`` via plain ``UPDATE`` statements. An external-content FTS5 table is NOT kept in sync
+    by those updates (only triggers on the *content* table would do that, and this schema has
+    none) -- so without an explicit rebuild, a recovered snippet is visible in ``jobs.snippet``
+    but invisible to ``jobs_fts MATCH`` keyword queries. Reuses the exact
+    ``INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')`` idiom the core build uses
+    (``index/build.py``: ``build_index``/``finalize_index``/``build_slim_index``).
+    """
+    from ergon_tracker.index.db import connect
+
+    con = connect(db_path)
+    try:
+        con.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')")
+        con.commit()
+    finally:
+        con.close()
+
+
+async def _reconcile_detail(detail_db: Path, index_db: Path) -> dict:
+    """Fetch JD detail for Tier-3 (no-description) postings via each source's registered provider
+    (``fetch_detail``), then merge recovered fields into the index db (already-promoted at this
+    point) in place. Returns the reconcile stats plus a ``merged`` row count.
+
+    ``fetch_detail`` dispatch: look up the provider by ``ref.source`` in the registry and call its
+    (possibly-unimplemented — defaults to returning ``None``) ``fetch_detail(ref, fetcher)``. One
+    real ``AsyncFetcher`` is shared across the whole reconcile window (bounded concurrency handled
+    inside ``reconcile_detail_tier``).
+    """
+    from datetime import datetime, timezone
+
+    from ergon_tracker.http import AsyncFetcher
+    from ergon_tracker.index.db import connect
+    from ergon_tracker.index.detail import merge_detail_into_index, reconcile_detail_tier
+    from ergon_tracker.providers.base import get_provider, load_builtins
+
+    load_builtins()
+
+    async with AsyncFetcher() as fetcher:
+
+        async def _dispatch(ref):
+            prov = get_provider(ref.source)
+            if prov is None:
+                return None
+            return await prov.fetch_detail(ref, fetcher)
+
+        stats = await reconcile_detail_tier(
+            str(detail_db),
+            str(index_db),
+            fetch_detail=_dispatch,
+            max_details=_detail_max(),
+            sources=_TIER3_DETAIL_SOURCES,
+            now=lambda: datetime.now(timezone.utc).isoformat(),
+        )
+
+    index_con = connect(index_db)
+    try:
+        stats["merged"] = merge_detail_into_index(index_con, str(detail_db))
+    finally:
+        index_con.close()
+    return stats
+
+
+def build_and_publish_detail(db_path: Path, out: Path, *, build_id: str) -> tuple[dict, int]:
+    """Tier-3 reconcile + merge against the ALREADY-PUBLISHED core index, then re-publish
+    ``index.sqlite.gz``/``manifest.json`` so the recovered fields actually reach users, and
+    publish the detail sidecar itself (``index-detail.sqlite.gz`` + ``manifest-detail.json``).
+
+    ORDERING (the one subtle wiring decision, see Task-5 brief): callers only invoke this AFTER
+    ``_gated_publish`` has already gzipped+promoted the core index — the reconcile pass needs the
+    final ``jobs`` table (with its real ids/content_hash) to select Tier-3 candidates against, and
+    that table only exists once ``_gated_publish`` has promoted ``db_tmp`` -> ``db``. But
+    ``merge_detail_into_index`` then mutates that SAME on-disk db in place, which means the
+    ``index.sqlite.gz``/``manifest.json`` that ``_gated_publish`` already wrote are now stale — the
+    recovered fields are on disk in ``db`` but not yet in the gzip a downloading user fetches. So
+    this function re-runs ``publish_artifacts`` at the end, re-gzipping + rewriting ``manifest.json``
+    (same ``build_id``, refreshed ``sha256``) with the merged fields included. Skipping that step
+    would silently strand every recovered field in the sidecar and never reach a user. This whole
+    call is wrapped in try/except by the caller (non-fatal: a detail failure must never undo or
+    block the already-succeeded core publish).
+    """
+    import anyio
+
+    detail_db = out / "index-detail.sqlite"
+    stats = anyio.run(_reconcile_detail, detail_db, db_path)
+    if stats.get("merged", 0) > 0:
+        # Recovered snippets just landed in `jobs.snippet` via plain UPDATEs, which do NOT
+        # propagate into the external-content `jobs_fts` table -- rebuild it so those postings
+        # become MATCHable before the re-publish below ships them.
+        _rebuild_jobs_fts(db_path)
+    sha, nbytes = _gzip_file(detail_db, out / "index-detail.sqlite.gz")
+    _write_detail_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
+    # Re-publish the core index so the fields merge_detail_into_index just wrote land in the
+    # gzip/manifest a downloading user actually fetches (see ORDERING above).
+    publish_artifacts(db_path, out, build_id=build_id)
+    return stats, nbytes
+
+
 def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
     """Build the slim broad-query tier (no snippet, FTS over title+company) and gzip it.
 
@@ -735,6 +862,7 @@ def main(argv: list[str]) -> None:
     rich = (
         False  # opt-in: also build/reconcile the rich sidecar (full-JD FTS + pre-stored embeddings)
     )
+    detail = False  # opt-in: also run the Tier-3 detail reconcile + merge (manual-only; see workflow)
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
     i = 0
     while i < len(argv):
@@ -755,6 +883,9 @@ def main(argv: list[str]) -> None:
             i += 1
         elif argv[i] == "--rich":
             rich = True
+            i += 1
+        elif argv[i] == "--detail":
+            detail = True
             i += 1
         else:
             print(f"unknown flag: {argv[i]}")
@@ -864,6 +995,19 @@ def main(argv: list[str]) -> None:
             except Exception as exc:  # noqa: BLE001 - never let the rich tier break the core build
                 print(f"  ! rich tier skipped (non-fatal): {type(exc).__name__}: {exc}")
         fresh_path.unlink(missing_ok=True)  # free disk before the shard VACUUMs
+        if ok and detail:  # Tier-3 reconcile + merge against the already-published core index
+            # NON-FATAL: the detail tier is an optional enhancement, same contract as rich above.
+            # The main index is already gated + promoted, so a fetch-dispatcher/merge failure must
+            # NOT crash the build or undo the core publish — log it and carry on.
+            try:
+                dstats, dbytes = build_and_publish_detail(db, out, build_id=build_id)
+                print(
+                    f"  + detail tier (fetched={dstats['fetched']} failed={dstats['failed']} "
+                    f"missing={dstats['missing']} merged={dstats['merged']}) -> "
+                    f"index-detail.sqlite.gz ({dbytes // 1024} KB)"
+                )
+            except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
+                print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")
         if ok and sharded:
             ns = build_and_publish_shards_from_db(db, out, build_id=build_id)
             print(f"  + published {ns} sector shards")
@@ -912,6 +1056,16 @@ def main(argv: list[str]) -> None:
             f"  + published rich tier (pruned={stats['pruned']} embedded={stats['embedded']} "
             f"missing={stats['missing']}) -> index-vectors.sqlite.gz ({nbytes // 1024} KB)"
         )
+    if detail:  # Tier-3 reconcile + merge against the already-published core index (non-fatal)
+        try:
+            dstats, dbytes = build_and_publish_detail(db, out, build_id=build_id)
+            print(
+                f"  + published detail tier (fetched={dstats['fetched']} failed={dstats['failed']} "
+                f"missing={dstats['missing']} merged={dstats['merged']}) -> "
+                f"index-detail.sqlite.gz ({dbytes // 1024} KB)"
+            )
+        except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
+            print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")
     print(f"built index: {n} jobs -> {out}/index.sqlite.gz (+manifest.json)")
 
 
