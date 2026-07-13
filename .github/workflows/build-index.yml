@@ -17,8 +17,8 @@ on:
         description: "Force the Tier-3 detail reconcile + merge (--detail) on a manual run. Also runs automatically on the daily schedule (proven out on run 29216124010)."
         default: "false"
       detail_max:
-        description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 10000; override to measure or throttle a single run."
-        default: "10000"
+        description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 25000; override to measure or throttle a single run."
+        default: "25000"
 
 permissions:
   contents: write          # to publish the release asset
@@ -120,7 +120,8 @@ jobs:
           # shell-expanded, so `~` would be taken literally by fastembed.
           FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
           ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
-          ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '10000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
+          ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
+          ERGON_DETAIL_CONCURRENCY: "24"             # Tier-3 detail: in-flight fetch concurrency (per-host politeness enforced separately by AsyncFetcher's token-bucket)
         run: |
           # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
@@ -144,9 +145,15 @@ jobs:
           # bursts; daily runs drain the remaining tail (~40-60k/run) then maintain it (only new/
           # changed sigs re-embed). Rich stays a non-fatal add-on: the core index publishes first.
           # --detail now runs on the daily schedule (proven out on run 29216124010: 497/500 fetched,
-          # zero 429s, <1min pass). ERGON_DETAIL_MAX=10000/run drains the SmartRecruiters backlog
-          # (~152k) over ~15 runs. Non-fatal add-on like --rich: the core index publishes first, so a
-          # detail failure never blocks the build. Also forceable on a manual run via detail=true.
+          # zero 429s, <1min pass, at concurrency=8). Raised ERGON_DETAIL_MAX 10000 -> 25000 and
+          # ERGON_DETAIL_CONCURRENCY 8 -> 24 (both env-tunable) to drain the much larger Workday
+          # backlog (~534k, 37% of the index) in weeks not months, spread across Workday's ~2,228
+          # independent tenant hosts -- per-host politeness is unaffected (AsyncFetcher's token-bucket
+          # is keyed per host, not by this global concurrency figure). Kept moderate, not a huge jump:
+          # core+rich+detail must stay well under the 330-min timeout, since a timed-out job loses the
+          # whole run (publish never runs). Non-fatal add-on like --rich: the core index publishes
+          # first, so a detail failure never blocks the build. Also forceable on a manual run via
+          # detail=true.
           uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
             ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }} \

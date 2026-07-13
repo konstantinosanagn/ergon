@@ -423,12 +423,20 @@ async def _reconcile_detail(detail_db: Path, index_db: Path) -> dict:
 
     from ergon_tracker.http import AsyncFetcher
     from ergon_tracker.index.db import connect
-    from ergon_tracker.index.detail import merge_detail_into_index, reconcile_detail_tier
+    from ergon_tracker.index.detail import (
+        _DETAIL_CONCURRENCY,
+        merge_detail_into_index,
+        reconcile_detail_tier,
+    )
     from ergon_tracker.providers.base import get_provider, load_builtins
 
     load_builtins()
 
-    async with AsyncFetcher() as fetcher:
+    # Match AsyncFetcher's own global cap to reconcile_detail_tier's fetch concurrency
+    # (ERGON_DETAIL_CONCURRENCY, default 24) -- AsyncFetcher's default (16) would otherwise become
+    # the binding limiter instead of _DETAIL_CONCURRENCY. Politeness is unaffected: it's enforced
+    # per-host by AsyncFetcher's token-bucket regardless of this global figure (see detail.py).
+    async with AsyncFetcher(concurrency=_DETAIL_CONCURRENCY) as fetcher:
 
         async def _dispatch(ref):
             prov = get_provider(ref.source)

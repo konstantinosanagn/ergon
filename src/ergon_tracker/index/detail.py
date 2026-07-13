@@ -3,6 +3,7 @@ keyed by posting id with a sig for re-crawl-safe carry-forward. The JD text itse
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
@@ -76,7 +77,16 @@ class DetailRef:
 # --- reconcile pass ----------------------------------------------------------------------------
 
 RETRY_CAP = 3  # bounded retries for a ref whose fetch keeps failing (never re-fetched forever)
-_DEFAULT_CONCURRENCY = 8  # in-flight fetches; the injected AsyncFetcher bounds per-host rate
+# In-flight Tier-3 fetches. Raised 8 -> 24 (env-tunable via ERGON_DETAIL_CONCURRENCY) to drain the
+# highest-volume sources (Workday 37% of the index across ~2,228 independent tenant hosts,
+# SmartRecruiters 10.5%, Greenhouse 9%) in weeks not months. Politeness is enforced BELOW this by
+# the injected AsyncFetcher's own per-host token-bucket (default 5 req/s per registrable domain,
+# Workday keyed per-tenant-host, see http.py::_PER_TENANT_HOSTS) -- raising this global figure only
+# lets more distinct hosts be in flight at once, it never raises the request rate against any one
+# host. The caller (scripts/build_index.py::_reconcile_detail) must construct its AsyncFetcher with
+# a matching-or-higher concurrency so this limiter -- not AsyncFetcher's own global cap -- is the
+# one governing throughput.
+_DETAIL_CONCURRENCY = int(os.environ.get("ERGON_DETAIL_CONCURRENCY", "24"))  # was a flat 8
 
 _JOBS_COLUMNS = "id, source, board_token, apply_url, listing_url, content_hash"
 
@@ -364,7 +374,7 @@ async def reconcile_detail_tier(
         _save_cursor(det_con, next_cursor)
         det_con.commit()
 
-        results = await _run_fetches(window, fetch_detail, _DEFAULT_CONCURRENCY)
+        results = await _run_fetches(window, fetch_detail, _DETAIL_CONCURRENCY)
 
         fetched = 0
         failed = 0
