@@ -2,10 +2,20 @@
 
 Offline only — a FakeFetcher stands in for AsyncFetcher; no live network calls. Mirrors
 ``tests/test_workday_fetch_detail.py`` (the Workday Task-3 pattern), including its
-non-raising discipline for a truthy non-dict payload shape."""
+non-raising discipline for a truthy non-dict payload shape.
+
+Also covers the join-specific redirect cap (``_get_text_following_redirects`` /
+``_MAX_DETAIL_REDIRECTS`` in ``providers/join.py``): join.com auto-reposts evergreen jobs,
+producing 22-23-hop redirect chains from a stale posting URL to its current live repost.
+``AsyncFetcher``'s shared httpx client follows redirects with the default ``max_redirects=20``
+and would raise ``TooManyRedirects`` short of the live page, so join follows redirects itself,
+hop by hop via ``fetcher.request(..., follow_redirects=False)``, up to a 30-hop cap. The
+``_FakeFetcher`` below simulates that hop-by-hop protocol: each ``request()`` call returns a
+302 with a ``Location`` header until ``redirect_hops`` is exhausted, then a final 200 page."""
 from __future__ import annotations
 
 import anyio
+import httpx
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -14,16 +24,46 @@ from ergon_tracker.providers.join import JoinProvider
 _APPLY_URL = "https://join.com/companies/acme/jobs/123456"
 
 
+class _FakeResponse:
+    def __init__(
+        self, *, status_code: int = 200, text: str = "", headers: dict[str, str] | None = None
+    ) -> None:
+        self.status_code = status_code
+        self.text = text
+        self.headers = headers or {}
+
+    @property
+    def has_redirect_location(self) -> bool:
+        return self.status_code in (301, 302, 303, 307, 308) and "location" in self.headers
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+
+
 class _FakeFetcher:
-    def __init__(self, text: str | None) -> None:
+    """Simulates ``AsyncFetcher.request`` for the manual hop-by-hop redirect follow.
+
+    Each call returns a 302 (with a ``Location`` header pointing at the next hop) until
+    ``redirect_hops`` calls have been made, then a final 200 whose body is ``text``.
+    ``redirect_hops=0`` (the default) means the very first call already returns the final page —
+    the shape every pre-existing (non-redirect) test in this file relies on."""
+
+    def __init__(self, text: str | None, *, redirect_hops: int = 0) -> None:
         self._text = text
+        self._redirect_hops = redirect_hops
         self.calls: list[str] = []
 
-    async def get_text(self, url: str, **kw: object) -> str:
+    async def request(self, method: str, url: str, **kw: object) -> _FakeResponse:
         self.calls.append(url)
         if self._text is None:
             raise RuntimeError("boom")
-        return self._text
+        hop = len(self.calls) - 1
+        if hop < self._redirect_hops:
+            return _FakeResponse(
+                status_code=302, headers={"location": f"{url}?hop={hop + 1}"}
+            )
+        return _FakeResponse(status_code=200, text=self._text)
 
 
 def _next_data_html(job_json: str) -> str:
@@ -141,7 +181,39 @@ def test_join_fetch_detail_falls_back_to_listing_url() -> None:
 
 
 def test_join_fetch_detail_get_text_failure_is_none() -> None:
-    fetcher = _FakeFetcher(None)  # raises inside get_text
+    fetcher = _FakeFetcher(None)  # raises inside request()
+    ref = _make_ref(_APPLY_URL)
+    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
+    assert desc is None
+
+
+def test_join_fetch_detail_follows_long_redirect_chain_to_live_page() -> None:
+    # join's evergreen-repost chains run 22-23 hops before landing on the live posting.
+    # httpx's shared-client default max_redirects=20 would raise TooManyRedirects one or two
+    # hops short of this; join's own redirect follow (cap=30) must reach the live page.
+    html = _next_data_html('{"schemaDescription":"<p>Live JD after 22 hops</p>"}')
+    fetcher = _FakeFetcher(html, redirect_hops=22)
+    ref = _make_ref(_APPLY_URL)
+    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
+    assert desc == "<p>Live JD after 22 hops</p>"
+    assert len(fetcher.calls) == 23  # 22 redirect hops + the final 200
+
+
+def test_join_fetch_detail_exactly_at_redirect_cap_succeeds() -> None:
+    # 30 hops == _MAX_DETAIL_REDIRECTS exactly -> still resolves (boundary check).
+    html = _next_data_html('{"schemaDescription":"<p>Right at the cap</p>"}')
+    fetcher = _FakeFetcher(html, redirect_hops=30)
+    ref = _make_ref(_APPLY_URL)
+    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
+    assert desc == "<p>Right at the cap</p>"
+    assert len(fetcher.calls) == 31
+
+
+def test_join_fetch_detail_exceeding_redirect_cap_is_none() -> None:
+    # One hop past _MAX_DETAIL_REDIRECTS -> TooManyRedirects internally, caught, returns None
+    # (never raises out of fetch_detail).
+    html = _next_data_html('{"schemaDescription":"<p>Unreachable</p>"}')
+    fetcher = _FakeFetcher(html, redirect_hops=31)
     ref = _make_ref(_APPLY_URL)
     desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
     assert desc is None

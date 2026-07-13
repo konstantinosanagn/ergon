@@ -86,6 +86,11 @@ class _FakeFetcher:
 
     async def get_json(self, url: str, **kw: object) -> object:
         self.calls.append(("GET_JSON", url))
+        # A real network call always yields control back to the event loop before its result
+        # is available; a purely-synchronous fake would mask the board-cache race (concurrent
+        # siblings would never get a chance to interleave). This checkpoint makes the fake
+        # behave like the real thing for concurrency tests.
+        await anyio.sleep(0)
         if url in self._board_payloads:
             self.board_fetch_count[url] = self.board_fetch_count.get(url, 0) + 1
             if url in self._board_raises:
@@ -360,3 +365,45 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher()))
     assert desc is None
+
+
+def test_workable_fetch_detail_concurrent_same_board_siblings_await_not_race() -> None:
+    """Regression for the board-cache check-then-act RACE: N concurrent ``fetch_detail`` calls
+    for DISTINCT postings on the SAME board, fired via a single ``anyio.create_task_group``
+    (mirroring how ``detail.py::_run_fetches`` drives real concurrency). Each posting's
+    ``apply_url`` already embeds the slug (the "full shortlink" shape), so no redirect hop is
+    needed -- every task races straight into the board-resolution path together.
+
+    Before the per-slug lock: the first task to run marks the board "fetched" (a synchronous
+    ``_fetched_board_slugs.add(slug)`` at the very start of ``_fetch_board``) and only THEN
+    awaits the actual board fetch (``fetcher.get_json``, which yields via the fake's
+    ``anyio.sleep(0)`` checkpoint). Every sibling that gets scheduled during that window sees
+    the board "already handled", skips fetching, and reads the (still-empty)
+    ``_desc_by_shortcode`` -> ``None``, permanently, for the rest of the run. Confirmed: with
+    the lock reverted, only 1 of N postings resolves a description.
+
+    After the fix: siblings block on the per-slug ``anyio.Lock`` instead of racing, so exactly
+    ONE board fetch happens and every posting resolves its description."""
+    n = 15
+    slug = "racedboard"
+    board_url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
+    jobs = [_job(f"CODE{i:02d}", f"<p>JD {i}</p>") for i in range(n)]
+    fetcher = _FakeFetcher(board_payloads={board_url: _board_payload(*jobs)})
+    refs = [
+        _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE{i:02d}", id_=str(i))
+        for i in range(n)
+    ]
+    results: list[str | None] = [None] * n
+
+    async def _worker(i: int) -> None:
+        results[i] = await WorkableProvider().fetch_detail(refs[i], fetcher)
+
+    async def _run() -> None:
+        async with anyio.create_task_group() as tg:
+            for i in range(n):
+                tg.start_soon(_worker, i)
+
+    anyio.run(_run)
+
+    assert results == [f"<p>JD {i}</p>" for i in range(n)]
+    assert fetcher.board_fetch_count[board_url] == 1
