@@ -43,6 +43,8 @@ from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+import anyio
+
 from ..extract.degree import degree_from_ats_vocab
 from ..extract.level import level_from_ats_vocab
 from ..models import (
@@ -76,6 +78,29 @@ _SHORTLINK_HOST = "apply.workable.com"
 _desc_by_shortcode: dict[str, str | None] = {}
 _fetched_board_slugs: set[str] = set()
 
+# Per-slug async once-gate (fixes a check-then-act RACE): concurrent sibling coroutines for
+# DIFFERENT postings on the SAME board must AWAIT one board fetch rather than each racing to
+# start (or skip) it. ``_board_locks`` holds one ``anyio.Lock`` per slug, created lazily; a
+# single ``_board_locks_guard`` lock serializes creation of those per-slug locks (a bare
+# ``dict.setdefault``/``defaultdict`` is NOT concurrency-safe to populate — two coroutines could
+# both decide "no lock yet" and hand out two different lock objects for the same slug, which
+# defeats the whole point). Once a per-slug lock object exists, holding *that* lock (not the
+# guard) around the double-checked ``_fetched_board_slugs`` read + bulk fetch is what actually
+# serializes siblings: the first coroutine in does the fetch; the others block on the lock and,
+# on acquiring it, find the board already populated and return immediately.
+_board_locks: dict[str, anyio.Lock] = {}
+_board_locks_guard = anyio.Lock()
+
+
+async def _lock_for_slug(slug: str) -> anyio.Lock:
+    """Return the (lazily-created) per-slug lock for ``slug``, safe under concurrent callers."""
+    async with _board_locks_guard:
+        lock = _board_locks.get(slug)
+        if lock is None:
+            lock = anyio.Lock()
+            _board_locks[slug] = lock
+        return lock
+
 
 def _reset_workable_cache() -> None:
     """Clear the module-level detail memo cache. Test-only: isolates tests from each other and
@@ -83,6 +108,7 @@ def _reset_workable_cache() -> None:
     live for the whole reconcile run)."""
     _desc_by_shortcode.clear()
     _fetched_board_slugs.clear()
+    _board_locks.clear()
 
 
 # Path pieces around a shortlink URL: {..., "j", shortcode, ...}. Used both on the canonical
@@ -232,7 +258,11 @@ class WorkableProvider(BaseProvider):
         call. On a miss, the board slug is taken from ``ref.token`` when present, else resolved
         via one redirect hop (see :meth:`_resolve_token`); the whole board is then bulk-fetched
         ONCE (see :meth:`_fetch_board`), priming the cache for every sibling posting on it before
-        this posting's (now-cached) description is returned.
+        this posting's (now-cached) description is returned. Concurrent siblings for OTHER
+        postings on the SAME board AWAIT that one in-flight fetch via a per-slug ``anyio.Lock``
+        (see :data:`_board_locks`) instead of racing it — without the lock, a sibling could see
+        the slug already "claimed" and read the cache before the fetch that claimed it had
+        actually populated anything, permanently returning ``None`` for the rest of the run.
 
         Non-raising: any unparseable URL, failed hop, or failed/malformed board fetch returns
         ``None``, never an exception."""
@@ -263,8 +293,18 @@ class WorkableProvider(BaseProvider):
         if not slug:
             return None
 
-        if slug not in _fetched_board_slugs:
-            await self._fetch_board(slug, fetcher)
+        # Concurrent siblings for OTHER postings on this SAME board must AWAIT the in-flight
+        # fetch rather than each independently deciding to start (or skip) one -- a bare
+        # ``if slug not in _fetched_board_slugs`` check-then-act here is exactly the race this
+        # lock closes: without it, two coroutines can both see "not fetched yet", both proceed,
+        # or (worse) one marks it fetched and returns before the fetch actually populates the
+        # cache, so the other reads ``_desc_by_shortcode`` while it's still empty.
+        lock = await _lock_for_slug(slug)
+        async with lock:
+            # Double-checked: another sibling may have finished populating the board while we
+            # were waiting for the lock, in which case there's nothing left to do.
+            if slug not in _fetched_board_slugs:
+                await self._fetch_board(slug, fetcher)
 
         return _desc_by_shortcode.get(shortcode)
 
@@ -273,7 +313,9 @@ class WorkableProvider(BaseProvider):
         """Bulk-fetch every job on ``slug``'s board (with descriptions) and prime
         :data:`_desc_by_shortcode` for all of them in one shot. Marks ``slug`` as fetched
         first so a failed/empty response never triggers a repeat fetch for the same board
-        within this run. Non-raising."""
+        within this run. Always called while holding ``slug``'s per-slug lock (see
+        :func:`_lock_for_slug`), so there is never more than one call in flight per slug.
+        Non-raising."""
         _fetched_board_slugs.add(slug)
         url = _API.format(token=slug)
         try:

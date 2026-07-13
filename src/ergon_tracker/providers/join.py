@@ -24,8 +24,10 @@ import json
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urljoin
 
 import anyio
+import httpx
 
 from ..extract.comp import coerce_amount
 from ..models import (
@@ -48,6 +50,16 @@ __all__ = ["JoinProvider"]
 
 _CAREERS = "https://join.com/companies/{token}"
 _JOB_URL = "https://join.com/companies/{token}/jobs/{id_param}"
+
+# join.com auto-reposts evergreen jobs, so a stale posting URL can redirect through EVERY prior
+# repost (live-observed chains of 22-23 hops) before landing on the current live posting.
+# ``AsyncFetcher``'s shared httpx client follows redirects with its default ``max_redirects=20``
+# (httpx has no *per-request* override — only a client-construction-time setting), so those
+# longest chains raise ``TooManyRedirects`` one or two hops short of a page that's actually live
+# and recoverable. Rather than raising the shared client's cap for every provider, join follows
+# redirects itself (see :func:`_get_text_following_redirects`), hop by hop via
+# ``fetcher.request(..., follow_redirects=False)``, up to this cap.
+_MAX_DETAIL_REDIRECTS = 30
 
 # Hosts/paths we recognise, capturing the company token (slug) as group 1.
 _HOST_PATTERNS = (re.compile(r"join\.com/companies/([^/?#\s]+)", re.IGNORECASE),)
@@ -182,6 +194,27 @@ def _employment(job: dict[str, Any]) -> EmploymentType:
     return _EMPLOYMENT.get(name, EmploymentType.UNKNOWN)
 
 
+async def _get_text_following_redirects(
+    fetcher: AsyncFetcher, url: str, *, max_redirects: int = _MAX_DETAIL_REDIRECTS
+) -> str:
+    """GET ``url``, following up to ``max_redirects`` redirect hops manually (see
+    :data:`_MAX_DETAIL_REDIRECTS` for why join needs a higher cap than the shared client's
+    default). Each hop is one ``fetcher.request(..., follow_redirects=False)`` call — so it
+    still goes through the same per-host rate limiting, retries, and circuit breaker as any
+    other fetch. Raises (``httpx.TooManyRedirects``, ``httpx.HTTPStatusError``, or any
+    underlying fetch error) exactly like ``fetcher.get_text`` would; callers already wrap this
+    in a broad ``except Exception``."""
+    current = url
+    for _ in range(max_redirects + 1):
+        resp = await fetcher.request("GET", current, follow_redirects=False)
+        location = resp.headers.get("location") if resp.has_redirect_location else None
+        if not location:
+            resp.raise_for_status()
+            return resp.text
+        current = urljoin(current, location)
+    raise httpx.TooManyRedirects(f"Exceeded {max_redirects} redirects for {url}")
+
+
 @register("join")
 class JoinProvider(BaseProvider):
     name = "join"
@@ -254,9 +287,12 @@ class JoinProvider(BaseProvider):
         (see :func:`_parse_initial_state`), at ``initialState.job.schemaDescription`` (genuine
         HTML) with a fallback to ``initialState.job.description`` (Markdown-flavored plain
         text) when ``schemaDescription`` is empty. ``initialState.job.unifiedDescription`` is a
-        bool flag, not content — never read for JD text. Non-raising: any unparseable URL,
-        fetch failure, non-JSON payload, or shape mismatch (including a truthy non-dict at
-        ``job``) returns ``None``, never an exception."""
+        bool flag, not content — never read for JD text. Fetched via
+        :func:`_get_text_following_redirects` rather than ``fetcher.get_text`` directly: join's
+        evergreen-repost redirect chains can run past the shared client's default redirect cap
+        (see :data:`_MAX_DETAIL_REDIRECTS`). Non-raising: any unparseable URL, fetch failure
+        (including exceeding the redirect cap), non-JSON payload, or shape mismatch (including a
+        truthy non-dict at ``job``) returns ``None``, never an exception."""
         url: str | None = None
         for candidate in (ref.apply_url, ref.listing_url):
             if candidate and _JOB_DETAIL_RE.search(candidate):
@@ -265,7 +301,7 @@ class JoinProvider(BaseProvider):
         if url is None:
             return None
         try:
-            html = await fetcher.get_text(url)
+            html = await _get_text_following_redirects(fetcher, url)
         except Exception:
             return None
         state = _parse_initial_state(html)
