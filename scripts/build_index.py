@@ -357,7 +357,7 @@ def build_and_publish_rich_incremental(
     return stats, nbytes
 
 
-_TIER3_DETAIL_SOURCES = ["smartrecruiters"]  # sources with a fetch_detail impl (Task 9: more ATS)
+_TIER3_DETAIL_SOURCES = ["smartrecruiters", "workday"]  # sources with a fetch_detail impl
 
 
 def _detail_max() -> int:

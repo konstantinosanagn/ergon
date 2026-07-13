@@ -52,6 +52,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["WorkdayProvider"]
 
@@ -332,6 +333,67 @@ class WorkdayProvider(BaseProvider):
         if bullets:
             return str(bullets[0])
         return str(posting.get("title") or "")
+
+    # --- detail (Tier-3 JD recovery) -----------------------------------------
+
+    @staticmethod
+    def _cxs_detail_url(url: str) -> str | None:
+        """Derive the per-posting cxs detail URL from a public Workday careers URL.
+
+        The public shape is ``https://{tenant}.{wd}.myworkdayjobs.com/{site}/job/{...}``
+        (``apply_url``/``listing_url`` as built by :meth:`_to_raw`). The cxs detail resource
+        lives at ``https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/job/{...}``,
+        so ``site`` is the path segment immediately BEFORE the ``job`` segment, and ``rest`` is
+        everything from ``job`` onward. Returns ``None`` (never raises) for anything that isn't
+        a recognisable Workday host or has no ``job`` path segment with a site before it."""
+        try:
+            parts = urlsplit(url)
+            host = (parts.netloc or "").split("@")[-1].split(":")[0].lower()
+            host_match = _HOST_RE.match(host)
+            if not host_match:
+                return None
+            tenant = host_match.group("tenant")
+            segments = [seg for seg in parts.path.split("/") if seg]
+            job_idx = next((i for i, seg in enumerate(segments) if seg.lower() == "job"), None)
+            if job_idx is None or job_idx == 0:
+                return None
+            site = segments[job_idx - 1]
+            rest = "/".join(segments[job_idx:])
+            if not site or not rest:
+                return None
+            return f"https://{host}/wday/cxs/{tenant}/{site}/{rest}"
+        except Exception:
+            return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the per-tenant cxs detail resource (Tier-3 recovery).
+
+        The cxs URL is derived deterministically from ``ref.apply_url`` (falling back to
+        ``ref.listing_url``) — see :meth:`_cxs_detail_url`. Non-raising: any unparseable URL,
+        fetch failure, non-JSON payload, or shape mismatch (including a truthy non-dict at
+        ``jobPostingInfo``/``jobDescription``) returns ``None``, never an exception."""
+        cxs_url: str | None = None
+        for url in (ref.apply_url, ref.listing_url):
+            if not url:
+                continue
+            cxs_url = self._cxs_detail_url(url)
+            if cxs_url:
+                break
+        if cxs_url is None:
+            return None
+        try:
+            data = await fetcher.get_json(cxs_url)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        job_posting_info = data.get("jobPostingInfo")
+        if not isinstance(job_posting_info, dict):
+            return None
+        job_description = job_posting_info.get("jobDescription")
+        if not isinstance(job_description, str) or not job_description.strip():
+            return None
+        return job_description
 
     # --- normalize ----------------------------------------------------------
 
