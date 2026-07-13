@@ -31,12 +31,14 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["OracleProvider"]
 
@@ -45,6 +47,12 @@ _VIEW = "https://{host}/hcmUI/CandidateExperience/en/sites/{site}/job/{jid}"
 # ORC career host + site: .../sites/{CX_xxxx}/...  on a *.fa.*.oraclecloud.com host.
 _HOST_RE = re.compile(r"([a-z0-9-]+\.fa\.[a-z0-9-]+\.oraclecloud\.com)", re.IGNORECASE)
 _SITE_RE = re.compile(r"/sites/(CX[0-9_]*)\b", re.IGNORECASE)
+
+# Per-requisition detail resource (Tier-3 JD recovery): distinct from the paginated list API
+# above. Same public, unauthenticated ORC REST surface. ``onlyData=true`` + a ``ById`` finder
+# keyed on the requisition id and site number -- NOT ``expand=requisitionList`` (that's a
+# list-endpoint param that 400s here).
+_DETAIL_API = "https://{host}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails"
 
 # WorkplaceTypeCode -> our enum (deterministic).
 _WORKPLACE = {
@@ -181,3 +189,77 @@ class OracleProvider(BaseProvider):
             description_text=None,  # full text only on the detail endpoint (not fetched in bulk)
             raw=raw.payload,
         )
+
+    # --- detail (Tier-3 JD recovery) -----------------------------------------
+
+    @staticmethod
+    def _detail_request(url: str) -> tuple[str, dict[str, str]] | None:
+        """Derive the ORC details-resource URL + query params from a public ``_VIEW`` URL.
+
+        The public shape is ``https://{host}/hcmUI/CandidateExperience/en/sites/{site}/job/{jid}``
+        (``apply_url``/``listing_url`` as built by :meth:`_to_raw`). ``host`` must look like an
+        ORC career host (reuses ``_HOST_RE``); ``site`` and ``jid`` are the path segments right
+        after ``sites`` and ``job`` respectively. The ``finder`` value is literally
+        ``ById;Id={jid},siteNumber={site}`` -- passed as a query param (not hand-encoded) so the
+        fetcher's own encoder handles it exactly like the proven list-endpoint ``finder`` in
+        :meth:`fetch`. Returns ``None`` (never raises) for anything unparseable or non-ORC."""
+        try:
+            parts = urlsplit(url)
+            host = (parts.netloc or "").split("@")[-1].split(":")[0].lower()
+            if not host or not _HOST_RE.search(host):
+                return None
+            segments = [seg for seg in parts.path.split("/") if seg]
+            low_segs = [seg.lower() for seg in segments]
+            if "sites" not in low_segs or "job" not in low_segs:
+                return None
+            site_idx = low_segs.index("sites") + 1
+            job_idx = low_segs.index("job") + 1
+            if site_idx >= len(segments) or job_idx >= len(segments):
+                return None
+            site = segments[site_idx]
+            jid = segments[job_idx]
+            if not site or not jid:
+                return None
+            detail_url = _DETAIL_API.format(host=host)
+            params = {
+                "onlyData": "true",
+                "finder": f"ById;Id={jid},siteNumber={site}",
+            }
+            return detail_url, params
+        except Exception:
+            return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the per-requisition ORC details resource (Tier-3
+        recovery). The URL+params are derived deterministically from ``ref.apply_url`` (falling
+        back to ``ref.listing_url``) -- see :meth:`_detail_request`. Like the list endpoint, the
+        payload wraps the requisition in ``items[0]`` (reuses :meth:`_first_item`). Concatenates
+        ``ExternalDescriptionStr`` + ``ExternalResponsibilitiesStr`` + ``ExternalQualificationsStr``
+        when present. Non-raising: any unparseable URL, fetch failure, non-JSON payload, or shape
+        mismatch (including a truthy non-dict payload/item) returns ``None``, never an exception."""
+        request: tuple[str, dict[str, str]] | None = None
+        for url in (ref.apply_url, ref.listing_url):
+            if not url:
+                continue
+            request = self._detail_request(url)
+            if request:
+                break
+        if request is None:
+            return None
+        detail_url, params = request
+        try:
+            data = await fetcher.get_json(detail_url, params=params)
+        except Exception:
+            return None
+        item = self._first_item(data)
+        if item is None:
+            return None
+        description = item.get("ExternalDescriptionStr")
+        if not isinstance(description, str) or not description.strip():
+            return None
+        parts = [description]
+        for key in ("ExternalResponsibilitiesStr", "ExternalQualificationsStr"):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value)
+        return "\n".join(parts)

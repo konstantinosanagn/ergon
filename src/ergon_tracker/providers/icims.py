@@ -60,6 +60,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["ICIMSProvider"]
 
@@ -69,6 +70,10 @@ _DETAIL = "https://{host}/jobs/{jid}/{slug}/job?in_iframe=1"
 
 # Classic listing job link: /jobs/{numeric id}/{slug}/job
 _JOB_LINK_RE = re.compile(r"/jobs/(\d+)/([a-z0-9%-]+)/job", re.IGNORECASE)
+# Any career-site posting URL carrying a numeric id right after /jobs/ (slug/trailing segment
+# optional/garbage — iCIMS accepts it). Used to derive the Tier-3 detail URL from apply_url/
+# listing_url, which may carry an arbitrary trailing shape (e.g. ``/jobs/12345/some-title/login``).
+_JOBS_ID_RE = re.compile(r"/jobs/(\d+)(?:/|$)", re.IGNORECASE)
 # Classic listing pagination footer: "Page X of Y"
 _PAGE_OF_RE = re.compile(r"Page\s+(\d+)\s+of\s+(\d+)", re.IGNORECASE)
 # An iCIMS host (classic tenants live on *.icims.com; new sites use vanity domains).
@@ -319,6 +324,62 @@ class ICIMSProvider(BaseProvider):
             url=page_url,
             payload=ld,
         )
+
+    # --- detail (Tier-3 JD recovery) --------------------------------------
+
+    @classmethod
+    def _detail_url(cls, url: str) -> str | None:
+        """Derive the per-posting classic detail URL from a public iCIMS careers URL.
+
+        The index ``apply_url``/``listing_url`` shape is ``https://{host}/jobs/{id}/{slug}/...``
+        (e.g. ``.../jobs/12345/some-title/login`` or ``.../job``) — ``slug``/trailing segments
+        vary and are irrelevant here. iCIMS serves the same JSON-LD-bearing detail page at
+        ``https://{host}/jobs/{id}/job`` regardless of slug (a missing/garbage slug is accepted),
+        so we only need ``host`` and the numeric ``id`` right after ``/jobs/``. The ``in_iframe=1``
+        query param is REQUIRED — live-verified: without it iCIMS serves a heavier framed page
+        with no ``application/ld+json`` block at all (same param the classic listing/detail
+        templates above already carry). Returns ``None`` (never raises) for anything that isn't a
+        recognisable iCIMS host/path or has no numeric ``/jobs/{id}`` segment."""
+        try:
+            host = cls.matches(url)
+            if not host:
+                return None
+            m = _JOBS_ID_RE.search(urlsplit(url).path)
+            if not m:
+                return None
+            return f"https://{host}/jobs/{m.group(1)}/job?in_iframe=1"
+        except Exception:
+            return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the classic per-posting detail page (Tier-3 recovery).
+
+        The detail URL is derived deterministically from ``ref.apply_url`` (falling back to
+        ``ref.listing_url``) — see :meth:`_detail_url`. The fetched HTML's ``application/ld+json``
+        ``JobPosting`` block is parsed (reusing :meth:`BaseProvider.extract_jsonld_jobs`) and its
+        ``description`` returned. Non-raising: any unparseable URL, fetch failure, missing/empty
+        JSON-LD, or shape mismatch returns ``None``, never an exception."""
+        detail_url: str | None = None
+        for url in (ref.apply_url, ref.listing_url):
+            if not url:
+                continue
+            detail_url = self._detail_url(url)
+            if detail_url:
+                break
+        if detail_url is None:
+            return None
+        try:
+            html = await fetcher.get_text(detail_url)
+        except Exception:
+            return None
+        if not isinstance(html, str) or not html:
+            return None
+        jobs = self.extract_jsonld_jobs(html)
+        for job in jobs:
+            description = job.get("description")
+            if isinstance(description, str) and description.strip():
+                return description
+        return None
 
     # --- shared ----------------------------------------------------------
 

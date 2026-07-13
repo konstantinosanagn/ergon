@@ -39,6 +39,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
     from ..models import SearchQuery
 
 __all__ = ["RadancyProvider"]
@@ -73,6 +74,18 @@ class RadancyProvider(BaseProvider):
     name = "radancy"
 
     MAX_PAGES = 200  # bound full pulls (=20k jobs) when no limit is given
+
+    # --- detail (Tier-3 JD recovery) -----------------------------------------
+
+    # Below this, a matched container is probably a short meta/summary chip, not the JD body
+    # (recon: on ~4/7 tenants the first ``div.job-description`` match is 62-172 chars).
+    _DETAIL_MIN_LEN = 400
+    _DETAIL_SELECTORS: tuple[str, ...] = (
+        "div.job-description",
+        'div[class*="description"]',
+        "main",
+        "article",
+    )
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
@@ -161,6 +174,44 @@ class RadancyProvider(BaseProvider):
                 )
             )
         return out
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via its own CMS-rendered detail page (Tier-3 recovery).
+
+        Verified by recon (7/7 live tenants): the Radancy ``apply_url``/``listing_url`` (built by
+        :meth:`_parse_cards`) IS ALREADY the full job detail page -- there is no separate detail
+        API to call, unlike Workday/SmartRecruiters. A per-tenant ``div.job-description`` selector
+        is UNRELIABLE though: on ~4/7 tenants the first match is a short 62-172 char meta/summary
+        chip, not the JD body. So we try a container-selector chain
+        (:attr:`_DETAIL_SELECTORS`) and take the FIRST match whose text clears
+        :attr:`_DETAIL_MIN_LEN`; if none clears it, fall back to the whole-page text (recon's
+        robust default -- nav-chrome noise is acceptable, and it reliably surfaces the JD).
+        Non-raising: a missing URL, fetch failure, or empty page returns ``None``, never an
+        exception."""
+        url = ref.apply_url or ref.listing_url
+        if not url:
+            return None
+        try:
+            html = await fetcher.get_text(url)
+        except Exception:
+            return None
+        if not isinstance(html, str) or not html.strip():
+            return None
+        tree = HTMLParser(html)
+        for selector in self._DETAIL_SELECTORS:
+            node = tree.css_first(selector)
+            if node is None:
+                continue
+            text = node.text(separator=" ", strip=True)
+            if len(text) >= self._DETAIL_MIN_LEN:
+                return node.html or text
+        body = tree.body
+        page_text = (
+            body.text(separator=" ", strip=True)
+            if body is not None
+            else tree.text(separator=" ", strip=True)
+        )
+        return page_text or None
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
