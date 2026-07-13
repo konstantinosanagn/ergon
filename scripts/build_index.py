@@ -360,6 +360,7 @@ def build_and_publish_rich_incremental(
 _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "smartrecruiters", "workday",
     "oracle", "icims", "successfactors", "eightfold", "rippling", "radancy",
+    "workable", "join", "phenom",  # phenom re-routes to workday/successfactors by apply_url host
 ]
 
 
