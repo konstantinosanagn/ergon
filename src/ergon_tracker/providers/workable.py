@@ -11,23 +11,29 @@ flag, ``department`` and an apply ``url``. There is no server-side filtering, so
 
 Tier-3 detail recovery
 -----------------------
-The bulk widget response's ``url``/``shortlink`` is a BARE shortlink,
-``https://apply.workable.com/j/{shortcode}`` — it does not embed the account token, and the
-index does not store ``board_token`` for Workable rows. Recovering the full JD for one posting
-is therefore a two-hop, unauthenticated flow:
+Live-verified: ``GET https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true``
+(the SAME bulk widget endpoint :meth:`fetch` already calls, plus ``details=true``) returns
+EVERY job on that board WITH a full ``description`` (HTML) in ONE unauthenticated call
+(probed: 1,100 jobs in a single response). That means per-posting detail recovery doesn't need
+a per-job round trip at all — one board fetch answers for every posting on that board.
 
-1. ``GET https://apply.workable.com/j/{shortcode}`` with redirects disabled → a ``301`` whose
-   ``Location`` reveals the token: ``/{token}/j/{shortcode}``.
-2. ``GET https://apply.workable.com/api/v1/accounts/{token}/jobs/{shortcode}`` — a per-job JSON
-   resource (same ``api/v1`` family as the bulk widget endpoint, just without the ``/widget/``
-   prefix) returning ``{..., description, requirements, benefits}`` as separate HTML fields.
+:meth:`fetch_detail` exploits this with a per-process memo cache (:data:`_desc_by_shortcode`):
+the account/board "slug" for a shortcode is resolved the same way as before — a bare
+``https://apply.workable.com/j/{shortcode}`` shortlink doesn't embed it, so it takes ONE
+redirect hop (``GET .../j/{shortcode}`` with redirects disabled → the ``Location`` header's
+``/{slug}/j/{shortcode}`` reveals it; ``ref.token``, when the index has it, skips this hop) —
+but instead of then hitting a per-job resource, we fetch the WHOLE board once and cache
+every sibling's description by shortcode. So the first posting fetched from a given board pays
+the redirect + board fetch; every other posting on that board (order-independent) is a pure
+cache hit — zero network calls. At ~24 postings/board on average this cuts ~67k per-posting
+2-hop calls down to ~2,800 board fetches for the whole crawl.
 
 This was chosen over the authenticated ``spi/v3`` REST API (requires a per-account Bearer
-token we don't have) and over the unofficial ``/{token}/jobs/view/{shortcode}.md`` LLM-crawler
-markdown surface (undocumented, narrower "cleanliness" than a JSON resource in the same public
-API family already used by :meth:`fetch`). Live-probed against 5 diverse accounts
-(jobrack, skylight-frame, huzzle, aira, talentpluto) — all returned substantial ``description``
-text. See :meth:`WorkableProvider.fetch_detail`.
+token we don't have), the per-job ``api/v1/accounts/{slug}/jobs/{shortcode}`` resource (works,
+but throws away the "whole board in one call" win), and the unofficial
+``/{slug}/jobs/view/{shortcode}.md`` LLM-crawler markdown surface (undocumented, narrower
+"cleanliness" than a JSON resource in the same public API family already used by :meth:`fetch`).
+See :meth:`WorkableProvider.fetch_detail`.
 """
 
 from __future__ import annotations
@@ -53,11 +59,32 @@ if TYPE_CHECKING:
     from ..http import AsyncFetcher
     from ..index.detail import DetailRef
 
-__all__ = ["WorkableProvider"]
+__all__ = ["WorkableProvider", "_reset_workable_cache"]
 
 _API = "https://apply.workable.com/api/v1/widget/accounts/{token}"
-_JOB_API = "https://apply.workable.com/api/v1/accounts/{token}/jobs/{shortcode}"
 _SHORTLINK_HOST = "apply.workable.com"
+
+# --- per-run detail memo cache (module-level: persists across a reconcile run's single
+# process) -----------------------------------------------------------------------------------
+# Board-bulk memoization (Tier-3 JD recovery, see module docstring): every posting's description
+# gets cached by shortcode the first time ANY posting from its board is fetched, so siblings on
+# the same board are pure cache hits (zero network). ``_desc_by_shortcode`` holds the concatenated
+# description (or ``None`` when the board response had no usable description for that shortcode);
+# key presence means "already resolved", not "has a description". ``_fetched_board_slugs`` tracks
+# which boards have already been bulk-fetched so a shortcode that's absent from its board's
+# response (e.g. since removed/relisted) doesn't trigger a repeat board fetch.
+_desc_by_shortcode: dict[str, str | None] = {}
+_fetched_board_slugs: set[str] = set()
+
+
+def _reset_workable_cache() -> None:
+    """Clear the module-level detail memo cache. Test-only: isolates tests from each other and
+    from prior process state; production code never needs to call this (the cache is meant to
+    live for the whole reconcile run)."""
+    _desc_by_shortcode.clear()
+    _fetched_board_slugs.clear()
+
+
 # Path pieces around a shortlink URL: {..., "j", shortcode, ...}. Used both on the canonical
 # bare shortlink (``apply.workable.com/j/{shortcode}``) and the post-redirect/full shape
 # (``apply.workable.com/{token}/j/{shortcode}``) and its legacy host cousin
@@ -196,23 +223,27 @@ class WorkableProvider(BaseProvider):
         return m.group(1)
 
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
-        """Fetch one posting's full JD via the per-job public JSON resource (Tier-3 recovery).
+        """Fetch one posting's full JD via the board-bulk memo cache (Tier-3 recovery, see
+        module docstring).
 
-        The shortcode is parsed from ``ref.apply_url`` (falling back to ``ref.listing_url``);
-        the account token is taken from ``ref.token`` when present, else resolved via one
-        redirect hop (see :meth:`_resolve_token`) since the index does not store
-        ``board_token`` for Workable rows today. Concatenates ``description`` +
-        ``requirements`` + ``benefits`` (whichever are present) from the per-job resource.
-        Non-raising: any unparseable URL, failed hop, non-dict payload, or missing/empty
-        description returns ``None``, never an exception."""
-        token: str | None = None
+        The shortcode is parsed from ``ref.apply_url`` (falling back to ``ref.listing_url``).
+        A cache hit (this shortcode already resolved by an earlier call — either directly, or as
+        a sibling on a board already bulk-fetched this run) returns immediately with NO network
+        call. On a miss, the board slug is taken from ``ref.token`` when present, else resolved
+        via one redirect hop (see :meth:`_resolve_token`); the whole board is then bulk-fetched
+        ONCE (see :meth:`_fetch_board`), priming the cache for every sibling posting on it before
+        this posting's (now-cached) description is returned.
+
+        Non-raising: any unparseable URL, failed hop, or failed/malformed board fetch returns
+        ``None``, never an exception."""
+        slug: str | None = None
         shortcode: str | None = None
         for url in (ref.apply_url, ref.listing_url):
             if not url:
                 continue
             full = self._full_shortlink(url)
             if full is not None:
-                token, shortcode = full
+                slug, shortcode = full
                 break
         if shortcode is None:
             for url in (ref.apply_url, ref.listing_url):
@@ -223,24 +254,56 @@ class WorkableProvider(BaseProvider):
                     break
         if not shortcode:
             return None
-        if not token:
-            token = ref.token or await self._resolve_token(shortcode, fetcher)
-        if not token:
+
+        if shortcode in _desc_by_shortcode:
+            return _desc_by_shortcode[shortcode]
+
+        if not slug:
+            slug = ref.token or await self._resolve_token(shortcode, fetcher)
+        if not slug:
             return None
 
-        url = _JOB_API.format(token=token, shortcode=shortcode)
+        if slug not in _fetched_board_slugs:
+            await self._fetch_board(slug, fetcher)
+
+        return _desc_by_shortcode.get(shortcode)
+
+    @staticmethod
+    async def _fetch_board(slug: str, fetcher: AsyncFetcher) -> None:
+        """Bulk-fetch every job on ``slug``'s board (with descriptions) and prime
+        :data:`_desc_by_shortcode` for all of them in one shot. Marks ``slug`` as fetched
+        first so a failed/empty response never triggers a repeat fetch for the same board
+        within this run. Non-raising."""
+        _fetched_board_slugs.add(slug)
+        url = _API.format(token=slug)
         try:
-            data = await fetcher.get_json(url)
+            data = await fetcher.get_json(url, params={"details": "true"})
         except Exception:
-            return None
+            return
         if not isinstance(data, dict):
-            return None
-        description = data.get("description")
+            return
+        jobs = data.get("jobs")
+        if not isinstance(jobs, list):
+            return
+        for job in jobs:
+            if not isinstance(job, dict):
+                continue
+            code = job.get("shortcode")
+            if not isinstance(code, str) or not code:
+                continue
+            _desc_by_shortcode[code] = WorkableProvider._extract_description(job)
+
+    @staticmethod
+    def _extract_description(job: dict[str, Any]) -> str | None:
+        """Concatenate ``description`` + ``requirements`` + ``benefits`` (whichever are
+        present) from one job record of a board-bulk response, matching the field shape of the
+        (now-retired) per-job resource. ``None`` when there's no usable description text."""
+        description = job.get("description")
         if not isinstance(description, str) or not description.strip():
             return None
         parts = [description]
         for key in ("requirements", "benefits"):
-            extra = data.get(key)
+            extra = job.get(key)
             if isinstance(extra, str) and extra.strip():
                 parts.append(extra)
         return "\n".join(parts)

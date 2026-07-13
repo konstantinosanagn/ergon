@@ -37,7 +37,7 @@ def _wrapper(reqs: list[dict], total: int) -> dict:
 
 
 def _mock(respx_mock: respx.MockRouter) -> None:
-    """offset=0 -> 2 reqs (total=2); offset=25 -> empty list (terminates)."""
+    """offset=0 -> 2 reqs (total=2); any other offset -> empty list (terminates)."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         finder = request.url.params.get("finder", "")
