@@ -53,3 +53,15 @@ def test_host_limiter_uses_domain_override() -> None:
     f = AsyncFetcher(per_host_rate=5)
     lim = f._host_limiter("workable.com")
     assert lim.max_rate == _DOMAIN_RATE_OVERRIDES["workable.com"][0]
+
+
+def test_self_built_client_raises_max_redirects_above_httpx_default() -> None:
+    # join.com's evergreen-repost chains run 22-23 hops -- above httpx's own default of 20 --
+    # so the self-built client (the one every provider actually uses in production) must raise
+    # its max_redirects, letting a single AsyncFetcher.request/get_text call follow the WHOLE
+    # chain internally (one rate-limit token per call, not one per hop; see providers/join.py).
+    from ergon_tracker.http import AsyncFetcher
+
+    f = AsyncFetcher()
+    assert f._client.max_redirects == 30
+    assert f._client.follow_redirects is True

@@ -186,6 +186,14 @@ class AsyncFetcher:
             "timeout": timeout,
             "headers": DEFAULT_HEADERS,
             "follow_redirects": True,
+            # httpx's default is 20 -- too low for join.com's evergreen-repost redirect chains
+            # (live-observed 22-23 hops from a stale posting URL to its current live repost; see
+            # providers/join.py). Raised to 30 so the WHOLE chain is followed internally by one
+            # `_client.request(...)` call -- i.e. ONE token against the per-host rate limiter in
+            # `AsyncFetcher.request` (host bucket acquired once per call, not once per hop) --
+            # rather than providers hand-rolling hop-by-hop redirect following that burns one
+            # rate-limit token per hop.
+            "max_redirects": 30,
             "http2": True,
             # The connection pool must never starve the global concurrency limiter: keep at least
             # `concurrency` live connections available (httpx defaults to 100, which silently caps a

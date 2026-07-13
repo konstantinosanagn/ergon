@@ -110,6 +110,7 @@ jobs:
 
   merge:
     needs: drain
+    if: ${{ !cancelled() }}   # a timed-out/failed shard must not skip the merge -- the other 19 shards' work still needs publishing (see FIX 1 note at the top of this file); only a manual cancellation of the whole run skips this
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -124,12 +125,28 @@ jobs:
       - name: Install package
         run: uv venv && uv pip install -e "."
 
-      - name: Download all shard sidecar artifacts
+      - name: Download whatever shard sidecar artifacts exist
+        # A timed-out/failed shard simply never uploaded its artifact (see the drain job's
+        # `if-no-files-found: warn` above) -- this must merge the shards that DID finish rather
+        # than hard-failing because the full set of NUM_SHARDS isn't present. `if-no-artifact-found:
+        # warn` covers the (unlikely) all-shards-failed case too: instead of erroring the step, it
+        # warns and leaves dist/shards empty, and the explicit count-and-guard step below turns
+        # that into one clear failure message rather than a confusing downstream error.
         uses: actions/download-artifact@v4
         with:
           pattern: detail-shard-*
           path: dist/shards
           merge-multiple: true
+          if-no-artifact-found: warn
+
+      - name: Count downloaded shards
+        run: |
+          n=$(find dist/shards -maxdepth 1 -name 'index-detail-shard-*.sqlite' 2>/dev/null | wc -l | tr -d ' ')
+          echo "downloaded $n/${NUM_SHARDS} shard sidecar(s)"
+          if [ "$n" -eq 0 ]; then
+            echo "no shard sidecars were downloaded -- every shard must have failed before uploading; nothing to merge" >&2
+            exit 1
+          fi
 
       - name: Merge shard sidecars into one combined index-detail.sqlite
         run: |
