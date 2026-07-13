@@ -46,6 +46,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["SuccessFactorsProvider"]
 
@@ -257,6 +258,37 @@ class SuccessFactorsProvider(BaseProvider):
                 )
             )
         return out
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD (Tier-3 recovery).
+
+        Unlike Workday/SmartRecruiters, SuccessFactors has no separate per-posting detail API:
+        ``ref.apply_url`` (falling back to ``ref.listing_url``) IS the job page already built by
+        the list crawl (see ``_parse_rows``/``_fetch_rss``), so we simply re-fetch that same URL
+        and pull the JD out of the search-result page's ``#jobdescription`` node (the CSB shape),
+        falling back to the class-only ``.jobdescription`` (some white-label sites drop the id).
+        Non-raising: no url, a failed/empty fetch, or an absent/empty JD node all return ``None``,
+        never an exception.
+        """
+        url = ref.apply_url or ref.listing_url
+        if not url:
+            return None
+        try:
+            html = await fetcher.get_text(url)
+        except Exception:
+            return None
+        if not html:
+            return None
+        tree = HTMLParser(html)
+        node = tree.css_first("#jobdescription") or tree.css_first(".jobdescription")
+        if node is None:
+            return None
+        if not (node.text(strip=True) or "").strip():
+            return None  # tag present but empty (e.g. a JS-hydrated placeholder) -- nothing to keep
+        jd_html = node.html
+        if not jd_html:
+            return None
+        return jd_html
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

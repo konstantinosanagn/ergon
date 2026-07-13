@@ -59,6 +59,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from ..models import (
     EmploymentType,
@@ -72,6 +73,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["EightfoldProvider"]
 
@@ -79,6 +81,9 @@ _API = "https://{tenant}.eightfold.ai/api/apply/v2/jobs"
 _PCSX_API = "https://{tenant}.eightfold.ai/api/pcsx/search"
 _JOB_URL = "https://{tenant}.eightfold.ai/careers/job/{id}"
 _HOST = "https://{tenant}.eightfold.ai"
+# Per-posting detail resource (Tier-3 JD recovery): a single-job GET, distinct from the
+# paginated listing above. No auth required (recon-verified 7/7 tenants).
+_DETAIL_API = "https://{tenant}.eightfold.ai/api/apply/v2/jobs/{id}"
 
 # Capture the tenant slug from ``{tenant}.eightfold.ai`` (exclude www/app fronts).
 _HOST_RE = re.compile(r"(?:https?://)?([a-z0-9][a-z0-9-]*)\.eightfold\.ai", re.IGNORECASE)
@@ -279,6 +284,77 @@ class EightfoldProvider(BaseProvider):
             url=url,
             payload=position,
         )
+
+    # --- detail (Tier-3 JD recovery) -----------------------------------------
+
+    @staticmethod
+    def _job_id_from_url(url: str | None) -> str | None:
+        """Trailing path segment of a posting URL (``.../careers/job/{id}`` -> ``{id}``)."""
+        if not url:
+            return None
+        try:
+            segments = [seg for seg in urlsplit(url).path.split("/") if seg]
+        except Exception:
+            return None
+        return segments[-1] if segments else None
+
+    @staticmethod
+    def _looks_like_tenant_slug(token: str | None) -> bool:
+        """A bare tenant slug has no scheme/dots — a custom domain or full URL doesn't qualify."""
+        if not token:
+            return False
+        t = token.strip()
+        return bool(t) and "." not in t and "://" not in t
+
+    @classmethod
+    def _tenant_for_detail(cls, ref: DetailRef) -> str | None:
+        """Derive the eightfold subdomain for the detail call (see module + method docstring
+        asymmetry note in :meth:`fetch_detail`)."""
+        tenant = cls.matches(ref.apply_url) if ref.apply_url else None
+        if tenant:
+            return tenant
+        token = ref.token
+        if token and cls._looks_like_tenant_slug(token):
+            return token.strip().lower()
+        return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the per-tenant detail resource (Tier-3 recovery).
+
+        ``{id}`` is the trailing path segment of ``ref.apply_url`` (shape
+        ``https://{host}/careers/job/{id}``), falling back to ``ref.listing_url`` when
+        ``apply_url`` is absent.
+
+        ``{tenant}`` derivation is ASYMMETRIC by design:
+        1. If ``ref.apply_url``'s host is ``{tenant}.eightfold.ai``, that subdomain IS the
+           tenant (via :meth:`matches`).
+        2. Else, if ``ref.token`` is present and looks like a bare tenant slug (no dots or
+           scheme -- i.e. not itself a custom domain/URL), use it as the tenant.
+        3. Else return ``None``. Roughly a quarter of Eightfold tenants are white-labeled onto
+           a custom domain with no tenant recoverable from the URL, and ``DetailRef`` carries no
+           ``company`` field to fall back on -- those degrade gracefully to a skipped fetch,
+           which is acceptable and non-fatal (not every Tier-3 candidate needs to resolve).
+
+        Non-raising: any unparseable URL, fetch failure, non-JSON/non-dict payload, or a
+        missing/empty/non-string ``job_description`` returns ``None``, never an exception.
+        """
+        job_id = self._job_id_from_url(ref.apply_url) or self._job_id_from_url(ref.listing_url)
+        if not job_id:
+            return None
+        tenant = self._tenant_for_detail(ref)
+        if tenant is None:
+            return None
+        url = _DETAIL_API.format(tenant=tenant, id=job_id)
+        try:
+            data = await fetcher.get_json(url)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        job_description = data.get("job_description")
+        if not isinstance(job_description, str) or not job_description.strip():
+            return None
+        return job_description
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
