@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:
     from ..models import JobPosting, Salary
@@ -16,6 +16,19 @@ __all__ = [
     "iter_extractors",
     "input_from_job",
 ]
+
+_T = TypeVar("_T")
+
+
+def _vocab(lang: str, table: dict[str, _T], fallback: str = "en") -> _T:
+    """Look up a language-keyed vocab table entry, falling back to ``fallback`` (default "en").
+
+    The single choke point every multilingual extractor uses to go from
+    ``ExtractInput.language`` to the right vocab/regex for that language. A language missing
+    from ``table`` (unsupported, or rollout not yet done for that field) transparently falls
+    back to English — so partial multilingual rollout is always safe and never raises.
+    """
+    return table.get(lang, table[fallback])
 
 
 @dataclass
@@ -33,6 +46,11 @@ class ExtractInput:
     company_key: str | None = None
     company_domain: str | None = None
     structured_salary: Salary | None = None
+    language: str = "en"
+    """ISO-639-1 code (``"en"``, ``"de"``, ...) for the posting's description text. Every
+    multilingual extractor reads this to pick its vocab table (see ``_vocab``); the default
+    ``"en"`` keeps every pre-existing construction site (incl. the ``test_*_recall.py`` fixtures)
+    on the exact original English behavior."""
 
 
 @runtime_checkable

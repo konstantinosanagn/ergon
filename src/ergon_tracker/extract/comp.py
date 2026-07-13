@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..models import Salary, SalaryInterval
-from .base import ExtractInput, register_extractor
+from .base import ExtractInput, _vocab, register_extractor
 
 __all__ = ["CompExtractor", "coerce_amount", "parse_salary"]
 
@@ -64,8 +64,9 @@ _SYMBOL_TO_CCY = {
     "A$": "AUD",
     "£": "GBP",
     "€": "EUR",
+    "R$": "BRL",
 }
-_KNOWN_CODES = {"USD", "CAD", "AUD", "GBP", "EUR"}
+_KNOWN_CODES = {"USD", "CAD", "AUD", "GBP", "EUR", "BRL"}
 
 
 def _currency(token: str | None) -> str | None:
@@ -85,24 +86,46 @@ def _currency(token: str | None) -> str | None:
 # --- regexes ------------------------------------------------------------------
 
 # Order matters: multi-char symbols/codes before the bare ``$``.
-_CUR = r"CA\$|C\$|US\$|A\$|\$|£|€|USD|CAD|AUD|GBP|EUR"
+_CUR = r"CA\$|C\$|US\$|A\$|R\$|\$|£|€|USD|CAD|AUD|GBP|EUR|BRL"
 _NUM = r"\d[\d.,]*\d|\d"
 
 _AMOUNT = re.compile(
     rf"(?P<pre>{_CUR})?\s*"
     rf"(?P<num>{_NUM})"
     rf"(?P<k>\s*[kK](?![A-Za-z]))?"  # boundary: don't eat the K of "Key"/"Kapitus"
-    rf"(?:\s*(?P<post>USD|CAD|AUD|GBP|EUR))?",
+    # Trailing currency: a 3-letter code ("USD") OR a symbol immediately/closely following the
+    # number — the dominant German convention ("16,42 €", "2000€", "45.000 € brutto") writes the
+    # symbol AFTER, not before. Reuses the full `_CUR` alternation (codes + symbols) so this is
+    # language-neutral: a trailing "$"/"£"/"R$" resolves to the same currency either side.
+    rf"(?:\s*(?P<post>{_CUR}))?",
+    re.IGNORECASE,
+)
+
+# Cross-cutting false-positive guard (all languages): a short, part-hours-shaped number
+# ("38,5", "40") immediately followed by an hours-per-week token is a work-schedule figure, never
+# pay — the "38,5 h/Woche" trap. Checked before any interval/cue logic so it can never be rescued.
+_HOURS_NUMBER = re.compile(r"^\d{1,2}(?:,\d)?$")
+_HOURS_TOKEN_AFTER = re.compile(
+    r"\s*(?:std\.?|stunden|h\s*/\s*woche|h/semaine|heures/semaine|h/semana|"
+    r"horas\s+semanales|ore\s+settimanali|ore/settimana|h/settimana|uur\s+per\s+week)\b",
     re.IGNORECASE,
 )
 
 # A range separator that sits *between* two amounts and nothing else.  Tolerates
 # an interval token glued to the first amount ("$97,000/year - $127,000/year").
-_SEP = re.compile(
+_SEP_EN = re.compile(
     r"^\s*(?:/\s*(?:year|yr|annum|hour|hr)|per\s+(?:year|annum|hour))?"
     r"\s*(?:-|–|—|to|and|through)\s*$",
     re.IGNORECASE,
 )
+# German: "bis" ("90.000 € bis 130.000 €") and "und" (the second half of "zwischen X und Y") —
+# same tolerance for a glued interval token on the first amount.
+_SEP_DE = re.compile(
+    r"^\s*(?:/\s*(?:jahr|monat|stunde)|pro\s+(?:jahr|monat|stunde))?"
+    r"\s*(?:-|–|—|bis|und)\s*$",
+    re.IGNORECASE,
+)
+_SEP_TABLE: dict[str, re.Pattern[str]] = {"en": _SEP_EN, "de": _SEP_DE}
 
 # Retirement plans — never salary. Skip "401k"/"401(k)" unless money-prefixed.
 _RETIREMENT = re.compile(r"(?<![\$£€])\b401\s*\(?\s*k\s*\)?", re.IGNORECASE)
@@ -155,31 +178,55 @@ _UNIT_AFTER = re.compile(
 )
 
 # Salary cue words used to give nearby numbers the benefit of the doubt.
-_CUE = re.compile(
+_CUE_EN = re.compile(
     r"\b(?:salary|salaries|compensation|comp(?:ensation)?|pay|payscale|"
     r"wage|wages|ote|on[- ]target\s+earnings|remuneration|"
     r"base(?:\s+(?:pay|salary))?|earn(?:s|ings)?|range)\b",
     re.IGNORECASE,
 )
+# German cue nouns + "brutto" (gross — the dominant convention, and itself a strong comp signal).
+_CUE_DE = re.compile(
+    r"\b(?:gehalt|jahresgehalt|monatsgehalt|stundenlohn|lohn|vergütung|entgelt|"
+    r"einstiegsgehalt|brutto|netto)\w*\b",
+    re.IGNORECASE,
+)
+_CUE_TABLE: dict[str, re.Pattern[str]] = {"en": _CUE_EN, "de": _CUE_DE}
 
 # Interval immediately following an amount, e.g. "/year", "per hour", "annually".
-_INTERVAL = re.compile(
+_INTERVAL_EN = re.compile(
     r"\s*(?:(?:/|per\s+|an?\s+)\s*)?"
     r"(?P<unit>annually|annum|annual|yearly|year|yr|hourly|hour|hr|"
     r"monthly|month|mo|weekly|week|wk|daily|day|h)\b",
     re.IGNORECASE,
 )
-_PA = re.compile(r"\s*p\.?\s*a\.?(?![a-z])", re.IGNORECASE)
+# German: "pro/je/im Jahr/Monat/Stunde", "jährlich/monatlich/stündlich" — often with a
+# "brutto"/"netto" gross/net qualifier sitting between the amount and the interval word ("59.000
+# EUR brutto pro Jahr", "1.580 € brutto im Monat"), so that qualifier is optionally absorbed here
+# too. Also matches slash-glued forms ("€/Stunde", "€/Std.") and the "Std."/"Std" abbreviation —
+# the trailing-symbol currency fix above means the amount span often already swallows the "€", so
+# the interval word can immediately follow a "/" with no space.
+_INTERVAL_DE = re.compile(
+    r"\s*(?:/\s*)?(?:brutto|netto)?\s*(?:pro\s+|je\s+|im\s+)?"
+    r"(?P<unit>jährlich\b|jahr\b|monatlich\b|monat\b|stündlich\b|stunde\b|std\.|std\b)",
+    re.IGNORECASE,
+)
+_INTERVAL_TABLE: dict[str, re.Pattern[str]] = {"en": _INTERVAL_EN, "de": _INTERVAL_DE}
+_PA = re.compile(r"\s*p\.?\s*a\.?(?![a-z])", re.IGNORECASE)  # "p.a." — language-neutral
 
 _CUR_TAIL = re.compile(rf"\s*(?:{_CUR})?\s*$", re.IGNORECASE)
-_UP_TO = re.compile(
+_UP_TO_EN = re.compile(
     r"(?:up\s*to|upto|maximum|max(?:\.|imum)?\s+of|under|no\s+more\s+than)\s*$", re.I
 )
-_FROM = re.compile(
+_UP_TO_DE = re.compile(r"(?:bis\s*zu|maximal|max\.?)\s*$", re.IGNORECASE)
+_UP_TO_TABLE: dict[str, re.Pattern[str]] = {"en": _UP_TO_EN, "de": _UP_TO_DE}
+
+_FROM_EN = re.compile(
     r"(?:from|starting(?:\s+at)?|start(?:s|ing)?\s+at|at\s+least|minimum|min\.?\s+of|above|"
     r"north\s+of)\s*$",
     re.IGNORECASE,
 )
+_FROM_DE = re.compile(r"(?:mindestens|ab|wenigstens)\s*$", re.IGNORECASE)
+_FROM_TABLE: dict[str, re.Pattern[str]] = {"en": _FROM_EN, "de": _FROM_DE}
 
 
 # --- number parsing -----------------------------------------------------------
@@ -229,13 +276,21 @@ for _u in ("weekly", "week", "wk"):
     _UNIT_MAP[_u] = SalaryInterval.WEEK
 for _u in ("daily", "day"):
     _UNIT_MAP[_u] = SalaryInterval.DAY
+# German unit words — distinct strings from the English ones above, so merging them into the
+# same lookup table is safe (no key collisions, no change to English resolution).
+for _u in ("jährlich", "jahr"):
+    _UNIT_MAP[_u] = SalaryInterval.YEAR
+for _u in ("monatlich", "monat"):
+    _UNIT_MAP[_u] = SalaryInterval.MONTH
+for _u in ("stündlich", "stunde", "std", "std."):
+    _UNIT_MAP[_u] = SalaryInterval.HOUR
 
 
-def _interval_after(text: str, pos: int) -> SalaryInterval | None:
+def _interval_after(text: str, pos: int, lang: str = "en") -> SalaryInterval | None:
     window = text[pos : pos + 18]
     if _PA.match(window):
         return SalaryInterval.YEAR
-    m = _INTERVAL.match(window)
+    m = _vocab(lang, _INTERVAL_TABLE).match(window)
     if not m:
         return None
     return _UNIT_MAP.get(m.group("unit").lower())
@@ -244,12 +299,21 @@ def _interval_after(text: str, pos: int) -> SalaryInterval | None:
 # Frequency word shortly *before* the amount: "Hourly Rate: $28.00",
 # "annual salary: $184,000". Bounded so a stray "per week" a sentence away
 # can't relabel an annual figure (and callers band-check the result anyway).
-_INTERVAL_BEFORE = re.compile(
+_INTERVAL_BEFORE_EN = re.compile(
     r"\b(?P<unit>annual(?:ly|ized)?|yearly|hourly|monthly|weekly|daily|"
     r"per\s+(?:year|annum|hour|month|week|day))\b[^\n$€£\d]{0,20}$",
     re.IGNORECASE,
 )
-_BEFORE_MAP: list[tuple[str, SalaryInterval]] = [
+_INTERVAL_BEFORE_DE = re.compile(
+    r"\b(?P<unit>jährlich|monatlich|stündlich|(?:pro|je)\s+(?:jahr|monat|stunde))\b"
+    r"[^\n$€£\d]{0,20}$",
+    re.IGNORECASE,
+)
+_INTERVAL_BEFORE_TABLE: dict[str, re.Pattern[str]] = {
+    "en": _INTERVAL_BEFORE_EN,
+    "de": _INTERVAL_BEFORE_DE,
+}
+_BEFORE_MAP_EN: list[tuple[str, SalaryInterval]] = [
     ("annu", SalaryInterval.YEAR),
     ("year", SalaryInterval.YEAR),
     ("hour", SalaryInterval.HOUR),
@@ -257,14 +321,30 @@ _BEFORE_MAP: list[tuple[str, SalaryInterval]] = [
     ("week", SalaryInterval.WEEK),
     ("da", SalaryInterval.DAY),
 ]
+_BEFORE_MAP_DE: list[tuple[str, SalaryInterval]] = [
+    ("pro jahr", SalaryInterval.YEAR),
+    ("je jahr", SalaryInterval.YEAR),
+    ("jähr", SalaryInterval.YEAR),
+    ("pro monat", SalaryInterval.MONTH),
+    ("je monat", SalaryInterval.MONTH),
+    ("monat", SalaryInterval.MONTH),
+    ("pro stunde", SalaryInterval.HOUR),
+    ("je stunde", SalaryInterval.HOUR),
+    ("stünd", SalaryInterval.HOUR),
+]
+_BEFORE_MAP_TABLE: dict[str, list[tuple[str, SalaryInterval]]] = {
+    "en": _BEFORE_MAP_EN,
+    "de": _BEFORE_MAP_DE,
+}
 
 
-def _interval_before(text: str, pos: int) -> SalaryInterval | None:
-    m = _INTERVAL_BEFORE.search(text[max(0, pos - 30) : pos])
+def _interval_before(text: str, pos: int, lang: str = "en") -> SalaryInterval | None:
+    pattern = _vocab(lang, _INTERVAL_BEFORE_TABLE)
+    m = pattern.search(text[max(0, pos - 30) : pos])
     if not m:
         return None
     unit = re.sub(r"^per\s+", "", m.group("unit").lower())
-    for prefix, itv in _BEFORE_MAP:
+    for prefix, itv in _vocab(lang, _BEFORE_MAP_TABLE):
         if unit.startswith(prefix):
             return itv
     return None
@@ -323,6 +403,12 @@ def _scan_amounts(text: str) -> list[_Amt]:
         # skip percentages (equity, raises): "0.5%", "$50%"
         if tail == "%":
             continue
+        # skip hours-per-week figures glued to an hours token ("38,5 h/Woche", "40 Std.") —
+        # never pay, regardless of language (see _HOURS_TOKEN_AFTER).
+        if _HOURS_NUMBER.match(m.group("num")) and _HOURS_TOKEN_AFTER.match(
+            text[m.end() : m.end() + 20]
+        ):
+            continue
         # skip plain quantities: "100 lbs", "15 hours / week", "12,000 acres" —
         # but only bare numbers; "$24.50 Hours: ..." is pay next to layout text.
         if not pre_tok and _UNIT_AFTER.match(text[m.end() : m.end() + 16]):
@@ -361,8 +447,8 @@ def _near_cue_tight(cues: list[tuple[int, int]], start: int, end: int) -> bool:
     return _near(cues, start, end, 40, 12)
 
 
-def _effective_interval(c: _Cand) -> SalaryInterval:
-    return c.interval or _infer_interval(c)
+def _effective_interval(c: _Cand, lang: str = "en") -> SalaryInterval:
+    return c.interval or _infer_interval(c, lang)
 
 
 def _band_fits(interval: SalaryInterval, *vals: float | None) -> bool:
@@ -370,8 +456,8 @@ def _band_fits(interval: SalaryInterval, *vals: float | None) -> bool:
     return all(v is None or lo_band <= v <= hi_band for v in vals)
 
 
-def _in_band(c: _Cand) -> bool:
-    return _band_fits(_effective_interval(c), c.min_amount, c.max_amount)
+def _in_band(c: _Cand, lang: str = "en") -> bool:
+    return _band_fits(_effective_interval(c, lang), c.min_amount, c.max_amount)
 
 
 def _pick_interval(
@@ -381,23 +467,24 @@ def _pick_interval(
     lo: float | None,
     hi: float | None,
     money_marked: bool,
+    lang: str = "en",
 ) -> SalaryInterval | None:
     """Explicit frequency for an amount span: after the span, else (band-checked) before.
 
     The before-window is only trusted for currency/K-marked amounts — "5 days per
     week on a 1099 Contractor basis" must not turn a bare 1099 into weekly pay.
     """
-    interval = _interval_after(text, end)
+    interval = _interval_after(text, end, lang)
     if interval is None and money_marked:
-        before = _interval_before(text, start)
+        before = _interval_before(text, start, lang)
         if before is not None and _band_fits(before, lo, hi):
             interval = before
     return interval
 
 
-def _build_candidates(text: str) -> list[_Cand]:
+def _build_candidates(text: str, lang: str = "en") -> list[_Cand]:
     amts = _scan_amounts(text)
-    cues = [m.span() for m in _CUE.finditer(text)]
+    cues = [m.span() for m in _vocab(lang, _CUE_TABLE).finditer(text)]
     fins = [m.span() for m in _FINANCIAL.finditer(text)]
     cands: list[_Cand] = []
     i = 0
@@ -406,7 +493,7 @@ def _build_candidates(text: str) -> list[_Cand]:
         # Try to merge a..b into a range when only a separator sits between them.
         if i + 1 < len(amts):
             b = amts[i + 1]
-            if _SEP.match(text[a.end : b.start]):
+            if _vocab(lang, _SEP_TABLE).match(text[a.end : b.start]):
                 lo, hi = a.value, b.value
                 # Spread a lone trailing/leading K across the range: "$70-130k",
                 # "$190k-237".
@@ -419,7 +506,7 @@ def _build_candidates(text: str) -> list[_Cand]:
                 ccy = a.currency or b.currency
                 end = b.end
                 marked = bool(ccy or a.has_k or b.has_k)
-                interval = _pick_interval(text, a.start, end, lo, hi, marked)
+                interval = _pick_interval(text, a.start, end, lo, hi, marked, lang)
                 cands.append(
                     _Cand(
                         start=a.start,
@@ -441,16 +528,22 @@ def _build_candidates(text: str) -> list[_Cand]:
         # Drop any trailing currency token so the cue word sits at the end of the window.
         before = _CUR_TAIL.sub("", text[max(0, a.num_pos - 20) : a.num_pos])
         interval = _pick_interval(
-            text, a.start, a.end, a.value, a.value, bool(a.currency or a.has_k)
+            text, a.start, a.end, a.value, a.value, bool(a.currency or a.has_k), lang
         )
         smin: float | None
         smax: float | None
-        if _UP_TO.search(before):
+        if _vocab(lang, _UP_TO_TABLE).search(before):
             smin, smax = None, a.value
-        elif _FROM.search(before):
+        elif _vocab(lang, _FROM_TABLE).search(before):
             smin, smax = a.value, None
         elif text[a.end : a.end + 1] == "+":
             smin, smax = a.value, None  # "$85,000+" — open-ended above
+        elif lang == "de":
+            # German convention: a bare, unqualified single figure ("Stundenlohn 13,90 €",
+            # "1.580 € brutto im Monat") reads as a floor, not an exact-and-only value — unlike
+            # English, where a bare "$85,000" is taken at face value unless explicitly marked
+            # open ("+", "from", "up to").
+            smin, smax = a.value, None
         else:
             smin, smax = a.value, a.value
         cands.append(
@@ -476,7 +569,7 @@ def _build_candidates(text: str) -> list[_Cand]:
     scales = [m.span() for m in _SCALE.finditer(text)]
     out: list[_Cand] = []
     for c in cands:
-        rescued = c.near_cue or (c.interval is not None and _in_band(c))
+        rescued = c.near_cue or (c.interval is not None and _in_band(c, lang))
         if _near(fins, c.start, c.end, 28, 22) and not rescued:
             continue
         if (
@@ -522,12 +615,12 @@ def _merge_range_blocks(text: str, ranges: list[_Cand]) -> list[_Cand]:
     return merged
 
 
-def _accept(c: _Cand) -> bool:
+def _accept(c: _Cand, lang: str = "en") -> bool:
     ref = c.max_amount if c.max_amount is not None else c.min_amount
     if ref is None:
         return False
     # Pay outside the plausible band for its interval is a fee/perk/scale figure.
-    if not _in_band(c):
+    if not _in_band(c, lang):
         return False
     if c.is_range:
         # A range needs a positive comp signal: currency, a "k", an interval, or a
@@ -555,28 +648,34 @@ def _score(c: _Cand) -> int:
     return score
 
 
-def _infer_interval(c: _Cand) -> SalaryInterval:
+def _infer_interval(c: _Cand, lang: str = "en") -> SalaryInterval:
     ref = c.max_amount if c.max_amount is not None else c.min_amount
+    # German bare figures without an explicit interval word ("2000€ Bruttogehalt", "Bruttogehalt
+    # mindestens 3.000,- EUR") read, by convention, as a monthly gross wage in this plausible
+    # range — unlike English, where a bare "$85,000" defaults to annual. Only larger bare figures
+    # (beyond a plausible monthly gross) fall through to the annual default below.
+    if lang == "de" and ref is not None and 1000 <= ref < 20_000:
+        return SalaryInterval.MONTH
     if ref is not None and ref >= 1000:
         return SalaryInterval.YEAR
     return SalaryInterval.HOUR
 
 
-def parse_salary(text: str | None) -> Salary | None:
+def parse_salary(text: str | None, lang: str = "en") -> Salary | None:
     """Best-effort salary parse from free text; ``None`` when nothing confident is found."""
     if not text:
         return None
-    cands = _build_candidates(text)
+    cands = _build_candidates(text, lang)
     # Two passes: ranges first (merging per-state/per-level blocks), singles after.
-    ranges = _merge_range_blocks(text, [c for c in cands if c.is_range and _accept(c)])
-    singles = [c for c in cands if not c.is_range and _accept(c)]
-    accepted = [c for c in ranges if _accept(c)] + singles
+    ranges = _merge_range_blocks(text, [c for c in cands if c.is_range and _accept(c, lang)])
+    singles = [c for c in cands if not c.is_range and _accept(c, lang)]
+    accepted = [c for c in ranges if _accept(c, lang)] + singles
     if not accepted:
         return None
     best = max(accepted, key=lambda c: (_score(c), -c.start))
     if best.min_amount is None and best.max_amount is None:
         return None
-    interval = _effective_interval(best)
+    interval = _effective_interval(best, lang)
     return Salary(
         min_amount=best.min_amount,
         max_amount=best.max_amount,
@@ -596,7 +695,8 @@ class CompExtractor:
             existing.min_amount is not None or existing.max_amount is not None
         ):
             return existing
-        return parse_salary(inp.description_text) or parse_salary(inp.title)
+        lang = inp.language or "en"
+        return parse_salary(inp.description_text, lang) or parse_salary(inp.title, lang)
 
 
 register_extractor(CompExtractor())
