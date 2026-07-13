@@ -16,6 +16,9 @@ on:
       detail:
         description: "Run the Tier-3 detail reconcile + merge (--detail). Manual-only (not on the schedule) until it's proven out."
         default: "false"
+      detail_max:
+        description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Start small to measure latency/QPS/lift, then raise from data."
+        default: "5000"
 
 permissions:
   contents: write          # to publish the release asset
@@ -117,7 +120,7 @@ jobs:
           # shell-expanded, so `~` would be taken literally by fastembed.
           FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
           ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
-          ERGON_DETAIL_MAX: "5000"                   # Tier-3 detail: per-run fetch budget (manual-only)
+          ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '5000' }}"   # Tier-3 detail: per-run fetch budget (manual-only; dispatch-overridable)
         run: |
           # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
