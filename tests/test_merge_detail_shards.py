@@ -103,6 +103,58 @@ def test_merge_is_idempotent_on_rerun(tmp_path):
     assert n == 1
 
 
+def test_merge_prefers_freshest_row_regardless_of_shard_order(tmp_path):
+    """Regression for the sharded-drain merge-correctness bug: if a row's carry-forward seed
+    (see ``.github/workflows/drain-detail.yml`` -- each shard's sidecar is `cp`'d from the prior
+    FULL combined ``index-detail.sqlite``) somehow makes it into two shards' OUTPUT artifacts, the
+    combine must keep the FRESH one and never let a STALE carry-forward clobber it -- in EITHER
+    merge order. One shard has row 'x' freshly fetched (fetched_at set, real recovered fields);
+    the other has the SAME id as a stale carry-forward (fetched_at NULL, no recovered fields).
+    """
+    fresh_row = {
+        "id": "x",
+        "sig": "sig-fresh",
+        "fetched_at": "2026-07-10T12:00:00Z",
+        "attempts": 0,
+        "snippet": "Real recovered JD snippet.",
+        "salary_min": 90000.0,
+        "salary_max": 120000.0,
+    }
+    stale_row = {
+        "id": "x",
+        "sig": "sig-stale",
+        "fetched_at": None,
+        "attempts": 0,
+        "snippet": None,
+        "salary_min": None,
+        "salary_max": None,
+    }
+    expected = (
+        "sig-fresh",
+        "2026-07-10T12:00:00Z",
+        "Real recovered JD snippet.",
+        90000.0,
+        120000.0,
+    )
+
+    for label, first, second in [
+        ("fresh-then-stale", fresh_row, stale_row),
+        ("stale-then-fresh", stale_row, fresh_row),
+    ]:
+        a = _mk_shard(tmp_path, f"index-detail-shard-0-{label}.sqlite", [first])
+        b = _mk_shard(tmp_path, f"index-detail-shard-1-{label}.sqlite", [second])
+        out = tmp_path / f"combined-{label}.sqlite"
+        mds.merge_shards([a, b], out)
+
+        con = open_detail(str(out))
+        row = con.execute(
+            "SELECT sig, fetched_at, snippet, salary_min, salary_max "
+            "FROM job_detail WHERE id='x'"
+        ).fetchone()
+        con.close()
+        assert row == expected, f"order {label}: fresh row must survive the merge"
+
+
 def test_merge_no_shards_found_returns_error(tmp_path, capsys):
     rc = mds.main(["--shards-dir", str(tmp_path), "--out", str(tmp_path / "out.sqlite")])
     assert rc == 1
