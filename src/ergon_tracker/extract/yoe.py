@@ -292,6 +292,187 @@ def _to_int_de(token: str) -> int | None:
     return _WORD_NUMBERS_DE.get(token)
 
 
+# --- French (FR) vocab ---------------------------------------------------------
+# unit: "an(s)"/"année(s)"; qualifiers ("at least/from/over"): minimum (de)|au moins|à partir
+# de|dès|plus de; ranges: "N-M ans" / "de N à M ans" / "entre N et M ans"; vague bands:
+# expérience significative -> (1,3), première expérience/débutant (accepté) -> (0,2), confirmé ->
+# (4,None).
+#
+# CRITICAL: "Bac+N" (see degree.py) is a DEGREE-LEVEL marker, never a years-of-experience count —
+# a hard veto rejects any match whose number sits immediately after "Bac+"/"Bac +".
+#
+# Unlike the German path, an explicit range here does NOT auto-qualify as a requirement on its
+# own: real postings pair age ranges with "ans" too ("Nous accueillons des enfants de 3 à 11
+# ans"), so every match (ranged or not) still needs either a require-prefix ("minimum", "au
+# moins", "plus de", ...) or an experience cue (expérience) nearby.
+_PREFIX_FR = r"minimum de|au moins|à partir de|dès|plus de|minimum|de|entre"
+_REQUIRE_PREFIXES_FR = {"minimum de", "au moins", "à partir de", "dès", "plus de", "minimum"}
+
+_WORD_NUMBERS_FR: dict[str, int] = {
+    "deux": 2,
+    "trois": 3,
+    "quatre": 4,
+    "cinq": 5,
+    "six": 6,
+    "sept": 7,
+    "huit": 8,
+    "neuf": 9,
+    "dix": 10,
+}
+_WORD_ALT_FR = "|".join(sorted(_WORD_NUMBERS_FR, key=len, reverse=True))
+_NUM_FR = rf"(?:\d{{1,2}}|\b(?:{_WORD_ALT_FR})\b)"
+
+_PHRASE_FR = re.compile(
+    rf"(?:(?P<prefix>{_PREFIX_FR})\s+)?"
+    rf"(?P<n1>{_NUM_FR})\s*"
+    rf"(?:(?P<sep>-|–|—|à|et)\s*(?P<n2>{_NUM_FR})\s*)?"
+    r"\+?\s*"
+    r"(?P<unit>ann[ée]es?|ans?)\b",
+    re.IGNORECASE,
+)
+
+_CUE_FR = re.compile(r"\b(?:expérience|exp)\w*", re.IGNORECASE)
+
+# "Bac+3", "Bac + 5" — an academic-level marker, not an experience count.
+_BAC_BEFORE_FR = re.compile(r"\bbac\s*\+\s*$", re.IGNORECASE)
+
+# Company/product age & tenure ("Depuis plus de 80 ans", "il y a 12 ans, créée...", "50 ans
+# d'histoire") — the years describe the ORGANIZATION, not a candidate requirement.
+_DQ_BEFORE_FR = re.compile(
+    r"\b(?:depuis|il\s+y\s+a|cr[ée][ée]e?\s+il\s+y\s+a|fond[ée]e?\s+il\s+y\s+a|ayant)\s*$",
+    re.IGNORECASE,
+)
+_DQ_AFTER_FR = re.compile(
+    r"^\W*(?:d['’]histoire\b|d['’]existence\b|d['’]anciennet[ée]\b|de\s+savoir[-\s]faire\b|"
+    r"au\s+compteur\b|renouvelable\b|d['’]âge\b|r[ée]volus\b|d['’]antiquit[ée]\b)",
+    re.IGNORECASE,
+)
+
+_VAGUE_FR: tuple[
+    tuple[re.Pattern[str], tuple[int | None, int | None], re.Pattern[str] | None], ...
+] = (
+    # "première expérience significative" — a combined phrase; the entry-level "première" reading
+    # wins (checked before the bare "expérience significative" band below), matching the corpus's
+    # human labeling.
+    (re.compile(r"premi[èe]re\s+expérience\w*|jeune\s+diplômé\w*", re.IGNORECASE), (0, 2), None),
+    (
+        re.compile(
+            r"pas\s+(?:\S+\s+){0,4}d['’]expérience\b|peu\s+ou\s+pas\s+d['’]expérience\b",
+            re.IGNORECASE,
+        ),
+        (0, 0),
+        None,
+    ),
+    (
+        re.compile(r"débutant\w*\s*(?:\(e\)\s*)?accept\w*|débutants?\s+bienvenus?", re.IGNORECASE),
+        (0, 2),
+        None,
+    ),
+    (re.compile(r"expérience\s+significative\w*", re.IGNORECASE), (1, 3), None),
+    (re.compile(r"expérience\s+(?:r[ée]ussie|solide)\w*", re.IGNORECASE), (1, 3), None),
+    (re.compile(r"confirmé\w*", re.IGNORECASE), (4, None), None),
+)
+
+# "vous justifiez d'une expérience d'au moins un an" — "un" (one) is otherwise excluded from
+# ``_WORD_NUMBERS_FR`` (like German excludes "ein": it is far more often the indefinite article),
+# but "un an" directly after an explicit require-prefix is unambiguous.
+_ONE_YEAR_FR = re.compile(
+    r"(?:au\s+moins|minimum(?:\s+de)?|à\s+partir\s+de|dès)\s+un\s+an\b", re.IGNORECASE
+)
+
+
+def _to_int_fr(token: str) -> int | None:
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    return _WORD_NUMBERS_FR.get(token)
+
+
+# --- Spanish (ES) vocab ---------------------------------------------------------
+# unit: "años"; cue: experiencia (laboral|profesional)|trayectoria; qualifiers: mínimo (de)|al
+# menos|más de|+N años; ranges: "entre N y M años" / "de N a M años"; negatives: "sin
+# experiencia"/"no se requiere experiencia" -> 0.
+#
+# Unlike French, an explicit range HERE does count as a requirement on its own (no cue needed) —
+# EXCEPT when "edad" (age) sits nearby, which flags the range as a candidate-age bracket
+# ("entre 25 y 35 años de edad") rather than an experience range.
+_PREFIX_ES = r"experiencia mínima de|mínimo de|al menos|más de|mínimo|entre|de"
+_REQUIRE_PREFIXES_ES = {"experiencia mínima de", "mínimo de", "al menos", "más de", "mínimo"}
+
+_WORD_NUMBERS_ES: dict[str, int] = {
+    "dos": 2,
+    "tres": 3,
+    "cuatro": 4,
+    "cinco": 5,
+    "seis": 6,
+    "siete": 7,
+    "ocho": 8,
+    "nueve": 9,
+    "diez": 10,
+}
+_WORD_ALT_ES = "|".join(sorted(_WORD_NUMBERS_ES, key=len, reverse=True))
+_NUM_ES = rf"(?:\d{{1,2}}|\b(?:{_WORD_ALT_ES})\b)"
+
+_PHRASE_ES = re.compile(
+    rf"(?:(?P<prefix>{_PREFIX_ES})\s+)?"
+    rf"\(?(?P<n1>{_NUM_ES})\)?\s*"
+    rf"(?:(?P<sep>-|–|—|y|a)\s*\(?(?P<n2>{_NUM_ES})\)?\s*)?"
+    r"\+?\s*"
+    r"(?P<unit>años?)\b"
+    r"(?P<half>\s*y\s+medio)?",
+    re.IGNORECASE,
+)
+
+_CUE_ES = re.compile(r"\b(?:experiencia|trayectoria)\w*", re.IGNORECASE)
+
+# Age context ("entre 25 y 35 años de edad") — a bare/range number near "edad" is a candidate-age
+# bracket, never an experience requirement, regardless of prefix/range shape.
+_AGE_NEAR_ES = re.compile(r"\bedad\b", re.IGNORECASE)
+
+# Company age/tenure/history ("compañía con más de 40 años de historia", "Centro ... con más de
+# 25 años de experiencia", "EMBARBA es una empresa que va a cumplir con 60 años") — a company noun
+# followed (within a handful of words) by "con" right before the number.
+_COMPANY_BEFORE_ES = re.compile(
+    r"\b(?:empresa|compañ[ií]a|centro|despacho|firma|grupo|negocio|academia)\w*"
+    r"(?:\s+\S+){0,8}\s+con\s*$",
+    re.IGNORECASE,
+)
+_DQ_AFTER_ES = re.compile(
+    r"^\W*(?:de\s+historia\b|de\s+antig[üu]edad\b|ayudando\b|al\s+servicio\b|de\s+recorrido\b)",
+    re.IGNORECASE,
+)
+# A company-growth clause in the SAME sentence ("Tras 28 años de experiencia, Grupo Intermedio ha
+# ido creciendo hasta...") — the years frame the COMPANY's history, not a candidate requirement.
+_COMPANY_ACHIEVEMENT_ES = re.compile(
+    r"\bha\s+ido\s+creciendo\b|\bse\s+ha\s+consolidado\b|\bhemos\s+crecido\b|"
+    r"\bnos\s+hemos\s+convertido\b",
+    re.IGNORECASE,
+)
+
+_VAGUE_ES: tuple[
+    tuple[re.Pattern[str], tuple[int | None, int | None], re.Pattern[str] | None], ...
+] = (
+    (re.compile(r"sin\s+experiencia\s*(?:previa)?\b", re.IGNORECASE), (0, None), None),
+    (
+        re.compile(r"no\s+(?:es\s+necesari[ao]|se\s+requiere)\s+experiencia\b", re.IGNORECASE),
+        (0, None),
+        None,
+    ),
+    (
+        re.compile(r"reci[ée]n\s+(?:titulad[ao]|egresad[ao]|graduad[ao])\w*", re.IGNORECASE),
+        (0, 2),
+        None,
+    ),
+)
+
+
+def _to_int_es(token: str) -> int | None:
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    return _WORD_NUMBERS_ES.get(token)
+
+
 class YoeExtractor:
     """Extract ``(min_years, max_years)`` of required experience from a posting."""
 
@@ -311,6 +492,10 @@ class YoeExtractor:
     def _parse(self, text: str, lang: str = "en") -> tuple[int | None, int | None]:
         if lang == "de":
             return self._parse_de(text)
+        if lang == "fr":
+            return self._parse_fr(text)
+        if lang == "es":
+            return self._parse_es(text)
         return self._parse_en(text)
 
     def _parse_de(self, text: str) -> tuple[int | None, int | None]:
@@ -369,6 +554,106 @@ class YoeExtractor:
         if m.group("n2") is not None:  # an explicit range reads as a requirement on its own
             return True
         return bool(_CUE_DE.search(before) or _CUE_DE.search(after))
+
+    def _parse_fr(self, text: str) -> tuple[int | None, int | None]:
+        for m in _PHRASE_FR.finditer(text):
+            value = self._value_fr(m)
+            if value is None:
+                continue
+            if self._is_valid_fr(text, m):
+                return value
+        if _ONE_YEAR_FR.search(text):
+            return (1, None)
+        for pattern, band, after_guard in _VAGUE_FR:
+            m2 = pattern.search(text)
+            if m2 is None:
+                continue
+            if after_guard is not None and after_guard.match(text[m2.end() : m2.end() + 20]):
+                continue
+            return band
+        return (None, None)
+
+    @staticmethod
+    def _value_fr(m: re.Match[str]) -> tuple[int | None, int | None] | None:
+        n1 = _to_int_fr(m.group("n1"))
+        if n1 is None or n1 > _MAX_PLAUSIBLE:
+            return None
+        raw_n2 = m.group("n2")
+        if raw_n2 is not None:
+            n2 = _to_int_fr(raw_n2)
+            if n2 is None or n2 > _MAX_PLAUSIBLE:
+                return None
+            lo, hi = (n1, n2) if n1 <= n2 else (n2, n1)
+            return (lo, hi)
+        return (n1, None)
+
+    @staticmethod
+    def _is_valid_fr(text: str, m: re.Match[str]) -> bool:
+        before = text[max(0, m.start() - 40) : m.start()]
+        after = text[m.end() : m.end() + 45]
+        if _BAC_BEFORE_FR.search(text[max(0, m.start() - 15) : m.start()]):
+            return False
+        if _DQ_BEFORE_FR.search(before) or _DQ_AFTER_FR.match(after):
+            return False
+        prefix = (m.group("prefix") or "").strip().lower()
+        if prefix in _REQUIRE_PREFIXES_FR:
+            return True
+        return bool(_CUE_FR.search(before) or _CUE_FR.search(after))
+
+    def _parse_es(self, text: str) -> tuple[int | None, int | None]:
+        for m in _PHRASE_ES.finditer(text):
+            value = self._value_es(m)
+            if value is None:
+                continue
+            if self._is_valid_es(text, m):
+                return value
+        for pattern, band, after_guard in _VAGUE_ES:
+            m2 = pattern.search(text)
+            if m2 is None:
+                continue
+            if after_guard is not None and after_guard.match(text[m2.end() : m2.end() + 20]):
+                continue
+            return band
+        return (None, None)
+
+    @staticmethod
+    def _value_es(m: re.Match[str]) -> tuple[int | None, int | None] | None:
+        n1 = _to_int_es(m.group("n1"))
+        if n1 is None or n1 > _MAX_PLAUSIBLE:
+            return None
+        raw_n2 = m.group("n2")
+        if raw_n2 is not None:
+            n2 = _to_int_es(raw_n2)
+            if n2 is None or n2 > _MAX_PLAUSIBLE:
+                return None
+            lo, hi = (n1, n2) if n1 <= n2 else (n2, n1)
+            return (lo, hi)
+        if m.group("half"):
+            # "un año y medio" -> rounds UP (1.5 -> 2), the one documented half-year convention.
+            n1 += 1
+        return (n1, None)
+
+    @staticmethod
+    def _is_valid_es(text: str, m: re.Match[str]) -> bool:
+        after = text[m.end() : m.end() + 45]
+        window = text[max(0, m.start() - 60) : m.end() + 60]
+        if _AGE_NEAR_ES.search(window):
+            return False
+        # A wider window for the company-subject guard: "Firma multidisciplinar formada por
+        # diferentes profesionales del sector jurídico, con más de 15 años" needs ~90 chars to
+        # reach back to the company noun.
+        company_before = text[max(0, m.start() - 150) : m.start()]
+        if _COMPANY_BEFORE_ES.search(company_before) or _DQ_AFTER_ES.match(after):
+            return False
+        same_sentence_after = re.split(r"[.\n;]", text[m.end() : m.end() + 90])[0]
+        if _COMPANY_ACHIEVEMENT_ES.search(same_sentence_after):
+            return False
+        prefix = (m.group("prefix") or "").strip().lower()
+        if prefix in _REQUIRE_PREFIXES_ES:
+            return True
+        if m.group("n2") is not None:  # explicit range — valid unless "edad" vetoed it above
+            return True
+        return bool(_CUE_ES.search(text[max(0, m.start() - 40) : m.start()]) or _CUE_ES.search(after))
 
     def _parse_en(self, text: str) -> tuple[int | None, int | None]:
         # First valid phrase wins — unless it opens a degree-alternation ladder ("BS + 8 years

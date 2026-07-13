@@ -152,9 +152,135 @@ _PATTERNS_DE: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\brealschulabschluss\b", re.I), "highschool"),
 )
 
+# --- French (FR) gazetteer -----------------------------------------------------
+# RNCP/Bac+N system. CAP/BEP are deliberately excluded — vocational, not on the academic
+# highschool<associate<bachelor<master<phd_md ladder — so they resolve to unmatched (None), the
+# same treatment German gives Ausbildung/Lehre. Bare "ingénieur" is deliberately excluded too:
+# unlike "diplôme d'ingénieur"/"école d'ingénieurs" (the credential), it is overwhelmingly a JOB
+# TITLE in French postings ("Ingénieur DevOps") — matching it bare would be as wrong as English
+# matching bare "engineer".
+_PATTERNS_FR: tuple[tuple[re.Pattern[str], str], ...] = (
+    # doctoral
+    (re.compile(r"\bdoctorat\w*\b", re.IGNORECASE), "phd_md"),
+    (re.compile(r"\bhdr\b"), "phd_md"),
+    (re.compile(r"\bbac\s*\+\s*(?:8|9|1\d)\b", re.IGNORECASE), "phd_md"),
+    # master's (incl. the RNCP Bac+5/6/7 band and the pre-LMD DESS/DEA diplomas)
+    # excludes "Scrum Master" (job-title false friend, same collision English handles).
+    (re.compile(r"(?<!scrum\s)\bmaster\b(?!\s*class)\w*", re.IGNORECASE), "master"),
+    (re.compile(r"\bmast[èe]re\w*\b", re.IGNORECASE), "master"),
+    (re.compile(r"\bdiplôme\s+d['’]ing[ée]nieurs?\b", re.IGNORECASE), "master"),
+    (re.compile(r"\b[ée]cole\s+d['’]ing[ée]nieurs?\b", re.IGNORECASE), "master"),
+    (re.compile(r"\bgrande\s+[ée]cole\w*\b", re.IGNORECASE), "master"),
+    (re.compile(r"\bdess\b", re.IGNORECASE), "master"),
+    (re.compile(r"\bdea\b"), "master"),
+    (re.compile(r"\bmba\b", re.IGNORECASE), "master"),
+    (re.compile(r"\bbac\s*\+\s*[567]\b", re.IGNORECASE), "master"),
+    # bachelor's (Licence/BUT/maîtrise/Bac+3/Bac+4/DE-level professional diplomas)
+    # "licence" is a false friend for "license/permit" ("licence Claude" a software license,
+    # "licence" a driving/broadcast permit) — scoped to a degree-context follower (field name,
+    # "pro(fessionnelle)", or an or-list/punctuation close), same treatment as English's dot-less
+    # BS/MS abbreviations.
+    (
+        re.compile(
+            r"\blicence\b(?=\s*(?:en\b|de\b|d['’]|pro\w*\b|,|/|\)|\.|;|:|$))", re.IGNORECASE
+        ),
+        "bachelor",
+    ),
+    # "maîtrise" is an even sharper false friend: "bonne maîtrise de/des <outil/langue>" (skill
+    # proficiency) vastly outnumbers the pre-Bologna "maîtrise" DEGREE in real postings. Scoped to
+    # only the unambiguous degree phrasing ("titulaire d'une maîtrise", "diplôme de maîtrise",
+    # or an explicit degree-list like "Licence, Master ou Maîtrise") — bare "maîtrise de <noun>" is
+    # deliberately left unmatched (its dominant reading is the skill sense, not the degree).
+    (
+        re.compile(
+            r"\b(?:titulaire\s+(?:d['’]une?\s+)?|diplôme\s+de\s+)ma[îi]trise\b", re.IGNORECASE
+        ),
+        "bachelor",
+    ),
+    # Diplôme d'État (DE) — a Bac+3-equivalent professional diploma (nursing, social work, ...).
+    (re.compile(r"\bdiplôme\s+d['’](?:[ée]tat\s+d['’])?infirmi[èe]r\w*\b", re.IGNORECASE), "bachelor"),
+    (re.compile(r"\bBUT\b"), "bachelor"),  # case-sensitive UPPERCASE: the diploma, not "but" (goal)
+    (re.compile(r"\bma[îi]trise\b", re.IGNORECASE), "bachelor"),
+    (re.compile(r"\bbac\s*\+\s*[34]\b", re.IGNORECASE), "bachelor"),
+    # associate (tertiary short-cycle: BTS/DUT/DEUG/Bac+2)
+    (re.compile(r"\bbts\b", re.IGNORECASE), "associate"),
+    (re.compile(r"\bdut\b", re.IGNORECASE), "associate"),
+    (re.compile(r"\bdeug\b", re.IGNORECASE), "associate"),
+    (re.compile(r"\bbac\s*\+\s*2\b", re.IGNORECASE), "associate"),
+    # high school (bare Bac, not the Bac+N ladder above)
+    (re.compile(r"\bbac\b(?!\s*\+)", re.IGNORECASE), "highschool"),
+    (re.compile(r"\bbaccalaur[ée]at\b(?!\s*\+)", re.IGNORECASE), "highschool"),
+)
+
+_OR_EQUIV_FR = re.compile(r"\bou\s+équivalent\w*\b", re.IGNORECASE)
+
+# --- Spanish (ES) gazetteer ------------------------------------------------------
+# Region-aware (Spain + LatAm). "Bachillerato"/"ESO" (Spain secondary school) are NOT a degree —
+# highschool. FP Grado Medio is deliberately excluded (vocational, no ladder rung), mirroring
+# CAP/BEP above. Bare "doctor" is deliberately excluded (job title "Doctor en medicina" collision,
+# same reasoning as English's dotted-only M.D. rule) — only "doctorado" (the degree noun) counts.
+_PATTERNS_ES: tuple[tuple[re.Pattern[str], str], ...] = (
+    # doctoral
+    (re.compile(r"\bdoctorado\w*\b", re.IGNORECASE), "phd_md"),
+    # master's / postgrado
+    # excludes "Scrum Master" (job-title false friend, same collision English handles) and
+    # "Master of the Funnel" (a gamified English job-title, not "Máster en/de <field>").
+    (re.compile(r"(?<!scrum\s)\bm[áa]ster\w*\b(?!\s+of\b)", re.IGNORECASE), "master"),
+    (re.compile(r"\bpost[-\s]?grado\w*\b", re.IGNORECASE), "master"),
+    # bachelor's (Licenciatura/Grado universitario/Graduado/Diplomatura/título universitario)
+    (re.compile(r"\blicenciatura\w*\b", re.IGNORECASE), "bachelor"),
+    (re.compile(r"\bgrado\s+universitario\w*\b", re.IGNORECASE), "bachelor"),
+    (re.compile(r"\bgraduado\s+escolar\b", re.IGNORECASE), "highschool"),
+    (re.compile(r"\bgraduad[oa]\b(?!\s+escolar)", re.IGNORECASE), "bachelor"),
+    (re.compile(r"\bdiplomatura\w*\b", re.IGNORECASE), "bachelor"),
+    (
+        re.compile(r"\bt[ií]tulo\s+(?:oficial|universitario|acad[ée]mico|de\s+grado)\b", re.IGNORECASE),
+        "bachelor",
+    ),
+    # "Ingeniería <field>"/"Ingeniero/a (en) <field>" — in Spain/LatAm postings this alone is the
+    # dominant way to state a required engineering degree (a genuine false-friend risk vs. the job
+    # title "ingeniero" — but unlike French "ingénieur", the measured ES corpus overwhelmingly uses
+    # it as the degree marker: "Requisitos: Ingeniería Industrial, ...", "Grado en Ingeniería
+    # Informática"; a bare mention drops in ``_add`` when the segment reads as a CURRENT-student
+    # program (see ``_CURRENT_STUDENT_ES``), not a completed-degree requirement.
+    (re.compile(r"\bingenier[ií]a\w*\b", re.IGNORECASE), "bachelor"),
+    (
+        re.compile(r"\btitulaci[oó]n\w*\b(?=\s+(?:universitaria|acad[ée]mica|oficial))", re.IGNORECASE),
+        "bachelor",
+    ),
+    # Peru/LatAm: "Bachiller"/"Grado de Bachiller" is a first-degree holder title (NOT
+    # "Bachillerato", Spain's highschool-equivalent — the word-boundary regex below cannot match
+    # inside "bachillerato" since it continues with "-ato").
+    (re.compile(r"\bbachiller\b", re.IGNORECASE), "bachelor"),
+    # associate (tertiary short-cycle: Grado Superior/Técnico Superior/TSU)
+    (re.compile(r"\bgrado\s+superior\b", re.IGNORECASE), "associate"),
+    (re.compile(r"\bt[ée]cnico\s+superior\w*\b", re.IGNORECASE), "associate"),
+    (re.compile(r"\btsu\b", re.IGNORECASE), "associate"),
+    # high school (Spain secondary — NOT the Peru "Bachiller" degree title above)
+    (re.compile(r"\bbachillerato\b", re.IGNORECASE), "highschool"),
+    (re.compile(r"\beso\b"), "highschool"),
+)
+
+_OR_EQUIV_ES = re.compile(r"\bo\s+equivalente\w*\b", re.IGNORECASE)
+
+# "Estudiante universitario/graduado de carreras...", "Matrícula en la universidad", "Matrícula
+# hasta mínimo 2026" — a candidate currently ENROLLED (student-internship postings), not a
+# completed-degree requirement; mirrors the German "neben/nach Deinem Studium" guard.
+_CURRENT_STUDENT_ES = re.compile(r"\bestudiante\w*\b|\bmatr[ií]cula\w*\b", re.IGNORECASE)
+
+# "empresa/sector/equipo/área/perfil/proyecto(s) de ingeniería" — a FIELD/DOMAIN descriptor
+# ("Empresa de ingeniería especializada en...", "perfil de ingeniería con interés en...", not a
+# degree requirement for the mention itself); scoped tightly to the word right before "ingeniería"
+# so a genuine requirement ("Grado en Ingeniería Industrial") is untouched.
+_INGENIERIA_FIELD_DESC_ES = re.compile(
+    r"\b(?:empresa|sector|equipo|[aá]rea|perfil|proyectos?)\s+de\s*$", re.IGNORECASE
+)
+
 _PATTERNS_TABLE: dict[str, tuple[tuple[re.Pattern[str], str], ...]] = {
     "en": _PATTERNS,
     "de": _PATTERNS_DE,
+    "fr": _PATTERNS_FR,
+    "es": _PATTERNS_ES,
 }
 
 # German "or equivalent qualification" escape — softens scope the same way the English
@@ -415,6 +541,17 @@ class DegreeExtractor:
             return  # "Ausbildung oder Studium" — the academic degree isn't actually required
         if lang == "de" and _CURRENT_STUDENT_DE.search(seg):
             return  # "neben/nach Deinem Studium" — candidate's own ongoing studies, not a requirement
+        if lang == "es" and _CURRENT_STUDENT_ES.search(seg):
+            return  # "Estudiante universitario de...", "Matrícula en la universidad" — an ongoing
+            # (not yet completed) program, e.g. an internship for enrolled students — not a
+            # completed-degree requirement.
+        if (
+            lang == "es"
+            and text[start:end].lower().startswith("ingenier")
+            and _INGENIERIA_FIELD_DESC_ES.search(text[max(0, start - 20) : start])
+        ):
+            return  # "Empresa/perfil/sector/proyecto de ingeniería" — a field/domain descriptor,
+            # not a degree requirement for this specific mention.
         mentions.append((rank, self._scope(text, seg, start - seg_start, start, lang)))
 
     @staticmethod
@@ -442,6 +579,10 @@ class DegreeExtractor:
         )
         if lang == "de":
             checks = (*checks, (_OR_EQUIV_DE, False))  # "oder vergleichbare Qualifikation" -> soft
+        elif lang == "fr":
+            checks = (*checks, (_OR_EQUIV_FR, False))  # "ou équivalent" -> soft
+        elif lang == "es":
+            checks = (*checks, (_OR_EQUIV_ES, False))  # "o equivalente" -> soft
         hits: list[tuple[int, bool]] = []
         for pat, verdict in checks:
             for m in pat.finditer(segment):

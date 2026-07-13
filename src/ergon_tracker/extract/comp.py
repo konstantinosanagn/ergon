@@ -101,6 +101,29 @@ _AMOUNT = re.compile(
     re.IGNORECASE,
 )
 
+# French/Spanish convention writes thousands with a plain (or non-breaking) SPACE, not a dot/comma
+# ("45 000 €", "1 867,02€") — the base ``_NUM`` above has no space in its character class on
+# purpose (English/German never group with spaces), so a French/Spanish-only amount regex adds an
+# alternative that greedily eats "\d{1,3}(space\d{3})+" groups, optionally followed by a decimal
+# tail, BEFORE falling back to the plain ``_NUM``. Kept as its own table entry (not merged into
+# the shared ``_AMOUNT``) so English/German amount-scanning is byte-for-byte unchanged.
+_NUM_SPACED = r"\d{1,3}(?:[  ]\d{3})+(?:[.,]\d+)?"
+_NUM_FRES = rf"(?:{_NUM_SPACED}|{_NUM})"
+_AMOUNT_FRES = re.compile(
+    rf"(?P<pre>{_CUR})?\s*"
+    rf"(?P<num>{_NUM_FRES})"
+    rf"(?P<k>\s*[kK](?![A-Za-z]))?"
+    rf"(?:\s*(?P<post>{_CUR}))?",
+    re.IGNORECASE,
+)
+_AMOUNT_TABLE: dict[str, re.Pattern[str]] = {"fr": _AMOUNT_FRES, "es": _AMOUNT_FRES}
+
+
+def _amount_pattern(lang: str) -> re.Pattern[str]:
+    """The amount regex for ``lang`` — English/German always get the original ``_AMOUNT``."""
+    return _AMOUNT_TABLE.get(lang, _AMOUNT)
+
+
 # Cross-cutting false-positive guard (all languages): a short, part-hours-shaped number
 # ("38,5", "40") immediately followed by an hours-per-week token is a work-schedule figure, never
 # pay — the "38,5 h/Woche" trap. Checked before any interval/cue logic so it can never be rescued.
@@ -125,7 +148,20 @@ _SEP_DE = re.compile(
     r"\s*(?:-|–|—|bis|und)\s*$",
     re.IGNORECASE,
 )
-_SEP_TABLE: dict[str, re.Pattern[str]] = {"en": _SEP_EN, "de": _SEP_DE}
+# French: "à"/"et" (the second half of "entre X et Y") glued to a "/an|/mois|/heure|/jour" or
+# "par ..." interval token on the first amount.
+_SEP_FR = re.compile(
+    r"^\s*(?:/\s*(?:an|mois|heure|jour)|par\s+(?:an|mois|heure|jour))?"
+    r"\s*(?:-|–|—|à|et)\s*$",
+    re.IGNORECASE,
+)
+# Spanish: "y" (the second half of "entre X y Y") / "a" (the second half of "de X a Y").
+_SEP_ES = re.compile(
+    r"^\s*(?:/\s*(?:a[ñn]o|mes|hora|d[ií]a)|al\s+(?:a[ñn]o|mes)|por\s+(?:hora|d[ií]a))?"
+    r"\s*(?:-|–|—|y|a)\s*$",
+    re.IGNORECASE,
+)
+_SEP_TABLE: dict[str, re.Pattern[str]] = {"en": _SEP_EN, "de": _SEP_DE, "fr": _SEP_FR, "es": _SEP_ES}
 
 # Retirement plans — never salary. Skip "401k"/"401(k)" unless money-prefixed.
 _RETIREMENT = re.compile(r"(?<![\$£€])\b401\s*\(?\s*k\s*\)?", re.IGNORECASE)
@@ -190,7 +226,19 @@ _CUE_DE = re.compile(
     r"einstiegsgehalt|brutto|netto)\w*\b",
     re.IGNORECASE,
 )
-_CUE_TABLE: dict[str, re.Pattern[str]] = {"en": _CUE_EN, "de": _CUE_DE}
+# French cue nouns + "brut"/"net"/"TJM" (freelance day-rate label — itself a strong comp signal).
+_CUE_FR = re.compile(
+    r"\b(?:salaire|salaires|r[ée]mun[ée]ration\w*|fixe|package|brut|nets?|tjm)\b",
+    re.IGNORECASE,
+)
+# Spanish cue nouns + "bruto"/"neto"/"líquido" (CL) + "SBA"/"RBA" (Salario/Retribución Bruta
+# Anual — always gross-annual on its own).
+_CUE_ES = re.compile(
+    r"\b(?:salario\w*|sueldo\w*|retribuci[oó]n\w*|remuneraci[oó]n\w*|n[oó]mina\w*|"
+    r"bruto\w*|neto\w*|l[ií]quido\w*|sba|rba)\b",
+    re.IGNORECASE,
+)
+_CUE_TABLE: dict[str, re.Pattern[str]] = {"en": _CUE_EN, "de": _CUE_DE, "fr": _CUE_FR, "es": _CUE_ES}
 
 # Interval immediately following an amount, e.g. "/year", "per hour", "annually".
 _INTERVAL_EN = re.compile(
@@ -210,7 +258,30 @@ _INTERVAL_DE = re.compile(
     r"(?P<unit>jährlich\b|jahr\b|monatlich\b|monat\b|stündlich\b|stunde\b|std\.|std\b)",
     re.IGNORECASE,
 )
-_INTERVAL_TABLE: dict[str, re.Pattern[str]] = {"en": _INTERVAL_EN, "de": _INTERVAL_DE}
+# French: "par an/mois/heure/jour", "annuel(le)", "mensuel(le)", "de l'heure". "sur 12/13 mois" is
+# recognized too (13e-mois convention) so the payment-count modifier alone still resolves to a
+# YEAR interval instead of leaving the amount unmarked — it does NOT multiply the figure by
+# 12/13 (the stated amount is already the annual one).
+_INTERVAL_FR = re.compile(
+    r"\s*(?:brut|net)?s?\s*(?:/\s*|par\s+|de\s+l['’])?"
+    r"(?P<unit>annuelles?\b|annuels?\b|an\b|mensuelles?\b|mensuels?\b|mois\b|"
+    r"jour(?:n[ée]e)?\b|heures?\b|sur\s+1[23]\s+mois\b)",
+    re.IGNORECASE,
+)
+# Spanish: "al año/mes", "anual", "mensual", "por hora/día". "14 pagas"/"12 pagas" (payment-count
+# convention) is deliberately NOT specially handled — see comp.py module docstring notes in the
+# multilingual spec; the base annual/monthly cue still resolves the interval correctly either way.
+_INTERVAL_ES = re.compile(
+    r"\s*(?:/\s*)?(?:bruto|neto)?\s*(?:al\s+|por\s+)?"
+    r"(?P<unit>a[ñn]o\b|anual\w*\b|mes\b|mensual\w*\b|hora\w*\b|d[ií]a\b)",
+    re.IGNORECASE,
+)
+_INTERVAL_TABLE: dict[str, re.Pattern[str]] = {
+    "en": _INTERVAL_EN,
+    "de": _INTERVAL_DE,
+    "fr": _INTERVAL_FR,
+    "es": _INTERVAL_ES,
+}
 _PA = re.compile(r"\s*p\.?\s*a\.?(?![a-z])", re.IGNORECASE)  # "p.a." — language-neutral
 
 _CUR_TAIL = re.compile(rf"\s*(?:{_CUR})?\s*$", re.IGNORECASE)
@@ -218,7 +289,14 @@ _UP_TO_EN = re.compile(
     r"(?:up\s*to|upto|maximum|max(?:\.|imum)?\s+of|under|no\s+more\s+than)\s*$", re.I
 )
 _UP_TO_DE = re.compile(r"(?:bis\s*zu|maximal|max\.?)\s*$", re.IGNORECASE)
-_UP_TO_TABLE: dict[str, re.Pattern[str]] = {"en": _UP_TO_EN, "de": _UP_TO_DE}
+_UP_TO_FR = re.compile(r"(?:jusqu['’]?\s*[àa]|maximum|max\.?)\s*$", re.IGNORECASE)
+_UP_TO_ES = re.compile(r"(?:hasta|m[áa]ximo|m[áa]x\.?)\s*$", re.IGNORECASE)
+_UP_TO_TABLE: dict[str, re.Pattern[str]] = {
+    "en": _UP_TO_EN,
+    "de": _UP_TO_DE,
+    "fr": _UP_TO_FR,
+    "es": _UP_TO_ES,
+}
 
 _FROM_EN = re.compile(
     r"(?:from|starting(?:\s+at)?|start(?:s|ing)?\s+at|at\s+least|minimum|min\.?\s+of|above|"
@@ -226,7 +304,14 @@ _FROM_EN = re.compile(
     re.IGNORECASE,
 )
 _FROM_DE = re.compile(r"(?:mindestens|ab|wenigstens)\s*$", re.IGNORECASE)
-_FROM_TABLE: dict[str, re.Pattern[str]] = {"en": _FROM_EN, "de": _FROM_DE}
+_FROM_FR = re.compile(r"(?:[àa]\s+partir\s+de|minimum(?:\s+de)?|d[èe]s|au\s+moins)\s*$", re.IGNORECASE)
+_FROM_ES = re.compile(r"(?:desde|a\s+partir\s+de|m[íi]nimo(?:\s+de)?|al\s+menos)\s*$", re.IGNORECASE)
+_FROM_TABLE: dict[str, re.Pattern[str]] = {
+    "en": _FROM_EN,
+    "de": _FROM_DE,
+    "fr": _FROM_FR,
+    "es": _FROM_ES,
+}
 
 
 # --- number parsing -----------------------------------------------------------
@@ -234,7 +319,10 @@ _FROM_TABLE: dict[str, re.Pattern[str]] = {"en": _FROM_EN, "de": _FROM_DE}
 
 def _parse_number(num: str, has_k: bool) -> float | None:
     """Parse a localized number string into a float (US ``80,000.00`` & EU ``80.000,00``)."""
-    s = num.strip()
+    # Strip a French/Spanish space-thousands grouping ("45 000", "1 867,02") — a no-op for
+    # English/German input, whose amount regex never captures a space in the first place, so this
+    # cannot change their behavior.
+    s = num.strip().replace("\xa0", "").replace(" ", "")
     has_comma = "," in s
     has_dot = "." in s
     try:
@@ -284,6 +372,26 @@ for _u in ("monatlich", "monat"):
     _UNIT_MAP[_u] = SalaryInterval.MONTH
 for _u in ("stündlich", "stunde", "std", "std."):
     _UNIT_MAP[_u] = SalaryInterval.HOUR
+# French unit words.
+for _u in ("annuel", "annuelle", "annuels", "annuelles", "an"):
+    _UNIT_MAP[_u] = SalaryInterval.YEAR
+for _u in ("mensuel", "mensuelle", "mensuels", "mensuelles", "mois"):
+    _UNIT_MAP[_u] = SalaryInterval.MONTH
+for _u in ("jour", "journee", "journée"):
+    _UNIT_MAP[_u] = SalaryInterval.DAY
+for _u in ("heure", "heures"):
+    _UNIT_MAP[_u] = SalaryInterval.HOUR
+_UNIT_MAP["sur 12 mois"] = SalaryInterval.YEAR
+_UNIT_MAP["sur 13 mois"] = SalaryInterval.YEAR
+# Spanish unit words.
+for _u in ("año", "ano", "anual"):
+    _UNIT_MAP[_u] = SalaryInterval.YEAR
+for _u in ("mes", "mensual"):
+    _UNIT_MAP[_u] = SalaryInterval.MONTH
+for _u in ("dia", "día"):
+    _UNIT_MAP[_u] = SalaryInterval.DAY
+for _u in ("hora", "horas"):
+    _UNIT_MAP[_u] = SalaryInterval.HOUR
 
 
 def _interval_after(text: str, pos: int, lang: str = "en") -> SalaryInterval | None:
@@ -309,9 +417,24 @@ _INTERVAL_BEFORE_DE = re.compile(
     r"[^\n$€£\d]{0,20}$",
     re.IGNORECASE,
 )
+# French: "TJM" (freelance daily rate label) resolves to DAY even with no explicit "/jour"
+# following, same as "annuel"/"par an" resolves to YEAR.
+_INTERVAL_BEFORE_FR = re.compile(
+    r"\b(?P<unit>tjm|par\s+jour|journalier\w*|annuel\w*|par\s+an|mensuel\w*|par\s+mois|"
+    r"par\s+heure)\b[^\n$€£\d]{0,20}$",
+    re.IGNORECASE,
+)
+# Spanish: "SBA"/"RBA" (Salario/Retribución Bruta Anual) resolves to YEAR on its own.
+_INTERVAL_BEFORE_ES = re.compile(
+    r"\b(?P<unit>sba|rba|anual\w*|al\s+a[ñn]o|mensual\w*|al\s+mes|por\s+hora)\b"
+    r"[^\n$€£\d]{0,20}$",
+    re.IGNORECASE,
+)
 _INTERVAL_BEFORE_TABLE: dict[str, re.Pattern[str]] = {
     "en": _INTERVAL_BEFORE_EN,
     "de": _INTERVAL_BEFORE_DE,
+    "fr": _INTERVAL_BEFORE_FR,
+    "es": _INTERVAL_BEFORE_ES,
 }
 _BEFORE_MAP_EN: list[tuple[str, SalaryInterval]] = [
     ("annu", SalaryInterval.YEAR),
@@ -332,9 +455,31 @@ _BEFORE_MAP_DE: list[tuple[str, SalaryInterval]] = [
     ("je stunde", SalaryInterval.HOUR),
     ("stünd", SalaryInterval.HOUR),
 ]
+_BEFORE_MAP_FR: list[tuple[str, SalaryInterval]] = [
+    ("tjm", SalaryInterval.DAY),
+    ("par jour", SalaryInterval.DAY),
+    ("journalier", SalaryInterval.DAY),
+    ("par an", SalaryInterval.YEAR),
+    ("annuel", SalaryInterval.YEAR),
+    ("par mois", SalaryInterval.MONTH),
+    ("mensuel", SalaryInterval.MONTH),
+    ("par heure", SalaryInterval.HOUR),
+]
+_BEFORE_MAP_ES: list[tuple[str, SalaryInterval]] = [
+    ("sba", SalaryInterval.YEAR),
+    ("rba", SalaryInterval.YEAR),
+    ("anual", SalaryInterval.YEAR),
+    ("al año", SalaryInterval.YEAR),
+    ("al ano", SalaryInterval.YEAR),
+    ("mensual", SalaryInterval.MONTH),
+    ("al mes", SalaryInterval.MONTH),
+    ("por hora", SalaryInterval.HOUR),
+]
 _BEFORE_MAP_TABLE: dict[str, list[tuple[str, SalaryInterval]]] = {
     "en": _BEFORE_MAP_EN,
     "de": _BEFORE_MAP_DE,
+    "fr": _BEFORE_MAP_FR,
+    "es": _BEFORE_MAP_ES,
 }
 
 
@@ -377,10 +522,10 @@ class _Amt:
     has_k: bool
 
 
-def _scan_amounts(text: str) -> list[_Amt]:
+def _scan_amounts(text: str, lang: str = "en") -> list[_Amt]:
     retire_spans = [m.span() for m in _RETIREMENT.finditer(text)]
     out: list[_Amt] = []
-    for m in _AMOUNT.finditer(text):
+    for m in _amount_pattern(lang).finditer(text):
         value = _parse_number(m.group("num"), bool(m.group("k")))
         if value is None or value <= 0:
             continue
@@ -483,7 +628,7 @@ def _pick_interval(
 
 
 def _build_candidates(text: str, lang: str = "en") -> list[_Cand]:
-    amts = _scan_amounts(text)
+    amts = _scan_amounts(text, lang)
     cues = [m.span() for m in _vocab(lang, _CUE_TABLE).finditer(text)]
     fins = [m.span() for m in _FINANCIAL.finditer(text)]
     cands: list[_Cand] = []
