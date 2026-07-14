@@ -78,6 +78,18 @@ _SHORTLINK_HOST = "apply.workable.com"
 _desc_by_shortcode: dict[str, str | None] = {}
 _fetched_board_slugs: set[str] = set()
 
+# Bounded re-attempt tracking for a board whose bulk fetch FAILS (network error / malformed
+# payload): the slug is deliberately NOT added to ``_fetched_board_slugs`` on failure (see
+# ``_fetch_board``), so a later posting on the same board -- or a reconcile retry -- gets a
+# chance to recover instead of being permanently poisoned (the bug this fixes: one dropped
+# board fetch used to leave EVERY sibling posting on that board returning ``None`` for the whole
+# run). But an unbounded retry would let a genuinely-dead board be re-hammered by every one of
+# its (possibly hundreds of) sibling postings. ``_board_fail_counts`` counts failed attempts per
+# slug; once a slug hits ``_MAX_BOARD_FETCH_ATTEMPTS`` it is treated as known-failed and
+# ``_fetch_board`` returns fast without re-fetching.
+_board_fail_counts: dict[str, int] = {}
+_MAX_BOARD_FETCH_ATTEMPTS = 3
+
 # Per-slug async once-gate (fixes a check-then-act RACE): concurrent sibling coroutines for
 # DIFFERENT postings on the SAME board must AWAIT one board fetch rather than each racing to
 # start (or skip) it. ``_board_locks`` holds one ``anyio.Lock`` per slug, created lazily; a
@@ -108,6 +120,7 @@ def _reset_workable_cache() -> None:
     live for the whole reconcile run)."""
     _desc_by_shortcode.clear()
     _fetched_board_slugs.clear()
+    _board_fail_counts.clear()
     _board_locks.clear()
 
 
@@ -301,9 +314,12 @@ class WorkableProvider(BaseProvider):
         # cache, so the other reads ``_desc_by_shortcode`` while it's still empty.
         lock = await _lock_for_slug(slug)
         async with lock:
-            # Double-checked: another sibling may have finished populating the board while we
-            # were waiting for the lock, in which case there's nothing left to do.
-            if slug not in _fetched_board_slugs:
+            # Double-checked: another sibling may have finished populating the board -- or
+            # exhausted its bounded retry budget -- while we were waiting for the lock.
+            if (
+                slug not in _fetched_board_slugs
+                and _board_fail_counts.get(slug, 0) < _MAX_BOARD_FETCH_ATTEMPTS
+            ):
                 await self._fetch_board(slug, fetcher)
 
         return _desc_by_shortcode.get(shortcode)
@@ -311,22 +327,33 @@ class WorkableProvider(BaseProvider):
     @staticmethod
     async def _fetch_board(slug: str, fetcher: AsyncFetcher) -> None:
         """Bulk-fetch every job on ``slug``'s board (with descriptions) and prime
-        :data:`_desc_by_shortcode` for all of them in one shot. Marks ``slug`` as fetched
-        first so a failed/empty response never triggers a repeat fetch for the same board
-        within this run. Always called while holding ``slug``'s per-slug lock (see
-        :func:`_lock_for_slug`), so there is never more than one call in flight per slug.
-        Non-raising."""
-        _fetched_board_slugs.add(slug)
+        :data:`_desc_by_shortcode` for all of them in one shot.
+
+        Marks ``slug`` as fetched ONLY on a full, well-formed success -- a failed or malformed
+        response instead increments :data:`_board_fail_counts` for ``slug`` (never adding it to
+        :data:`_fetched_board_slugs`), so a later posting on the SAME board, or a reconcile
+        retry, gets a chance to recover it rather than being permanently poisoned by one dropped
+        request (previously: the slug was marked "fetched" unconditionally before the fetch even
+        started, so a single failed board fetch returned ``None`` for every sibling posting on
+        that board for the rest of the run). The caller (:meth:`fetch_detail`) bounds re-attempts
+        via :data:`_MAX_BOARD_FETCH_ATTEMPTS` so a genuinely-dead board isn't re-hammered by
+        every one of its sibling postings forever. Always called while holding ``slug``'s
+        per-slug lock (see :func:`_lock_for_slug`), so there is never more than one call in
+        flight per slug. Non-raising."""
         url = _API.format(token=slug)
         try:
             data = await fetcher.get_json(url, params={"details": "true"})
         except Exception:
+            _board_fail_counts[slug] = _board_fail_counts.get(slug, 0) + 1
             return
         if not isinstance(data, dict):
+            _board_fail_counts[slug] = _board_fail_counts.get(slug, 0) + 1
             return
         jobs = data.get("jobs")
         if not isinstance(jobs, list):
+            _board_fail_counts[slug] = _board_fail_counts.get(slug, 0) + 1
             return
+        _fetched_board_slugs.add(slug)
         for job in jobs:
             if not isinstance(job, dict):
                 continue
