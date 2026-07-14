@@ -92,3 +92,67 @@ async def test_normalize_remote_from_metadata_and_location() -> None:
     assert job.remote is RemoteType.REMOTE
     assert job.locations[0].raw == "Beijing, China"
     assert job.department == "Software Engineering"
+
+
+# --- structured pay-transparency metadata (the SoFi-class capture fix) --------------------------
+# Greenhouse exposes pay via `metadata` custom fields, NOT the JD body. On pay-transparency-law
+# boards, ~100% of jobs carry it while ~0% inline it in `content`, so reading metadata is what
+# actually recovers salary. Shapes verified live against boards-api.greenhouse.io/.../sofi.
+
+from ergon_tracker.models import SalaryInterval  # noqa: E402
+
+
+def _sal(md: object):
+    return GreenhouseProvider._salary_from_metadata(md)
+
+
+def test_salary_from_currency_range_metadata() -> None:
+    md = [
+        {"name": "Pay Frequency", "value_type": "single_select", "value": "Annual"},
+        {
+            "name": "Pay Transparency Range",
+            "value_type": "currency_range",
+            "value": {"unit": "USD", "min_value": "172800.0", "max_value": "297000.0"},
+        },
+    ]
+    s = _sal(md)
+    assert s is not None
+    assert (s.min_amount, s.max_amount) == (172_800, 297_000)
+    assert s.currency == "USD"
+    assert s.interval is SalaryInterval.YEAR
+
+
+def test_salary_currency_range_respects_pay_frequency_hourly() -> None:
+    md = [
+        {"name": "Pay Frequency", "value_type": "single_select", "value": "Hourly"},
+        {
+            "name": "Pay Transparency Range",
+            "value_type": "currency_range",
+            "value": {"unit": "USD", "min_value": "22.5", "max_value": "30.0"},
+        },
+    ]
+    s = _sal(md)
+    assert s is not None and s.interval is SalaryInterval.HOUR
+    assert (s.min_amount, s.max_amount) == (22.5, 30.0)
+
+
+def test_salary_falls_back_to_pay_range_text() -> None:
+    # No currency_range -> parse the free-text "Pay Range" field.
+    md = [
+        {"name": "Pay Range", "value_type": "long_text", "value": "$120,000 - $150,000"},
+        {"name": "Pay Language", "value_type": "long_text", "value": "Also eligible for a bonus."},
+    ]
+    s = _sal(md)
+    assert s is not None and (s.min_amount, s.max_amount) == (120_000, 150_000)
+
+
+def test_salary_ignores_pay_language_boilerplate() -> None:
+    # "Pay Language" is prose, not a figure -> must not be parsed as salary.
+    md = [{"name": "Pay Language", "value_type": "long_text", "value": "Eligible for a bonus."}]
+    assert _sal(md) is None
+
+
+def test_salary_none_when_no_pay_metadata() -> None:
+    assert _sal(None) is None
+    assert _sal([]) is None
+    assert _sal([{"name": "Workplace Type", "value_type": "single_select", "value": "Remote"}]) is None
