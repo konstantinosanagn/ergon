@@ -130,6 +130,21 @@ class Salary(BaseModel):
         return f"{prefix}{body}{suffix}"
 
 
+class DetailFetch(BaseModel):
+    """Structured return for a provider's ``fetch_detail`` (Tier-3 JD recovery).
+
+    ``fetch_detail`` historically returned just the JD ``text`` (``str``), from which the reconcile
+    extracts salary/years/degree. A provider that ALSO gets a *structured* pay field in the same
+    detail response (e.g. rippling's ``payRangeDetails``) returns this instead: the reconcile seeds
+    the recovered posting with ``salary`` BEFORE running the text extractors (which only fill a
+    still-empty field), so a clean structured range is preferred over re-parsing it from prose and
+    never clobbers it. Returning a bare ``str`` remains valid and equivalent to ``salary=None``.
+    """
+
+    text: str
+    salary: Salary | None = None
+
+
 class Company(BaseModel):
     """Canonical employer identity (keyed by dedup.normalize_company)."""
 

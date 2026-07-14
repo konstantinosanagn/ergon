@@ -285,3 +285,48 @@ def test_merge_is_per_row_atomic_check_violation_does_not_discard_good_merges(tm
     persisted = idx2.execute("SELECT salary_min, salary_max FROM jobs WHERE id='A'").fetchone()
     idx2.close()
     assert persisted == (60000.0, 80000.0)
+
+
+def test_reconcile_prefers_structured_detailfetch_salary_over_body(tmp_path):
+    # A provider that returns DetailFetch(text, salary) must have its STRUCTURED salary persisted,
+    # even when the text body carries a DIFFERENT parseable figure -- the structured range wins
+    # (enrich only fills a still-empty field, and the reconcile seeds it first). Proves the whole
+    # str|DetailFetch plumbing end to end.
+    from ergon_tracker.models import DetailFetch, Salary, SalaryInterval
+
+    idx = _mk_index(tmp_path, [("1", "rippling", "http://x/1", "h1", None)])
+    det = str(tmp_path / "detail.sqlite")
+
+    async def fake(ref):
+        return DetailFetch(
+            text="<p>Decoy in body: Salary $10,000 - $20,000 / year.</p>",
+            salary=Salary(
+                min_amount=55000, max_amount=65000, currency="USD", interval=SalaryInterval.YEAR
+            ),
+        )
+
+    stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
+    assert stats["fetched"] == 1
+    con = open_detail(det)
+    row = con.execute(
+        "SELECT salary_min, salary_max, salary_currency, salary_interval, snippet FROM job_detail"
+    ).fetchone()
+    assert row[0] == 55000.0 and row[1] == 65000.0  # structured, NOT the 10k-20k body decoy
+    assert row[2] == "USD" and row[3] == "year"
+    assert row[4] and "Decoy" in row[4]  # snippet still comes from the text body
+
+
+def test_reconcile_detailfetch_without_salary_falls_back_to_body(tmp_path):
+    # DetailFetch(salary=None) must behave exactly like a bare str: the body extractor fills salary.
+    from ergon_tracker.models import DetailFetch
+
+    idx = _mk_index(tmp_path, [("1", "rippling", "http://x/1", "h1", None)])
+    det = str(tmp_path / "detail.sqlite")
+
+    async def fake(ref):
+        return DetailFetch(text="<p>Pay: $120,000 - $150,000 per year.</p>", salary=None)
+
+    anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
+    con = open_detail(det)
+    row = con.execute("SELECT salary_min, salary_max FROM job_detail").fetchone()
+    assert row[0] == 120000.0 and row[1] == 150000.0  # body-extracted, as before

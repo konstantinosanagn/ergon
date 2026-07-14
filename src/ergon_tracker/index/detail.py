@@ -17,7 +17,7 @@ import anyio
 from ..enrich import enrich_in_place
 from ..extract.base import html_to_text
 from ..http import _rate_key
-from ..models import JobPosting
+from ..models import DetailFetch, JobPosting, Salary
 
 DETAIL_SCHEMA_VERSION = 1
 DETAIL_SCHEMA = """
@@ -259,15 +259,23 @@ def _select_window(
     return window, (cursor + max_details) % total
 
 
+def _detail_parts(result: str | DetailFetch | None) -> tuple[str | None, Salary | None]:
+    """Normalize a ``fetch_detail`` return to ``(text, structured_salary)``. A bare ``str`` (the
+    historical contract) carries no structured salary; a ``DetailFetch`` carries both."""
+    if isinstance(result, DetailFetch):
+        return (result.text or None), result.salary
+    return result, None
+
+
 async def _run_fetches(
     window: list[DetailRef],
-    fetch_detail: Callable[[DetailRef], Awaitable[str | None]],
+    fetch_detail: Callable[[DetailRef], Awaitable[str | DetailFetch | None]],
     concurrency: int,
-) -> list[tuple[DetailRef, str | None]]:
+) -> list[tuple[DetailRef, str | DetailFetch | None]]:
     """Fetch the whole window concurrently, bounded by ``concurrency``. A failing fetch (exception
     or ``None``) is captured per-ref, never raised — one bad host must not abort the others."""
     limiter = anyio.CapacityLimiter(concurrency)
-    results: list[tuple[DetailRef, str | None]] = []
+    results: list[tuple[DetailRef, str | DetailFetch | None]] = []
 
     async def worker(ref: DetailRef) -> None:
         async with limiter:
@@ -479,7 +487,7 @@ async def reconcile_detail_tier(
     detail_path: str,
     index_path: str,
     *,
-    fetch_detail: Callable[[DetailRef], Awaitable[str | None]],
+    fetch_detail: Callable[[DetailRef], Awaitable[str | DetailFetch | None]],
     max_details: int | None = None,
     sources: Sequence[str] | None = None,
     now: Callable[[], str],
@@ -546,19 +554,25 @@ async def reconcile_detail_tier(
 
         fetched = 0
         failed = 0
-        for ref, desc in results:
+        for ref, result in results:
             try:
-                if desc is None:
+                # fetch_detail may return a bare str (JD text) or a DetailFetch carrying a
+                # STRUCTURED salary alongside the text (e.g. rippling's payRangeDetails). Seed the
+                # posting with that salary BEFORE enrich so the text extractors — which only fill a
+                # still-empty field — prefer the structured range over re-parsing it from prose.
+                text, pre_salary = _detail_parts(result)
+                if not text:
                     raise ValueError("fetch_detail returned no description")
                 job = JobPosting.create(
                     source=ref.source,
                     source_job_id=ref.id,
                     company="",
                     title="",
-                    description_html=desc,
+                    description_html=text,
+                    salary=pre_salary,
                 )
                 enrich_in_place(job)
-                snippet = (html_to_text(desc) or "")[:300]
+                snippet = (html_to_text(text) or "")[:300]
                 _record_success(det_con, ref, job, snippet, now())
                 fetched += 1
             except Exception:

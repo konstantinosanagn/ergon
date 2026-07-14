@@ -16,7 +16,7 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast, runtime_checkable
 
-from ..models import JobPosting, RawJob, SearchQuery
+from ..models import DetailFetch, JobPosting, RawJob, SearchQuery
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
@@ -148,15 +148,17 @@ class BaseProvider:
         ETag/Last-Modified support override this (see conditional-requests plan)."""
         return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch the full JD detail resource for one posting (Tier-3 detail recovery).
 
         Default: unsupported — the base provider has no per-posting detail endpoint to call.
-        Providers opt in by overriding this. Must be non-raising: any missing field, shape
-        mismatch, or fetch failure is a ``None`` return, not an exception — the reconcile pass
-        (``index.detail.reconcile_detail_tier``) counts a ``None`` as a failed fetch and treats
-        an exception the same way, but implementations should return ``None`` explicitly rather
-        than rely on that fallback."""
+        Providers opt in by overriding this. Return the JD text as a ``str``, or — when the same
+        detail response also yields a STRUCTURED pay field — a ``DetailFetch(text, salary)`` so the
+        reconcile prefers the structured range over re-parsing it from prose. Must be non-raising:
+        any missing field, shape mismatch, or fetch failure is a ``None`` return, not an exception —
+        the reconcile pass (``index.detail.reconcile_detail_tier``) counts a ``None`` as a failed
+        fetch and treats an exception the same way, but implementations should return ``None``
+        explicitly rather than rely on that fallback."""
         return None
 
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:

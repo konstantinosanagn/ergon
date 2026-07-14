@@ -208,3 +208,78 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
+
+
+# --- structured pay (payRangeDetails -> DetailFetch.salary) ------------------------------------
+
+
+def _ref() -> DetailRef:
+    return DetailRef(
+        id="1",
+        source="rippling",
+        token=None,
+        apply_url="https://ats.rippling.com/covenant-house-new-york/jobs/uuid-1",
+        listing_url=None,
+        content_sig="s",
+    )
+
+
+def test_fetch_detail_returns_detailfetch_with_structured_salary() -> None:
+    from ergon_tracker.models import DetailFetch, SalaryInterval
+
+    payload = {
+        "description": {"role": "<p>Do the thing.</p>"},
+        "payRangeDetails": [
+            {"currency": "USD", "frequency": "YEAR", "rangeStart": 55000.0, "rangeEnd": 65000.0}
+        ],
+    }
+    res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert res.text == "<p>Do the thing.</p>"
+    assert res.salary is not None
+    assert res.salary.min_amount == 55000 and res.salary.max_amount == 65000
+    assert res.salary.currency == "USD" and res.salary.interval is SalaryInterval.YEAR
+
+
+def test_fetch_detail_returns_bare_str_when_no_payrange() -> None:
+    # No payRangeDetails -> unchanged historical contract (bare str), so nothing downstream shifts.
+    payload = {"description": "<p>Body only.</p>"}
+    res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
+    assert res == "<p>Body only.</p>"
+
+
+def test_fetch_detail_empty_payrange_is_bare_str() -> None:
+    payload = {"description": "<p>Body.</p>", "payRangeDetails": []}
+    res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
+    assert res == "<p>Body.</p>"
+
+
+def test_salary_from_payrange_edge_cases() -> None:
+    from ergon_tracker.models import SalaryInterval
+
+    P = RipplingProvider._salary_from_payrange
+    assert P(None) is None and P([]) is None and P("nope") is None
+    assert P([{"frequency": "YEAR"}]) is None  # no amounts
+    assert P([{"rangeStart": None, "rangeEnd": None, "currency": "USD"}]) is None
+    # hourly equal bounds are a valid single-point figure
+    hr = P([{"currency": "USD", "frequency": "HOUR", "rangeStart": 24.28, "rangeEnd": 24.28}])
+    assert hr.min_amount == 24.28 and hr.max_amount == 24.28 and hr.interval is SalaryInterval.HOUR
+    # multi geo-tier, same currency -> span (min start, max end)
+    span = P(
+        [
+            {"currency": "USD", "frequency": "YEAR", "rangeStart": 97200, "rangeEnd": 170100},
+            {"currency": "USD", "frequency": "YEAR", "rangeStart": 91800, "rangeEnd": 160650},
+        ]
+    )
+    assert span.min_amount == 91800 and span.max_amount == 170100
+    # multi-currency -> headline (first) currency only, CAD never merged in
+    mc = P(
+        [
+            {"currency": "USD", "frequency": "YEAR", "rangeStart": 156000, "rangeEnd": 260000},
+            {"currency": "CAD", "frequency": "YEAR", "rangeStart": 128000, "rangeEnd": 160000},
+        ]
+    )
+    assert mc.currency == "USD" and mc.min_amount == 156000 and mc.max_amount == 260000
+    # unknown frequency -> keep amounts, interval unset (never guessed)
+    unk = P([{"currency": "USD", "frequency": "FORTNIGHT", "rangeStart": 2000, "rangeEnd": 2500}])
+    assert unk.min_amount == 2000 and unk.interval is None

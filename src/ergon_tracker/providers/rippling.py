@@ -20,14 +20,18 @@ Each list entry is summary-only (no description, salary, or dates), e.g.::
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import coerce_amount
 from ..models import (
+    DetailFetch,
     EmploymentType,
     JobPosting,
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -110,7 +114,7 @@ class RipplingProvider(BaseProvider):
             return ref.token, ref.id
         return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via the per-posting detail resource (Tier-3 recovery).
 
         The detail URL is the list URL (``_API``) with ``/{uuid}`` appended; ``token`` and
@@ -135,13 +139,80 @@ class RipplingProvider(BaseProvider):
             return None
         description = data.get("description")
         if isinstance(description, str):
-            return description if description.strip() else None
-        if isinstance(description, dict):
+            text = description if description.strip() else None
+        elif isinstance(description, dict):
             parts = [v for v in description.values() if isinstance(v, str) and v.strip()]
-            if not parts:
-                return None
-            return "\n".join(parts)
-        return None
+            text = "\n".join(parts) if parts else None
+        else:
+            text = None
+        if text is None:
+            return None
+        # The SAME detail response carries a STRUCTURED pay array (payRangeDetails) alongside the
+        # JD body -- return it so the reconcile prefers it over re-parsing pay from prose.
+        salary = self._salary_from_payrange(data.get("payRangeDetails"))
+        return DetailFetch(text=text, salary=salary) if salary is not None else text
+
+    # Rippling's payRangeDetails.frequency vocab -> canonical interval (values seen upper-case).
+    _INTERVAL_BY_FREQUENCY: dict[str, SalaryInterval] = {
+        "YEAR": SalaryInterval.YEAR,
+        "ANNUAL": SalaryInterval.YEAR,
+        "ANNUALLY": SalaryInterval.YEAR,
+        "YEARLY": SalaryInterval.YEAR,
+        "MONTH": SalaryInterval.MONTH,
+        "MONTHLY": SalaryInterval.MONTH,
+        "WEEK": SalaryInterval.WEEK,
+        "WEEKLY": SalaryInterval.WEEK,
+        "DAY": SalaryInterval.DAY,
+        "DAILY": SalaryInterval.DAY,
+        "HOUR": SalaryInterval.HOUR,
+        "HOURLY": SalaryInterval.HOUR,
+    }
+
+    @classmethod
+    def _salary_from_payrange(cls, pay_ranges: Any) -> Salary | None:
+        """Structured pay from the detail response's ``payRangeDetails`` array, e.g.
+        ``[{"currency":"USD","frequency":"YEAR","rangeStart":55000.0,"rangeEnd":65000.0}]``.
+
+        Multiple entries are common (pay-transparency GEO TIERS — "US Tier 2" vs "US Tier 3" —
+        and, less often, a second CURRENCY like a CAD range beside the USD one). Reduce them to
+        one range by taking the first usable entry's (currency, frequency) as the headline group
+        and SPANNING every entry that shares it (min of starts, max of ends); entries in a
+        different currency are ignored, never numerically merged (USD + CAD must not average).
+        Equal bounds are a valid single-point figure. Returns ``None`` (never raises, never invents
+        a figure) on a missing/empty/non-list value or entries with no usable amount, so the
+        reconcile falls back to body extraction. Unknown frequency -> amounts kept, interval unset.
+        """
+        if not isinstance(pay_ranges, list):
+            return None
+        headline_ccy: str | None = None
+        headline_freq: str | None = None
+        los: list[float] = []
+        his: list[float] = []
+        for entry in pay_ranges:
+            if not isinstance(entry, dict):
+                continue
+            lo = coerce_amount(entry.get("rangeStart"))
+            hi = coerce_amount(entry.get("rangeEnd"))
+            if lo is None and hi is None:
+                continue
+            ccy = str(entry.get("currency") or "").strip().upper() or None
+            freq = str(entry.get("frequency") or "").strip().upper() or None
+            if not los and not his:  # first usable entry defines the headline group
+                headline_ccy, headline_freq = ccy, freq
+            elif ccy != headline_ccy or freq != headline_freq:
+                continue  # a different currency/period tier -- don't merge it in
+            if lo is not None:
+                los.append(lo)
+            if hi is not None:
+                his.append(hi)
+        if not los and not his:
+            return None
+        return Salary(
+            min_amount=min(los) if los else None,
+            max_amount=max(his) if his else None,
+            currency=headline_ccy,
+            interval=cls._INTERVAL_BY_FREQUENCY.get(headline_freq or ""),
+        )
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
