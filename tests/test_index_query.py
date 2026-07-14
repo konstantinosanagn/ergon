@@ -107,6 +107,31 @@ def test_query_robust_against_adversarial_and_edge_input(tmp_path):
     assert len(search_rows(con, SearchQuery(keywords="engineer", limit=100000))) <= 3  # huge limit
 
 
+def test_last_seen_staleness_guard(tmp_path):
+    # A row whose board hasn't been re-confirmed within max_last_seen_age_days is hidden; a
+    # recently-seen row survives. Both are status='active' (the ghost differs only by last_seen).
+    import sqlite3
+    from datetime import date, timedelta
+
+    p = tmp_path / "i.sqlite"
+    build_index([_job("1", "Fresh Engineer"), _job("2", "Stale Engineer")], p, build_id="b1")
+    # Age job 2's last_seen to 40 days ago (an abandoned-board ghost carried forward).
+    old = (date.today() - timedelta(days=40)).isoformat()
+    w = sqlite3.connect(p)
+    w.execute("UPDATE jobs SET last_seen = ? WHERE title = 'Stale Engineer'", (old,))
+    w.commit()
+    w.close()
+    con = connect(p, read_only=True)
+
+    # No guard -> both returned.
+    assert len(search_rows(con, SearchQuery(keywords="engineer", limit=10))) == 2
+    # Guard at 21 days -> the stale ghost is dropped, the fresh row survives.
+    guarded = search_rows(con, SearchQuery(keywords="engineer", max_last_seen_age_days=21, limit=10))
+    assert [r["title"] for r in guarded] == ["Fresh Engineer"]
+    # A generous window (60d) keeps both (never hides a slow-but-alive board).
+    assert len(search_rows(con, SearchQuery(keywords="engineer", max_last_seen_age_days=60, limit=10))) == 2
+
+
 def test_match_expr_one_and_two_tokens_unchanged():
     # 1-2 token queries keep the historical AND-of-quoted-tokens semantics exactly.
     assert _match_expr("engineer") == '"engineer"'

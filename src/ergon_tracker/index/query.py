@@ -161,6 +161,17 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
         else:
             cl.append(f"{fresh} >= ?")
         p.append(cutoff)
+    if q.max_last_seen_age_days is not None:
+        # Staleness backstop: drop active rows whose board hasn't been re-confirmed within this many
+        # days. last_seen is the last build that saw the posting on its board (carried-forward rows
+        # keep their true last-crawl date), so this hides the abandoned/erroring-board tail that
+        # carry_forward would otherwise surface forever — e.g. a job deleted upstream that still reads
+        # "active" because its board went uncrawled. Stored as 'YYYY-MM-DD', which sorts chronologically.
+        from datetime import date, timedelta
+
+        ls_cutoff = (date.today() - timedelta(days=q.max_last_seen_age_days)).isoformat()
+        cl.append("j.last_seen >= ?")
+        p.append(ls_cutoff)
     return cl, p
 
 

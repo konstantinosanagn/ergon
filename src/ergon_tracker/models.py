@@ -281,6 +281,15 @@ class SearchQuery(BaseModel):
     # Whether to keep postings with no date at all (default: drop them — undated correlates with stale
     # legacy reqs). Mirrors include_unknown_level; only consulted when max_age_days is set.
     include_undated: bool = False
+    # Staleness backstop keyed on last_seen (the last build that CONFIRMED the posting present on its
+    # board; carried-forward rows keep their true last-crawl date). Drops active rows whose board
+    # hasn't been successfully re-crawled in this many days — the abandoned/erroring-board tail whose
+    # snapshot carry_forward would otherwise surface indefinitely (e.g. a job deleted on greenhouse
+    # that still shows "active" because its board went uncrawled). Distinct from max_age_days, which
+    # keys on the posting's OWN date (posted_at/updated_at). None = off (model default, existing
+    # callers unchanged); the production surface (MCP) sets a default. Must exceed the max legitimate
+    # crawl gap (COLD 7d + quarantine 7d) so a slow-but-alive board is never hidden.
+    max_last_seen_age_days: int | None = None
     limit: int | None = None
     companies: list[str] | None = None
     sources: list[str] | None = None

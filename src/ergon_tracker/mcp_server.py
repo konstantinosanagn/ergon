@@ -86,6 +86,7 @@ async def search_jobs(
     posted_within_days: int | None = None,
     max_age_days: int | None = 365,
     include_undated: bool = False,
+    max_last_seen_age_days: int | None = 21,
     visa_sponsor: bool = False,
     sponsorship_offered: bool | None = None,
     infer_level_from_experience: bool = True,
@@ -141,6 +142,10 @@ async def search_jobs(
             recent activity (posted/updated) is older than N days. Pass null to include stale ones.
             The response echoes the floor actually used as `max_age_days_applied`.
         include_undated: keep postings with no date at all (default false; they correlate with stale).
+        max_last_seen_age_days: staleness backstop (default 21). Drops rows whose board hasn't been
+            re-confirmed within N days — the abandoned/erroring-board tail whose snapshot would
+            otherwise surface forever (a job deleted upstream still reading "active"). Distinct from
+            max_age_days (which keys on the posting's own date). Pass null to disable.
         visa_sponsor: COMPANY-level signal. Each job's `visa_sponsor` flag means the EMPLOYER has
             certified H-1B LCA filings in US DoL data — a historical filer. Positive evidence
             only: true = the company has filed; null = no filing found, which is NOT "does not
@@ -203,6 +208,7 @@ async def search_jobs(
         posted_after=_days_ago(posted_within_days),
         max_age_days=max_age_days,
         include_undated=include_undated,
+        max_last_seen_age_days=max_last_seen_age_days,
         visa_sponsor=True if visa_sponsor else None,
         sponsorship_offered=sponsorship_offered,
         infer_level_from_experience=infer_level_from_experience,
