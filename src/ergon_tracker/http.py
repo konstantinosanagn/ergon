@@ -8,6 +8,7 @@ should never construct their own ``httpx`` client — they receive an ``AsyncFet
 
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -23,6 +24,18 @@ from aiolimiter import AsyncLimiter
 from .exceptions import FetchError, RateLimitError, TransientHTTPError
 
 __all__ = ["AsyncFetcher", "ConditionalResult", "DEFAULT_HEADERS"]
+
+# Per-host (per-``_rate_key``) IN-FLIGHT concurrency cap -- independent of, and layered UNDER,
+# the global ``AsyncFetcher._limiter``. Confirmed root cause (2026-07 Workable cascade): with a
+# high global concurrency (e.g. 50) and a single shared host like apply.workable.com pinned to a
+# strict 3 req/s token bucket, every coroutine piles onto that one host's bucket queue at once;
+# the pileup itself (not the bucket) is what trips the per-host circuit breaker and cascades to a
+# 100%-fail run (conc=6 -> 20% fail, conc=40 -> 100% fail, single 120-long cascade). This cap
+# bounds how many requests to one host are ever in flight (queued on the rate bucket + sending)
+# regardless of how many coroutines target it, WITHOUT slowing a host whose token bucket is
+# already the binding constraint (e.g. SmartRecruiters at 3/s stays 3/s: 8 concurrent waiters
+# draining a 3/s bucket is still bound by the bucket, not the semaphore).
+_DEFAULT_PER_HOST_CONCURRENCY = int(os.environ.get("ERGON_PER_HOST_CONCURRENCY", "8"))
 
 
 @dataclass(frozen=True)
@@ -164,6 +177,7 @@ class AsyncFetcher:
         concurrency: int = 16,
         per_host_rate: int = 5,
         per_host_period: float = 1.0,
+        per_host_concurrency: int = _DEFAULT_PER_HOST_CONCURRENCY,
         timeout: float = 25.0,
         retries: int = 3,
         cache: bool = False,
@@ -171,8 +185,10 @@ class AsyncFetcher:
     ) -> None:
         self._limiter = anyio.CapacityLimiter(concurrency)
         self._host_limiters: dict[str, AsyncLimiter] = {}
+        self._host_concurrency_limiters: dict[str, anyio.CapacityLimiter] = {}
         self._per_host_rate = per_host_rate
         self._per_host_period = per_host_period
+        self._per_host_concurrency = per_host_concurrency
         self._retries = retries
         self._breakers: dict[str, _CircuitBreaker] = defaultdict(_CircuitBreaker)
         self._owns_client = client is None
@@ -222,12 +238,28 @@ class AsyncFetcher:
             self._host_limiters[key] = limiter
         return limiter
 
+    def _host_concurrency_limiter(self, key: str) -> anyio.CapacityLimiter:
+        """Per-host in-flight cap (see :data:`_DEFAULT_PER_HOST_CONCURRENCY`). Lazily created,
+        same synchronous get-or-create shape as :meth:`_host_limiter` -- safe without a guard
+        lock because there is no ``await`` between the dict lookup and the assignment, so no
+        other coroutine can interleave and hand out a second limiter object for the same key."""
+        limiter = self._host_concurrency_limiters.get(key)
+        if limiter is None:
+            limiter = anyio.CapacityLimiter(self._per_host_concurrency)
+            self._host_concurrency_limiters[key] = limiter
+        return limiter
+
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         host = urlsplit(url).netloc
         key = _rate_key(host)  # registrable domain (shared backends throttle together)
         breaker = self._breakers[key]
         breaker.check(key)
-        async with self._limiter, self._host_limiter(key):
+        # Global limiter (outer) -> per-host in-flight cap -> per-host rate wait + send. The
+        # concurrency cap sits INSIDE the global limiter so it only ever bounds pileup onto a
+        # single host, never overall throughput; it sits AROUND the rate wait so a host whose
+        # token bucket is already the binding constraint (e.g. workable.com at 3/s) is unaffected
+        # -- the bucket, not this semaphore, remains what paces actual sends.
+        async with self._limiter, self._host_concurrency_limiter(key), self._host_limiter(key):
             return await self._request_with_retries(method, url, host, breaker, **kwargs)
 
     async def _request_with_retries(
@@ -250,7 +282,16 @@ class AsyncFetcher:
                     raise
 
                 if resp.status_code == 429:
-                    breaker.record_failure()
+                    # Deliberately NOT a breaker failure: 429 means "throttled", not "down", and
+                    # the per-host token bucket + this Retry-After wait are already the
+                    # mechanism that paces requests to a rate-limited host. Confirmed root cause
+                    # (2026-07 Workable cascade): with retries=3, counting every 429 toward the
+                    # breaker meant ONE logical rate-limited call recorded up to 3 breaker
+                    # failures -- against a threshold of 5, just ~2 concurrent/consecutive 429s
+                    # (6 recorded failures) tripped the breaker OPEN for the full 30s cooldown,
+                    # failing every subsequent request to the host instantly and cascading a
+                    # transient rate-limit window into a total outage. The breaker still exists
+                    # to detect a genuinely DOWN host (5xx / transport errors below).
                     ra = _retry_after_seconds(resp)
                     if ra:
                         await anyio.sleep(min(ra, 30.0))

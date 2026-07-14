@@ -21,7 +21,11 @@ import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.workable import WorkableProvider, _reset_workable_cache
+from ergon_tracker.providers.workable import (
+    _MAX_BOARD_FETCH_ATTEMPTS,
+    WorkableProvider,
+    _reset_workable_cache,
+)
 
 _SHORTLINK = "https://apply.workable.com/j/516863E6FD"
 _SHORTLINK_2 = "https://apply.workable.com/j/AAAAAAAAAA"
@@ -59,7 +63,9 @@ class _FakeFetcher:
     ``redirects`` maps a shortlink URL -> the ``Location`` header value returned by a
     redirect-disabled GET (``None`` means a 301 with no ``Location`` header at all).
     ``board_payloads`` maps a board URL -> the JSON body ``get_json`` returns for it.
-    ``board_raises`` is the set of board URLs whose ``get_json`` call raises instead.
+    ``board_raises`` is the set of board URLs whose ``get_json`` call ALWAYS raises (a
+    permanently-dead board). ``board_fail_first_n`` maps a board URL -> a number of LEADING
+    calls that raise before subsequent calls succeed (a transiently-flaky board that recovers).
     Any URL not explicitly wired raises ``AssertionError``, so an unexpected extra call
     (e.g. a second fetch of an already-cached board) fails the test loudly."""
 
@@ -69,10 +75,12 @@ class _FakeFetcher:
         redirects: dict[str, str | None] | None = None,
         board_payloads: dict[str, object] | None = None,
         board_raises: frozenset[str] = frozenset(),
+        board_fail_first_n: dict[str, int] | None = None,
     ) -> None:
         self._redirects = redirects or {}
         self._board_payloads = board_payloads or {}
         self._board_raises = board_raises
+        self._board_fail_first_n = board_fail_first_n or {}
         self.calls: list[tuple[str, str]] = []
         self.board_fetch_count: dict[str, int] = {}
 
@@ -94,6 +102,9 @@ class _FakeFetcher:
         if url in self._board_payloads:
             self.board_fetch_count[url] = self.board_fetch_count.get(url, 0) + 1
             if url in self._board_raises:
+                raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            fail_n = self._board_fail_first_n.get(url, 0)
+            if self.board_fetch_count[url] <= fail_n:
                 raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
             return self._board_payloads[url]
         raise AssertionError(f"unexpected get_json() call: {url}")
@@ -407,3 +418,99 @@ def test_workable_fetch_detail_concurrent_same_board_siblings_await_not_race() -
 
     assert results == [f"<p>JD {i}</p>" for i in range(n)]
     assert fetcher.board_fetch_count[board_url] == 1
+
+
+# --- poison-pill regression: a failed board fetch must not permanently kill every sibling ------
+# Bug: ``_fetch_board`` used to add the slug to ``_fetched_board_slugs`` UNCONDITIONALLY before
+# the bulk fetch even started, then swallow the exception -- so ONE dropped board fetch left the
+# slug marked "done" with an empty cache, and every sibling posting on that board returned
+# ``None`` for the rest of the run (one failed request killing ~1,100 postings on a large board).
+# Fix: only mark the slug fetched on SUCCESS; a failure increments a bounded per-slug retry
+# counter (``_board_fail_counts`` / ``_MAX_BOARD_FETCH_ATTEMPTS``) instead, so a later sibling
+# posting gets a chance to retry -- but a genuinely-dead board still stops being re-hammered
+# after a few attempts.
+
+
+def test_workable_fetch_detail_board_fails_once_then_recovers_for_siblings() -> None:
+    slug = "flaky"
+    board_url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
+    fetcher = _FakeFetcher(
+        board_payloads={
+            board_url: _board_payload(
+                _job("CODE01", "<p>First posting JD.</p>"),
+                _job("CODE02", "<p>Second posting JD.</p>"),
+            )
+        },
+        board_fail_first_n={board_url: 1},  # the FIRST bulk fetch attempt fails; the 2nd works
+    )
+    ref1 = _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE01", id_="1")
+    ref2 = _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE02", id_="2")
+
+    # This posting triggers the board's first (failing) bulk fetch -> None, but the board must
+    # NOT be poisoned as "fetched" -- a sibling gets to retry it.
+    desc1 = anyio.run(lambda: WorkableProvider().fetch_detail(ref1, fetcher))
+    assert desc1 is None
+
+    # A sibling posting on the SAME board retries the fetch -> succeeds this time -> recovers.
+    desc2 = anyio.run(lambda: WorkableProvider().fetch_detail(ref2, fetcher))
+    assert desc2 == "<p>Second posting JD.</p>"
+
+    # The FIRST posting's shortcode is now populated too (primed by the successful retry) --
+    # proving it wasn't permanently poisoned by the earlier failed attempt.
+    desc1_again = anyio.run(lambda: WorkableProvider().fetch_detail(ref1, fetcher))
+    assert desc1_again == "<p>First posting JD.</p>"
+
+    assert fetcher.board_fetch_count[board_url] == 2  # one failed attempt + one successful retry
+
+
+def test_workable_fetch_detail_board_always_fails_bounded_reattempts_not_infinite() -> None:
+    slug = "deadboard"
+    board_url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
+    fetcher = _FakeFetcher(
+        board_payloads={board_url: _board_payload(_job("CODE00", "<p>Unreachable.</p>"))},
+        board_raises=frozenset({board_url}),
+    )
+    # More siblings than the retry budget, each on the SAME permanently-dead board.
+    refs = [
+        _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE{i:02d}", id_=str(i))
+        for i in range(_MAX_BOARD_FETCH_ATTEMPTS + 3)
+    ]
+
+    for ref in refs:
+        desc = anyio.run(lambda r=ref: WorkableProvider().fetch_detail(r, fetcher))
+        assert desc is None
+
+    # Every sibling gets None, but the board is only ever re-attempted up to the bound -- not
+    # once per sibling -- so it's treated as known-failed and stops being re-hammered.
+    assert fetcher.board_fetch_count[board_url] == _MAX_BOARD_FETCH_ATTEMPTS
+
+
+def test_workable_fetch_detail_board_always_fails_bounded_under_concurrency() -> None:
+    """Same bound as above, but siblings fire concurrently (mirrors real drain concurrency) --
+    the per-slug lock must still serialize attempts so the bound holds under a race, not just
+    sequentially."""
+    slug = "deadboard-concurrent"
+    board_url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
+    n = 10
+    fetcher = _FakeFetcher(
+        board_payloads={board_url: _board_payload(_job("CODE00", "<p>Unreachable.</p>"))},
+        board_raises=frozenset({board_url}),
+    )
+    refs = [
+        _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE{i:02d}", id_=str(i))
+        for i in range(n)
+    ]
+    results: list[str | None] = [None] * n
+
+    async def _worker(i: int) -> None:
+        results[i] = await WorkableProvider().fetch_detail(refs[i], fetcher)
+
+    async def _run() -> None:
+        async with anyio.create_task_group() as tg:
+            for i in range(n):
+                tg.start_soon(_worker, i)
+
+    anyio.run(_run)
+
+    assert results == [None] * n
+    assert fetcher.board_fetch_count[board_url] <= _MAX_BOARD_FETCH_ATTEMPTS
