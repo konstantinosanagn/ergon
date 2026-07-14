@@ -186,3 +186,44 @@ def test_normalize_remote_flag() -> None:
     )
     assert job.remote is RemoteType.REMOTE
     assert job.employment_type is EmploymentType.CONTRACT
+
+
+async def test_fetch_detail_includes_additional_information_pay_section() -> None:
+    # US pay-transparency salary ranges live in jobAd.sections.additionalInformation, NOT in
+    # jobDescription/qualifications. fetch_detail must concatenate it so the enrich CompExtractor
+    # can recover the range (SR was 5.7% salary because this section was dropped).
+    import respx
+    from ergon_tracker.index.detail import DetailRef
+
+    posting = {
+        "jobAd": {
+            "sections": {
+                "jobDescription": {"text": "Build reliable services."},
+                "qualifications": {"text": "5+ years, BS in CS."},
+                "additionalInformation": {
+                    "text": "The U.S. base salary range for this role is $88,000 - $95,000."
+                },
+            }
+        }
+    }
+    url = "https://api.smartrecruiters.com/v1/companies/boschgroup/postings/744000137669170"
+    ref = DetailRef(
+        id="x",
+        source="smartrecruiters",
+        token=None,
+        apply_url="https://jobs.smartrecruiters.com/boschgroup/744000137669170",
+        listing_url=None,
+        content_sig="",
+    )
+    with respx.mock:
+        respx.get(url).mock(return_value=httpx.Response(200, json=posting))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            body = await SmartRecruitersProvider().fetch_detail(ref, f)
+
+    assert body is not None
+    assert "$88,000 - $95,000" in body  # the pay section is present
+    assert "5+ years" in body  # qualifications still included
+    from ergon_tracker.extract.comp import parse_salary
+
+    sal = parse_salary(body)
+    assert sal is not None and sal.min_amount == 88_000 and sal.max_amount == 95_000

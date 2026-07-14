@@ -123,3 +123,46 @@ async def test_fetch_malformed_xml_returns_empty() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await PersonioProvider().fetch("personio", SearchQuery(), f)
     assert raws == []
+
+
+async def test_normalize_maps_structured_salary_information() -> None:
+    # personio's <salaryInformation> block (min/max/currencyCode/type) is nested, so the generic
+    # flattener used to drop it. It must now surface as a structured Salary (was 6.7% salary
+    # despite the field being handed to us for free).
+    feed = (
+        '<?xml version="1.0" encoding="UTF-8"?><workzag-jobs>'
+        "<position><id>77</id><name>Data Engineer</name>"
+        "<office>London</office><employmentType>permanent</employmentType>"
+        "<salaryInformation><min>34000.00</min><max>38000.00</max>"
+        "<currencySymbol>&#163;</currencySymbol><currencyCode>GBP</currencyCode>"
+        "<type>yearly</type></salaryInformation>"
+        "<jobDescriptions><jobDescription><name>Role</name>"
+        "<value><![CDATA[Build pipelines.]]></value></jobDescription></jobDescriptions>"
+        "</position></workzag-jobs>"
+    )
+    with respx.mock:
+        respx.get(FEED_URL).mock(return_value=httpx.Response(200, text=feed))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await PersonioProvider().fetch("personio", SearchQuery(), f)
+
+    from ergon_tracker.models import SalaryInterval
+
+    job = PersonioProvider().normalize(raws[0])
+    assert job.salary is not None
+    assert job.salary.min_amount == 34_000 and job.salary.max_amount == 38_000
+    assert job.salary.currency == "GBP"
+    assert job.salary.interval is SalaryInterval.YEAR
+
+
+async def test_normalize_salary_none_when_block_absent() -> None:
+    # No <salaryInformation> -> salary stays None so enrich can body-extract (regression guard).
+    feed = (
+        '<?xml version="1.0" encoding="UTF-8"?><workzag-jobs>'
+        "<position><id>78</id><name>Analyst</name><office>Berlin</office>"
+        "<employmentType>permanent</employmentType></position></workzag-jobs>"
+    )
+    with respx.mock:
+        respx.get(FEED_URL).mock(return_value=httpx.Response(200, text=feed))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await PersonioProvider().fetch("personio", SearchQuery(), f)
+    assert PersonioProvider().normalize(raws[0]).salary is None

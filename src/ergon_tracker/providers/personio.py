@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
+from ..extract.comp import coerce_amount
 from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
@@ -32,6 +33,8 @@ from ..models import (
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -164,6 +167,11 @@ class PersonioProvider(BaseProvider):
                         {"name": _text(jd.find("name")), "value": _text(jd.find("value"))}
                     )
                 out[tag] = sections
+            elif tag == "salaryInformation":
+                # Structured pay block: <min>/<max>/<currencyCode>/<type>. A nested element with no
+                # direct text, so the generic _text() below would silently drop it (personio was
+                # 6.7% salary despite handing us min/max/currency/interval for free).
+                out[tag] = {c.tag: _text(c) for c in child}
             else:
                 out[tag] = _text(child)
         return out
@@ -205,12 +213,37 @@ class PersonioProvider(BaseProvider):
             level=level_from_ats_vocab(p.get("seniority")),
             years_experience_min=ymin,
             years_experience_max=ymax,
-            salary=None,  # not exposed by the feed
+            salary=self._salary(p.get("salaryInformation")),
             posted_at=_parse_dt(p.get("createdAt")),
             description_html=description_html,
             description_text=description_text,
             raw=raw.payload,
         )
+
+    # Personio's <type> pay-period vocab -> canonical interval.
+    _INTERVAL_BY_TYPE: dict[str, SalaryInterval] = {
+        "yearly": SalaryInterval.YEAR,
+        "annual": SalaryInterval.YEAR,
+        "monthly": SalaryInterval.MONTH,
+        "weekly": SalaryInterval.WEEK,
+        "daily": SalaryInterval.DAY,
+        "hourly": SalaryInterval.HOUR,
+    }
+
+    @classmethod
+    def _salary(cls, info: Any) -> Salary | None:
+        """Salary from the structured ``<salaryInformation>`` block (``min``/``max``/
+        ``currencyCode``/``type``). Amounts arrive as strings ("34000.00"); ``coerce_amount``
+        handles them. Returns ``None`` when the block is absent or carries no amounts, so
+        ``enrich_in_place`` can still body-extract."""
+        if not isinstance(info, dict):
+            return None
+        lo, hi = coerce_amount(info.get("min")), coerce_amount(info.get("max"))
+        if lo is None and hi is None:
+            return None
+        currency = (info.get("currencyCode") or "").strip().upper() or None
+        interval = cls._INTERVAL_BY_TYPE.get((info.get("type") or "").strip().lower())
+        return Salary(min_amount=lo, max_amount=hi, currency=currency, interval=interval)
 
     @staticmethod
     def _descriptions_to_html(sections: Any) -> str | None:

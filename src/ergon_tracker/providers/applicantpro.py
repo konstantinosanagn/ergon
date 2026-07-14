@@ -19,12 +19,15 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import coerce_amount
 from ..models import (
     EmploymentType,
     JobPosting,
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -60,6 +63,34 @@ def _employment(value: str | None) -> EmploymentType:
     if not value:
         return EmploymentType.UNKNOWN
     return _EMPLOYMENT.get(value.strip().lower(), EmploymentType.UNKNOWN)
+
+
+# payTypeFrame ("per year"/"per hour"/…) -> canonical interval. payType ("Hourly"/"Salary") is a
+# coarser fallback.
+_PAY_FRAME: dict[str, SalaryInterval] = {
+    "per year": SalaryInterval.YEAR,
+    "per month": SalaryInterval.MONTH,
+    "per week": SalaryInterval.WEEK,
+    "per day": SalaryInterval.DAY,
+    "per hour": SalaryInterval.HOUR,
+}
+_PAY_TYPE: dict[str, SalaryInterval] = {
+    "salary": SalaryInterval.YEAR,
+    "hourly": SalaryInterval.HOUR,
+}
+
+
+def _salary(p: dict[str, Any]) -> Salary | None:
+    """Structured pay from the LIST payload (``minSalary``/``maxSalary``/``payTypeFrame``), which
+    applicantpro already hands us but ``normalize`` never read (source was 0% salary despite ~50-68%
+    of postings carrying it). Amounts arrive as numbers or numeric strings; ``coerce_amount`` handles
+    both. US ATS -> USD. Returns ``None`` with no amounts so enrich can body-extract."""
+    lo, hi = coerce_amount(p.get("minSalary")), coerce_amount(p.get("maxSalary"))
+    if lo is None and hi is None:
+        return None
+    frame = (p.get("payTypeFrame") or "").strip().lower()
+    interval = _PAY_FRAME.get(frame) or _PAY_TYPE.get((p.get("payType") or "").strip().lower())
+    return Salary(min_amount=lo, max_amount=hi, currency="USD", interval=interval)
 
 
 @register("applicantpro")
@@ -136,6 +167,7 @@ class ApplicantProProvider(BaseProvider):
             remote=RemoteType.UNKNOWN,
             employment_type=_employment(p.get("classification") or p.get("employmentType")),
             department=(p.get("orgTitle") or "").strip() or None,
+            salary=_salary(p),
             raw=p,
         )
 

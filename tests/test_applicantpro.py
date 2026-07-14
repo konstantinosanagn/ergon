@@ -31,6 +31,10 @@ _RESPONSE = {
                 "classification": "Full-Time",
                 "orgTitle": "Production",
                 "subdomain": "acme",
+                "minSalary": 76000,
+                "maxSalary": 92500,
+                "payType": "Salary",
+                "payTypeFrame": "per year",
             },
             {
                 "id": 4080525,
@@ -91,8 +95,15 @@ async def test_normalize_maps_fields() -> None:
     assert j0.department == "Production"
     assert j0.employment_type == EmploymentType.FULL_TIME
     assert j0.apply_url == "https://acme.applicantpro.com/jobs/4080524"
+    # structured pay from the list payload (minSalary/maxSalary/payTypeFrame)
+    from ergon_tracker.models import SalaryInterval
+
+    assert j0.salary is not None
+    assert j0.salary.min_amount == 76_000 and j0.salary.max_amount == 92_500
+    assert j0.salary.currency == "USD" and j0.salary.interval is SalaryInterval.YEAR
     j1 = ApplicantProProvider().normalize(raws[1])
     assert j1.employment_type == EmploymentType.PART_TIME
+    assert j1.salary is None  # no pay fields -> None (enrich can body-extract)
 
 
 async def test_empty_and_malformed_return_no_jobs() -> None:

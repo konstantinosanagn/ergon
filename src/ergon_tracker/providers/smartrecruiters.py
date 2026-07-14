@@ -182,13 +182,16 @@ class SmartRecruitersProvider(BaseProvider):
         )
         if not job_description or not isinstance(job_description, str):
             return None
-        qualifications_obj = sections.get("qualifications")
-        qualifications = (
-            qualifications_obj.get("text") if isinstance(qualifications_obj, dict) else None
-        )
         parts = [job_description]
-        if qualifications and isinstance(qualifications, str):
-            parts.append(qualifications)
+        # qualifications tends to carry degree/YOE language; additionalInformation is where US
+        # pay-transparency salary ranges sit ("The U.S. base salary range ... is $88,000 - $95,000")
+        # -- present in ~40% of US postings and previously dropped, so the enrich CompExtractor never
+        # saw them (SR was 5.7% salary despite the range being one section away in the SAME payload).
+        for section_key in ("qualifications", "additionalInformation"):
+            section_obj = sections.get(section_key)
+            text = section_obj.get("text") if isinstance(section_obj, dict) else None
+            if text and isinstance(text, str):
+                parts.append(text)
         return "\n".join(parts)
 
     def normalize(self, raw: RawJob) -> JobPosting:
