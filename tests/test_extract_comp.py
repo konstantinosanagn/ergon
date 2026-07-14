@@ -261,5 +261,31 @@ def test_salary_survives_financial_distractor() -> None:
 
 
 def test_million_salary_rejected_as_scale() -> None:
-    # Seven-figure "salary" is implausible per period — treat as a scale figure.
+    # Eight-figure-adjacent "salary" is implausible per period — treat as a scale figure.
     assert _run("Salary budget of $5,000,000 per year for the whole team.") is None
+
+
+# --- top-of-market comp (band ceiling raised 600k -> 2M) -----------------------
+# The old 600k annual ceiling silently rejected the whole range when its MAX cleared the cap.
+# These are real 2026 wages (Anthropic, Netflix staff, quant/HFT) and must now be captured.
+
+
+@pytest.mark.parametrize(
+    "text,lo,hi",
+    [
+        ("Annual Salary:\n$405,000 - $625,000 USD", 405_000, 625_000),  # Anthropic (was rejected)
+        ("The range for this role is $388,000.00 - $558,000.00.", 388_000, 558_000),  # Netflix
+        ("Total compensation range: $600,000 - $900,000 per year.", 600_000, 900_000),  # quant
+        ("Base salary $850,000 - $1,200,000 annually.", 850_000, 1_200_000),  # top HFT range
+    ],
+)
+def test_top_of_market_ranges_now_captured(text: str, lo: float, hi: float) -> None:
+    out = _run(text)
+    assert out is not None
+    assert out.min_amount == lo
+    assert out.max_amount == hi
+
+
+def test_above_two_million_still_rejected_as_scale() -> None:
+    # 2M/yr is the new ceiling: a range whose max clears it is a scale/budget figure, not a wage.
+    assert _run("Compensation pool of $2,500,000 - $3,000,000 per year.") is None

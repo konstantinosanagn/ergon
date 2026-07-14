@@ -69,7 +69,12 @@ _RETRYABLE_STATUS = {500, 502, 503, 504}
 # careers site on separate infra, so collapsing to the registrable domain creates a false
 # bottleneck (e.g. Oracle's 109 tenants all sharing one ``oraclecloud.com`` bucket) instead of
 # unblocking real parallel draining across tenants.
-_PER_TENANT_HOSTS = ("myworkdayjobs.com", "oraclecloud.com", "icims.com")
+# Eightfold is the same shape: every customer is served from ``{tenant}.eightfold.ai`` (list AND
+# ``/api/apply/v2/jobs/{id}`` detail), so collapsing to ``eightfold.ai`` made a single 429 from ONE
+# tenant trip the shared circuit breaker for ALL of them — measured 72% detail-fetch failure across
+# eightfold (morganstanley/netflix/…) in the drain. Per-host keying gives each tenant its own
+# bucket + breaker, mirroring the workday/oracle/icims carve-out.
+_PER_TENANT_HOSTS = ("myworkdayjobs.com", "oraclecloud.com", "icims.com", "eightfold.ai")
 # Shared backends with stricter limits than the default — (max_rate, period_seconds).
 # These always win over the constructor's per_host_rate. The workable/bamboohr/smartrecruiters
 # caps were added after a clustered crawl window threw a 2,181x-429 storm against them

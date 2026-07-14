@@ -178,7 +178,12 @@ _BANDS: dict[SalaryInterval, tuple[float, float]] = {
     SalaryInterval.DAY: (56, 3_000),
     SalaryInterval.WEEK: (280, 15_000),
     SalaryInterval.MONTH: (1_200, 60_000),
-    SalaryInterval.YEAR: (15_000, 600_000),
+    # Ceiling raised 600k -> 2M: the old cap silently rejected top-of-market ranges that are real
+    # wages in 2026 (Anthropic $405k-$625k, Netflix staff, quant/HFT total-comp ranges), because a
+    # range's MAX just clearing the cap killed the whole match. 2M/yr is still comfortably below
+    # company-scale figures, which are separately guarded by _MAGNITUDE (millions/M/B) and
+    # _FINANCIAL (funding/revenue/valuation) plus the currency+keyword positive anchor.
+    SalaryInterval.YEAR: (15_000, 2_000_000),
 }
 
 # Financial / corporate-scale context. A money mention sitting next to one of

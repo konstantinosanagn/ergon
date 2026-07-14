@@ -26,6 +26,15 @@ def test_oracle_and_icims_stay_per_tenant() -> None:
     assert _rate_key("careers-costco.icims.com") == "careers-costco.icims.com"
 
 
+def test_eightfold_stays_per_tenant() -> None:
+    # Every eightfold customer is served from its own ``{tenant}.eightfold.ai`` subdomain (list AND
+    # detail). Collapsing to ``eightfold.ai`` shared one circuit breaker across all tenants, so a
+    # single tenant's 429 tripped the breaker for every other tenant -> measured 72% detail-fetch
+    # failure in the drain. Per-tenant keying isolates each backend.
+    assert _rate_key("morganstanley.eightfold.ai") == "morganstanley.eightfold.ai"
+    assert _rate_key("marriott.eightfold.ai") == "marriott.eightfold.ai"
+
+
 def test_single_host_providers_unchanged() -> None:
     assert _rate_key("boards-api.greenhouse.io") == "greenhouse.io"
     assert _rate_key("api.lever.co") == "lever.co"
