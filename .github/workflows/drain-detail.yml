@@ -117,6 +117,13 @@ jobs:
             --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} --out dist
 
       - name: Upload shard sidecar artifact
+        # !cancelled() so a shard that FAILS mid-drain (e.g. the SR megahost shard hitting a runner
+        # resource wall after 100+ min) still uploads the sidecar it committed up to the failure --
+        # the drain writes per-window (det_con.commit in the loop), so that partial work is real and
+        # must not be thrown away. Safe to merge: merge_detail_shards is a prefer-freshest UPSERT
+        # keyed on fetched_at (an unpruned/partial shard's carried-over stale rows can never clobber
+        # another shard's fresher rows). Turns a hard shard failure into incremental progress.
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: detail-shard-${{ matrix.shard }}
