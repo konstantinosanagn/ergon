@@ -47,7 +47,7 @@ from urllib.parse import urlsplit
 
 import anyio
 
-from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -365,7 +365,7 @@ class WorkdayProvider(BaseProvider):
         except Exception:
             return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via the per-tenant cxs detail resource (Tier-3 recovery).
 
         The cxs URL is derived deterministically from ``ref.apply_url`` (falling back to
@@ -393,7 +393,24 @@ class WorkdayProvider(BaseProvider):
         job_description = job_posting_info.get("jobDescription")
         if not isinstance(job_description, str) or not job_description.strip():
             return None
-        return job_description
+        # The SAME cxs response carries a STRUCTURED location the list feed lacks (its `locationsText`
+        # is a "N Locations" placeholder for multi-location reqs). Return it so the merge fills the
+        # index row's NULL country -- Workday is ~44k of the whole index's country gap.
+        locations = self._cxs_locations(job_posting_info)
+        return DetailFetch(text=job_description, locations=locations) if locations else job_description
+
+    @staticmethod
+    def _cxs_locations(jpi: dict[str, Any]) -> list[Location]:
+        """Structured location from cxs ``jobPostingInfo``: the ``location`` display string plus the
+        authoritative ``country.descriptor`` (e.g. "United States of America", which normalize_geo
+        canonicalizes to "United States"). Returns ``[]`` when neither is present."""
+        country_obj = jpi.get("country")
+        country = country_obj.get("descriptor") if isinstance(country_obj, dict) else None
+        country = (country or "").strip() or None
+        loc_str = str(jpi.get("location") or "").strip() or None
+        if not loc_str and not country:
+            return []
+        return [Location(raw=loc_str or country or "", country=country)]
 
     # --- normalize ----------------------------------------------------------
 

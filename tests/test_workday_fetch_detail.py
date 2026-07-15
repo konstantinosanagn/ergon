@@ -204,3 +204,56 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
+
+
+def test_workday_fetch_detail_recovers_structured_location() -> None:
+    # The cxs response carries jobPostingInfo.country.descriptor (+ location string) even when the
+    # list feed only had a "N Locations" placeholder -> DetailFetch(text, locations) so the merge
+    # can fill the index row's NULL country (Workday is ~44k of the whole country gap).
+    from ergon_tracker.models import DetailFetch
+
+    payload = {
+        "jobPostingInfo": {
+            "jobDescription": "<p>Full JD.</p>",
+            "location": "Remote - USA",
+            "country": {"descriptor": "United States of America", "id": "bc33"},
+            "additionalLocations": ["Remote - Canada"],
+        }
+    }
+    ref = DetailRef(
+        id="1",
+        source="workday",
+        token=None,
+        apply_url="https://calix.wd1.myworkdayjobs.com/external/job/Remote---USA/Role_R-1",
+        listing_url=None,
+        content_sig="s",
+    )
+    res = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert res.text == "<p>Full JD.</p>"
+    assert res.locations and res.locations[0].country == "United States of America"
+    assert res.locations[0].raw == "Remote - USA"
+
+
+def test_workday_fetch_detail_no_location_stays_bare_str() -> None:
+    # No location/country in jobPostingInfo -> unchanged bare-str contract.
+    res = anyio.run(
+        lambda: WorkdayProvider().fetch_detail(
+            DetailRef(
+                id="1", source="workday", token=None,
+                apply_url="https://x.wd1.myworkdayjobs.com/s/job/L/R_1",
+                listing_url=None, content_sig="s",
+            ),
+            _FakeFetcher(_wd_payload("<p>JD only.</p>")),
+        )
+    )
+    assert res == "<p>JD only.</p>"
+
+
+def test_workday_cxs_locations_helper() -> None:
+    P = WorkdayProvider._cxs_locations
+    assert P({}) == []
+    assert P({"location": "Boston, MA"})[0].raw == "Boston, MA"
+    only_country = P({"country": {"descriptor": "Canada"}})
+    assert only_country[0].country == "Canada"
+    assert P({"country": "not-a-dict"}) == []
