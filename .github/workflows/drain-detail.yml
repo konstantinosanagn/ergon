@@ -30,8 +30,8 @@ on:
         description: "DRAIN-ONLY SmartRecruiters req/s (ERGON_SR_DETAIL_RATE). api.smartrecruiters.com detail probed clean to 76/s sustained (flat latency); 40 leaves wide margin. Crawl stays 3/s."
         default: "40"
       workable_detail_rate:
-        description: "DRAIN-ONLY Workable req/s (ERGON_WORKABLE_DETAIL_RATE). Widget detail clean at 8/s sustained + 146/s burst across 60 boards; 16 is a safe 2x (re-probe up if a run logs 0 429). Crawl stays 3/s."
-        default: "16"
+        description: "DRAIN-ONLY Workable req/s (ERGON_WORKABLE_DETAIL_RATE). LOWERED 16->4: at 16/s from a GitHub datacenter IP the finisher drain saw 87% failure (429 + gateway 5xx) -- Workable's edge WAF throttles datacenter IPs FAR harder than the residential probe (clean to 48/s) suggested. The daily LIST crawl proves 3/s is clean from the same IP; 4 keeps a hair of margin. Single-host + WAF => stay conservative regardless of a burst probe."
+        default: "4"
       rippling_detail_rate:
         description: "DRAIN-ONLY Rippling req/s (ERGON_RIPPLING_DETAIL_RATE). api.rippling.com probed clean to 49/s sustained (flat latency); 30 leaves margin. Default 5/s otherwise."
         default: "30"
