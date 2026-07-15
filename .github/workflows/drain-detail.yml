@@ -26,6 +26,9 @@ on:
       detail_concurrency:
         description: "Per-shard in-flight fetch concurrency (ERGON_DETAIL_CONCURRENCY). Politeness is unaffected -- enforced per-host by AsyncFetcher's token-bucket regardless of this figure."
         default: "50"
+      sr_detail_rate:
+        description: "DRAIN-ONLY SmartRecruiters req/s cap (ERGON_SR_DETAIL_RATE). Detail API probed clean at 10/s sustained; the daily crawl stays at 3/s. Lower it if SR ever 429-storms."
+        default: "10"
   # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
   # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
   # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
@@ -108,6 +111,12 @@ jobs:
         env:
           ERGON_DETAIL_CONCURRENCY: "${{ github.event.inputs.detail_concurrency || '50' }}"
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '200000' }}"
+          # DRAIN-ONLY SmartRecruiters rate raise 3 -> 10 req/s (see http._sr_rate_override). The
+          # detail API live-probed clean at 10/s sustained; at 3/s SR's 152k backlog is ~14h (never
+          # finishes one run), at 10/s it's ~4.2h (fits). Safe because this workflow shares
+          # build-index's concurrency group, so it NEVER runs while the daily list-crawl (which stays
+          # at the storm-safe 3/s because it doesn't set this env) is running.
+          ERGON_SR_DETAIL_RATE: "${{ github.event.inputs.sr_detail_rate || '10' }}"
         run: |
           if [ ! -f dist/index.sqlite ]; then
             echo "no prior index.sqlite available -- nothing to drain yet (first-ever run before build-index.yml has published once)"

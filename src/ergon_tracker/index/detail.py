@@ -98,6 +98,14 @@ def rate_key_for_host(host: str) -> str:
     return _rate_key(host)
 
 
+def _host_from_urls(apply_url: str | None, listing_url: str | None) -> str | None:
+    url = apply_url or listing_url
+    if not url:
+        return None
+    host = urlsplit(url).netloc
+    return host or None
+
+
 def _host_for_ref(ref: DetailRef) -> str | None:
     """Best-effort FETCH host a provider's ``fetch_detail`` would hit for this ref.
 
@@ -108,11 +116,14 @@ def _host_for_ref(ref: DetailRef) -> str | None:
     therefore correct for every registered source without needing per-provider knowledge here. A
     future provider whose ``fetch_detail`` hits a wholly different host would need this updated.
     """
-    url = ref.apply_url or ref.listing_url
-    if not url:
-        return None
-    host = urlsplit(url).netloc
-    return host or None
+    return _host_from_urls(ref.apply_url, ref.listing_url)
+
+
+def _rate_bucket_from_fields(source: str, apply_url: str | None, listing_url: str | None) -> str:
+    host = _host_from_urls(apply_url, listing_url)
+    if host:
+        return rate_key_for_host(host)
+    return f"source:{source}"  # no derivable URL -- bucket by source, still deterministic
 
 
 def _rate_bucket_for_ref(ref: DetailRef) -> str:
@@ -121,10 +132,7 @@ def _rate_bucket_for_ref(ref: DetailRef) -> str:
     string used both to shard candidates and, transitively, to key AsyncFetcher's own rate
     limiter, so a ref's shard assignment always matches the backend it will actually contend on.
     """
-    host = _host_for_ref(ref)
-    if host:
-        return rate_key_for_host(host)
-    return f"source:{ref.source}"  # no derivable URL -- bucket by source, still deterministic
+    return _rate_bucket_from_fields(ref.source, ref.apply_url, ref.listing_url)
 
 
 # Single shared-backend megahosts pinned to a FIXED shard number each, rather than left to the
@@ -180,19 +188,41 @@ _DETAIL_CONCURRENCY = int(os.environ.get("ERGON_DETAIL_CONCURRENCY", "24"))  # w
 _JOBS_COLUMNS = "id, source, board_token, apply_url, listing_url, content_hash"
 
 
-def _tier3_rows(idx_con: sqlite3.Connection, sources: Sequence[str] | None) -> list[dict[str, Any]]:
+def _tier3_rows(
+    idx_con: sqlite3.Connection,
+    sources: Sequence[str] | None,
+    shard: int | None = None,
+    num_shards: int | None = None,
+) -> list[dict[str, Any]]:
     """Index rows lacking a recovered JD (Tier-3 candidates), optionally restricted to ``sources``.
 
     The real ``jobs`` schema never stores the full description (discard-after-extract), so ``snippet``
     is the real-column signal for "no JD captured yet": list-only sources have an empty snippet until a
     detail fetch + ``merge_detail_into_index`` populates one, which is what makes the drain converge
-    (a fetched+merged row gains a snippet and drops out of this candidate set)."""
+    (a fetched+merged row gains a snippet and drops out of this candidate set).
+
+    When ``shard``/``num_shards`` are given, the shard predicate is pushed DOWN INTO SQL (via a
+    registered ``_shard_of_row`` function that reuses the exact ``_rate_bucket_from_fields`` +
+    ``_shard_of`` logic) so each of the 20 matrix jobs materializes ONLY its ~1/20th of candidates
+    instead of the full ~1M-row Tier-3 set. Previously every shard did ``fetchall()`` on all ~1M
+    rows and filtered in Python -- ~1GB of dicts held for the shard's whole (multi-hour) lifetime,
+    the likely trigger of the SR megahost shard's late OOM. The caller still re-checks
+    ``_ref_in_shard`` as a cheap belt-and-suspenders on the (now small) result."""
     sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE (snippet IS NULL OR TRIM(snippet) = '')"
     params: list[Any] = []
     if sources:
         placeholders = ",".join("?" for _ in sources)
         sql += f" AND source IN ({placeholders})"
         params.extend(sources)
+    if num_shards is not None:
+        n = num_shards
+
+        def _shard_of_row(source: Any, apply_url: Any, listing_url: Any) -> int:
+            return _shard_of(_rate_bucket_from_fields(source or "", apply_url, listing_url), n)
+
+        idx_con.create_function("_shard_of_row", 3, _shard_of_row, deterministic=True)
+        sql += " AND _shard_of_row(source, apply_url, listing_url) = ?"
+        params.append(shard)
     idx_con.row_factory = sqlite3.Row
     return [dict(r) for r in idx_con.execute(sql, params).fetchall()]
 
@@ -534,7 +564,15 @@ async def reconcile_detail_tier(
     try:
         idx_con = sqlite3.connect(index_path)
         try:
-            tier3_rows = _tier3_rows(idx_con, sources)
+            # Push the shard predicate into SQL so a matrix job loads only ITS ~1/20th of the ~1M
+            # Tier-3 candidates (not all of them) -- the memory fix. `None,None` keeps the original
+            # unsharded path byte-identical.
+            tier3_rows = _tier3_rows(
+                idx_con,
+                sources,
+                shard=shard_i if sharded else None,
+                num_shards=num_shards_i if sharded else None,
+            )
         finally:
             idx_con.close()
 
@@ -543,6 +581,8 @@ async def reconcile_detail_tier(
         candidates = [ref for ref in all_refs if _eligible(ref.id, ref.content_sig, existing)]
 
         if sharded:
+            # Belt-and-suspenders: the SQL filter above already restricted to this shard; re-checking
+            # in Python guards against any SQL/Python drift and is cheap now (operates on ~50k, not 1M).
             candidates = [c for c in candidates if _ref_in_shard(c, shard_i, num_shards_i)]
 
         interleaved = _interleave_by_source(candidates)

@@ -346,3 +346,59 @@ def test_reconcile_shard_requires_both_shard_and_num_shards(tmp_path):
                 det, idx, fetch_detail=fake, now=lambda: "t", shard=4, num_shards=4
             )
         )
+
+
+# --- shard predicate pushed into SQL (memory fix) must equal the Python assignment ---------------
+
+
+def test_tier3_rows_sql_shard_filter_equals_python_ref_in_shard(tmp_path):
+    """_tier3_rows(shard=k, num_shards=N) must return EXACTLY the candidates _ref_in_shard assigns
+    to shard k -- the SQL push-down (which lets each matrix job load only its ~1/20th instead of all
+    ~1M rows) has to be byte-identical to the in-Python assignment, or the drain would silently
+    drop/double-count candidates."""
+    from ergon_tracker.index.detail import _tier3_rows
+
+    SOURCES = ["smartrecruiters", "workday", "oracle", "icims", "workable", "eightfold", "rippling"]
+    samples = [
+        ("smartrecruiters", "https://jobs.smartrecruiters.com/acme/1"),
+        ("smartrecruiters", "https://jobs.smartrecruiters.com/beta/2"),
+        ("workday", "https://nvidia.wd5.myworkdayjobs.com/x/job/1"),
+        ("workday", "https://salesforce.wd12.myworkdayjobs.com/y/job/2"),
+        ("oracle", "https://foo.oraclecloud.com/job/1"),
+        ("icims", "https://careers-costco.icims.com/jobs/1"),
+        ("workable", "https://apply.workable.com/j/ABC"),
+        ("eightfold", "https://citi.eightfold.ai/careers/job/1"),
+        ("eightfold", "https://marriott.eightfold.ai/careers/job/2"),
+        ("rippling", "https://ats.rippling.com/acme/jobs/u1"),
+        ("rippling", None),  # no url -> source bucket fallback
+    ]
+    rows = [
+        (str(i), src, None, url, None, f"h{i}", None)
+        for i, (src, url) in enumerate(samples * 12)
+    ]
+    con = sqlite3.connect(tmp_path / "idx.sqlite")
+    con.execute(
+        "CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
+        "listing_url TEXT, content_hash TEXT, snippet TEXT)"
+    )
+    con.executemany(
+        "INSERT INTO jobs (id,source,board_token,apply_url,listing_url,content_hash,snippet) "
+        "VALUES (?,?,?,?,?,?,?)",
+        rows,
+    )
+    con.commit()
+
+    n = 20
+    union: set[str] = set()
+    for shard in range(n):
+        sql_ids = {r["id"] for r in _tier3_rows(con, SOURCES, shard=shard, num_shards=n)}
+        py_ids = {
+            rid
+            for (rid, src, _bt, url, _lu, _ch, _sn) in rows
+            if _ref_in_shard(_ref(rid, src, url), shard, n)
+        }
+        assert sql_ids == py_ids, f"shard {shard}: SQL {sql_ids} != Python {py_ids}"
+        assert union.isdisjoint(sql_ids)  # no candidate on two shards
+        union |= sql_ids
+    assert len(union) == len(rows)  # every candidate landed on exactly one shard
+    con.close()

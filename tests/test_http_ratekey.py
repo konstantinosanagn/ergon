@@ -236,3 +236,36 @@ def test_repeated_5xx_still_trips_circuit_breaker() -> None:
                 await fetcher.get_json("https://down.test/x")
 
     anyio.run(main)
+
+
+def test_sr_detail_rate_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # DRAIN-ONLY: ERGON_SR_DETAIL_RATE raises the smartrecruiters.com cap for THIS process only
+    # (the drain sets it; the daily list-crawl never does, so the crawl stays at the safe 3/s).
+    import importlib
+
+    import ergon_tracker.http as http_mod
+
+    monkeypatch.setenv("ERGON_SR_DETAIL_RATE", "10")
+    try:
+        importlib.reload(http_mod)
+        assert http_mod._DOMAIN_RATE_OVERRIDES["smartrecruiters.com"] == (10.0, 1.0)
+    finally:
+        monkeypatch.delenv("ERGON_SR_DETAIL_RATE", raising=False)
+        importlib.reload(http_mod)
+    # default (no env) stays at the conservative crawl-safe rate
+    assert http_mod._DOMAIN_RATE_OVERRIDES["smartrecruiters.com"] == (3.0, 1.0)
+
+
+def test_sr_detail_rate_ignores_bad_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+
+    import ergon_tracker.http as http_mod
+
+    for bad in ("", "abc", "-5", "0"):
+        monkeypatch.setenv("ERGON_SR_DETAIL_RATE", bad)
+        try:
+            importlib.reload(http_mod)
+            assert http_mod._DOMAIN_RATE_OVERRIDES["smartrecruiters.com"] == (3.0, 1.0)
+        finally:
+            monkeypatch.delenv("ERGON_SR_DETAIL_RATE", raising=False)
+            importlib.reload(http_mod)

@@ -90,6 +90,32 @@ _DOMAIN_RATE_OVERRIDES: dict[str, tuple[float, float]] = {
     "applicantpro.com": (3.0, 1.0),  # small-tenant ATS; keep the public list endpoint polite
     "adp.com": (1.0, 6.0),  # ADP WFN soft-blocks (404/503) on bursts; ~1 req/6s is the safe rate
 }
+
+
+def _sr_rate_override() -> None:
+    """DRAIN-ONLY raise of the SmartRecruiters cap via ``ERGON_SR_DETAIL_RATE`` (req/s).
+
+    The default 3/s smartrecruiters.com cap was set after a *sustained crawl storm* on the LIST
+    endpoint. The DETAIL API is a different backend that live-probed clean at 10/s sustained (250
+    reqs, 0x 429) and 46/s in burst, so the Tier-3 drain leaves ~14h of throughput on the table.
+    The cap is domain-wide, though — shared with the daily list-crawl that stormed — so we DON'T
+    raise it globally. Instead the drain workflow (which shares build-index's concurrency group, so
+    it never runs at the same time as the crawl) sets ERGON_SR_DETAIL_RATE, and only then does the
+    smartrecruiters.com cap rise for that process. The crawl process never sets it -> stays 3/s ->
+    zero storm-risk regression.
+    """
+    raw = os.environ.get("ERGON_SR_DETAIL_RATE")
+    if not raw:
+        return
+    try:
+        rate = float(raw)
+    except ValueError:
+        return
+    if rate > 0:
+        _DOMAIN_RATE_OVERRIDES["smartrecruiters.com"] = (rate, 1.0)
+
+
+_sr_rate_override()
 # Two-level public suffixes, so the registrable domain is computed correctly.
 _TWO_LEVEL_TLDS = {
     "co.uk",
