@@ -286,3 +286,31 @@ def test_workable_detail_rate_override_env(monkeypatch: pytest.MonkeyPatch) -> N
         monkeypatch.delenv("ERGON_WORKABLE_DETAIL_RATE", raising=False)
         importlib.reload(http_mod)
     assert http_mod._DOMAIN_RATE_OVERRIDES["workable.com"] == (3.0, 1.0)  # crawl-safe default
+
+
+def test_all_drain_rate_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every _DRAIN_RATE_ENV mapping raises its domain's cap DRAIN-ONLY (drain sets the env; the
+    # daily crawl never does -> defaults hold). Covers rippling/join/bamboohr added after the
+    # capacity probes, alongside SR/workable.
+    import importlib
+
+    import ergon_tracker.http as http_mod
+
+    cases = {
+        "ERGON_RIPPLING_DETAIL_RATE": ("rippling.com", 16.0),
+        "ERGON_JOIN_DETAIL_RATE": ("join.com", 10.0),
+        "ERGON_BAMBOOHR_DETAIL_RATE": ("bamboohr.com", 6.0),
+    }
+    for env, (domain, rate) in cases.items():
+        monkeypatch.setenv(env, str(rate))
+        try:
+            importlib.reload(http_mod)
+            assert http_mod._DOMAIN_RATE_OVERRIDES[domain] == (rate, 1.0)
+        finally:
+            monkeypatch.delenv(env, raising=False)
+            importlib.reload(http_mod)
+    # bamboohr keeps its crawl-safe 3/s default when the drain env is absent; rippling/join have
+    # no base override (fall through to the AsyncFetcher default, i.e. not in the dict).
+    assert http_mod._DOMAIN_RATE_OVERRIDES["bamboohr.com"] == (3.0, 1.0)
+    assert "rippling.com" not in http_mod._DOMAIN_RATE_OVERRIDES
+    assert "join.com" not in http_mod._DOMAIN_RATE_OVERRIDES

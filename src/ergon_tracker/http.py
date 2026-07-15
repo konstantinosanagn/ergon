@@ -99,9 +99,16 @@ _DOMAIN_RATE_OVERRIDES: dict[str, tuple[float, float]] = {
 # build-index's concurrency group and thus NEVER runs while the crawl does -- sets these env vars,
 # and only then does the cap rise for that process. The crawl process never sets them -> stays at the
 # conservative default -> zero storm-risk regression.
+# Each mapping's DETAIL endpoint was capacity-probed (escalating sustained bursts, stop-on-429):
+# SR 10/s, workable 8/s, rippling 16/s (clean to 24), join 10/s (clean to 17 but 22-hop redirect
+# amplification + ~7/s latency-bound), bamboohr 6/s (its /careers/{id}/detail JSON is a different
+# backend than the /careers/list crawl that set the 3/s cap). All far above their crawl-era caps.
 _DRAIN_RATE_ENV: dict[str, str] = {
     "ERGON_SR_DETAIL_RATE": "smartrecruiters.com",
     "ERGON_WORKABLE_DETAIL_RATE": "workable.com",
+    "ERGON_RIPPLING_DETAIL_RATE": "rippling.com",
+    "ERGON_JOIN_DETAIL_RATE": "join.com",
+    "ERGON_BAMBOOHR_DETAIL_RATE": "bamboohr.com",
 }
 
 

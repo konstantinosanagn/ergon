@@ -24,14 +24,23 @@ on:
         description: "Per-shard Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Big by design -- each shard should drain its ENTIRE slice in one run, not a small window."
         default: "200000"
       detail_concurrency:
-        description: "Per-shard in-flight fetch concurrency (ERGON_DETAIL_CONCURRENCY). Politeness is unaffected -- enforced per-host by AsyncFetcher's token-bucket regardless of this figure."
-        default: "50"
+        description: "Per-shard in-flight fetch concurrency (ERGON_DETAIL_CONCURRENCY). 50->80: the per-tenant giants (workday 2224 hosts/shard etc.) are global-concurrency-bound ~10x below per-host politeness. Watch inline-enrich CPU before going to 100. Politeness unaffected (per-host token-bucket)."
+        default: "80"
       sr_detail_rate:
         description: "DRAIN-ONLY SmartRecruiters req/s cap (ERGON_SR_DETAIL_RATE). Detail API probed clean at 10/s sustained; the daily crawl stays at 3/s. Lower it if SR ever 429-storms."
         default: "10"
       workable_detail_rate:
         description: "DRAIN-ONLY Workable req/s cap (ERGON_WORKABLE_DETAIL_RATE). Widget/detail API probed clean at 8/s sustained across 60 boards; the daily crawl stays at 3/s. Lower it if Workable 429-storms."
         default: "8"
+      rippling_detail_rate:
+        description: "DRAIN-ONLY Rippling req/s cap (ERGON_RIPPLING_DETAIL_RATE). api.rippling.com probed clean to 24/s; 16 is the conservative pick. Default 5/s otherwise."
+        default: "16"
+      join_detail_rate:
+        description: "DRAIN-ONLY Join req/s cap (ERGON_JOIN_DETAIL_RATE). join.com probed clean to 17/s but has 22-hop redirect amplification -> conservative 10/s. Default 5/s otherwise."
+        default: "10"
+      bamboohr_detail_rate:
+        description: "DRAIN-ONLY BambooHR req/s cap (ERGON_BAMBOOHR_DETAIL_RATE). The /careers/{id}/detail JSON probed clean to 16/s; 6 is a safe 2x. The daily LIST crawl stays pinned at 3/s."
+        default: "6"
   # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
   # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
   # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
@@ -112,7 +121,7 @@ jobs:
 
       - name: Drain shard ${{ matrix.shard }} of ${{ env.NUM_SHARDS }}
         env:
-          ERGON_DETAIL_CONCURRENCY: "${{ github.event.inputs.detail_concurrency || '50' }}"
+          ERGON_DETAIL_CONCURRENCY: "${{ github.event.inputs.detail_concurrency || '80' }}"
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '200000' }}"
           # DRAIN-ONLY SmartRecruiters rate raise 3 -> 10 req/s (see http._sr_rate_override). The
           # detail API live-probed clean at 10/s sustained; at 3/s SR's 152k backlog is ~14h (never
@@ -124,6 +133,12 @@ jobs:
           # widget/detail API probed clean at 8/s sustained across 60 distinct boards (0x 429); the
           # 3/s default was for the list-crawl storm. Same concurrency-group safety as SR above.
           ERGON_WORKABLE_DETAIL_RATE: "${{ github.event.inputs.workable_detail_rate || '8' }}"
+          # More single-host detail sources raised drain-only after capacity probes (see
+          # http._DRAIN_RATE_ENV). Each is far below its probed 429 ceiling; the daily crawl never
+          # sets these envs so its rate is unchanged.
+          ERGON_RIPPLING_DETAIL_RATE: "${{ github.event.inputs.rippling_detail_rate || '16' }}"
+          ERGON_JOIN_DETAIL_RATE: "${{ github.event.inputs.join_detail_rate || '10' }}"
+          ERGON_BAMBOOHR_DETAIL_RATE: "${{ github.event.inputs.bamboohr_detail_rate || '6' }}"
         run: |
           if [ ! -f dist/index.sqlite ]; then
             echo "no prior index.sqlite available -- nothing to drain yet (first-ever run before build-index.yml has published once)"
