@@ -99,21 +99,27 @@ _DOMAIN_RATE_OVERRIDES: dict[str, tuple[float, float]] = {
 # build-index's concurrency group and thus NEVER runs while the crawl does -- sets these env vars,
 # and only then does the cap rise for that process. The crawl process never sets them -> stays at the
 # conservative default -> zero storm-risk regression.
-# Each mapping's DETAIL endpoint was capacity-probed (escalating sustained bursts, stop-on-429):
-# SR 10/s, workable 8/s, rippling 16/s (clean to 24), join 10/s (clean to 17 but 22-hop redirect
-# amplification + ~7/s latency-bound), bamboohr 6/s (its /careers/{id}/detail JSON is a different
-# backend than the /careers/list crawl that set the 3/s cap). All far above their crawl-era caps.
-_DRAIN_RATE_ENV: dict[str, str] = {
-    "ERGON_SR_DETAIL_RATE": "smartrecruiters.com",
-    "ERGON_WORKABLE_DETAIL_RATE": "workable.com",
-    "ERGON_RIPPLING_DETAIL_RATE": "rippling.com",
-    "ERGON_JOIN_DETAIL_RATE": "join.com",
-    "ERGON_BAMBOOHR_DETAIL_RATE": "bamboohr.com",
+# Every single-host detail endpoint here was capacity-probed with escalating SUSTAINED bursts to the
+# actual 429 knee (not the earlier stop-on-first-429 floor): SR clean to 76/s, rippling to 49/s,
+# bamboohr to 30/s -- ALL flat-latency, no throttle. Their detail backend is a different (CDN-fronted)
+# origin than the LIST-crawl that set the tiny 3-5/s caps. So the drain caps are set aggressively
+# (well within the probed-clean range, with the graceful-429 backoff -- Retry-After honored, 429s
+# excluded from the breaker -- as the safety net). join stays modest: it's latency-bound at ~7/s
+# actual by its 22-hop redirect chains, so a higher token cap changes nothing. Each value maps to
+# one-or-more registrable domains (ukg spans ultipro.com + ukg.net).
+_DRAIN_RATE_ENV: dict[str, tuple[str, ...]] = {
+    "ERGON_SR_DETAIL_RATE": ("smartrecruiters.com",),
+    "ERGON_WORKABLE_DETAIL_RATE": ("workable.com",),
+    "ERGON_RIPPLING_DETAIL_RATE": ("rippling.com",),
+    "ERGON_JOIN_DETAIL_RATE": ("join.com",),
+    "ERGON_BAMBOOHR_DETAIL_RATE": ("bamboohr.com",),
+    "ERGON_JOBVITE_DETAIL_RATE": ("jobvite.com",),
+    "ERGON_UKG_DETAIL_RATE": ("ultipro.com", "ukg.net"),
 }
 
 
 def _apply_drain_rate_overrides() -> None:
-    for env, domain in _DRAIN_RATE_ENV.items():
+    for env, domains in _DRAIN_RATE_ENV.items():
         raw = os.environ.get(env)
         if not raw:
             continue
@@ -122,7 +128,8 @@ def _apply_drain_rate_overrides() -> None:
         except ValueError:
             continue
         if rate > 0:
-            _DOMAIN_RATE_OVERRIDES[domain] = (rate, 1.0)
+            for domain in domains:
+                _DOMAIN_RATE_OVERRIDES[domain] = (rate, 1.0)
 
 
 _apply_drain_rate_overrides()

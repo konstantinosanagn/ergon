@@ -297,15 +297,18 @@ def test_all_drain_rate_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     import ergon_tracker.http as http_mod
 
     cases = {
-        "ERGON_RIPPLING_DETAIL_RATE": ("rippling.com", 16.0),
-        "ERGON_JOIN_DETAIL_RATE": ("join.com", 10.0),
-        "ERGON_BAMBOOHR_DETAIL_RATE": ("bamboohr.com", 6.0),
+        "ERGON_RIPPLING_DETAIL_RATE": (("rippling.com",), 30.0),
+        "ERGON_JOIN_DETAIL_RATE": (("join.com",), 12.0),
+        "ERGON_BAMBOOHR_DETAIL_RATE": (("bamboohr.com",), 20.0),
+        "ERGON_JOBVITE_DETAIL_RATE": (("jobvite.com",), 20.0),
+        "ERGON_UKG_DETAIL_RATE": (("ultipro.com", "ukg.net"), 10.0),  # one env -> two buckets
     }
-    for env, (domain, rate) in cases.items():
+    for env, (domains, rate) in cases.items():
         monkeypatch.setenv(env, str(rate))
         try:
             importlib.reload(http_mod)
-            assert http_mod._DOMAIN_RATE_OVERRIDES[domain] == (rate, 1.0)
+            for domain in domains:
+                assert http_mod._DOMAIN_RATE_OVERRIDES[domain] == (rate, 1.0)
         finally:
             monkeypatch.delenv(env, raising=False)
             importlib.reload(http_mod)
