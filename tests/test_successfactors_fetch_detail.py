@@ -146,3 +146,23 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher("<html></html>")))
     assert desc is None
+
+
+def test_microdata_locations_structured_and_string_variants() -> None:
+    from selectolax.parser import HTMLParser
+    from ergon_tracker.providers.successfactors import SuccessFactorsProvider as SF
+
+    struct = HTMLParser(
+        '<div itemprop="jobLocation"><div itemprop="address">'
+        '<meta itemprop="addressLocality" content="CABA">'
+        '<meta itemprop="addressRegion" content="B">'
+        '<meta itemprop="addressCountry" content="AR"></div></div>'
+    )
+    locs = SF._microdata_locations(struct)
+    assert locs[0].city == "CABA" and locs[0].country == "AR"
+    string = HTMLParser(
+        '<div itemprop="jobLocation"><div itemprop="address">'
+        '<meta itemprop="streetAddress" content="Auckland, NZ, 1010"></div></div>'
+    )
+    assert SF._microdata_locations(string)[0].raw == "Auckland, NZ, 1010"
+    assert SF._microdata_locations(HTMLParser("<div>no microdata</div>")) == []

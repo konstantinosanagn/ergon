@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
-from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -232,7 +232,7 @@ class OracleProvider(BaseProvider):
         except Exception:
             return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via the per-requisition ORC details resource (Tier-3
         recovery). The URL+params are derived deterministically from ``ref.apply_url`` (falling
         back to ``ref.listing_url``) -- see :meth:`_detail_request`. Like the list endpoint, the
@@ -265,4 +265,14 @@ class OracleProvider(BaseProvider):
             value = item.get(key)
             if isinstance(value, str) and value.strip():
                 parts.append(value)
-        return "\n".join(parts)
+        text = "\n".join(parts)
+        # The detail resource adds location the list feed lacks: PrimaryLocation (string, e.g.
+        # "Orlando, FL, United States") + PrimaryLocationCountry (ISO-2, "US"). Both geo-resolve
+        # (raw "…, United States" / ISO-2 -> country); return them so the merge fills NULL country.
+        loc_str = str(item.get("PrimaryLocation") or "").strip() or None
+        country = str(item.get("PrimaryLocationCountry") or "").strip() or None
+        if loc_str or country:
+            return DetailFetch(
+                text=text, locations=[Location(raw=loc_str or country or "", country=country)]
+            )
+        return text

@@ -255,3 +255,20 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
+
+
+def test_oracle_fetch_detail_recovers_structured_location() -> None:
+    from ergon_tracker.models import DetailFetch
+
+    payload = _orc_payload("<p>JD.</p>", None, None)
+    payload["items"][0]["PrimaryLocation"] = "Orlando, FL, United States"
+    payload["items"][0]["PrimaryLocationCountry"] = "US"
+    ref = DetailRef(
+        id="1", source="oracle", token=None,
+        apply_url="https://ehac.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/R1",
+        listing_url=None, content_sig="s",
+    )
+    res = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert res.locations[0].raw == "Orlando, FL, United States"
+    assert res.locations[0].country == "US"

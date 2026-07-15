@@ -123,3 +123,18 @@ def test_base_fetch_detail_is_none() -> None:
     ref = _ref()
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher("<html></html>")))
     assert desc is None
+
+
+def test_fetch_detail_recovers_jsonld_location() -> None:
+    from ergon_tracker.models import DetailFetch
+
+    page = (
+        "<html><body><div class='job-description'>" + ("Full JD body. " * 40) + "</div>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","jobLocation":[{"@type":"Place","address":{'
+        '"addressLocality":"Eden Prairie","addressRegion":"Minnesota",'
+        '"addressCountry":"United States"}}]}</script></body></html>'
+    )
+    res = anyio.run(lambda: RadancyProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.locations[0].city == "Eden Prairie" and res.locations[0].country == "United States"

@@ -147,10 +147,19 @@ class RipplingProvider(BaseProvider):
             text = None
         if text is None:
             return None
-        # The SAME detail response carries a STRUCTURED pay array (payRangeDetails) alongside the
-        # JD body -- return it so the reconcile prefers it over re-parsing pay from prose.
+        # The SAME detail response carries a STRUCTURED pay array (payRangeDetails) and a location
+        # STRING list (workLocations, e.g. ["London, United Kingdom"] -- note the DETAIL uses the
+        # plural, unlike the list view's workLocation.label). Return both so the reconcile prefers
+        # the structured pay and the merge fills the index row's NULL country (geo derives it).
         salary = self._salary_from_payrange(data.get("payRangeDetails"))
-        return DetailFetch(text=text, salary=salary) if salary is not None else text
+        locations = [
+            Location(raw=s.strip())
+            for s in (data.get("workLocations") or [])
+            if isinstance(s, str) and s.strip()
+        ]
+        if salary is not None or locations:
+            return DetailFetch(text=text, salary=salary, locations=locations or None)
+        return text
 
     # Rippling's payRangeDetails.frequency vocab -> canonical interval (values seen upper-case).
     _INTERVAL_BY_FREQUENCY: dict[str, SalaryInterval] = {

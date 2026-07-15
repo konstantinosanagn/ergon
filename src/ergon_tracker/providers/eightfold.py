@@ -62,6 +62,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from ..models import (
+    DetailFetch,
     EmploymentType,
     JobPosting,
     Location,
@@ -318,7 +319,7 @@ class EightfoldProvider(BaseProvider):
             return token.strip().lower()
         return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via the per-tenant detail resource (Tier-3 recovery).
 
         ``{id}`` is the trailing path segment of ``ref.apply_url`` (shape
@@ -354,6 +355,12 @@ class EightfoldProvider(BaseProvider):
         job_description = data.get("job_description")
         if not isinstance(job_description, str) or not job_description.strip():
             return None
+        # The detail response also carries a location STRING ("Phoenix, AZ USA 85040" / "USA -
+        # Remote"); build a raw Location and let enrich's geo derive the country (fills the index
+        # row's NULL country). Format is inconsistent so no safe structured city/region split.
+        loc = data.get("location")
+        if isinstance(loc, str) and loc.strip():
+            return DetailFetch(text=job_description, locations=[Location(raw=loc.strip())])
         return job_description
 
     def normalize(self, raw: RawJob) -> JobPosting:

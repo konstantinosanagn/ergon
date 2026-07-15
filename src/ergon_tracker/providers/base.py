@@ -16,7 +16,7 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast, runtime_checkable
 
-from ..models import DetailFetch, JobPosting, RawJob, SearchQuery
+from ..models import DetailFetch, JobPosting, Location, RawJob, SearchQuery
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
@@ -187,6 +187,27 @@ class BaseProvider:
             for item in items:
                 if isinstance(item, dict) and item.get("@type") in ("JobPosting", ["JobPosting"]):
                     out.append(item)
+        return out
+
+    @staticmethod
+    def jsonld_locations(job_location: Any) -> list[Location]:
+        """schema.org ``jobLocation`` -> ``Location`` list. Accepts a single ``Place`` or a list;
+        reads ``address.{addressLocality,addressRegion,addressCountry}``. Skips entries with no
+        usable field. Shared by every provider whose detail page carries JSON-LD (jobvite/radancy/…)
+        so the reconcile can fill the index row's NULL city/country."""
+        entries = job_location if isinstance(job_location, list) else [job_location]
+        out: list[Location] = []
+        for entry in entries:
+            addr = entry.get("address") if isinstance(entry, dict) else None
+            if not isinstance(addr, dict):
+                continue
+            city = (addr.get("addressLocality") or "").strip() or None
+            region = (addr.get("addressRegion") or "").strip() or None
+            country = (addr.get("addressCountry") or "").strip() or None
+            if not any((city, region, country)):
+                continue
+            raw = ", ".join(p for p in (city, region, country) if p)
+            out.append(Location(raw=raw, city=city, region=region, country=country))
         return out
 
 

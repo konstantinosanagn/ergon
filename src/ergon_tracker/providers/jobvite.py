@@ -169,31 +169,11 @@ class JobviteProvider(BaseProvider):
         for job in self.extract_jsonld_jobs(html):
             description = job.get("description")
             if isinstance(description, str) and description.strip():
-                locations = self._jsonld_locations(job.get("jobLocation"))
+                locations = self.jsonld_locations(job.get("jobLocation"))  # shared BaseProvider helper
                 if locations:
                     return DetailFetch(text=description, locations=locations)
                 return description
         return None
-
-    @staticmethod
-    def _jsonld_locations(job_location: object) -> list[Location]:
-        """schema.org ``jobLocation`` -> ``Location`` list. Accepts a single Place or a list; reads
-        ``address.{addressLocality,addressRegion,addressCountry}``. Skips entries with no usable
-        field (a bare Remote place with only a country still yields a country -> resolvable)."""
-        entries = job_location if isinstance(job_location, list) else [job_location]
-        out: list[Location] = []
-        for entry in entries:
-            addr = entry.get("address") if isinstance(entry, dict) else None
-            if not isinstance(addr, dict):
-                continue
-            city = (addr.get("addressLocality") or "").strip() or None
-            region = (addr.get("addressRegion") or "").strip() or None
-            country = (addr.get("addressCountry") or "").strip() or None
-            if not any((city, region, country)):
-                continue
-            raw = ", ".join(p for p in (city, region, country) if p)
-            out.append(Location(raw=raw, city=city, region=region, country=country))
-        return out
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

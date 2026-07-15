@@ -142,7 +142,26 @@ class BambooHRProvider(BaseProvider):
             return None
         comp = opening.get("compensation")
         salary = parse_salary(comp) if isinstance(comp, str) else None
-        return DetailFetch(text=description, salary=salary) if salary is not None else description
+        locations = self._detail_location(opening)
+        if salary is not None or locations:
+            return DetailFetch(text=description, salary=salary, locations=locations or None)
+        return description
+
+    @staticmethod
+    def _detail_location(opening: dict[str, Any]) -> list[Location]:
+        """Structured location from the detail ``jobOpening`` — prefer ``location`` (carries
+        ``addressCountry``); fall back to ``atsLocation``. Fills the index row's NULL city/country."""
+        for key, ckey in (("location", "addressCountry"), ("atsLocation", "country")):
+            loc = opening.get(key)
+            if not isinstance(loc, dict):
+                continue
+            city = (loc.get("city") or "").strip() or None
+            region = (loc.get("state") or loc.get("province") or "").strip() or None
+            country = (loc.get(ckey) or "").strip() or None
+            if any((city, region, country)):
+                raw = ", ".join(p for p in (city, region, country) if p)
+                return [Location(raw=raw, city=city, region=region, country=country)]
+        return []
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

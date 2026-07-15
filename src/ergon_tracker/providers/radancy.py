@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 from selectolax.parser import HTMLParser
 
-from ..models import JobPosting, Location, RawJob, RemoteType
+from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -175,7 +175,7 @@ class RadancyProvider(BaseProvider):
             )
         return out
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via its own CMS-rendered detail page (Tier-3 recovery).
 
         Verified by recon (7/7 live tenants): the Radancy ``apply_url``/``listing_url`` (built by
@@ -198,20 +198,33 @@ class RadancyProvider(BaseProvider):
         if not isinstance(html, str) or not html.strip():
             return None
         tree = HTMLParser(html)
+        text: str | None = None
         for selector in self._DETAIL_SELECTORS:
             node = tree.css_first(selector)
             if node is None:
                 continue
-            text = node.text(separator=" ", strip=True)
-            if len(text) >= self._DETAIL_MIN_LEN:
-                return node.html or text
-        body = tree.body
-        page_text = (
-            body.text(separator=" ", strip=True)
-            if body is not None
-            else tree.text(separator=" ", strip=True)
-        )
-        return page_text or None
+            chunk = node.text(separator=" ", strip=True)
+            if len(chunk) >= self._DETAIL_MIN_LEN:
+                text = node.html or chunk
+                break
+        if text is None:
+            body = tree.body
+            text = (
+                body.text(separator=" ", strip=True)
+                if body is not None
+                else tree.text(separator=" ", strip=True)
+            ) or None
+        if text is None:
+            return None
+        # Most tenants embed a JSON-LD JobPosting whose `jobLocation` is a STRUCTURED address
+        # (city/region/country) -> return it so the merge fills the index row's NULL country. Not
+        # universal (some tenant templates carry no ld+json); those degrade to the bare-str body.
+        locations: list[Location] = []
+        for job in self.extract_jsonld_jobs(html):
+            locations = self.jsonld_locations(job.get("jobLocation"))
+            if locations:
+                break
+        return DetailFetch(text=text, locations=locations) if locations else text
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

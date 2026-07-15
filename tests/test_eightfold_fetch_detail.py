@@ -203,3 +203,16 @@ def test_base_fetch_detail_is_none() -> None:
                      content_sig="s")
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
+
+
+def test_eightfold_fetch_detail_recovers_location_string() -> None:
+    from ergon_tracker.models import DetailFetch
+
+    payload = {"job_description": "<p>JD.</p>", "location": "Phoenix, AZ USA 85040"}
+    ref = DetailRef(
+        id="1", source="eightfold", token=None,
+        apply_url="https://acme.eightfold.ai/careers/job/42", listing_url=None, content_sig="s",
+    )
+    res = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert res.locations[0].raw == "Phoenix, AZ USA 85040"

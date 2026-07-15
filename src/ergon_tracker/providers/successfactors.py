@@ -41,7 +41,7 @@ from urllib.parse import urlsplit
 
 from selectolax.parser import HTMLParser
 
-from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -259,7 +259,7 @@ class SuccessFactorsProvider(BaseProvider):
             )
         return out
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD (Tier-3 recovery).
 
         Unlike Workday/SmartRecruiters, SuccessFactors has no separate per-posting detail API:
@@ -288,7 +288,30 @@ class SuccessFactorsProvider(BaseProvider):
         jd_html = node.html
         if not jd_html:
             return None
-        return jd_html
+        locations = self._microdata_locations(tree)
+        return DetailFetch(text=jd_html, locations=locations) if locations else jd_html
+
+    @staticmethod
+    def _microdata_locations(tree: HTMLParser) -> list[Location]:
+        """schema.org microdata ``jobLocation`` -> Location. Two tenant shapes: structured metas
+        (addressLocality/Region/Country, country is ISO-2) or a single ``streetAddress`` string
+        ("City, ISO, postal"). Both geo-resolve (ISO-2 in country position, or the raw string) so
+        the merge can fill the index row's NULL country."""
+        addr = tree.css_first('[itemprop="jobLocation"] [itemprop="address"]')
+        if addr is None:
+            return []
+
+        def meta(prop: str) -> str | None:
+            n = addr.css_first(f'meta[itemprop="{prop}"]')
+            val = (n.attributes.get("content") or "").strip() if n is not None else ""
+            return val or None
+
+        city, region, country = meta("addressLocality"), meta("addressRegion"), meta("addressCountry")
+        if city or region or country:
+            raw = ", ".join(p for p in (city, region, country) if p)
+            return [Location(raw=raw, city=city, region=region, country=country)]
+        street = meta("streetAddress")
+        return [Location(raw=street)] if street else []
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

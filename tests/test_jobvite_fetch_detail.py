@@ -84,7 +84,7 @@ def test_fetch_detail_returns_structured_locations() -> None:
 
 
 def test_jsonld_locations_parses_single_and_list_and_skips_empty() -> None:
-    P = JobviteProvider._jsonld_locations
+    P = JobviteProvider.jsonld_locations
     assert P(None) == []
     assert P({"address": {"addressCountry": "United States"}})[0].country == "United States"
     # bare place with no usable address field is skipped

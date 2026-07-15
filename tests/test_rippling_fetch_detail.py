@@ -283,3 +283,12 @@ def test_salary_from_payrange_edge_cases() -> None:
     # unknown frequency -> keep amounts, interval unset (never guessed)
     unk = P([{"currency": "USD", "frequency": "FORTNIGHT", "rangeStart": 2000, "rangeEnd": 2500}])
     assert unk.min_amount == 2000 and unk.interval is None
+
+
+def test_fetch_detail_recovers_worklocations_strings() -> None:
+    from ergon_tracker.models import DetailFetch
+
+    payload = {"description": "<p>Role.</p>", "workLocations": ["London, United Kingdom", ""]}
+    res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert [l.raw for l in res.locations] == ["London, United Kingdom"]  # empties skipped
