@@ -227,3 +227,49 @@ async def test_fetch_detail_includes_additional_information_pay_section() -> Non
 
     sal = parse_salary(body)
     assert sal is not None and sal.min_amount == 88_000 and sal.max_amount == 95_000
+
+
+async def test_fetch_detail_recovers_when_job_description_empty() -> None:
+    # Measured bug (fixed): ~40% of failed SR postings have an EMPTY jobDescription.text but real
+    # content in qualifications/additionalInformation. The parser must NOT bail on an empty
+    # jobDescription -- it must return whatever JD-relevant sections carry text.
+    from ergon_tracker.index.detail import DetailRef
+
+    posting = {
+        "jobAd": {
+            "sections": {
+                "jobDescription": {"text": ""},  # empty -- the pre-fix bail trigger
+                "qualifications": {"text": "5+ years, BS in CS."},
+                "additionalInformation": {"text": "Salary $88,000 - $95,000."},
+            }
+        }
+    }
+    url = "https://api.smartrecruiters.com/v1/companies/acme/postings/12345"
+    ref = DetailRef(id="x", source="smartrecruiters", token=None,
+                    apply_url="https://jobs.smartrecruiters.com/acme/12345", listing_url=None,
+                    content_sig="")
+    with respx.mock:
+        respx.get(url).mock(return_value=httpx.Response(200, json=posting))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            body = await SmartRecruitersProvider().fetch_detail(ref, f)
+    assert body is not None and "5+ years" in body and "$88,000" in body
+
+
+async def test_fetch_detail_none_when_only_company_boilerplate() -> None:
+    # companyDescription is deliberately excluded (boilerplate, not the role) -- a posting with only
+    # an empty jobDescription + companyDescription must still return None, not company marketing.
+    from ergon_tracker.index.detail import DetailRef
+
+    posting = {"jobAd": {"sections": {
+        "jobDescription": {"text": ""},
+        "companyDescription": {"text": "We are Acme, a great place to work."},
+    }}}
+    url = "https://api.smartrecruiters.com/v1/companies/acme/postings/999"
+    ref = DetailRef(id="x", source="smartrecruiters", token=None,
+                    apply_url="https://jobs.smartrecruiters.com/acme/999", listing_url=None,
+                    content_sig="")
+    with respx.mock:
+        respx.get(url).mock(return_value=httpx.Response(200, json=posting))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            body = await SmartRecruitersProvider().fetch_detail(ref, f)
+    assert body is None

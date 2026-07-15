@@ -45,7 +45,10 @@ def test_smartrecruiters_fetch_detail_returns_description() -> None:
     assert "BS in CS" in desc
 
 
-def test_smartrecruiters_fetch_detail_missing_job_description_is_none() -> None:
+def test_smartrecruiters_fetch_detail_recovers_from_secondary_sections() -> None:
+    # A missing/empty jobDescription must NOT drop the posting when other JD sections carry text:
+    # measured ~40% of failed SR postings have their real content only in qualifications/
+    # additionalInformation. (Previously this returned None -- the dropped-content bug.)
     payload = {"jobAd": {"sections": {"qualifications": {"text": "BS required"}}}}
     ref = DetailRef(
         id="1",
@@ -58,7 +61,23 @@ def test_smartrecruiters_fetch_detail_missing_job_description_is_none() -> None:
     desc = anyio.run(
         lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
     )
-    assert desc is None
+    assert desc == "BS required"
+
+
+def test_smartrecruiters_fetch_detail_none_when_no_section_has_text() -> None:
+    # Only when EVERY JD-relevant section is empty does fetch_detail return None.
+    payload = {"jobAd": {"sections": {"jobDescription": {"text": ""}, "qualifications": {"text": ""}}}}
+    ref = DetailRef(
+        id="1",
+        source="smartrecruiters",
+        token="acme",
+        apply_url="https://jobs.smartrecruiters.com/acme/743999983512345",
+        listing_url=None,
+        content_sig="s",
+    )
+    assert anyio.run(
+        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
+    ) is None
 
 
 def test_smartrecruiters_fetch_detail_unparseable_apply_url_is_none() -> None:

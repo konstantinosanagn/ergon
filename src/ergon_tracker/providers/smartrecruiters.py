@@ -176,22 +176,22 @@ class SmartRecruitersProvider(BaseProvider):
         sections = job_ad.get("sections") if isinstance(job_ad, dict) else None
         if not isinstance(sections, dict):
             return None
-        job_description_obj = sections.get("jobDescription")
-        job_description = (
-            job_description_obj.get("text") if isinstance(job_description_obj, dict) else None
-        )
-        if not job_description or not isinstance(job_description, str):
-            return None
-        parts = [job_description]
-        # qualifications tends to carry degree/YOE language; additionalInformation is where US
-        # pay-transparency salary ranges sit ("The U.S. base salary range ... is $88,000 - $95,000")
-        # -- present in ~40% of US postings and previously dropped, so the enrich CompExtractor never
-        # saw them (SR was 5.7% salary despite the range being one section away in the SAME payload).
-        for section_key in ("qualifications", "additionalInformation"):
+        # Collect EVERY JD-relevant section that carries text -- do NOT hard-require jobDescription.
+        # Measured (sampling real drained-and-failed rows): ~40% of failed SR postings have an EMPTY
+        # jobDescription.text but real content in qualifications/additionalInformation; the old
+        # "bail if jobDescription empty" logic dropped all of it (returning None), so those postings
+        # were never recovered even though the JD text sat one section away in the SAME payload.
+        # qualifications carries degree/YOE language; additionalInformation is where US pay-
+        # transparency salary ranges sit. companyDescription is deliberately excluded -- it's company
+        # boilerplate, not the role, and would pollute the JD text the enrich extractors read.
+        parts: list[str] = []
+        for section_key in ("jobDescription", "qualifications", "additionalInformation"):
             section_obj = sections.get(section_key)
             text = section_obj.get("text") if isinstance(section_obj, dict) else None
-            if text and isinstance(text, str):
+            if isinstance(text, str) and text.strip():
                 parts.append(text)
+        if not parts:
+            return None
         return "\n".join(parts)
 
     def normalize(self, raw: RawJob) -> JobPosting:

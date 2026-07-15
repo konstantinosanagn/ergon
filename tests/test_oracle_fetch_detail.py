@@ -272,3 +272,33 @@ def test_oracle_fetch_detail_recovers_structured_location() -> None:
     assert isinstance(res, DetailFetch)
     assert res.locations[0].raw == "Orlando, FL, United States"
     assert res.locations[0].country == "US"
+
+
+def test_oracle_fetch_detail_recovers_when_description_empty_but_secondary_populated() -> None:
+    # Measured bug (fixed): ~25% of failed oracle postings have an EMPTY ExternalDescriptionStr but
+    # real content in ExternalResponsibilitiesStr/ExternalQualificationsStr. The parser must NOT bail
+    # on an empty primary field -- it must return the secondary sections.
+    payload = _orc_payload(
+        description="",
+        responsibilities="<p>Own the roadmap.</p>",
+        qualifications="<p>BS in CS, 5+ years.</p>",
+    )
+    fetcher = _FakeFetcher(payload)
+    ref = DetailRef(
+        id="1", source="oracle", token=None,
+        apply_url="https://ehac.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/R1",
+        listing_url=None, content_sig="s",
+    )
+    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, fetcher))
+    assert desc == "<p>Own the roadmap.</p>\n<p>BS in CS, 5+ years.</p>"
+
+
+def test_oracle_fetch_detail_none_when_all_sections_empty() -> None:
+    payload = _orc_payload(description="", responsibilities=None, qualifications=None)
+    fetcher = _FakeFetcher(payload)
+    ref = DetailRef(
+        id="1", source="oracle", token=None,
+        apply_url="https://ehac.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/R1",
+        listing_url=None, content_sig="s",
+    )
+    assert anyio.run(lambda: OracleProvider().fetch_detail(ref, fetcher)) is None

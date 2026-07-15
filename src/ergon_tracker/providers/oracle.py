@@ -257,14 +257,19 @@ class OracleProvider(BaseProvider):
         item = self._first_item(data)
         if item is None:
             return None
-        description = item.get("ExternalDescriptionStr")
-        if not isinstance(description, str) or not description.strip():
-            return None
-        parts = [description]
-        for key in ("ExternalResponsibilitiesStr", "ExternalQualificationsStr"):
+        # Collect EVERY JD-relevant field that carries text -- do NOT hard-require
+        # ExternalDescriptionStr. Measured (sampling real drained-and-failed rows): ~25% of failed
+        # oracle postings have an EMPTY ExternalDescriptionStr but real content in
+        # ExternalResponsibilitiesStr/ExternalQualificationsStr (up to 60KB+), which the old "bail if
+        # ExternalDescriptionStr empty" logic dropped entirely -- so those postings were never
+        # recovered even though the JD sat in a sibling field of the SAME payload.
+        parts: list[str] = []
+        for key in ("ExternalDescriptionStr", "ExternalResponsibilitiesStr", "ExternalQualificationsStr"):
             value = item.get(key)
             if isinstance(value, str) and value.strip():
                 parts.append(value)
+        if not parts:
+            return None
         text = "\n".join(parts)
         # The detail resource adds location the list feed lacks: PrimaryLocation (string, e.g.
         # "Orlando, FL, United States") + PrimaryLocationCountry (ISO-2, "US"). Both geo-resolve
