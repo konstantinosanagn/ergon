@@ -19,7 +19,9 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import parse_salary
 from ..models import (
+    DetailFetch,
     EmploymentType,
     JobPosting,
     Location,
@@ -31,11 +33,15 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["BambooHRProvider"]
 
 _API = "https://{token}.bamboohr.com/careers/list"
 _APPLY = "https://{token}.bamboohr.com/careers/{job_id}"
+_DETAIL_API = "https://{token}.bamboohr.com/careers/{job_id}/detail"
+# Pull (token, id) from an apply/listing URL like ``https://acme.bamboohr.com/careers/109``.
+_DETAIL_URL_RE = re.compile(r"([^/.\s]+)\.bamboohr\.com/careers/(\d+)", re.I)
 
 # Hosts we recognise, capturing the company token as group 1.
 _HOST_PATTERNS = (re.compile(r"([^/.\s]+)\.bamboohr\.com", re.I),)
@@ -95,6 +101,48 @@ class BambooHRProvider(BaseProvider):
                 )
             )
         return raws
+
+    @staticmethod
+    def _parse_detail_ref(ref: DetailRef) -> tuple[str, str] | None:
+        for url in (ref.apply_url, ref.listing_url):
+            if url:
+                m = _DETAIL_URL_RE.search(url)
+                if m:
+                    return m.group(1), m.group(2)
+        if ref.token and ref.id:
+            return ref.token, ref.id
+        return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
+        """Fetch one posting's full JD + structured pay (Tier-3 recovery).
+
+        The list feed (``fetch``) is intentionally thin (no description, no pay), but the per-posting
+        ``/careers/{id}/detail`` endpoint returns ``result.jobOpening`` with a full ``description``
+        (HTML) AND a free-text ``compensation`` string (e.g. ``"$85K - 135K Base per year DOE"``).
+        Return a ``DetailFetch`` carrying the description body (so yoe/degree also extract) plus the
+        parsed ``compensation`` as a structured salary, preferred over re-parsing it from the body.
+        Non-raising: any unparseable ref, fetch failure, non-dict payload, or missing/empty
+        ``description`` returns ``None``.
+        """
+        parsed = self._parse_detail_ref(ref)
+        if parsed is None:
+            return None
+        token, job_id = parsed
+        try:
+            data = await fetcher.get_json(_DETAIL_API.format(token=token, job_id=job_id))
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        opening = (data.get("result") or {}).get("jobOpening")
+        if not isinstance(opening, dict):
+            return None
+        description = opening.get("description")
+        if not isinstance(description, str) or not description.strip():
+            return None
+        comp = opening.get("compensation")
+        salary = parse_salary(comp) if isinstance(comp, str) else None
+        return DetailFetch(text=description, salary=salary) if salary is not None else description
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

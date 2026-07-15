@@ -99,3 +99,36 @@ async def test_fetch_empty_on_error() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await PageUpProvider().fetch("669|University of Alabama", SearchQuery(), f)
     assert raws == []
+
+
+async def test_double_escaped_body_yields_salary_and_teaser_does_not_shadow() -> None:
+    # Regression: PageUp double-escapes <job:description>, and the provider used to (a) decode it
+    # only once (leaving "&lt;p&gt;…" that garbles the snippet) and (b) put the short <description>
+    # teaser into description_text, which input_from_job PREFERS -> the full JD (with salary) never
+    # reached enrich (pageup was ~0% salary). Now the body is fully decoded and the teaser is dropped.
+    from ergon_tracker.enrich import enrich_in_place
+
+    # Truly double-escaped body carrying a salary; teaser has NO pay.
+    body = (
+        "<item>"
+        "<link>https://careers.pageuppeople.com/669/cw/en-us/job/501</link>"
+        "<title>Staff Engineer</title>"
+        "<description>Short teaser, no pay here.</description>"
+        "<job:refNo>501</job:refNo>"
+        "<job:description>&amp;lt;p&amp;gt;Salary range is $65,000 - $75,000 per year.&amp;lt;/p&amp;gt;"
+        "</job:description>"
+        "</item>"
+    )
+    with respx.mock as respx_mock:
+        respx_mock.get(RSS_URL).mock(return_value=httpx.Response(200, text=_rss([body])))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await PageUpProvider().fetch("669", SearchQuery(), f)
+
+    job = PageUpProvider().normalize(raws[0])
+    assert job.description_html is not None and "<p>" in job.description_html  # fully decoded HTML
+    assert "&lt;" not in job.description_html  # not left half-escaped
+    assert job.description_text is None  # teaser dropped so it can't shadow the full body
+
+    enrich_in_place(job)
+    assert job.salary is not None
+    assert job.salary.min_amount == 65000 and job.salary.max_amount == 75000

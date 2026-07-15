@@ -124,8 +124,17 @@ class PageUpProvider(BaseProvider):
                         "category": _tag(block, "job:subCategory") or _tag(block, "job:category"),
                         "department": _tag(block, "job:businessLayer1"),
                         "work_type": _tag(block, "job:workType"),
-                        "description_html": _tag(block, "job:description"),
-                        "description_text": _tag(block, "description"),
+                        # <job:description> is DOUBLE-escaped in the feed; _tag decodes once, so
+                        # unescape a second time to get real HTML (else the body reaches enrich as
+                        # literal "&lt;p&gt;…" text and its snippet is garbled).
+                        "description_html": _htmlmod.unescape(_tag(block, "job:description") or "")
+                        or None,
+                        # Deliberately DON'T carry the short <description> teaser as description_text:
+                        # input_from_job prefers description_text over the full body, so the teaser
+                        # would SHADOW the real JD (salary/yoe/degree live in <job:description>, not
+                        # the teaser) -- the cause of pageup's ~0% salary. None -> enrich derives the
+                        # text from the full description_html.
+                        "description_text": None,
                         "updated": _tag(block, "a10:updated"),
                         "pub_date": _tag(block, "pubDate"),
                         "link": link or None,

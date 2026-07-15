@@ -369,6 +369,7 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "workable",
     "join",
     "phenom",  # phenom re-routes to workday/successfactors by apply_url host
+    "bamboohr",  # /careers/{id}/detail -> description + structured `compensation` string
 ]
 
 
