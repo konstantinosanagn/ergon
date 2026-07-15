@@ -578,3 +578,86 @@ def test_reconcile_from_fresh_migrates_legacy_sidecar_preserves_vectors(tmp_path
     assert "job_text" not in names and "job_text_fts" not in names  # legacy tables dropped
     row = con.execute("SELECT id, sig, scale, vec FROM job_vectors").fetchone()
     assert tuple(row) == (a.id, legacy_sig, 0.5, legacy_vec)  # vector preserved byte-for-byte
+
+
+def test_backfill_from_index_embeds_unvectored_backlog(tmp_path):
+    """Coverage accelerator: rows live in the main index but NOT in this run's crawl window
+    (fresh_rich) get embedded directly from the index, so the tail reaches 100% without waiting for
+    board rotation. Also covers idempotency + budget + the sig self-upgrade on a later real crawl."""
+    import sqlite3
+
+    from ergon_tracker.index.rich import open_rich, reconcile_rich_tier_from_fresh, write_fresh_rich
+
+    jobs = [
+        _job("a", "Alpha Engineer", "alpha description here", company="C1"),
+        _job("b", "Beta Engineer", "beta " + "x" * 500, company="C2"),  # long: snippet<full desc
+        _job("c", "Gamma Engineer", "gamma description here", company="C3"),
+    ]
+    ida, idb, idc = jobs[0].id, jobs[1].id, jobs[2].id
+    main = tmp_path / "main.sqlite"
+    build_index(jobs, main, build_id="b1")
+    # crawl window this run = only job a
+    fresh = tmp_path / "fresh.sqlite"
+    con = sqlite3.connect(fresh)
+    write_fresh_rich(con, [jobs[0]])
+    con.commit()
+    con.close()
+    rich = tmp_path / "rich.sqlite"
+
+    # WITHOUT backfill: only the crawl-window row embeds; b, c stay missing.
+    s = reconcile_rich_tier_from_fresh(
+        rich, main, fresh, build_id="b1", reranker=FAKE, backfill_from_index=False
+    )
+    assert s["embedded"] == 1 and s["missing"] == 2
+
+    # WITH backfill: b, c embed straight from the index -> full coverage.
+    s2 = reconcile_rich_tier_from_fresh(
+        rich, main, fresh, build_id="b2", reranker=FAKE, backfill_from_index=True
+    )
+    assert s2["embedded"] == 2 and s2["missing"] == 0  # a already vectored, b+c backfilled
+    rc = open_rich(rich)
+    got = dict(rc.execute("SELECT id, sig FROM job_vectors"))
+    rc.close()
+    assert set(got) == {ida, idb, idc}
+    bsig_backfill = got[idb]  # sha1(content_hash | snippet)
+
+    # IDEMPOTENT: re-run backfill -> nothing new (sigs already match).
+    s3 = reconcile_rich_tier_from_fresh(
+        rich, main, fresh, build_id="b3", reranker=FAKE, backfill_from_index=True
+    )
+    assert s3["embedded"] == 0 and s3["missing"] == 0
+
+    # SELF-UPGRADE: when b's board is later crawled (full description in fresh_rich), its full-desc
+    # sig differs from the snippet-backfill sig -> it re-embeds (quality upgrade).
+    fresh2 = tmp_path / "fresh2.sqlite"
+    con = sqlite3.connect(fresh2)
+    write_fresh_rich(con, [jobs[1]])  # b, now via the crawl path (full description_text)
+    con.commit()
+    con.close()
+    s4 = reconcile_rich_tier_from_fresh(
+        rich, main, fresh2, build_id="b4", reranker=FAKE, backfill_from_index=False
+    )
+    assert s4["embedded"] == 1  # b re-embedded (upgraded)
+    rc = open_rich(rich)
+    assert rc.execute("SELECT sig FROM job_vectors WHERE id=?", (idb,)).fetchone()[0] != bsig_backfill
+    rc.close()
+
+
+def test_backfill_respects_embed_budget(tmp_path):
+    import sqlite3
+
+    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh, write_fresh_rich
+
+    jobs = [_job(str(i), f"Engineer {i}", f"desc {i}", company=f"C{i}") for i in range(6)]
+    main = tmp_path / "m.sqlite"
+    build_index(jobs, main, build_id="b1")
+    fresh = tmp_path / "f.sqlite"  # empty crawl window -> all 6 are backlog
+    con = sqlite3.connect(fresh)
+    write_fresh_rich(con, [])
+    con.commit()
+    con.close()
+    rich = tmp_path / "r.sqlite"
+    s = reconcile_rich_tier_from_fresh(
+        rich, main, fresh, build_id="b1", reranker=FAKE, backfill_from_index=True, max_embed_per_run=4
+    )
+    assert s["embedded"] == 4 and s["missing"] == 2  # budget capped; rest next run

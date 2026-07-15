@@ -277,6 +277,82 @@ def _resolve_max_embed() -> int | None:
     return _RAMP_DEFAULT_CI if os.environ.get("CI") else None
 
 
+def _resolve_backfill_from_index() -> bool:
+    """``ERGON_RICH_BACKFILL_FROM_INDEX=1`` enables the coverage accelerator (below). Default off so
+    normal cron keeps the full-quality crawl-window path; set it on a few 'catch-up' runs to embed
+    the un-vectored backlog directly and reach ~100% coverage in 1-2 runs instead of ~7."""
+    import os
+
+    return os.environ.get("ERGON_RICH_BACKFILL_FROM_INDEX", "").strip() == "1"
+
+
+def _embed_text_from_row(title: str | None, department: str | None, snippet: str | None) -> str:
+    """Backfill embed-text, mirroring semantic._job_text but sourced from the main index (snippet,
+    ~300 chars) instead of the fresh crawl's 600-char description. Same title — dept — text shape."""
+    parts = [title or ""]
+    if department:
+        parts.append(department)
+    if snippet:
+        parts.append(snippet)
+    return " — ".join(p for p in parts if p)
+
+
+def _backfill_from_index(
+    con: sqlite3.Connection,
+    main_index_path: Path | str,
+    *,
+    skip_ids: set[str],
+    budget: int | None,
+    reranker: SemanticReranker | None,
+    batch: int,
+    chunk_size: int,
+) -> tuple[int, set[str]]:
+    """COVERAGE ACCELERATOR: embed live index rows that have NO vector yet, sourced DIRECTLY from the
+    main index (title — department — snippet), instead of waiting for their board to rotate into the
+    crawl window (the crawl-coupled path drains the tail only ~30k/run). ``sig`` is
+    ``sha1(content_hash | snippet)`` — STABLE (idempotent across catch-up runs) yet DIFFERENT from the
+    crawl path's ``sha1(content_hash | full_description)`` sig, so each row self-UPGRADES to a
+    full-description vector the next time its board is crawled. Streams the main index with
+    ``fetchmany`` (peak memory O(chunk), never the corpus). Returns ``(embedded, ids)``.
+    """
+    if budget is not None and budget <= 0:
+        return 0, set()
+    import hashlib
+
+    embedded = 0
+    done: set[str] = set()
+    main = sqlite3.connect(f"file:{main_index_path}?mode=ro", uri=True)
+    try:
+        cur = main.execute(
+            "SELECT id, title, department, snippet, content_hash FROM jobs WHERE status = 'active'"
+        )
+        while budget is None or embedded < budget:
+            rows = cur.fetchmany(chunk_size)
+            if not rows:
+                break
+            eligible: list[tuple[str, str, str]] = []
+            for jid, title, dept, snippet, chash in rows:
+                if jid in skip_ids:
+                    continue
+                text = _embed_text_from_row(title, dept, snippet)
+                if not text:
+                    continue  # no title AND no snippet -> nothing to embed
+                sig = hashlib.sha1(f"{chash or ''}|{snippet or ''}".encode()).hexdigest()[:16]
+                eligible.append((jid, sig, text))
+            if budget is not None and len(eligible) > budget - embedded:
+                eligible = eligible[: budget - embedded]
+            if eligible:
+                _embed_rows_into(
+                    con, eligible, reranker=reranker, batch=batch, single_process=True
+                )
+                con.commit()
+                embedded += len(eligible)
+                done.update(r[0] for r in eligible)
+    finally:
+        main.close()
+    return embedded, done
+
+
 def reconcile_rich_tier_from_fresh(
     rich_path: Path | str,
     main_index_path: Path | str,
@@ -287,6 +363,7 @@ def reconcile_rich_tier_from_fresh(
     batch: int = 256,
     chunk_size: int = 10_000,
     max_embed_per_run: int | None | Literal["auto"] = "auto",
+    backfill_from_index: bool | Literal["auto"] = "auto",
 ) -> dict[str, int]:
     """Incremental (cron) cascade — same contract as :func:`reconcile_rich_tier` but reads the freshly-
     crawled ``(id, sig, embed_text)`` from the streaming fresh DB (disk, memory-safe via
@@ -310,6 +387,9 @@ def reconcile_rich_tier_from_fresh(
     next run via the same sig comparison, so a cold start converges over a few runs instead of
     OOMing one."""
     max_embed = _resolve_max_embed() if max_embed_per_run == "auto" else max_embed_per_run
+    do_backfill = (
+        _resolve_backfill_from_index() if backfill_from_index == "auto" else backfill_from_index
+    )
 
     main = sqlite3.connect(f"file:{main_index_path}?mode=ro", uri=True)
     try:
@@ -365,6 +445,25 @@ def reconcile_rich_tier_from_fresh(
                 embedded += len(chunk)
         finally:
             fresh.close()
+
+        # COVERAGE ACCELERATOR (opt-in): after the crawl-window path, spend any remaining embed
+        # budget on live rows that STILL have no vector, sourced straight from the main index —
+        # so the tail reaches ~100% in 1-2 runs instead of waiting ~7 for boards to rotate in.
+        if do_backfill:
+            remaining = None if max_embed is None else max(0, max_embed - embedded)
+            bf_embedded, bf_ids = _backfill_from_index(
+                con,
+                main_index_path,
+                skip_ids=set(have) | rebuilt_ids,  # already-vectored + this run's rebuilds
+                budget=remaining,
+                reranker=reranker,
+                batch=batch,
+                chunk_size=chunk_size,
+            )
+            embedded += bf_embedded
+            rebuilt_ids.update(bf_ids)
+            if bf_embedded:
+                print(f"rich backfill-from-index: embedded {bf_embedded} un-vectored backlog rows")
 
         meta = [("build_id", build_id), ("quant", "int8")]
         if dim:

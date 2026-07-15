@@ -19,6 +19,9 @@ on:
       detail_max:
         description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 25000; override to measure or throttle a single run."
         default: "25000"
+      rich_backfill:
+        description: "Rich COVERAGE ACCELERATOR (ERGON_RICH_BACKFILL_FROM_INDEX). '1' embeds the un-vectored backlog straight from the main index (snippet-quality, self-upgrades on next crawl) to reach ~100% coverage in 1-2 catch-up runs instead of ~7. Leave off for normal full-quality cron."
+        default: ""
 
 permissions:
   contents: write          # to publish the release asset
@@ -120,6 +123,7 @@ jobs:
           # shell-expanded, so `~` would be taken literally by fastembed.
           FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
           ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
+          ERGON_RICH_BACKFILL_FROM_INDEX: "${{ github.event.inputs.rich_backfill || '' }}"  # '1' on a catch-up dispatch: embed the un-vectored backlog directly (see rich._backfill_from_index)
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
           ERGON_DETAIL_CONCURRENCY: "24"             # Tier-3 detail: in-flight fetch concurrency (per-host politeness enforced separately by AsyncFetcher's token-bucket)
         run: |
