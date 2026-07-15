@@ -47,6 +47,8 @@ _JOB_DETAIL_COLUMNS: tuple[str, ...] = (
     "degree_min",
     "degree_required",
     "sponsorship_offered",
+    "city",
+    "country",
 )
 
 

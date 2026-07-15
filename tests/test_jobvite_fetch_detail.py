@@ -63,3 +63,29 @@ def test_fetch_detail_missing_url_or_jsonld_returns_none() -> None:
     for page in ("<html><body>no json-ld</body></html>", "", "not html"):
         res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
         assert res is None
+
+
+def test_fetch_detail_returns_structured_locations() -> None:
+    from ergon_tracker.models import DetailFetch
+
+    page = (
+        "<html><head>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","description":"\\u003cp\\u003eRole.\\u003c/p\\u003e",'
+        '"jobLocation":[{"@type":"Place","address":{"addressLocality":"Phoenix",'
+        '"addressRegion":"Arizona","addressCountry":"United States"}},'
+        '{"@type":"Place","address":{"addressCountry":"United States"}}]}'
+        "</script></head><body></body></html>"
+    )
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.locations and res.locations[0].city == "Phoenix"
+    assert res.locations[0].region == "Arizona" and res.locations[0].country == "United States"
+
+
+def test_jsonld_locations_parses_single_and_list_and_skips_empty() -> None:
+    P = JobviteProvider._jsonld_locations
+    assert P(None) == []
+    assert P({"address": {"addressCountry": "United States"}})[0].country == "United States"
+    # bare place with no usable address field is skipped
+    assert P([{"@type": "Place"}, {"address": {}}]) == []

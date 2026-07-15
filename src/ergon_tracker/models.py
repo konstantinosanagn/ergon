@@ -139,10 +139,17 @@ class DetailFetch(BaseModel):
     the recovered posting with ``salary`` BEFORE running the text extractors (which only fill a
     still-empty field), so a clean structured range is preferred over re-parsing it from prose and
     never clobbers it. Returning a bare ``str`` remains valid and equivalent to ``salary=None``.
+
+    ``locations`` carries structured place(s) the same way: many list feeds emit a ``"N Locations"``
+    placeholder (or nothing) for multi-location jobs, so the country is unknown — but the detail
+    response (e.g. jobvite's JSON-LD ``jobLocation``, Workday's CxS) has the full address. The
+    reconcile seeds these onto the posting before enrich (which geo-normalizes them), and the merge
+    fills the index row's still-NULL ``city``/``country``.
     """
 
     text: str
     salary: Salary | None = None
+    locations: list[Location] | None = None
 
 
 class Company(BaseModel):

@@ -49,7 +49,7 @@ def test_fetch_detail_returns_body_plus_structured_salary() -> None:
     res = anyio.run(lambda: BambooHRProvider().fetch_detail(_ref(), fetcher))
     assert fetcher.calls == ["https://evergreene.bamboohr.com/careers/109/detail"]
     assert isinstance(res, DetailFetch)
-    text, sal = _detail_parts(res)
+    text, sal, _locs = _detail_parts(res)
     assert text == "<p>Build historic restorations.</p>"
     assert sal is not None
     assert sal.min_amount == 85000 and sal.max_amount == 135000

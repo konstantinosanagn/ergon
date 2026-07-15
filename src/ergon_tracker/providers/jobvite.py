@@ -31,7 +31,7 @@ from urllib.parse import urlsplit
 
 from selectolax.parser import HTMLParser, Node
 
-from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -147,15 +147,16 @@ class JobviteProvider(BaseProvider):
             payload={"title": title, "location": location, "url": url, "id": slug},
         )
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
-        """Fetch one posting's full JD from its detail page (Tier-3 recovery).
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
+        """Fetch one posting's full JD + structured location from its detail page (Tier-3 recovery).
 
-        jobvite is list-only — the bulk ``viewall`` carries no description/pay/date. The per-job
-        page (== ``ref.apply_url``) has an ``application/ld+json`` ``JobPosting`` whose
-        ``description`` is the full JD. jobvite postings almost never disclose salary (measured:
-        structured baseSalary blank AND no prose pay), but the body still powers yoe/degree/level/
-        skills/sector extraction. Non-raising: any missing URL, fetch failure, or absent/empty
-        JSON-LD ``description`` returns ``None``."""
+        jobvite is list-only — the bulk ``viewall`` gives no description/pay/date, and its location
+        is unreliable (a ``"N Locations"`` placeholder for multi-location jobs, or missing entirely
+        for some company templates). The per-job page (== ``ref.apply_url``) has an
+        ``application/ld+json`` ``JobPosting`` with the full ``description`` AND a structured
+        ``jobLocation`` (city/region/country). Return the body (so yoe/degree/level extract) plus the
+        structured locations so the merge can fill the index row's NULL city/country. Non-raising:
+        any missing URL, fetch failure, or absent/empty JSON-LD ``description`` returns ``None``."""
         url = ref.apply_url or ref.listing_url
         if not url:
             return None
@@ -168,8 +169,31 @@ class JobviteProvider(BaseProvider):
         for job in self.extract_jsonld_jobs(html):
             description = job.get("description")
             if isinstance(description, str) and description.strip():
+                locations = self._jsonld_locations(job.get("jobLocation"))
+                if locations:
+                    return DetailFetch(text=description, locations=locations)
                 return description
         return None
+
+    @staticmethod
+    def _jsonld_locations(job_location: object) -> list[Location]:
+        """schema.org ``jobLocation`` -> ``Location`` list. Accepts a single Place or a list; reads
+        ``address.{addressLocality,addressRegion,addressCountry}``. Skips entries with no usable
+        field (a bare Remote place with only a country still yields a country -> resolvable)."""
+        entries = job_location if isinstance(job_location, list) else [job_location]
+        out: list[Location] = []
+        for entry in entries:
+            addr = entry.get("address") if isinstance(entry, dict) else None
+            if not isinstance(addr, dict):
+                continue
+            city = (addr.get("addressLocality") or "").strip() or None
+            region = (addr.get("addressRegion") or "").strip() or None
+            country = (addr.get("addressCountry") or "").strip() or None
+            if not any((city, region, country)):
+                continue
+            raw = ", ".join(p for p in (city, region, country) if p)
+            out.append(Location(raw=raw, city=city, region=region, country=country))
+        return out
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

@@ -330,3 +330,61 @@ def test_reconcile_detailfetch_without_salary_falls_back_to_body(tmp_path):
     con = open_detail(det)
     row = con.execute("SELECT salary_min, salary_max FROM job_detail").fetchone()
     assert row[0] == 120000.0 and row[1] == 150000.0  # body-extracted, as before
+
+
+def test_reconcile_recovers_structured_location_and_merges_country(tmp_path):
+    # A provider returning DetailFetch(locations=...) must persist city/country to the sidecar, and
+    # merge must fill the index row's NULL country -- the fix for "N Locations" placeholder / empty
+    # list-scrape geo. Also exercises the v1->v2 sidecar column migration implicitly (fresh db).
+    import sqlite3
+    from ergon_tracker.models import DetailFetch, Location
+
+    # index row with a placeholder location and NULL city/country (the Arcus/jobvite case)
+    idx = tmp_path / "index.sqlite"
+    c = sqlite3.connect(idx)
+    c.execute("CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
+              "listing_url TEXT, content_hash TEXT, title TEXT, level TEXT, snippet TEXT, "
+              "salary_min REAL, salary_max REAL, salary_currency TEXT, salary_interval TEXT, "
+              "years_min INTEGER, years_max INTEGER, degree_min TEXT, degree_required INTEGER, "
+              "sponsorship_offered INTEGER, city TEXT, country TEXT, location TEXT)")
+    c.execute("INSERT INTO jobs (id,source,apply_url,content_hash,title,level,snippet,location) "
+              "VALUES ('1','jobvite','http://x/1','h1','Eng','unknown',NULL,'3 Locations')")
+    c.commit(); c.close()
+    det = str(tmp_path / "detail.sqlite")
+
+    async def fake(ref):
+        return DetailFetch(
+            text="<p>Great role.</p>",
+            locations=[Location(raw="Brisbane, California, United States", city="Brisbane",
+                                region="California", country="United States")],
+        )
+
+    anyio.run(lambda: reconcile_detail_tier(det, str(idx), fetch_detail=fake, now=lambda: "t"))
+    dcon = open_detail(det)
+    srow = dcon.execute("SELECT city, country FROM job_detail WHERE id='1'").fetchone()
+    assert srow == ("Brisbane", "United States")  # persisted to the sidecar
+
+    icon = sqlite3.connect(idx)
+    merge_detail_into_index(icon, det)
+    got = icon.execute("SELECT city, country, location FROM jobs WHERE id='1'").fetchone()
+    icon.close()
+    assert got[0] == "Brisbane" and got[1] == "United States"  # NULL city/country filled
+    assert got[2] == "3 Locations"  # raw location left as-is (never clobbered)
+
+
+def test_ensure_detail_schema_migrates_v1_sidecar_adds_city_country(tmp_path):
+    # A pre-existing v1 sidecar (no city/country) must gain the columns without data loss.
+    import sqlite3
+    from ergon_tracker.index.detail import ensure_detail_schema
+
+    p = tmp_path / "old.sqlite"
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE job_detail (id TEXT PRIMARY KEY, sig TEXT, fetched_at TEXT, "
+              "attempts INTEGER, snippet TEXT, salary_min REAL)")
+    c.execute("INSERT INTO job_detail (id, snippet) VALUES ('a', 'kept')")
+    c.commit()
+    ensure_detail_schema(c)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(job_detail)")}
+    assert "city" in cols and "country" in cols
+    assert c.execute("SELECT snippet FROM job_detail WHERE id='a'").fetchone()[0] == "kept"
+    c.close()

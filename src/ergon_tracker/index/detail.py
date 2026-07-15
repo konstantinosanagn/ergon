@@ -17,9 +17,9 @@ import anyio
 from ..enrich import enrich_in_place
 from ..extract.base import html_to_text
 from ..http import _rate_key
-from ..models import DetailFetch, JobPosting, Salary
+from ..models import DetailFetch, JobPosting, Location, Salary
 
-DETAIL_SCHEMA_VERSION = 1
+DETAIL_SCHEMA_VERSION = 2  # v2: added city/country (structured location recovery)
 DETAIL_SCHEMA = """
 CREATE TABLE IF NOT EXISTS job_detail (
   id TEXT PRIMARY KEY,
@@ -30,14 +30,22 @@ CREATE TABLE IF NOT EXISTS job_detail (
   salary_min REAL, salary_max REAL, salary_currency TEXT, salary_interval TEXT,
   years_min INTEGER, years_max INTEGER,
   degree_min TEXT, degree_required INTEGER,
-  sponsorship_offered INTEGER
+  sponsorship_offered INTEGER,
+  city TEXT, country TEXT
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
+# Columns added after v1; ADDed to any pre-existing (carry-forward) sidecar so the merge can read
+# them. Additive only -- old rows get NULLs, which the merge simply skips.
+_DETAIL_ADDED_COLUMNS = {"city": "TEXT", "country": "TEXT"}
 
 
 def ensure_detail_schema(con: sqlite3.Connection) -> None:
     con.executescript(DETAIL_SCHEMA)
+    existing = {r[1] for r in con.execute("PRAGMA table_info(job_detail)")}
+    for col, coltype in _DETAIL_ADDED_COLUMNS.items():
+        if col not in existing:
+            con.execute(f"ALTER TABLE job_detail ADD COLUMN {col} {coltype}")
     con.execute(
         "INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)",
         (str(DETAIL_SCHEMA_VERSION),),
@@ -289,12 +297,14 @@ def _select_window(
     return window, (cursor + max_details) % total
 
 
-def _detail_parts(result: str | DetailFetch | None) -> tuple[str | None, Salary | None]:
-    """Normalize a ``fetch_detail`` return to ``(text, structured_salary)``. A bare ``str`` (the
-    historical contract) carries no structured salary; a ``DetailFetch`` carries both."""
+def _detail_parts(
+    result: str | DetailFetch | None,
+) -> tuple[str | None, Salary | None, list[Location] | None]:
+    """Normalize a ``fetch_detail`` return to ``(text, structured_salary, structured_locations)``.
+    A bare ``str`` (the historical contract) carries neither; a ``DetailFetch`` may carry both."""
     if isinstance(result, DetailFetch):
-        return (result.text or None), result.salary
-    return result, None
+        return (result.text or None), result.salary, result.locations
+    return result, None, None
 
 
 async def _run_fetches(
@@ -376,12 +386,22 @@ def _record_success(
     salary_interval = salary.interval.value if salary and salary.interval else None
     degree_required = None if job.degree_required is None else int(job.degree_required)
     sponsorship_offered = None if job.sponsorship_offered is None else int(job.sponsorship_offered)
+    # Recovered structured location: the first geo-normalized location that carries a city/country
+    # (enrich_in_place already ran normalize_geo). Fills the index row's NULL city/country on merge.
+    city = country = None
+    for loc in job.locations:
+        if city is None and loc.city:
+            city = loc.city
+        if country is None and loc.country:
+            country = loc.country
+        if city and country:
+            break
     det_con.execute(
         """
         INSERT INTO job_detail (id, sig, fetched_at, attempts, snippet, salary_min, salary_max,
             salary_currency, salary_interval, years_min, years_max, degree_min, degree_required,
-            sponsorship_offered)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sponsorship_offered, city, country)
+        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             sig = excluded.sig, fetched_at = excluded.fetched_at, attempts = 0,
             snippet = excluded.snippet, salary_min = excluded.salary_min,
@@ -389,7 +409,8 @@ def _record_success(
             salary_interval = excluded.salary_interval, years_min = excluded.years_min,
             years_max = excluded.years_max, degree_min = excluded.degree_min,
             degree_required = excluded.degree_required,
-            sponsorship_offered = excluded.sponsorship_offered
+            sponsorship_offered = excluded.sponsorship_offered,
+            city = excluded.city, country = excluded.country
         """,
         (
             ref.id,
@@ -405,6 +426,8 @@ def _record_success(
             job.degree_min,
             degree_required,
             sponsorship_offered,
+            city,
+            country,
         ),
     )
 
@@ -423,6 +446,8 @@ _MERGE_COLUMNS: tuple[str, ...] = (
     "degree_min",
     "degree_required",
     "sponsorship_offered",
+    "city",
+    "country",
 )
 _INT_COLUMNS = {"degree_required", "sponsorship_offered"}
 
@@ -600,7 +625,7 @@ async def reconcile_detail_tier(
                 # STRUCTURED salary alongside the text (e.g. rippling's payRangeDetails). Seed the
                 # posting with that salary BEFORE enrich so the text extractors — which only fill a
                 # still-empty field — prefer the structured range over re-parsing it from prose.
-                text, pre_salary = _detail_parts(result)
+                text, pre_salary, pre_locations = _detail_parts(result)
                 if not text:
                     raise ValueError("fetch_detail returned no description")
                 job = JobPosting.create(
@@ -610,8 +635,9 @@ async def reconcile_detail_tier(
                     title="",
                     description_html=text,
                     salary=pre_salary,
+                    locations=pre_locations or [],
                 )
-                enrich_in_place(job)
+                enrich_in_place(job)  # geo-normalizes the seeded locations -> resolves country
                 snippet = (html_to_text(text) or "")[:300]
                 _record_success(det_con, ref, job, snippet, now())
                 fetched += 1
