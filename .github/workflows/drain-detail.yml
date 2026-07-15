@@ -47,6 +47,9 @@ on:
       ukg_detail_rate:
         description: "DRAIN-ONLY UKG req/s per bucket (ERGON_UKG_DETAIL_RATE -> ultipro.com + ukg.net). Latency-bound ~8-11/s/bucket; 10 keeps the token bucket non-binding. Default 5/s otherwise."
         default: "10"
+      location_backfill:
+        description: "Set to 1 to ALSO re-fetch already-drained rows on the location-capable sources (workday/oracle/successfactors/eightfold/radancy/rippling/bamboohr/jobvite) that still lack a city/country -- rows drained before their location wiring existed. Preserves recovered salary (fetched_at re-queue, never DELETE). Leave empty for a normal drain."
+        default: ""
   # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
   # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
   # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
@@ -147,6 +150,9 @@ jobs:
           ERGON_BAMBOOHR_DETAIL_RATE: "${{ github.event.inputs.bamboohr_detail_rate || '20' }}"
           ERGON_JOBVITE_DETAIL_RATE: "${{ github.event.inputs.jobvite_detail_rate || '20' }}"
           ERGON_UKG_DETAIL_RATE: "${{ github.event.inputs.ukg_detail_rate || '10' }}"
+          # Opt-in location backfill: re-fetch already-drained rows on location-capable sources that
+          # still lack a city/country (rows drained before their location wiring). Empty = normal drain.
+          ERGON_DETAIL_LOCATION_BACKFILL: "${{ github.event.inputs.location_backfill || '' }}"
         run: |
           if [ ! -f dist/index.sqlite ]; then
             echo "no prior index.sqlite available -- nothing to drain yet (first-ever run before build-index.yml has published once)"

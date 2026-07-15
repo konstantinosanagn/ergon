@@ -380,6 +380,16 @@ def _detail_max() -> int:
     return int(os.environ.get("ERGON_DETAIL_MAX", "5000"))
 
 
+def _location_backfill() -> bool:
+    """Opt-in location-backfill drain, ``ERGON_DETAIL_LOCATION_BACKFILL`` (env), default off.
+
+    When ``"1"``, the sharded reconcile also re-fetches already-drained rows on the location-capable
+    sources that still lack a city/country (see ``reconcile_detail_tier``). Never set by the daily
+    crawl -- only the drain workflow's dedicated dispatch input turns it on -- so ordinary builds are
+    byte-for-byte unaffected."""
+    return os.environ.get("ERGON_DETAIL_LOCATION_BACKFILL", "") == "1"
+
+
 def _write_detail_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
     """Write ``manifest-detail.json`` alongside the gz — the exact fields ``DetailCache.ensure_fresh``
     reads (schema_version gate, build_id freshness key, sha256 of the RAW bytes). Mirrors the vectors
@@ -491,6 +501,7 @@ async def _reconcile_detail(
             now=lambda: datetime.now(timezone.utc).isoformat(),
             shard=shard,
             num_shards=num_shards,
+            location_backfill=_location_backfill(),
         )
 
     if not merge:

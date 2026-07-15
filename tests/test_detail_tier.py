@@ -388,3 +388,152 @@ def test_ensure_detail_schema_migrates_v1_sidecar_adds_city_country(tmp_path):
     assert "city" in cols and "country" in cols
     assert c.execute("SELECT snippet FROM job_detail WHERE id='a'").fetchone()[0] == "kept"
     c.close()
+
+
+# --- location backfill (opt-in drain re-fetch of already-drained, location-less rows) -----------
+#
+# The 5 non-Workday location-capable sources (oracle/successfactors/eightfold/radancy/rippling +
+# bamboohr/jobvite) gained structured-location wiring AFTER much of their backlog was already
+# drained. Those drained rows have a snippet, so the normal empty-snippet Tier-3 selection can never
+# reach them again. The backfill mode widens the selection to the union of (empty-snippet) and
+# (location-capable + NULL-location) rows and re-queues the drained ones so a re-fetch can recover
+# their city/country -- WITHOUT losing any already-recovered field on a failed re-fetch.
+
+def _mk_index_loc(tmp_path, rows):
+    """Index stub WITH city/country columns (the real jobs schema has them), for backfill tests.
+    Each row tuple: (id, source, apply_url, content_hash, snippet, city, country)."""
+    import sqlite3
+
+    p = tmp_path / "index.sqlite"
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
+              "listing_url TEXT, content_hash TEXT, snippet TEXT, city TEXT, country TEXT, "
+              "salary_min REAL, salary_max REAL, years_min INTEGER)")
+    c.executemany("INSERT INTO jobs (id,source,apply_url,content_hash,snippet,city,country) "
+                  "VALUES (?,?,?,?,?,?,?)", rows)
+    c.commit()
+    c.close()
+    return str(p)
+
+
+def _seed_drained(det_path, *, id_, content_hash, salary_min, fetched_at="2026-07-01T00:00:00Z"):
+    """Seed the sidecar with an ALREADY-DRAINED row: sig current, fetched_at set, a recovered salary,
+    but NO location (mirrors a row drained before its provider's location wiring existed)."""
+    con = open_detail(det_path)
+    con.execute(
+        "INSERT INTO job_detail(id, sig, fetched_at, attempts, snippet, salary_min) "
+        "VALUES (?,?,?,0,?,?)",
+        (id_, detail_sig({"content_hash": content_hash}), fetched_at, "old snippet", salary_min),
+    )
+    con.commit()
+    con.close()
+
+
+def _loc_fetch(with_salary=True):
+    """fetch_detail stub returning a DetailFetch that carries a structured location (and, by default,
+    a re-parseable salary in the JD body). NEVER embeds/network -- pure in-memory."""
+    from ergon_tracker.models import DetailFetch, Location
+
+    async def fake(ref):
+        body = "Senior Engineer in New York. "
+        if with_salary:
+            body += "Salary: $120,000 - $150,000 / year. "
+        return DetailFetch(
+            text=f"<p>{body}Req {ref.id}.</p>",
+            locations=[Location(city="New York", country="US", raw="New York, NY, United States")],
+        )
+
+    return fake
+
+
+def test_location_backfill_requeues_drained_row_and_fills_location(tmp_path):
+    # A: oracle, drained (has snippet), NO location  -> the backfill target
+    # B: oracle, drained, ALREADY has a location     -> must never be re-fetched
+    # C: greenhouse (not location-capable), drained   -> out of scope for backfill
+    idx = _mk_index_loc(tmp_path, [
+        ("A", "oracle", "http://x/A", "ha", "drained A", None, None),
+        ("B", "oracle", "http://x/B", "hb", "drained B", "London", "GB"),
+        ("C", "greenhouse", "http://x/C", "hc", "drained C", None, None),
+    ])
+    det = str(tmp_path / "detail.sqlite")
+    _seed_drained(det, id_="A", content_hash="ha", salary_min=100000.0)
+    stats = anyio.run(lambda: reconcile_detail_tier(
+        det, idx, fetch_detail=_loc_fetch(), max_details=50,
+        sources=["oracle", "greenhouse"], now=lambda: "2026-07-15T00:00:00Z",
+        location_backfill=True))
+    assert stats["location_requeued"] == 1   # only A (B has a location, C is not location-capable)
+    assert stats["fetched"] == 1             # only A re-fetched
+    con = open_detail(det)
+    city, country, sal, fetched = con.execute(
+        "SELECT city, country, salary_min, fetched_at FROM job_detail WHERE id='A'").fetchone()
+    assert city and country                  # location now recovered
+    assert sal == 120000.0                   # re-extracted from the (present) JD salary on success
+    assert fetched == "2026-07-15T00:00:00Z"
+    # B and C were never selected -> no sidecar rows created for them.
+    assert con.execute("SELECT COUNT(*) FROM job_detail WHERE id IN ('B','C')").fetchone()[0] == 0
+    con.close()
+    # Idempotent: a second backfill re-queues nothing (A now carries a location in the sidecar).
+    stats2 = anyio.run(lambda: reconcile_detail_tier(
+        det, idx, fetch_detail=_loc_fetch(), max_details=50,
+        sources=["oracle", "greenhouse"], now=lambda: "2026-07-15T01:00:00Z",
+        location_backfill=True))
+    assert stats2["location_requeued"] == 0 and stats2["fetched"] == 0
+
+
+def test_location_backfill_preserves_salary_on_failed_refetch(tmp_path):
+    # The no-worse-than-current guarantee: a FAILED re-fetch must never drop the already-recovered
+    # salary -- _record_attempt only bumps attempts.
+    idx = _mk_index_loc(tmp_path, [("A", "oracle", "http://x/A", "ha", "drained A", None, None)])
+    det = str(tmp_path / "detail.sqlite")
+    _seed_drained(det, id_="A", content_hash="ha", salary_min=100000.0)
+
+    async def boom(ref):
+        raise RuntimeError("network down")
+
+    stats = anyio.run(lambda: reconcile_detail_tier(
+        det, idx, fetch_detail=boom, max_details=50, sources=["oracle"],
+        now=lambda: "2026-07-15T00:00:00Z", location_backfill=True))
+    assert stats["location_requeued"] == 1 and stats["failed"] == 1 and stats["fetched"] == 0
+    con = open_detail(det)
+    city, country, sal, fetched, attempts = con.execute(
+        "SELECT city, country, salary_min, fetched_at, attempts FROM job_detail WHERE id='A'"
+    ).fetchone()
+    assert sal == 100000.0                   # preserved -- not clobbered to NULL
+    assert city is None and country is None  # still no location (fetch failed)
+    assert fetched is None and attempts == 1  # re-queued then one spent attempt
+    con.close()
+
+
+def test_location_backfill_union_covers_empty_snippet_rows(tmp_path):
+    # The union arm: a backfill run still drains the ordinary empty-snippet backlog too (so a
+    # drained-but-not-yet-merged row's carry-forward is never pruned away). E is a normal Tier-3
+    # candidate; A is a drained backfill target -- both must be fetched in one pass.
+    idx = _mk_index_loc(tmp_path, [
+        ("E", "greenhouse", "http://x/E", "he", None, None, None),
+        ("A", "oracle", "http://x/A", "ha", "drained A", None, None),
+    ])
+    det = str(tmp_path / "detail.sqlite")
+    _seed_drained(det, id_="A", content_hash="ha", salary_min=100000.0)
+    stats = anyio.run(lambda: reconcile_detail_tier(
+        det, idx, fetch_detail=_loc_fetch(), max_details=50, sources=["oracle", "greenhouse"],
+        now=lambda: "2026-07-15T00:00:00Z", location_backfill=True))
+    assert stats["fetched"] == 2             # BOTH the empty-snippet row and the drained target
+    assert stats["location_requeued"] == 1   # only A (E had no prior sidecar row)
+
+
+def test_location_backfill_off_leaves_drained_rows_untouched(tmp_path):
+    # Default (off): a drained row keeps its snippet, so it is not a normal Tier-3 candidate and is
+    # never touched -- the ordinary daily/drain path is byte-for-byte unchanged.
+    idx = _mk_index_loc(tmp_path, [("A", "oracle", "http://x/A", "ha", "drained A", None, None)])
+    det = str(tmp_path / "detail.sqlite")
+    _seed_drained(det, id_="A", content_hash="ha", salary_min=100000.0)
+    stats = anyio.run(lambda: reconcile_detail_tier(
+        det, idx, fetch_detail=_loc_fetch(), max_details=50, sources=["oracle"],
+        now=lambda: "2026-07-15T00:00:00Z"))  # location_backfill defaults False
+    assert stats["fetched"] == 0
+    assert stats.get("location_requeued", 0) == 0
+    con = open_detail(det)
+    city, sal, fetched = con.execute(
+        "SELECT city, salary_min, fetched_at FROM job_detail WHERE id='A'").fetchone()
+    assert city is None and sal == 100000.0 and fetched == "2026-07-01T00:00:00Z"
+    con.close()

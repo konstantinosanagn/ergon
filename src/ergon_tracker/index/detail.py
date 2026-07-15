@@ -196,11 +196,30 @@ _DETAIL_CONCURRENCY = int(os.environ.get("ERGON_DETAIL_CONCURRENCY", "24"))  # w
 _JOBS_COLUMNS = "id, source, board_token, apply_url, listing_url, content_hash"
 
 
+# Sources whose ``fetch_detail`` can recover a STRUCTURED city/country (they ``return DetailFetch(
+# ..., locations=...)``). The opt-in location-backfill drain re-queues already-drained rows on these
+# sources that still lack a location -- rows fetched BEFORE their provider gained location wiring,
+# which the normal empty-snippet Tier-3 selection can never reach again (a drained row has a snippet
+# and drops out). Keep in sync with the providers returning ``DetailFetch(..., locations=...)``.
+_LOCATION_CAPABLE_SOURCES: tuple[str, ...] = (
+    "workday",
+    "oracle",
+    "successfactors",
+    "eightfold",
+    "radancy",
+    "rippling",
+    "bamboohr",
+    "jobvite",
+)
+
+
 def _tier3_rows(
     idx_con: sqlite3.Connection,
     sources: Sequence[str] | None,
     shard: int | None = None,
     num_shards: int | None = None,
+    *,
+    location_backfill: bool = False,
 ) -> list[dict[str, Any]]:
     """Index rows lacking a recovered JD (Tier-3 candidates), optionally restricted to ``sources``.
 
@@ -209,6 +228,16 @@ def _tier3_rows(
     detail fetch + ``merge_detail_into_index`` populates one, which is what makes the drain converge
     (a fetched+merged row gains a snippet and drops out of this candidate set).
 
+    ``location_backfill`` widens the selection to the UNION of the normal empty-snippet set AND every
+    row on a ``_LOCATION_CAPABLE_SOURCES`` source whose index row still has NO location
+    (``city IS NULL AND country IS NULL``). The second arm reaches ALREADY-DRAINED rows (they have a
+    snippet, so the empty-snippet arm alone would never see them) -- the whole point of the backfill.
+    The union (not just the second arm) is deliberate: a drained-but-not-yet-merged row still has an
+    EMPTY snippet in the index (the merge runs in the daily build, not the drain), so it is always in
+    the first arm -- keeping it in the candidate set is what stops ``_prune_sidecar_to_shard`` from
+    dropping its carry-forward. The only rows outside the union are drained-AND-merged rows (snippet
+    present in the index), which are redundant in the sidecar anyway.
+
     When ``shard``/``num_shards`` are given, the shard predicate is pushed DOWN INTO SQL (via a
     registered ``_shard_of_row`` function that reuses the exact ``_rate_bucket_from_fields`` +
     ``_shard_of`` logic) so each of the 20 matrix jobs materializes ONLY its ~1/20th of candidates
@@ -216,12 +245,28 @@ def _tier3_rows(
     rows and filtered in Python -- ~1GB of dicts held for the shard's whole (multi-hour) lifetime,
     the likely trigger of the SR megahost shard's late OOM. The caller still re-checks
     ``_ref_in_shard`` as a cheap belt-and-suspenders on the (now small) result."""
-    sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE (snippet IS NULL OR TRIM(snippet) = '')"
     params: list[Any] = []
+    normal = "(snippet IS NULL OR TRIM(snippet) = '')"
     if sources:
         placeholders = ",".join("?" for _ in sources)
-        sql += f" AND source IN ({placeholders})"
-        params.extend(sources)
+        normal += f" AND source IN ({placeholders})"
+    if location_backfill:
+        # Restrict the backfill arm to the location-capable sources actually in play (intersect
+        # with `sources` when given so it never widens beyond the Tier-3 source set).
+        pool = sources if sources else _LOCATION_CAPABLE_SOURCES
+        loc_sources = tuple(s for s in pool if s in _LOCATION_CAPABLE_SOURCES)
+        where = f"({normal})"
+        if sources:
+            params.extend(sources)
+        if loc_sources:
+            lph = ",".join("?" for _ in loc_sources)
+            where += f" OR (source IN ({lph}) AND city IS NULL AND country IS NULL)"
+            params.extend(loc_sources)
+        sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE ({where})"
+    else:
+        sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE ({normal})"
+        if sources:
+            params.extend(sources)
     if num_shards is not None:
         n = num_shards
 
@@ -249,6 +294,34 @@ def _eligible(id_: str, sig: str, existing: dict[str, dict[str, Any]]) -> bool:
     if d["sig"] != sig:
         return True
     return d["fetched_at"] is None and d["attempts"] < RETRY_CAP
+
+
+def _requeue_for_location_backfill(det_con: sqlite3.Connection, ids: Sequence[str]) -> int:
+    """Re-queue already-drained sidecar rows so the location-backfill pass re-fetches them: clear
+    ``fetched_at`` (which flips ``_eligible`` back to True) and reset the retry budget -- but ONLY
+    for rows that still lack a location in the sidecar. Deliberately PRESERVES ``sig``/``salary``/
+    ``snippet``: a subsequent FAILED re-fetch only bumps ``attempts`` (``_record_attempt`` never
+    clears those columns), so this is provably no-worse-than-current -- a row can only GAIN a
+    location, never lose an already-recovered field. Returns the number of rows re-queued.
+
+    ``ids`` should already be scoped to ``_LOCATION_CAPABLE_SOURCES`` rows by the caller; the
+    ``city IS NULL AND country IS NULL`` guard here is the real correctness gate (never touch a row
+    that already has a location) and makes the call idempotent across repeated backfill runs."""
+    total = 0
+    chunk = 500  # stay well under SQLite's bound-variable ceiling for large backlogs
+    for start in range(0, len(ids), chunk):
+        batch = ids[start : start + chunk]
+        placeholders = ",".join("?" for _ in batch)
+        cur = det_con.execute(
+            "UPDATE job_detail SET fetched_at = NULL, attempts = 0 "
+            "WHERE fetched_at IS NOT NULL AND city IS NULL AND country IS NULL "
+            f"AND id IN ({placeholders})",
+            list(batch),
+        )
+        total += cur.rowcount
+    if total:
+        det_con.commit()
+    return total
 
 
 def _interleave_by_source(refs: Sequence[DetailRef]) -> list[DetailRef]:
@@ -564,6 +637,7 @@ async def reconcile_detail_tier(
     now: Callable[[], str],
     shard: int | None = None,
     num_shards: int | None = None,
+    location_backfill: bool = False,
 ) -> dict[str, int]:
     """Tier-3 reconcile pass: select index rows lacking a recovered JD (empty snippet), fetch their JD
     via the
@@ -588,6 +662,12 @@ async def reconcile_detail_tier(
     output disjoint by id from every other shard's, so ``merge_detail_shards.py``'s union is a
     clean, ~1x-sized combine with no possibility of a stale carry-forward clobbering a fresher
     fetch from another shard.
+
+    ``location_backfill`` (opt-in, drain-only) additionally re-fetches already-drained rows on the
+    location-capable sources that still lack a city/country -- rows drained BEFORE their provider's
+    structured-location wiring existed, which the ordinary empty-snippet selection can never reach.
+    It widens ``_tier3_rows`` to the union of both populations and re-queues the drained ones (see
+    ``_requeue_for_location_backfill``); the returned ``location_requeued`` count reports how many.
     """
     if (shard is None) != (num_shards is None):
         raise ValueError("shard and num_shards must be given together (or neither)")
@@ -613,9 +693,28 @@ async def reconcile_detail_tier(
                 sources,
                 shard=shard_i if sharded else None,
                 num_shards=num_shards_i if sharded else None,
+                location_backfill=location_backfill,
             )
         finally:
             idx_con.close()
+
+        # Location-backfill mode: the newly-selected already-drained rows are sig-current with
+        # fetched_at set, so `_eligible` would skip every one. Re-queue them FIRST (fetched_at=NULL,
+        # preserving their recovered salary/snippet) so the normal eligibility path below picks them
+        # up for a re-fetch that can now recover a location. Scope the re-queue to location-capable
+        # sources; the helper's own NULL-location guard does the rest.
+        requeued = (
+            _requeue_for_location_backfill(
+                det_con,
+                [
+                    str(r["id"])
+                    for r in tier3_rows
+                    if r.get("source") in _LOCATION_CAPABLE_SOURCES
+                ],
+            )
+            if location_backfill
+            else 0
+        )
 
         existing = _load_existing(det_con)
         all_refs = [DetailRef.from_row(row) for row in tier3_rows]
@@ -686,6 +785,11 @@ async def reconcile_detail_tier(
             and _eligible(ref.id, ref.content_sig, existing_after)
         )
 
-        return {"fetched": fetched, "failed": failed, "missing": missing}
+        stats = {"fetched": fetched, "failed": failed, "missing": missing}
+        if location_backfill:
+            # Only surfaced in backfill mode so the ordinary drain/daily return stays byte-identical
+            # (existing callers/tests assert the exact 3-key dict).
+            stats["location_requeued"] = requeued
+        return stats
     finally:
         det_con.close()
