@@ -24,6 +24,7 @@ Token: ``"{host}|{code}|{guid}|{Company}"``. ``Company`` is optional (defaults t
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -34,7 +35,12 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
     from ..models import SearchQuery
+
+# The OpportunityDetail SPA page embeds the full JD as a JSON `"Description":"…"` string (escaped
+# HTML). The list feed only carries a short `BriefDescription` teaser.
+_DETAIL_DESC_RE = re.compile(r'"Description"\s*:\s*("(?:[^"\\]|\\.)*")')
 
 __all__ = ["UKGProvider"]
 
@@ -181,6 +187,34 @@ class UKGProvider(BaseProvider):
                 return datetime.strptime(value.strip()[:10], "%Y-%m-%d")
             except ValueError:
                 return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's FULL JD (Tier-3 recovery).
+
+        UKG's list feed only carries a short ``BriefDescription`` teaser; the full JD lives on the
+        ``OpportunityDetail`` page (which IS ``ref.apply_url``), embedded as a JSON ``"Description"``
+        string. Recovering it matters because UKG's structured pay field is almost always gated off
+        (``PayRangeVisible=false``), yet ~40% of postings state the salary in the JD BODY (pay-
+        transparency-law text) -- which the enrich extractor mines once we capture it. Non-raising:
+        any missing URL, fetch failure, or absent/empty ``Description`` returns ``None``.
+        """
+        url = ref.apply_url or ref.listing_url
+        if not url or "OpportunityDetail" not in url:
+            return None
+        try:
+            raw = await fetcher.get_text(url)
+        except Exception:
+            return None
+        if not raw:
+            return None
+        m = _DETAIL_DESC_RE.search(raw)
+        if not m:
+            return None
+        try:
+            desc = json.loads(m.group(1))  # decodes \uXXXX / \" / \\ correctly
+        except (ValueError, TypeError):
+            return None
+        return desc if isinstance(desc, str) and desc.strip() else None
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

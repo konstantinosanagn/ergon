@@ -370,6 +370,7 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "join",
     "phenom",  # phenom re-routes to workday/successfactors by apply_url host
     "bamboohr",  # /careers/{id}/detail -> description + structured `compensation` string
+    "ukg",  # OpportunityDetail page -> full JD body (structured pay is gated, but ~40% state it in prose)
 ]
 
 
