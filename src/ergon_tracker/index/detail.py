@@ -299,10 +299,10 @@ def _eligible(id_: str, sig: str, existing: dict[str, dict[str, Any]]) -> bool:
 def _requeue_for_location_backfill(det_con: sqlite3.Connection, ids: Sequence[str]) -> int:
     """Re-queue already-drained sidecar rows so the location-backfill pass re-fetches them: clear
     ``fetched_at`` (which flips ``_eligible`` back to True) and reset the retry budget -- but ONLY
-    for rows that still lack a location in the sidecar. Deliberately PRESERVES ``sig``/``salary``/
-    ``snippet``: a subsequent FAILED re-fetch only bumps ``attempts`` (``_record_attempt`` never
-    clears those columns), so this is provably no-worse-than-current -- a row can only GAIN a
-    location, never lose an already-recovered field. Returns the number of rows re-queued.
+    for rows that still lack a location in the sidecar. Deliberately PRESERVES ``salary``/``snippet``:
+    a subsequent FAILED re-fetch only bumps ``attempts`` and rewrites ``sig`` (``_record_attempt``
+    never clears the recovered columns), so this is provably no-worse-than-current -- a row can only
+    GAIN a location, never lose an already-recovered field. Returns the number of rows re-queued.
 
     ``ids`` should already be scoped to ``_LOCATION_CAPABLE_SOURCES`` rows by the caller; the
     ``city IS NULL AND country IS NULL`` guard here is the real correctness gate (never touch a row
@@ -454,11 +454,26 @@ def _prune_sidecar_to_shard(
     det_con.commit()
 
 
-def _record_attempt(det_con: sqlite3.Connection, id_: str) -> None:
+def _record_attempt(det_con: sqlite3.Connection, ref: DetailRef) -> None:
+    """Record a FAILED fetch: bump the retry budget AND persist the posting's ``content_sig``.
+
+    Persisting the sig is what makes ``_eligible``'s ``attempts < RETRY_CAP`` gate reachable at all.
+    A never-succeeded row otherwise keeps ``sig = NULL`` (``_record_attempt`` was the only write path
+    for a failed row and never set it), so ``_eligible``'s ``d["sig"] != sig`` guard short-circuits
+    to True on EVERY run and the dead posting is re-fetched forever, never capped -- the dead-row
+    re-fetch leak (measured: a shard re-attempted the identical ~5.5k dead rows every run). With the
+    sig written, a persistently-dead posting is abandoned after ``RETRY_CAP`` attempts.
+
+    On a GENUINELY-CHANGED posting (incoming sig differs from the stored one) the budget RESETS to 1
+    so the new content gets a full fresh ``RETRY_CAP`` rather than inheriting a spent budget.
+    Deliberately does NOT touch snippet/salary/location -- a failed retry never clears an
+    already-recovered field (the location-backfill no-worse-than-current guarantee depends on this)."""
     det_con.execute(
-        "INSERT INTO job_detail(id, attempts) VALUES (?, 1) "
-        "ON CONFLICT(id) DO UPDATE SET attempts = attempts + 1",
-        (id_,),
+        "INSERT INTO job_detail(id, sig, attempts) VALUES (?, ?, 1) "
+        "ON CONFLICT(id) DO UPDATE SET "
+        "attempts = CASE WHEN job_detail.sig = excluded.sig THEN job_detail.attempts + 1 ELSE 1 END, "
+        "sig = excluded.sig",
+        (ref.id, ref.content_sig),
     )
 
 
@@ -755,7 +770,7 @@ async def reconcile_detail_tier(
                 _record_success(det_con, ref, job, snippet, now())
                 counts["fetched"] += 1
             except Exception:
-                _record_attempt(det_con, ref.id)
+                _record_attempt(det_con, ref)
                 counts["failed"] += 1
 
         # Fetch + enrich pipelined: enrich CPU overlaps the in-flight fetches' network waits (was a

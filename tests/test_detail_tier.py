@@ -537,3 +537,75 @@ def test_location_backfill_off_leaves_drained_rows_untouched(tmp_path):
         "SELECT city, salary_min, fetched_at FROM job_detail WHERE id='A'").fetchone()
     assert city is None and sal == 100000.0 and fetched == "2026-07-01T00:00:00Z"
     con.close()
+
+
+# --- RETRY_CAP engagement: dead rows must STOP being re-fetched (the sig-persistence fix) ---------
+#
+# BUG (fixed): _record_attempt wrote only (id, attempts), never `sig`, so a never-succeeded row kept
+# sig=NULL. _eligible's `d["sig"] != sig` guard then short-circuited to True EVERY run (NULL never
+# equals a real content_sig), so the `attempts < RETRY_CAP` gate was never reached and dead/expired
+# postings were re-fetched forever (a shard re-attempted the identical ~5.5k dead rows every run).
+# Persisting the sig lets a persistently-dead row reach attempts>=RETRY_CAP and be abandoned; a
+# genuinely-changed posting (new sig) still re-qualifies with a fresh budget.
+
+def _ref(id_, sig, source="oracle"):
+    return DetailRef(id=id_, source=source, token=None, apply_url=f"http://x/{id_}",
+                     listing_url=None, content_sig=sig)
+
+
+def test_record_attempt_persists_sig_and_increments(tmp_path):
+    from ergon_tracker.index.detail import _record_attempt
+    con = open_detail(str(tmp_path / "d.sqlite"))
+    _record_attempt(con, _ref("x", "SIGA")); con.commit()
+    sig, att = con.execute("SELECT sig, attempts FROM job_detail WHERE id='x'").fetchone()
+    assert sig == "SIGA" and att == 1            # sig written (was NULL before the fix)
+    _record_attempt(con, _ref("x", "SIGA")); _record_attempt(con, _ref("x", "SIGA")); con.commit()
+    assert con.execute("SELECT attempts FROM job_detail WHERE id='x'").fetchone()[0] == 3
+    con.close()
+
+
+def test_record_attempt_resets_budget_when_posting_changes(tmp_path):
+    from ergon_tracker.index.detail import _record_attempt, _load_existing, _eligible, RETRY_CAP
+    con = open_detail(str(tmp_path / "d.sqlite"))
+    for _ in range(RETRY_CAP):
+        _record_attempt(con, _ref("x", "SIG1"))
+    con.commit()
+    ex = _load_existing(con)
+    assert not _eligible("x", "SIG1", ex)        # capped: same sig, attempts == RETRY_CAP -> skip
+    assert _eligible("x", "SIG2", ex)            # posting changed -> eligible again
+    _record_attempt(con, _ref("x", "SIG2")); con.commit()
+    sig, att = con.execute("SELECT sig, attempts FROM job_detail WHERE id='x'").fetchone()
+    assert sig == "SIG2" and att == 1            # fresh budget for the changed posting (reset to 1)
+    con.close()
+
+
+def test_eligible_reaches_retry_cap_gate_once_sig_persisted(tmp_path):
+    # Directly exercise the gate: a failed row with a MATCHING persisted sig is skipped at the cap.
+    from ergon_tracker.index.detail import _record_attempt, _load_existing, _eligible, RETRY_CAP
+    con = open_detail(str(tmp_path / "d.sqlite"))
+    for i in range(RETRY_CAP - 1):
+        _record_attempt(con, _ref("x", "SIG"))
+        con.commit()
+        assert _eligible("x", "SIG", _load_existing(con))   # still under cap -> eligible
+    _record_attempt(con, _ref("x", "SIG")); con.commit()
+    assert not _eligible("x", "SIG", _load_existing(con))    # hit cap -> abandoned
+    con.close()
+
+
+def test_dead_row_abandoned_after_retry_cap_across_runs(tmp_path):
+    # THE regression/stress test: a row whose fetch ALWAYS fails must be attempted exactly RETRY_CAP
+    # times across successive reconcile passes, then permanently skipped -- NOT re-fetched every run
+    # (the pre-fix behaviour that burned ~96% of the finisher drain on dead rows).
+    from ergon_tracker.index.detail import RETRY_CAP
+    idx = _mk_index(tmp_path, [("dead", "oracle", "http://x/dead", "h", None)])
+    det = str(tmp_path / "detail.sqlite")
+    calls = []
+
+    async def always_fail(ref):
+        calls.append(ref.id)
+        return None   # dead posting -> no description -> _record_attempt
+
+    for _ in range(RETRY_CAP + 3):   # run several extra passes past the cap
+        anyio.run(lambda: reconcile_detail_tier(
+            det, idx, fetch_detail=always_fail, max_details=10, now=lambda: "2026-07-15T00:00:00Z"))
+    assert len(calls) == RETRY_CAP   # attempted RETRY_CAP times then abandoned (pre-fix: RETRY_CAP+3)
