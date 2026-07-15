@@ -381,7 +381,7 @@ def test_base_fetch_detail_is_none() -> None:
 def test_workable_fetch_detail_concurrent_same_board_siblings_await_not_race() -> None:
     """Regression for the board-cache check-then-act RACE: N concurrent ``fetch_detail`` calls
     for DISTINCT postings on the SAME board, fired via a single ``anyio.create_task_group``
-    (mirroring how ``detail.py::_run_fetches`` drives real concurrency). Each posting's
+    (mirroring how ``detail.py::_run_pipeline`` drives real concurrency). Each posting's
     ``apply_url`` already embeds the slug (the "full shortlink" shape), so no redirect hop is
     needed -- every task races straight into the board-resolution path together.
 

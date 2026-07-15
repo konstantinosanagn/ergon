@@ -307,28 +307,44 @@ def _detail_parts(
     return result, None, None
 
 
-async def _run_fetches(
+async def _run_pipeline(
     window: list[DetailRef],
     fetch_detail: Callable[[DetailRef], Awaitable[str | DetailFetch | None]],
     concurrency: int,
-) -> list[tuple[DetailRef, str | DetailFetch | None]]:
-    """Fetch the whole window concurrently, bounded by ``concurrency``. A failing fetch (exception
-    or ``None``) is captured per-ref, never raised — one bad host must not abort the others."""
+    handle: Callable[[DetailRef, str | DetailFetch | None], None],
+) -> None:
+    """Fetch the window concurrently AND run ``handle`` (the CPU-bound enrich+record step) on each
+    result AS IT ARRIVES, from a single consumer — so extraction CPU (~4.5ms/JD) overlaps the
+    network waits of the in-flight fetches instead of running as a blocking phase after every fetch
+    completes (which added ~40% to per-window wall time at high concurrency). ``handle`` runs
+    serially in one coroutine, so it's safe for the shared sqlite connection; a failing fetch
+    (exception or ``None``) is passed through as ``None``, never raised — one bad host must not abort
+    the others. Bounded memory: the stream buffers at most ``concurrency`` results, and each worker
+    holds its limiter slot until it hands off, so at most ~``concurrency`` results are ever live —
+    never the whole window."""
+    send, recv = anyio.create_memory_object_stream(max_buffer_size=concurrency)
     limiter = anyio.CapacityLimiter(concurrency)
-    results: list[tuple[DetailRef, str | DetailFetch | None]] = []
 
-    async def worker(ref: DetailRef) -> None:
-        async with limiter:
-            try:
-                desc = await fetch_detail(ref)
-            except Exception:
-                desc = None
-        results.append((ref, desc))
+    async def producer() -> None:
+        async with anyio.create_task_group() as tg:
+
+            async def worker(ref: DetailRef) -> None:
+                async with limiter:
+                    try:
+                        res = await fetch_detail(ref)
+                    except Exception:
+                        res = None
+                    await send.send((ref, res))  # backpressure: blocks if the consumer lags
+
+            for ref in window:
+                tg.start_soon(worker, ref)
+        await send.aclose()
 
     async with anyio.create_task_group() as tg:
-        for ref in window:
-            tg.start_soon(worker, ref)
-    return results
+        tg.start_soon(producer)
+        async with recv:
+            async for ref, result in recv:
+                handle(ref, result)
 
 
 def _prune_sidecar_to_shard(
@@ -615,11 +631,9 @@ async def reconcile_detail_tier(
         _save_cursor(det_con, next_cursor)
         det_con.commit()
 
-        results = await _run_fetches(window, fetch_detail, _DETAIL_CONCURRENCY)
+        counts = {"fetched": 0, "failed": 0}
 
-        fetched = 0
-        failed = 0
-        for ref, result in results:
+        def handle(ref: DetailRef, result: str | DetailFetch | None) -> None:
             try:
                 # fetch_detail may return a bare str (JD text) or a DetailFetch carrying a
                 # STRUCTURED salary alongside the text (e.g. rippling's payRangeDetails). Seed the
@@ -640,10 +654,16 @@ async def reconcile_detail_tier(
                 enrich_in_place(job)  # geo-normalizes the seeded locations -> resolves country
                 snippet = (html_to_text(text) or "")[:300]
                 _record_success(det_con, ref, job, snippet, now())
-                fetched += 1
+                counts["fetched"] += 1
             except Exception:
                 _record_attempt(det_con, ref.id)
-                failed += 1
+                counts["failed"] += 1
+
+        # Fetch + enrich pipelined: enrich CPU overlaps the in-flight fetches' network waits (was a
+        # blocking post-fetch phase ~40% of wall time). handle() runs serially -> sqlite-safe.
+        await _run_pipeline(window, fetch_detail, _DETAIL_CONCURRENCY, handle)
+        fetched = counts["fetched"]
+        failed = counts["failed"]
         det_con.commit()
 
         if sharded:
