@@ -29,6 +29,9 @@ on:
       sr_detail_rate:
         description: "DRAIN-ONLY SmartRecruiters req/s cap (ERGON_SR_DETAIL_RATE). Detail API probed clean at 10/s sustained; the daily crawl stays at 3/s. Lower it if SR ever 429-storms."
         default: "10"
+      workable_detail_rate:
+        description: "DRAIN-ONLY Workable req/s cap (ERGON_WORKABLE_DETAIL_RATE). Widget/detail API probed clean at 8/s sustained across 60 boards; the daily crawl stays at 3/s. Lower it if Workable 429-storms."
+        default: "8"
   # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
   # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
   # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
@@ -117,6 +120,10 @@ jobs:
           # build-index's concurrency group, so it NEVER runs while the daily list-crawl (which stays
           # at the storm-safe 3/s because it doesn't set this env) is running.
           ERGON_SR_DETAIL_RATE: "${{ github.event.inputs.sr_detail_rate || '10' }}"
+          # DRAIN-ONLY Workable rate raise 3 -> 8 req/s (see http._apply_drain_rate_overrides). The
+          # widget/detail API probed clean at 8/s sustained across 60 distinct boards (0x 429); the
+          # 3/s default was for the list-crawl storm. Same concurrency-group safety as SR above.
+          ERGON_WORKABLE_DETAIL_RATE: "${{ github.event.inputs.workable_detail_rate || '8' }}"
         run: |
           if [ ! -f dist/index.sqlite ]; then
             echo "no prior index.sqlite available -- nothing to drain yet (first-ever run before build-index.yml has published once)"

@@ -92,30 +92,33 @@ _DOMAIN_RATE_OVERRIDES: dict[str, tuple[float, float]] = {
 }
 
 
-def _sr_rate_override() -> None:
-    """DRAIN-ONLY raise of the SmartRecruiters cap via ``ERGON_SR_DETAIL_RATE`` (req/s).
-
-    The default 3/s smartrecruiters.com cap was set after a *sustained crawl storm* on the LIST
-    endpoint. The DETAIL API is a different backend that live-probed clean at 10/s sustained (250
-    reqs, 0x 429) and 46/s in burst, so the Tier-3 drain leaves ~14h of throughput on the table.
-    The cap is domain-wide, though — shared with the daily list-crawl that stormed — so we DON'T
-    raise it globally. Instead the drain workflow (which shares build-index's concurrency group, so
-    it never runs at the same time as the crawl) sets ERGON_SR_DETAIL_RATE, and only then does the
-    smartrecruiters.com cap rise for that process. The crawl process never sets it -> stays 3/s ->
-    zero storm-risk regression.
-    """
-    raw = os.environ.get("ERGON_SR_DETAIL_RATE")
-    if not raw:
-        return
-    try:
-        rate = float(raw)
-    except ValueError:
-        return
-    if rate > 0:
-        _DOMAIN_RATE_OVERRIDES["smartrecruiters.com"] = (rate, 1.0)
+# DRAIN-ONLY per-host rate raises. Each default cap was set for a *sustained LIST-crawl storm*, but
+# the per-posting/board DETAIL endpoint is a different backend that live-probes far higher (SR 10/s
+# sustained; workable 8/s sustained across 60 boards, both 0x 429). The cap is domain-wide (shared
+# with the daily crawl), so we DON'T raise it globally: the drain workflow -- which shares
+# build-index's concurrency group and thus NEVER runs while the crawl does -- sets these env vars,
+# and only then does the cap rise for that process. The crawl process never sets them -> stays at the
+# conservative default -> zero storm-risk regression.
+_DRAIN_RATE_ENV: dict[str, str] = {
+    "ERGON_SR_DETAIL_RATE": "smartrecruiters.com",
+    "ERGON_WORKABLE_DETAIL_RATE": "workable.com",
+}
 
 
-_sr_rate_override()
+def _apply_drain_rate_overrides() -> None:
+    for env, domain in _DRAIN_RATE_ENV.items():
+        raw = os.environ.get(env)
+        if not raw:
+            continue
+        try:
+            rate = float(raw)
+        except ValueError:
+            continue
+        if rate > 0:
+            _DOMAIN_RATE_OVERRIDES[domain] = (rate, 1.0)
+
+
+_apply_drain_rate_overrides()
 # Two-level public suffixes, so the registrable domain is computed correctly.
 _TWO_LEVEL_TLDS = {
     "co.uk",

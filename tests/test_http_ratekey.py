@@ -269,3 +269,20 @@ def test_sr_detail_rate_ignores_bad_env(monkeypatch: pytest.MonkeyPatch) -> None
         finally:
             monkeypatch.delenv("ERGON_SR_DETAIL_RATE", raising=False)
             importlib.reload(http_mod)
+
+
+def test_workable_detail_rate_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # DRAIN-ONLY: ERGON_WORKABLE_DETAIL_RATE raises the workable.com cap for THIS process only
+    # (the drain sets it; the daily list-crawl never does, so the crawl stays at the safe 3/s).
+    import importlib
+
+    import ergon_tracker.http as http_mod
+
+    monkeypatch.setenv("ERGON_WORKABLE_DETAIL_RATE", "8")
+    try:
+        importlib.reload(http_mod)
+        assert http_mod._DOMAIN_RATE_OVERRIDES["workable.com"] == (8.0, 1.0)
+    finally:
+        monkeypatch.delenv("ERGON_WORKABLE_DETAIL_RATE", raising=False)
+        importlib.reload(http_mod)
+    assert http_mod._DOMAIN_RATE_OVERRIDES["workable.com"] == (3.0, 1.0)  # crawl-safe default
