@@ -36,6 +36,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["JobviteProvider"]
 
@@ -145,6 +146,30 @@ class JobviteProvider(BaseProvider):
             url=url,
             payload={"title": title, "location": location, "url": url, "id": slug},
         )
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD from its detail page (Tier-3 recovery).
+
+        jobvite is list-only — the bulk ``viewall`` carries no description/pay/date. The per-job
+        page (== ``ref.apply_url``) has an ``application/ld+json`` ``JobPosting`` whose
+        ``description`` is the full JD. jobvite postings almost never disclose salary (measured:
+        structured baseSalary blank AND no prose pay), but the body still powers yoe/degree/level/
+        skills/sector extraction. Non-raising: any missing URL, fetch failure, or absent/empty
+        JSON-LD ``description`` returns ``None``."""
+        url = ref.apply_url or ref.listing_url
+        if not url:
+            return None
+        try:
+            html = await fetcher.get_text(url)
+        except Exception:
+            return None
+        if not isinstance(html, str) or not html:
+            return None
+        for job in self.extract_jsonld_jobs(html):
+            description = job.get("description")
+            if isinstance(description, str) and description.strip():
+                return description
+        return None
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
