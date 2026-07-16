@@ -100,6 +100,20 @@ _GENERIC_SEG = frozenset(
 )
 
 
+def _unescape_url(url: str) -> str:
+    """Un-escape an XML/HTML-escaped URL to a fixpoint. SuccessFactors RSS hrefs are XML-escaped and
+    frequently DOUBLE-escaped ("&amp;amp;"), so a single ``html.unescape`` leaves a still-broken
+    "&amp;"; iterate until stable (bounded -- each pass strictly shortens or terminates). A clean URL
+    is returned unchanged (no entities -> first pass is a no-op)."""
+    prev = ""
+    for _ in range(4):  # 4 passes clears any realistic nesting; guards against a pathological loop
+        if url == prev:
+            break
+        prev = url
+        url = _html.unescape(url)
+    return url
+
+
 @register("successfactors")
 class SuccessFactorsProvider(BaseProvider):
     name = "successfactors"
@@ -185,7 +199,10 @@ class SuccessFactorsProvider(BaseProvider):
         seen: set[str] = set()
         for block in _RSS_ITEM.findall(text):
             link_m = _RSS_LINK.search(block)
-            href = (link_m.group(1).strip() if link_m else "") or ""
+            # Un-escape to a fixpoint: the RSS href is XML-escaped and often DOUBLE-escaped
+            # ("&amp;amp;"), which -- left raw -- both breaks the user-facing apply link and makes
+            # SuccessFactors serve a JD-less shell on the detail re-fetch.
+            href = _unescape_url(link_m.group(1).strip() if link_m else "")
             id_m = _RSS_JOBID.search(href)
             if not id_m:
                 continue
@@ -270,7 +287,11 @@ class SuccessFactorsProvider(BaseProvider):
         Non-raising: no url, a failed/empty fetch, or an absent/empty JD node all return ``None``,
         never an exception.
         """
-        url = ref.apply_url or ref.listing_url
+        # The RSS <link> href is XML-escaped and (measured) often DOUBLE-escaped ("&amp;amp;"), which
+        # poisons the query so SuccessFactors serves a JD-less shell -- so unescape to a fixpoint here
+        # to recover already-stored poisoned rows (the crawl side is also fixed at the source, but
+        # existing index rows keep the escaped URL until re-crawled).
+        url = _unescape_url(ref.apply_url or ref.listing_url or "")
         if not url:
             return None
         try:
@@ -280,16 +301,29 @@ class SuccessFactorsProvider(BaseProvider):
         if not html:
             return None
         tree = HTMLParser(html)
-        node = tree.css_first("#jobdescription") or tree.css_first(".jobdescription")
-        if node is None:
-            return None
-        if not (node.text(strip=True) or "").strip():
-            return None  # tag present but empty (e.g. a JS-hydrated placeholder) -- nothing to keep
-        jd_html = node.html
+        jd_html = self._extract_jd(tree)
         if not jd_html:
             return None
         locations = self._microdata_locations(tree)
         return DetailFetch(text=jd_html, locations=locations) if locations else jd_html
+
+    @staticmethod
+    def _extract_jd(tree: HTMLParser) -> str | None:
+        """Pull the JD HTML out of a SuccessFactors job page across its tenant shapes.
+
+        Preferred: the CSB ``#jobdescription`` node (or the class-only ``.jobdescription``). But many
+        jobs2web/CSB microdata tenants emit NEITHER (measured: 0/12 sampled tenants had either) -- for
+        those the JD lives in ``[itemprop="description"]`` span(s), else the ``.joblayouttoken``
+        content blocks. The whole ``.job`` JobPosting scope is deliberately NOT used as a fallback: it
+        drags in a ``<style>`` block. Returns None when no shape yields text."""
+        node = tree.css_first("#jobdescription") or tree.css_first(".jobdescription")
+        if node is not None and (node.text(strip=True) or "").strip() and node.html:
+            return node.html
+        for selector in ('[itemprop="description"]', ".joblayouttoken"):
+            parts = [n.html for n in tree.css(selector) if n.html and (n.text(strip=True) or "").strip()]
+            if parts:
+                return "\n".join(parts)
+        return None
 
     @staticmethod
     def _microdata_locations(tree: HTMLParser) -> list[Location]:

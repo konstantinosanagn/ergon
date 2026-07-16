@@ -166,3 +166,44 @@ def test_microdata_locations_structured_and_string_variants() -> None:
     )
     assert SF._microdata_locations(string)[0].raw == "Auckland, NZ, 1010"
     assert SF._microdata_locations(HTMLParser("<div>no microdata</div>")) == []
+
+
+def test_extract_jd_falls_back_to_itemprop_description() -> None:
+    # jobs2web/CSB microdata tenants emit no #jobdescription/.jobdescription -- measured 0/12; the JD
+    # lives in [itemprop="description"] and was previously dropped entirely.
+    html = _page('<span itemprop="description"><p>Real JD in a microdata span.</p></span>')
+    fetcher = _FakeFetcher(html)
+    ref = DetailRef(id="1", source="successfactors", token=None, apply_url=_APPLY_URL,
+                    listing_url=None, content_sig="s")
+    desc = anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
+    text = desc if isinstance(desc, str) else (desc.text if desc else None)
+    assert text is not None and "Real JD in a microdata span." in text
+
+
+def test_extract_jd_falls_back_to_joblayouttoken() -> None:
+    html = _page('<div class="joblayouttoken"><p>JD via joblayouttoken.</p></div>')
+    fetcher = _FakeFetcher(html)
+    ref = DetailRef(id="1", source="successfactors", token=None, apply_url=_APPLY_URL,
+                    listing_url=None, content_sig="s")
+    desc = anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
+    text = desc if isinstance(desc, str) else (desc.text if desc else None)
+    assert text is not None and "JD via joblayouttoken." in text
+
+
+def test_fetch_detail_unescapes_double_escaped_apply_url() -> None:
+    # Stored URL is XML double-escaped (&amp;amp;); fetch_detail must un-escape to a fixpoint so SF
+    # serves the real page, not a JD-less shell.
+    poisoned = "https://jobs.x.edu/x/job/A/1/?feedId=null&amp;amp;utm_source=J2WRSS"
+    fetcher = _FakeFetcher(_page('<div id="jobdescription"><p>JD.</p></div>'))
+    ref = DetailRef(id="1", source="successfactors", token=None, apply_url=poisoned,
+                    listing_url=None, content_sig="s")
+    anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
+    assert fetcher.calls == ["https://jobs.x.edu/x/job/A/1/?feedId=null&utm_source=J2WRSS"]
+
+
+def test_unescape_url_handles_single_and_double_escape() -> None:
+    from ergon_tracker.providers.successfactors import _unescape_url
+
+    assert _unescape_url("a?x=1&amp;amp;y=2") == "a?x=1&y=2"  # double-escaped
+    assert _unescape_url("a?x=1&amp;y=2") == "a?x=1&y=2"      # single-escaped
+    assert _unescape_url("a?x=1&y=2") == "a?x=1&y=2"          # clean -> unchanged
