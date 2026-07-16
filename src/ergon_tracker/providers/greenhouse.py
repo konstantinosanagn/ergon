@@ -53,6 +53,11 @@ def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
+        # Python 3.10's fromisoformat REJECTS the RFC3339 'Z' UTC suffix (3.11+ accepts it) -- and
+        # Greenhouse emits `...Z`. Without this, the posting parses on 3.11+ but raises on 3.10, where
+        # it's then treated as undated and dropped by the date filter (the 3.10-only CI test failure).
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
         return datetime.fromisoformat(value)
     except ValueError:
         return None
