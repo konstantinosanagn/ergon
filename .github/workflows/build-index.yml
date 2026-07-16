@@ -122,6 +122,11 @@ jobs:
           # Stable model cache dir (matches the cache step). Explicit path: env values are not
           # shell-expanded, so `~` would be taken literally by fastembed.
           FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+          # CUTOVER: --rich still CAPTURES fresh_rich (published as fresh-rich.sqlite.gz), but the
+          # embedding itself is skipped here and owned by the sharded embed-vectors.yml matrix (~10x).
+          # This drops the daily build from ~3h -> ~1h; embed-vectors (scheduled after) rebuilds the
+          # vectors. Set to "" to fall back to the inline embed.
+          ERGON_SHARDED_EMBED: "1"
           ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
           ERGON_RICH_BACKFILL_FROM_INDEX: "${{ github.event.inputs.rich_backfill || '' }}"  # '1' on a catch-up dispatch: embed the un-vectored backlog directly (see rich._backfill_from_index)
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)

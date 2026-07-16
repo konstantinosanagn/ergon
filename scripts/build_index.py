@@ -422,6 +422,15 @@ def _location_backfill() -> bool:
     return os.environ.get("ERGON_DETAIL_LOCATION_BACKFILL", "") == "1"
 
 
+def _sharded_embed() -> bool:
+    """When ``ERGON_SHARDED_EMBED == "1"``, SKIP the inline (single-runner) rich embed. The crawl still
+    captures ``fresh_rich`` (``--rich`` stays on, so the full-description embed-text DB is written +
+    published) -- but the embedding itself is owned by the sharded ``embed-vectors.yml`` matrix
+    (~10x faster across 20 runners). Default off keeps the inline embed for local/manual builds and
+    any environment that doesn't run the matrix. This is the daily-build cutover lever."""
+    return os.environ.get("ERGON_SHARDED_EMBED", "") == "1"
+
+
 def _write_detail_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
     """Write ``manifest-detail.json`` alongside the gz — the exact fields ``DetailCache.ensure_fresh``
     reads (schema_version gate, build_id freshness key, sha256 of the RAW bytes). Mirrors the vectors
@@ -1227,7 +1236,7 @@ def main(argv: list[str]) -> None:
                 "published": ok,
             },
         )
-        if ok and rich:  # reconcile the rich sidecar from fresh_rich BEFORE fresh.sqlite is deleted
+        if ok and rich and not _sharded_embed():  # inline embed UNLESS the sharded matrix owns it
             # NON-FATAL: the rich tier is an optional enhancement. The main index is already gated +
             # promoted above, so an embedding OOM/timeout/model-download failure must NOT crash the
             # build and skip the publish step — log it and carry on (yesterday's rich gz stays live).

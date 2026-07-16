@@ -17,16 +17,20 @@ name: embed-vectors
 # index-latest release. Sharing `concurrency: group: build-index` with build-index.yml (and
 # drain-detail.yml) means the three never run simultaneously, so there is no index/asset race.
 on:
+  schedule:
+    # 06:00 UTC daily -- AFTER build-index (04:17 UTC), which post-cutover takes ~40-90 min and
+    # publishes the fresh-rich.sqlite.gz this matrix consumes. The shared `concurrency: build-index`
+    # group below serializes the two, so if build-index runs long this run simply queues behind it
+    # rather than racing it. This is the sharded embed that REPLACES build-index's inline --rich embed
+    # (build-index runs with ERGON_SHARDED_EMBED=1, capturing fresh_rich but skipping the inline embed).
+    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       rich_max_embed:
-        description: "Per-shard embed budget (ERGON_RICH_MAX_EMBED). Big by design -- each shard only holds 1/20 of the delta, so a high cap still fits the per-shard timeout. Override to bound a validation run."
+        description: "Per-shard embed budget (ERGON_RICH_MAX_EMBED). Big by design -- each shard only holds 1/20 of the delta, so a high cap still fits the per-shard timeout. Override to bound a run."
         default: "300000"
-  # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded embed path is validated by a bounded live
-  # run (a small rich_max_embed across all 20 shards, measuring per-shard rows/s + merge correctness
-  # against the inline --rich baseline). Re-add a `schedule:` cron for ongoing maintenance ONLY after
-  # that measures clean -- the shared concurrency group below already serializes this with the daily
-  # build so they never race.
+  # Validated 2026-07-16 (run 29472360603): warm-cache + all 20 shards + merge succeeded, republished
+  # index-vectors.sqlite.gz in ~5 min of plumbing (carry-forward run). Scheduled on from here.
 
 permissions:
   contents: write   # to publish the merged vectors sidecar as a release asset (merge job)
