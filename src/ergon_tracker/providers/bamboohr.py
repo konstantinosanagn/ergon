@@ -167,7 +167,7 @@ class BambooHRProvider(BaseProvider):
         p = raw.payload
 
         location = self._location(p)
-        remote = self._remote(p, location)
+        remote = self._remote(p)
 
         return JobPosting.create(
             source=self.name,
@@ -214,7 +214,7 @@ class BambooHRProvider(BaseProvider):
         )
 
     @staticmethod
-    def _remote(p: dict[str, Any], location: Location | None) -> RemoteType:
+    def _remote(p: dict[str, Any]) -> RemoteType:
         if p.get("isRemote"):
             return RemoteType.REMOTE
         return RemoteType.UNKNOWN

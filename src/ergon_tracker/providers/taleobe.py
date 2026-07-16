@@ -253,9 +253,7 @@ class TaleoBEProvider(BaseProvider):
                 remote = RemoteType.REMOTE
         employment_type_raw = p.get("employment_type")
         employment_type = (
-            _match_employment(str(employment_type_raw)) or EmploymentType.UNKNOWN
-            if employment_type_raw
-            else EmploymentType.UNKNOWN
+            _match_employment(str(employment_type_raw or "")) or EmploymentType.UNKNOWN
         )
         department = p.get("department") or None
         return JobPosting.create(

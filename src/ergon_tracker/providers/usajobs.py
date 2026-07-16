@@ -78,10 +78,9 @@ def _interval(entry: dict[str, Any]) -> SalaryInterval | None:
     if code in _INTERVAL_CODE:
         return _INTERVAL_CODE[code]
     # Some codes arrive already as readable text; the Description field is also readable.
-    text = code or (entry.get("Description") or "").strip().lower()
-    return _INTERVAL_TEXT.get(
-        (entry.get("Description") or "").strip().lower()
-    ) or _INTERVAL_TEXT.get(text)
+    desc = (entry.get("Description") or "").strip().lower()
+    text = code or desc
+    return _INTERVAL_TEXT.get(desc) or _INTERVAL_TEXT.get(text)
 
 
 def _parse_dt(value: str | None) -> datetime | None:

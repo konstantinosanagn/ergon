@@ -62,8 +62,8 @@ class SeedRegistry:
 
     def __init__(self) -> None:
         raw = _load_seed()
-        self._meta: dict[str, Any] = raw.get("_meta", {}) if isinstance(raw, dict) else {}
-        companies = raw.get("companies", {}) if isinstance(raw, dict) else {}
+        self._meta: dict[str, Any] = raw.get("_meta", {})
+        companies = raw.get("companies", {})
         self._companies: dict[str, dict[str, Any]] = {
             key: entry for key, entry in companies.items() if isinstance(entry, dict)
         }

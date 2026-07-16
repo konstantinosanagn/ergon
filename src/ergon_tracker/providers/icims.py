@@ -166,13 +166,13 @@ class ICIMSProvider(BaseProvider):
         if pin == "classic":
             return await self._fetch_classic(host, query, fetcher)
 
+        # Reaching here means pin is "new" or None: probe the JSON API to auto-detect generation.
         probe: Any = None
-        if pin != "classic":
-            url = _API.format(host=host, page=1, limit=self.NEW_PER_PAGE)
-            try:
-                probe = await fetcher.get_json(url)
-            except Exception:
-                probe = None
+        url = _API.format(host=host, page=1, limit=self.NEW_PER_PAGE)
+        try:
+            probe = await fetcher.get_json(url)
+        except Exception:
+            probe = None
 
         if isinstance(probe, dict) and ("jobs" in probe or "totalCount" in probe):
             return await self._fetch_new(host, query, fetcher, probe)
