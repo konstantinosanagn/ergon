@@ -21,19 +21,22 @@ def _load_sharded(query: SearchQuery) -> ShardedIndexBackend | None:
 
 
 def _slim_serves(query: SearchQuery) -> bool:
-    """True when the slim tier returns IDENTICAL results to the full index for this query.
+    """Whether to serve this query from the compact slim tier (~1/3 the cold-start download).
 
-    The slim tier nulls snippet/description (so keyword matches in the description would be lost)
-    and years (so year filters can't apply) and skips semantic embeddings. It is therefore exactly
-    equivalent to the full index only for broad STRUCTURED-FILTER queries: no keywords, no year
-    filter, no semantic rerank. Those download ~half the bytes with zero recall loss.
+    The slim tier nulls snippet/department (keyword matches THERE are lost — it keeps title+company
+    FTS) and years, and has no embeddings. So:
+    - ``semantic`` / year-filtered queries can NEVER use slim (it lacks the data) -> always False.
+    - broad STRUCTURED-FILTER queries (no keywords) are an EXACT equivalent of the full index -> slim
+      always wins (same results, ~1/3 the bytes).
+    - broad KEYWORD queries are served from slim ONLY under ``ERGON_INDEX=slim`` (opt-in fast mode):
+      a ~3x faster first-query download, at the cost of matching keywords on title+company only
+      (description-body/department matches need the full index). Default keeps full recall.
     """
-    return (
-        not query.keywords
-        and not query.semantic
-        and query.min_years is None
-        and query.max_years is None
-    )
+    if query.semantic or query.min_years is not None or query.max_years is not None:
+        return False
+    if not query.keywords:
+        return True
+    return os.environ.get("ERGON_INDEX", "").lower() == "slim"
 
 
 def _load_slim() -> SqliteIndexBackend | None:

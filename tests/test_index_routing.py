@@ -133,6 +133,41 @@ def test_router_skips_slim_for_keyword_query(tmp_path, monkeypatch):
     assert out is not None
 
 
+def test_router_serves_keyword_from_slim_when_opted_in(tmp_path, monkeypatch):
+    # ERGON_INDEX=slim opts broad KEYWORD queries into the compact tier (title+company FTS) for a
+    # ~3x smaller cold-start download; the full index must NOT be consulted.
+    p = tmp_path / "slim.sqlite"
+    build_index(
+        [JobPosting.create(source="greenhouse", source_job_id="1", company="Co", title="Engineer")],
+        p,
+        build_id="b1",
+    )
+    monkeypatch.setenv("ERGON_INDEX", "slim")
+    monkeypatch.setattr(router, "_load_sharded", lambda q: None)
+    monkeypatch.setattr(router, "_load_slim", lambda: SqliteIndexBackend(p))
+    monkeypatch.setattr(
+        router,
+        "_load_backend",
+        lambda: (_ for _ in ()).throw(AssertionError("full index used under ERGON_INDEX=slim")),
+    )
+    out = router.try_index(SearchQuery(keywords="engineer", limit=5))
+    assert out is not None and out[0].title == "Engineer"
+
+
+def test_slim_never_serves_year_or_semantic_even_when_opted_in(monkeypatch):
+    # Year-filtered / semantic queries lack the data in slim (years nulled, no vectors): even under
+    # ERGON_INDEX=slim they must fall through to the full index.
+    from ergon_tracker.index.router import _slim_serves
+
+    monkeypatch.setenv("ERGON_INDEX", "slim")
+    assert _slim_serves(SearchQuery(keywords="eng", max_years=2)) is False
+    assert _slim_serves(SearchQuery(keywords="eng", min_years=3)) is False
+    assert _slim_serves(SearchQuery(keywords="eng", semantic=True)) is False
+    # ...but a plain keyword query does opt in, and a broad filter query always does.
+    assert _slim_serves(SearchQuery(keywords="eng")) is True
+    assert _slim_serves(SearchQuery(level=JobLevel.SENIOR)) is True
+
+
 def test_env_off_disables_index(monkeypatch):
     monkeypatch.setenv("ERGON_INDEX", "off")
     assert router.try_index(SearchQuery(keywords="x")) is None

@@ -131,6 +131,10 @@ broad search is fast and makes **zero ATS requests at query time**.
 - **Auto-fresh** — each query checks the release manifest's `build_id` and pulls the newer snapshot
   (small row-level delta when possible). Every response carries `as_of` so freshness is visible.
 - **Sector-sharded** — a `sector=` query pulls only that shard (a few MB).
+- **Tiered download** — broad *structured-filter* queries (no keywords) already use a compact **slim
+  tier** (~1/3 the bytes, identical results). `ERGON_INDEX=slim` extends that to broad **keyword**
+  queries too — a ~3× faster first-query (cold-start) download that matches keywords on
+  **title + company** only (description-body matches need the full index). Default keeps full recall.
 - `ERGON_INDEX=off` forces everything live. Current coverage: **[INDEX_STATUS.md](INDEX_STATUS.md)**.
 
 ## Sources (30+)
