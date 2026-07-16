@@ -39,7 +39,19 @@ def _match_expr(keywords: str) -> str:
         return " AND ".join(f'"{t}"' for t in toks)  # quoted = no FTS5 syntax injection
     phrase = '"' + " ".join(toks) + '"'  # one quoted phrase: tokens in exact order
     near = "NEAR(" + " ".join(f'"{t}"' for t in toks) + f", {_NEAR_WINDOW})"
-    return f"({phrase}) OR ({near})"
+    if len(toks) <= 4:
+        return f"({phrase}) OR ({near})"
+    # 5+ tokens is a keyword BAG (a pasted sentence / long natural query), NOT a title -- e.g.
+    # "software engineer AI ML GPU systems infrastructure". NEAR(all-N, 10) requires every token
+    # within 10 words of the others in ONE column, which is effectively unsatisfiable for a long
+    # diverse query -> the phrase/NEAR-only expr returned ZERO hits (a real recall bug). Add an
+    # any-token OR arm so FTS RETRIEVES every posting matching ANY term; the backend's field-weighted
+    # BM25 re-rank (see ranking.rank + ShardedIndexBackend.search) then orders that pool by how well
+    # each posting actually matches (title >> department/company >> snippet; postings matching more
+    # terms rank higher). The phrase/NEAR arms are kept so an exact-phrase or proximity hit still
+    # floats to the very top; they just no longer GATE out everything else.
+    any_tok = " OR ".join(f'"{t}"' for t in toks)
+    return f"({phrase}) OR ({near}) OR ({any_tok})"
 
 
 def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:

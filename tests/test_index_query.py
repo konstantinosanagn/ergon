@@ -146,9 +146,26 @@ def test_match_expr_one_and_two_tokens_unchanged():
 
 
 def test_match_expr_three_plus_tokens_phrase_or_near():
-    # 3+ tokens: exact phrase OR same-column NEAR group; every token individually quoted.
+    # 3-4 tokens: exact phrase OR same-column NEAR group; every token individually quoted.
     assert _match_expr("Equity Research Associate") == (
         '("equity research associate") OR (NEAR("equity" "research" "associate", 10))'
+    )
+    # 4 tokens still stays phrase-OR-NEAR (the measured precision sweet spot) -- no any-token arm.
+    assert _match_expr("senior backend distributed systems") == (
+        '("senior backend distributed systems") OR '
+        '(NEAR("senior" "backend" "distributed" "systems", 10))'
+    )
+
+
+def test_match_expr_five_plus_tokens_adds_any_token_or_arm():
+    # Regression for "long query returns nothing": a 5+ token keyword BAG (a pasted sentence) can't
+    # satisfy NEAR(all-N, 10), so phrase-OR-NEAR alone returned ZERO. An any-token OR arm is added so
+    # FTS retrieves postings matching ANY term (BM25 re-rank then orders them); phrase + NEAR stay so
+    # exact/proximity hits still rank on top.
+    assert _match_expr("software engineer ai ml gpu systems") == (
+        '("software engineer ai ml gpu systems") OR '
+        '(NEAR("software" "engineer" "ai" "ml" "gpu" "systems", 10)) OR '
+        '("software" OR "engineer" OR "ai" OR "ml" OR "gpu" OR "systems")'
     )
 
 
