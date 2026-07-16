@@ -15,6 +15,8 @@ import os
 import shutil
 import subprocess
 import sys
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +28,29 @@ from ergon_tracker.index.db import SCHEMA_VERSION  # noqa: E402
 # Compression level 6 (not gzip's default 9): ~2x faster for ~5% larger output — the right trade for a
 # ~1GB artifact rebuilt daily. Output stays standard gzip (.gz), so the SDK's gunzip is unchanged.
 _GZIP_LEVEL = int(os.environ.get("ERGON_GZIP_LEVEL", "6"))
+
+
+@contextmanager
+def _phase(label: str):
+    """Time a build phase and make it OBSERVABLE: log ``[phase] start/done in Ns`` to stdout (streams
+    into the workflow step log live) AND append a ``- label — Ns`` line to the GitHub run-page step
+    summary (``$GITHUB_STEP_SUMMARY``) when running in Actions. Turns the build from a silent
+    black box into a timed timeline -- so ETAs and the crawl/build/embed split are MEASURED, recorded
+    per run, not guessed. Never raises from the observability itself (a bad summary write is swallowed)."""
+    print(f"[phase] {label} ...", flush=True)
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        dt = time.perf_counter() - t0
+        print(f"[phase] {label}: done in {dt:.0f}s", flush=True)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            try:
+                with open(summary, "a", encoding="utf-8") as fh:
+                    fh.write(f"- **{label}** — {dt:.0f}s\n")
+            except OSError:
+                pass
 
 
 def _gzip_file(src: Path, dst: Path) -> tuple[str, int]:
@@ -1126,9 +1151,10 @@ def main(argv: list[str]) -> None:
         last_known_rows = _last_published_rows(out / "history.jsonl")
         # Streaming crawl over a rotating window: jobs stream to fresh.sqlite as boards complete.
         fresh_path = out / "fresh.sqlite"
-        outcome, next_cursor = anyio.run(
-            _crawl_due, limit, states, fresh_path, build_id, cursor, rich
-        )
+        with _phase("crawl"):
+            outcome, next_cursor = anyio.run(
+                _crawl_due, limit, states, fresh_path, build_id, cursor, rich
+            )
         # Fold the first-party Workable network feed into the same fresh.sqlite (its rows flow into
         # the index alongside the crawled boards). Done before changed_companies_sql so new network
         # companies register as changed.
@@ -1155,9 +1181,10 @@ def main(argv: list[str]) -> None:
         _save_cursor(cursor_path, next_cursor)
         fresh_jobs_count = _count_jobs(fresh_path)
         db_tmp = out / "index.tmp.sqlite"
-        n = build_index_from_fresh_db(
-            fresh_path, db_tmp, build_id=build_id, prev_db=prev_db, crawled_keys=crawled_keys
-        )
+        with _phase("build index"):
+            n = build_index_from_fresh_db(
+                fresh_path, db_tmp, build_id=build_id, prev_db=prev_db, crawled_keys=crawled_keys
+            )
         # Preserve the prior index (move aside, instant on same fs) so we can diff it for the delta
         # AFTER the gated promote overwrites `db`. Build_index_from_fresh_db has already read it.
         prev_snap = None
@@ -1198,9 +1225,10 @@ def main(argv: list[str]) -> None:
             # promoted above, so an embedding OOM/timeout/model-download failure must NOT crash the
             # build and skip the publish step — log it and carry on (yesterday's rich gz stays live).
             try:
-                rstats, rbytes = build_and_publish_rich_incremental(
-                    db, fresh_path, out, build_id=build_id
-                )
+                with _phase("embed (inline)"):
+                    rstats, rbytes = build_and_publish_rich_incremental(
+                        db, fresh_path, out, build_id=build_id
+                    )
                 print(
                     f"  + rich tier (pruned={rstats['pruned']} embedded={rstats['embedded']} "
                     f"missing={rstats['missing']}) -> index-vectors.sqlite.gz ({rbytes // 1024} KB)"

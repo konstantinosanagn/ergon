@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -449,6 +450,9 @@ def reconcile_rich_tier_from_fresh(
                 cur = fresh.execute("SELECT id, sig, embed_text FROM fresh_rich")
             except sqlite3.OperationalError:
                 cur = None  # capture was off this run → prune-only reconcile
+            _tag = f"embed shard {shard}/{num_shards}" if sharded else "rich embed"
+            _t_start = time.monotonic()
+            _t_last = _t_start
             while cur is not None:
                 rows = cur.fetchmany(chunk_size)
                 if not rows:
@@ -476,8 +480,25 @@ def reconcile_rich_tier_from_fresh(
                 dim, model = dim or d, m or model
                 rebuilt_ids.update(r[0] for r in chunk)
                 embedded += len(chunk)
+                # Live progress on the long embed -- the workflow step log streams this, so throttle
+                # to ~every 20s: readable, and shows RATE + running total instead of a silent hang
+                # (the observability gap that made build ETAs a guess).
+                _now = time.monotonic()
+                if _now - _t_last >= 20.0:
+                    _el = _now - _t_start
+                    print(
+                        f"[{_tag}] embedded {embedded} rows | {embedded / _el if _el else 0:.0f}/s "
+                        f"| {_el:.0f}s elapsed",
+                        flush=True,
+                    )
+                    _t_last = _now
         finally:
             fresh.close()
+        if embedded:
+            print(
+                f"[{_tag}] embed complete: {embedded} rows in {time.monotonic() - _t_start:.0f}s",
+                flush=True,
+            )
 
         # COVERAGE ACCELERATOR (opt-in): after the crawl-window path, spend any remaining embed
         # budget on live rows that STILL have no vector, sourced straight from the main index —
