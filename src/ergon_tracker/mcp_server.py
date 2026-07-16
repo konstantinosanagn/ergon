@@ -50,6 +50,22 @@ Tools — pick by intent:
 - resolve_company    — which ATS a company/URL uses + its board token.
 - list_sources / list_companies — coverage introspection.
 
+Writing an effective `search_jobs` call — the #1 mistake is cramming everything into `keywords`:
+- `keywords` = the ROLE only, kept SHORT (1-4 core terms). Results are RANKED by relevance, so you
+  do NOT need every requirement in the keyword string — a long keyword bag over-narrows and returns
+  weak or empty results. Put every constraint in a TYPED FILTER instead:
+    WRONG: search_jobs(keywords="software engineer new grad NYC 140k H1B sponsor remote")
+    RIGHT: search_jobs(keywords="software engineer", city="New York", max_years=2,
+                       salary_min=140000, salary_currency="USD", visa_sponsor=True, remote=True)
+- Filters (all typed, tested, combinable): location `country`/`city`, `remote`, `level`,
+  `min_years`/`max_years` (+ `include_unknown_years`), `max_degree`, `sector`,
+  `salary_min`/`salary_max` (+ `salary_currency`), `employment_type`, `posted_within_days`,
+  `visa_sponsor`, `sponsorship_offered`.
+- For fuzzy / natural-language intent (synonyms, "AI infra roles at fintechs"), set `semantic=True`
+  to rank by MEANING instead of exact tokens — better than a long keyword string.
+- Ranking is field-weighted (title > department/company > snippet); each result carries a `score`.
+  Widen with fewer keywords + `include_unknown_*` flags; narrow with more filters, not more keywords.
+
 Index vs. live — how to choose your `search_jobs` call:
 - "roles at <company>" → pass `companies=[...]` (domains/careers URLs). This fetches LIVE from
   that company's ATS: fresh and exact. Use it whenever the user names a specific employer.
