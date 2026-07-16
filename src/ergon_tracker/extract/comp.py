@@ -161,7 +161,12 @@ _SEP_ES = re.compile(
     r"\s*(?:-|–|—|y|a)\s*$",
     re.IGNORECASE,
 )
-_SEP_TABLE: dict[str, re.Pattern[str]] = {"en": _SEP_EN, "de": _SEP_DE, "fr": _SEP_FR, "es": _SEP_ES}
+_SEP_TABLE: dict[str, re.Pattern[str]] = {
+    "en": _SEP_EN,
+    "de": _SEP_DE,
+    "fr": _SEP_FR,
+    "es": _SEP_ES,
+}
 
 # Retirement plans — never salary. Skip "401k"/"401(k)" unless money-prefixed.
 _RETIREMENT = re.compile(r"(?<![\$£€])\b401\s*\(?\s*k\s*\)?", re.IGNORECASE)
@@ -243,7 +248,12 @@ _CUE_ES = re.compile(
     r"bruto\w*|neto\w*|l[ií]quido\w*|sba|rba)\b",
     re.IGNORECASE,
 )
-_CUE_TABLE: dict[str, re.Pattern[str]] = {"en": _CUE_EN, "de": _CUE_DE, "fr": _CUE_FR, "es": _CUE_ES}
+_CUE_TABLE: dict[str, re.Pattern[str]] = {
+    "en": _CUE_EN,
+    "de": _CUE_DE,
+    "fr": _CUE_FR,
+    "es": _CUE_ES,
+}
 
 # Interval immediately following an amount, e.g. "/year", "per hour", "annually".
 _INTERVAL_EN = re.compile(
@@ -309,8 +319,12 @@ _FROM_EN = re.compile(
     re.IGNORECASE,
 )
 _FROM_DE = re.compile(r"(?:mindestens|ab|wenigstens)\s*$", re.IGNORECASE)
-_FROM_FR = re.compile(r"(?:[àa]\s+partir\s+de|minimum(?:\s+de)?|d[èe]s|au\s+moins)\s*$", re.IGNORECASE)
-_FROM_ES = re.compile(r"(?:desde|a\s+partir\s+de|m[íi]nimo(?:\s+de)?|al\s+menos)\s*$", re.IGNORECASE)
+_FROM_FR = re.compile(
+    r"(?:[àa]\s+partir\s+de|minimum(?:\s+de)?|d[èe]s|au\s+moins)\s*$", re.IGNORECASE
+)
+_FROM_ES = re.compile(
+    r"(?:desde|a\s+partir\s+de|m[íi]nimo(?:\s+de)?|al\s+menos)\s*$", re.IGNORECASE
+)
 _FROM_TABLE: dict[str, re.Pattern[str]] = {
     "en": _FROM_EN,
     "de": _FROM_DE,

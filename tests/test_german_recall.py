@@ -194,9 +194,7 @@ def _close(got: float | None, want: float | None) -> bool:
 
 
 def _salary_matches(record: dict) -> bool:
-    out = _COMP.extract(
-        ExtractInput(title="Rolle", description_text=record["text"], language="de")
-    )
+    out = _COMP.extract(ExtractInput(title="Rolle", description_text=record["text"], language="de"))
     if out is None:
         return False
     want = record["expect"]
@@ -224,9 +222,7 @@ def test_german_salary_recall_and_precision() -> None:
 
     fp = []
     for r in negatives:
-        got = _COMP.extract(
-            ExtractInput(title="Rolle", description_text=r["text"], language="de")
-        )
+        got = _COMP.extract(ExtractInput(title="Rolle", description_text=r["text"], language="de"))
         if got is not None:
             fp.append((r, got))
     precision = (len(negatives) - len(fp)) / len(negatives) if negatives else 1.0

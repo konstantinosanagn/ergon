@@ -79,9 +79,7 @@ _EMPLOYMENT_TOKEN = (
     r"(?:full[\s-]?time|part[\s-]?time|contract(?:or)?|temp(?:orary)?|seasonal"
     r"|intern(?:ship)?|casual|regular)"
 )
-_EMPLOYMENT_WHOLE_RE = re.compile(
-    rf"^{_EMPLOYMENT_TOKEN}(?:[\s/,&-]+{_EMPLOYMENT_TOKEN})*$", re.I
-)
+_EMPLOYMENT_WHOLE_RE = re.compile(rf"^{_EMPLOYMENT_TOKEN}(?:[\s/,&-]+{_EMPLOYMENT_TOKEN})*$", re.I)
 
 
 def _clean(text: str) -> str:

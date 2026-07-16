@@ -320,7 +320,9 @@ class SuccessFactorsProvider(BaseProvider):
         if node is not None and (node.text(strip=True) or "").strip() and node.html:
             return node.html
         for selector in ('[itemprop="description"]', ".joblayouttoken"):
-            parts = [n.html for n in tree.css(selector) if n.html and (n.text(strip=True) or "").strip()]
+            parts = [
+                n.html for n in tree.css(selector) if n.html and (n.text(strip=True) or "").strip()
+            ]
             if parts:
                 return "\n".join(parts)
         return None
@@ -340,7 +342,11 @@ class SuccessFactorsProvider(BaseProvider):
             val = (n.attributes.get("content") or "").strip() if n is not None else ""
             return val or None
 
-        city, region, country = meta("addressLocality"), meta("addressRegion"), meta("addressCountry")
+        city, region, country = (
+            meta("addressLocality"),
+            meta("addressRegion"),
+            meta("addressCountry"),
+        )
         if city or region or country:
             raw = ", ".join(p for p in (city, region, country) if p)
             return [Location(raw=raw, city=city, region=region, country=country)]

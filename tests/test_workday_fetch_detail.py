@@ -4,6 +4,7 @@ across 2,228 tenants at 0% JD text).
 Offline only — a FakeFetcher stands in for AsyncFetcher; no live network calls. Mirrors
 ``tests/test_provider_fetch_detail.py`` (the SmartRecruiters Task-3 pattern), including its
 non-raising discipline for a truthy non-dict payload shape."""
+
 from __future__ import annotations
 
 import anyio
@@ -192,7 +193,11 @@ def test_workday_fetch_detail_no_job_segment_is_none() -> None:
 def test_workday_fetch_detail_no_urls_is_none() -> None:
     payload = _wd_payload()
     ref = DetailRef(
-        id="11", source="workday", token=None, apply_url=None, listing_url=None,
+        id="11",
+        source="workday",
+        token=None,
+        apply_url=None,
+        listing_url=None,
         content_sig="s",
     )
     desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
@@ -200,8 +205,9 @@ def test_workday_fetch_detail_no_urls_is_none() -> None:
 
 
 def test_base_fetch_detail_is_none() -> None:
-    ref = DetailRef(id="1", source="x", token=None, apply_url=None, listing_url=None,
-                     content_sig="s")
+    ref = DetailRef(
+        id="1", source="x", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
 
@@ -240,9 +246,12 @@ def test_workday_fetch_detail_no_location_stays_bare_str() -> None:
     res = anyio.run(
         lambda: WorkdayProvider().fetch_detail(
             DetailRef(
-                id="1", source="workday", token=None,
+                id="1",
+                source="workday",
+                token=None,
                 apply_url="https://x.wd1.myworkdayjobs.com/s/job/L/R_1",
-                listing_url=None, content_sig="s",
+                listing_url=None,
+                content_sig="s",
             ),
             _FakeFetcher(_wd_payload("<p>JD only.</p>")),
         )

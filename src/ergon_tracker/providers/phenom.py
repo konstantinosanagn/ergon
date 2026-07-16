@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from ..models import (
+    DetailFetch,
     EmploymentType,
     JobPosting,
     Location,
@@ -217,7 +218,7 @@ class PhenomProvider(BaseProvider):
 
     # --- detail (Tier-3 JD recovery, re-route to the underlying ATS) --------
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Re-route to the ATS that actually hosts the JD (Tier-3 recovery).
 
         11,414 of 11,831 phenom rows are AGGREGATED listings whose ``apply_url`` points at

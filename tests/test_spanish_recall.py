@@ -202,9 +202,7 @@ def test_spanish_salary_recall_and_precision() -> None:
 
     fp = []
     for r in negatives:
-        got = _COMP.extract(
-            ExtractInput(title="Puesto", description_text=r["text"], language="es")
-        )
+        got = _COMP.extract(ExtractInput(title="Puesto", description_text=r["text"], language="es"))
         if got is not None:
             fp.append((r, got))
     precision = (len(negatives) - len(fp)) / len(negatives) if negatives else 1.0

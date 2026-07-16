@@ -8,6 +8,7 @@ Offline only -- a fake fetcher stands in for AsyncFetcher; no live network calls
 ``tests/test_workday_fetch_detail.py``'s fake-fetcher style, but serves BOTH the Workday cxs
 JSON shape (``get_json``) and the SuccessFactors HTML shape (``get_text``) so one fetcher can
 back both delegate paths."""
+
 from __future__ import annotations
 
 import anyio
@@ -56,8 +57,7 @@ def test_phenom_workday_apply_url_strips_trailing_apply_and_delegates() -> None:
         source="phenom",
         token="careers.example.com",
         apply_url=(
-            "https://acme.wd5.myworkdayjobs.com/acme_careers/job/"
-            "USA-Remote/Engineer_R-100/apply"
+            "https://acme.wd5.myworkdayjobs.com/acme_careers/job/USA-Remote/Engineer_R-100/apply"
         ),
         listing_url="https://careers.example.com/job/12345",
         content_sig="s",

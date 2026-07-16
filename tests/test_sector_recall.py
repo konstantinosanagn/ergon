@@ -35,7 +35,12 @@ def _load() -> list[dict]:
 
 def _predict(r: dict) -> str | None:
     return _EX.extract(
-        ExtractInput(title="x", company=r["company"], company_key=r["company_key"], company_domain=r.get("domain"))
+        ExtractInput(
+            title="x",
+            company=r["company"],
+            company_key=r["company_key"],
+            company_domain=r.get("domain"),
+        )
     )
 
 
@@ -52,7 +57,9 @@ def test_accuracy_when_covered() -> None:
     acc = hits / len(both) if both else 1.0
     print(f"\nsector accuracy-when-covered: {hits}/{len(both)} = {acc:.1%}")
     if acc < ACCURACY_GATE:
-        miss = [(r["company"], r["sector"], _predict(r)) for r in both if _predict(r) != r["sector"]][:10]
+        miss = [
+            (r["company"], r["sector"], _predict(r)) for r in both if _predict(r) != r["sector"]
+        ][:10]
         detail = "\n".join(f"  {c!r} want={w} got={g}" for c, w, g in miss)
         pytest.fail(f"accuracy {acc:.1%} below gate {ACCURACY_GATE:.0%}.\n{detail}")
 

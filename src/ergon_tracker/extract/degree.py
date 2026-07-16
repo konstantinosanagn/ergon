@@ -101,9 +101,15 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(rf"\b(?:BS|BA|BEng){_CTX_BS}"), "bachelor"),
     (re.compile(r"(?<=/)(?:BS|BA|BEng)\b"), "bachelor"),
     (re.compile(r"\b(?:undergraduate|university|college)\s+degree\b", re.I), "bachelor"),
-    (re.compile(r"\bdegree[-\s]+(?:educated|qualified)\b", re.I), "bachelor"),  # British "degree educated"
+    (
+        re.compile(r"\bdegree[-\s]+(?:educated|qualified)\b", re.I),
+        "bachelor",
+    ),  # British "degree educated"
     # "4-year degree" allowing an intervening field ("4-year computer science degree").
-    (re.compile(r"\b(?:4|four)[-\s]year\s+(?:[A-Za-z][A-Za-z&/]*\s+){0,3}degree\b", re.I), "bachelor"),
+    (
+        re.compile(r"\b(?:4|four)[-\s]year\s+(?:[A-Za-z][A-Za-z&/]*\s+){0,3}degree\b", re.I),
+        "bachelor",
+    ),
     # associate
     (re.compile(r"\bassociate(?:'|’)?s?\s+degree\b", re.I), "associate"),
     (re.compile(r"\ba\.\s?(?:a|s)\.?\s+degree\b", re.I), "associate"),
@@ -198,7 +204,10 @@ _PATTERNS_FR: tuple[tuple[re.Pattern[str], str], ...] = (
         "bachelor",
     ),
     # Diplôme d'État (DE) — a Bac+3-equivalent professional diploma (nursing, social work, ...).
-    (re.compile(r"\bdiplôme\s+d['’](?:[ée]tat\s+d['’])?infirmi[èe]r\w*\b", re.IGNORECASE), "bachelor"),
+    (
+        re.compile(r"\bdiplôme\s+d['’](?:[ée]tat\s+d['’])?infirmi[èe]r\w*\b", re.IGNORECASE),
+        "bachelor",
+    ),
     (re.compile(r"\bBUT\b"), "bachelor"),  # case-sensitive UPPERCASE: the diploma, not "but" (goal)
     (re.compile(r"\bma[îi]trise\b", re.IGNORECASE), "bachelor"),
     (re.compile(r"\bbac\s*\+\s*[34]\b", re.IGNORECASE), "bachelor"),
@@ -234,7 +243,9 @@ _PATTERNS_ES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bgraduad[oa]\b(?!\s+escolar)", re.IGNORECASE), "bachelor"),
     (re.compile(r"\bdiplomatura\w*\b", re.IGNORECASE), "bachelor"),
     (
-        re.compile(r"\bt[ií]tulo\s+(?:oficial|universitario|acad[ée]mico|de\s+grado)\b", re.IGNORECASE),
+        re.compile(
+            r"\bt[ií]tulo\s+(?:oficial|universitario|acad[ée]mico|de\s+grado)\b", re.IGNORECASE
+        ),
         "bachelor",
     ),
     # "Ingeniería <field>"/"Ingeniero/a (en) <field>" — in Spain/LatAm postings this alone is the
@@ -245,7 +256,9 @@ _PATTERNS_ES: tuple[tuple[re.Pattern[str], str], ...] = (
     # program (see ``_CURRENT_STUDENT_ES``), not a completed-degree requirement.
     (re.compile(r"\bingenier[ií]a\w*\b", re.IGNORECASE), "bachelor"),
     (
-        re.compile(r"\btitulaci[oó]n\w*\b(?=\s+(?:universitaria|acad[ée]mica|oficial))", re.IGNORECASE),
+        re.compile(
+            r"\btitulaci[oó]n\w*\b(?=\s+(?:universitaria|acad[ée]mica|oficial))", re.IGNORECASE
+        ),
         "bachelor",
     ),
     # Peru/LatAm: "Bachiller"/"Grado de Bachiller" is a first-degree holder title (NOT
@@ -331,6 +344,7 @@ def _vocational_alternative_de(segment: str) -> bool:
                 return True
     return False
 
+
 # --- ATS "education" vocabulary -> degree_min --------------------------------
 # Closed set of free-text education values some ATS widgets expose directly (e.g. Workable's
 # "education" field: "High School", "Associate Degree", "Bachelor's Degree", "Master's Degree",
@@ -385,7 +399,8 @@ _OR_EQUIV = re.compile(
 # accepted, but something is required). The negative lookahead excludes "or equivalent EXPERIENCE
 # required" (experience substitutes for the degree -> preferred-only, stays False).
 _EQUIV_REQUIRED = re.compile(
-    r"\bor\s+(?:equivalent|comparable)\b(?!\s+(?:work\s+)?experience)[^.\n;]{0,12}\brequired\b", re.I
+    r"\bor\s+(?:equivalent|comparable)\b(?!\s+(?:work\s+)?experience)[^.\n;]{0,12}\brequired\b",
+    re.I,
 )
 _PREFERRED = re.compile(
     r"\bpreferred\b|\ba\s+plus\b|\bnice\s+to\s+have\b|\bideally\b|\bdesir(?:ed|able)\b"

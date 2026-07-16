@@ -10,6 +10,7 @@ makes it searchable again.
 
 Offline/deterministic: fake `fetch_detail`, injected `now`, real schema via `db.fresh_db`.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -74,9 +75,7 @@ def test_fts_rebuild_makes_recovered_snippet_searchable(tmp_path):
     # Baseline: the rare word appears nowhere yet -- not in the row, not in the (empty) FTS.
     assert _match_ids(idx, _RARE_WORD) == []
 
-    stats = anyio.run(
-        lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: _NOW)
-    )
+    stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: _NOW))
     assert stats["fetched"] == 1
 
     index_con = sqlite3.connect(idx)

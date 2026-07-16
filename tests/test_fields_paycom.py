@@ -72,8 +72,10 @@ def test_truncated_teaser_description_is_kept_not_nulled() -> None:
     """Pin the deliberate decision: a hard-truncated ~153-char teaser is still stored in
     description_html (not discarded) — it aids keyword search and is too short to make
     precision-oriented extractors (degree/comp/yoe) false-positive."""
-    teaser = ("Overview- At Angel Oak Mortgage Solutions, we achieve success through our "
-              "people. The Sr Software Engineer III Principal Engine")[:153]
+    teaser = (
+        "Overview- At Angel Oak Mortgage Solutions, we achieve success through our "
+        "people. The Sr Software Engineer III Principal Engine"
+    )[:153]
     raw = _raw({"jobId": 5, "jobTitle": "Sr Software Engineer III", "description": teaser})
     job = PaycomProvider().normalize(raw)
     assert job.description_html == teaser

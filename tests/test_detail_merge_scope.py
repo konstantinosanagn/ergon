@@ -2,6 +2,7 @@
 FROM jobs`. This proves the merge is scoped to rows present in the (bounded) job_detail sidecar
 by building an index with rows the sidecar never mentions and asserting they're untouched, and
 that the returned count matches exactly the sidecar-matched rows."""
+
 import sqlite3
 
 from ergon_tracker.index.db import fresh_db
@@ -15,11 +16,22 @@ def _mk_real_index(tmp_path, job_rows):
     con = sqlite3.connect(p)
     for row in job_rows:
         defaults = {
-            "source": "oracle", "company": "Acme", "remote": "unknown", "level": "mid",
-            "employment_type": "full_time", "ts": "2026-07-01T00:00:00Z", "build_id": "b1",
-            "salary_min": None, "salary_max": None, "salary_currency": None,
-            "salary_interval": None, "years_min": None, "years_max": None,
-            "degree_min": None, "degree_required": None, "sponsorship_offered": None,
+            "source": "oracle",
+            "company": "Acme",
+            "remote": "unknown",
+            "level": "mid",
+            "employment_type": "full_time",
+            "ts": "2026-07-01T00:00:00Z",
+            "build_id": "b1",
+            "salary_min": None,
+            "salary_max": None,
+            "salary_currency": None,
+            "salary_interval": None,
+            "years_min": None,
+            "years_max": None,
+            "degree_min": None,
+            "degree_required": None,
+            "sponsorship_offered": None,
             "snippet": None,
         }
         defaults.update(row)
@@ -44,10 +56,20 @@ def _mk_detail_sidecar(tmp_path, rows):
     con = open_detail(str(p))
     for row in rows:
         defaults = {
-            "id": None, "sig": None, "fetched_at": "2026-07-01T00:00:00Z", "attempts": 0,
-            "snippet": None, "salary_min": None, "salary_max": None, "salary_currency": None,
-            "salary_interval": None, "years_min": None, "years_max": None,
-            "degree_min": None, "degree_required": None, "sponsorship_offered": None,
+            "id": None,
+            "sig": None,
+            "fetched_at": "2026-07-01T00:00:00Z",
+            "attempts": 0,
+            "snippet": None,
+            "salary_min": None,
+            "salary_max": None,
+            "salary_currency": None,
+            "salary_interval": None,
+            "years_min": None,
+            "years_max": None,
+            "degree_min": None,
+            "degree_required": None,
+            "sponsorship_offered": None,
         }
         defaults.update(row)
         con.execute(
@@ -69,17 +91,35 @@ def test_merge_is_scoped_to_sidecar_rows_not_whole_table(tmp_path):
     should be merged/counted; the other 3 (never in the sidecar) must be completely untouched --
     proving the merge reads O(sidecar rows) via the ATTACH+JOIN, not a whole-table jobs scan."""
     good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "mid"})
-    idx = _mk_real_index(tmp_path, [
-        {"id": "1", "content_hash": "h1", "title": "Engineer"},   # in sidecar -- should merge
-        {"id": "2", "content_hash": "h1", "title": "Engineer"},   # in sidecar -- should merge
-        {"id": "3", "content_hash": "h1", "title": "Engineer"},   # NOT in sidecar -- must be untouched
-        {"id": "4", "content_hash": "h1", "title": "Engineer"},   # NOT in sidecar -- must be untouched
-        {"id": "5", "content_hash": "h1", "title": "Engineer"},   # NOT in sidecar -- must be untouched
-    ])
-    det = _mk_detail_sidecar(tmp_path, [
-        {"id": "1", "sig": good_sig, "salary_min": 90000.0, "snippet": "Role one."},
-        {"id": "2", "sig": good_sig, "salary_min": 95000.0, "snippet": "Role two."},
-    ])
+    idx = _mk_real_index(
+        tmp_path,
+        [
+            {"id": "1", "content_hash": "h1", "title": "Engineer"},  # in sidecar -- should merge
+            {"id": "2", "content_hash": "h1", "title": "Engineer"},  # in sidecar -- should merge
+            {
+                "id": "3",
+                "content_hash": "h1",
+                "title": "Engineer",
+            },  # NOT in sidecar -- must be untouched
+            {
+                "id": "4",
+                "content_hash": "h1",
+                "title": "Engineer",
+            },  # NOT in sidecar -- must be untouched
+            {
+                "id": "5",
+                "content_hash": "h1",
+                "title": "Engineer",
+            },  # NOT in sidecar -- must be untouched
+        ],
+    )
+    det = _mk_detail_sidecar(
+        tmp_path,
+        [
+            {"id": "1", "sig": good_sig, "salary_min": 90000.0, "snippet": "Role one."},
+            {"id": "2", "sig": good_sig, "salary_min": 95000.0, "snippet": "Role two."},
+        ],
+    )
 
     n = merge_detail_into_index(idx, det)
     assert n == 2  # exactly the two sidecar-matched rows were merged

@@ -116,7 +116,9 @@ def test_precision_on_negatives() -> None:
     precision = (len(negatives) - len(false_pos)) / len(negatives)
     print(f"degree precision: {len(negatives) - len(false_pos)}/{len(negatives)} = {precision:.1%}")
     if precision < PRECISION_GATE:
-        detail = "\n".join(f"  got={_extract(r['text'])} :: {r['text'][:110]!r}" for r in false_pos[:8])
+        detail = "\n".join(
+            f"  got={_extract(r['text'])} :: {r['text'][:110]!r}" for r in false_pos[:8]
+        )
         pytest.fail(
             f"precision {precision:.1%} below gate {PRECISION_GATE:.0%} "
             f"({len(false_pos)} false positives). first offenders:\n{detail}"

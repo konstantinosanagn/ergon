@@ -56,7 +56,7 @@ class SectorClassifier:
 
     def _features(  # noqa: UP037
         self,
-        embeddings: "np.ndarray",
+        embeddings: np.ndarray,
         domains: "list[str | None]",  # noqa: UP037
     ) -> "np.ndarray":  # noqa: UP037
         import numpy as np
@@ -73,7 +73,7 @@ class SectorClassifier:
 
     def predict_batch(  # noqa: UP037
         self,
-        embeddings: "np.ndarray",
+        embeddings: np.ndarray,
         domains: "list[str | None]",  # noqa: UP037
     ) -> "list[tuple[str | None, float]]":  # noqa: UP037
         import numpy as np
@@ -106,7 +106,7 @@ class SectorClassifier:
 
     def predict(  # noqa: UP037
         self,
-        embedding: "np.ndarray",
+        embedding: np.ndarray,
         domain: str | None,  # noqa: UP037
     ) -> "tuple[str | None, float]":  # noqa: UP037
         return self.predict_batch(embedding, [domain])[0]

@@ -35,9 +35,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
 
 
 def test_normalize_maps_string_amounts_month() -> None:
-    payload = _payload(
-        salary={"min": "5200", "max": "6400", "currency": "EUR", "period": "month"}
-    )
+    payload = _payload(salary={"min": "5200", "max": "6400", "currency": "EUR", "period": "month"})
     job = RecruiteeProvider().normalize(_raw(payload))
 
     assert job.salary is not None
@@ -48,9 +46,7 @@ def test_normalize_maps_string_amounts_month() -> None:
 
 
 def test_normalize_maps_numeric_amounts() -> None:
-    payload = _payload(
-        salary={"min": 80000, "max": 100000, "currency": "USD", "period": "year"}
-    )
+    payload = _payload(salary={"min": 80000, "max": 100000, "currency": "USD", "period": "year"})
     job = RecruiteeProvider().normalize(_raw(payload))
 
     assert job.salary is not None

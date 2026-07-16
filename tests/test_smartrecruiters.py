@@ -193,6 +193,7 @@ async def test_fetch_detail_includes_additional_information_pay_section() -> Non
     # jobDescription/qualifications. fetch_detail must concatenate it so the enrich CompExtractor
     # can recover the range (SR was 5.7% salary because this section was dropped).
     import respx
+
     from ergon_tracker.index.detail import DetailRef
 
     posting = {
@@ -245,9 +246,14 @@ async def test_fetch_detail_recovers_when_job_description_empty() -> None:
         }
     }
     url = "https://api.smartrecruiters.com/v1/companies/acme/postings/12345"
-    ref = DetailRef(id="x", source="smartrecruiters", token=None,
-                    apply_url="https://jobs.smartrecruiters.com/acme/12345", listing_url=None,
-                    content_sig="")
+    ref = DetailRef(
+        id="x",
+        source="smartrecruiters",
+        token=None,
+        apply_url="https://jobs.smartrecruiters.com/acme/12345",
+        listing_url=None,
+        content_sig="",
+    )
     with respx.mock:
         respx.get(url).mock(return_value=httpx.Response(200, json=posting))
         async with AsyncFetcher(per_host_rate=100) as f:
@@ -260,14 +266,23 @@ async def test_fetch_detail_none_when_only_company_boilerplate() -> None:
     # an empty jobDescription + companyDescription must still return None, not company marketing.
     from ergon_tracker.index.detail import DetailRef
 
-    posting = {"jobAd": {"sections": {
-        "jobDescription": {"text": ""},
-        "companyDescription": {"text": "We are Acme, a great place to work."},
-    }}}
+    posting = {
+        "jobAd": {
+            "sections": {
+                "jobDescription": {"text": ""},
+                "companyDescription": {"text": "We are Acme, a great place to work."},
+            }
+        }
+    }
     url = "https://api.smartrecruiters.com/v1/companies/acme/postings/999"
-    ref = DetailRef(id="x", source="smartrecruiters", token=None,
-                    apply_url="https://jobs.smartrecruiters.com/acme/999", listing_url=None,
-                    content_sig="")
+    ref = DetailRef(
+        id="x",
+        source="smartrecruiters",
+        token=None,
+        apply_url="https://jobs.smartrecruiters.com/acme/999",
+        listing_url=None,
+        content_sig="",
+    )
     with respx.mock:
         respx.get(url).mock(return_value=httpx.Response(200, json=posting))
         async with AsyncFetcher(per_host_rate=100) as f:

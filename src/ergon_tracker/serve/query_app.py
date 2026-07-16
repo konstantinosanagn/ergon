@@ -124,8 +124,12 @@ class SearchService:
     """Index-backed search with bounded DB concurrency, single-flight, and a body-aware ETag cache."""
 
     def __init__(
-        self, index_path: Path | str, *, max_db_threads: int = 8,
-        cache_size: int = 2048, cache_ttl: float = 300.0,
+        self,
+        index_path: Path | str,
+        *,
+        max_db_threads: int = 8,
+        cache_size: int = 2048,
+        cache_ttl: float = 300.0,
     ) -> None:
         self.backend = SqliteIndexBackend(index_path)
         self._path = Path(index_path)
@@ -164,7 +168,8 @@ class SearchService:
             # Honesty guard: this surface serves the lexical index (the cacheable/idempotent path).
             # Silently returning BM25 results under a semantic=true cache key would mislead — say so.
             raise QueryError(
-                501, "semantic ranking is not available on the QUERY surface; "
+                501,
+                "semantic ranking is not available on the QUERY surface; "
                 "use the MCP search_jobs(semantic=true) for embedding-based ranking",
             )
         limit = min(q.limit or _DEFAULT_LIMIT, _LIMIT_CAP)
@@ -180,7 +185,9 @@ class SearchService:
         if hit is not None:
             return etag, hit, True
 
-        pending = self._inflight.get(etag)  # no await since the cache miss -> race-free registration
+        pending = self._inflight.get(
+            etag
+        )  # no await since the cache miss -> race-free registration
         if pending is not None:
             await pending.event.wait()
             if pending.error is not None:
@@ -266,16 +273,21 @@ class QueryApp:
         if path == "/health":
             if method != "GET":
                 raise QueryError(405, "health is GET-only")
-            await self._json(send, 200, {"status": "ok", **self.service.index_meta(),
-                                         **self.service.stats()})
+            await self._json(
+                send, 200, {"status": "ok", **self.service.index_meta(), **self.service.stats()}
+            )
             return
 
         if path != "/jobs":
             raise QueryError(404, f"no such resource: {scope['path']}")
 
         if method not in ("QUERY", "POST"):
-            await self._json(send, 405, {"error": "use QUERY (preferred) or POST"},
-                             extra=[(b"allow", b"QUERY, POST")])
+            await self._json(
+                send,
+                405,
+                {"error": "use QUERY (preferred) or POST"},
+                extra=[(b"allow", b"QUERY, POST")],
+            )
             return
 
         headers = {k.lower(): v for k, v in scope.get("headers", [])}
@@ -296,23 +308,44 @@ class QueryApp:
         # RFC 10008 conditional: a repeated QUERY whose result is unchanged answers 304.
         inm = headers.get(b"if-none-match", b"")
         if inm and etag.encode() in {t.strip() for t in inm.split(b",")}:
-            await self._send(send, 304, b"", extra=[(b"etag", etag.encode()),
-                                                    (b"cache-control", self._cache_control)])
+            await self._send(
+                send,
+                304,
+                b"",
+                extra=[(b"etag", etag.encode()), (b"cache-control", self._cache_control)],
+            )
             return
 
-        await self._send(send, 200, payload, extra=[
-            *_JSON,
-            (b"etag", etag.encode()),
-            (b"cache-control", self._cache_control),
-            (b"x-cache", b"HIT" if cache_hit else b"MISS"),
-        ])
+        await self._send(
+            send,
+            200,
+            payload,
+            extra=[
+                *_JSON,
+                (b"etag", etag.encode()),
+                (b"cache-control", self._cache_control),
+                (b"x-cache", b"HIT" if cache_hit else b"MISS"),
+            ],
+        )
 
-    async def _json(self, send: Send, status: int, obj: dict[str, Any],
-                    *, extra: list[tuple[bytes, bytes]] | None = None) -> None:
+    async def _json(
+        self,
+        send: Send,
+        status: int,
+        obj: dict[str, Any],
+        *,
+        extra: list[tuple[bytes, bytes]] | None = None,
+    ) -> None:
         await self._send(send, status, json.dumps(obj).encode(), extra=[*_JSON, *(extra or [])])
 
-    async def _send(self, send: Send, status: int, body: bytes,
-                    *, extra: list[tuple[bytes, bytes]] | None = None) -> None:
+    async def _send(
+        self,
+        send: Send,
+        status: int,
+        body: bytes,
+        *,
+        extra: list[tuple[bytes, bytes]] | None = None,
+    ) -> None:
         await send({"type": "http.response.start", "status": status, "headers": extra or []})
         await send({"type": "http.response.body", "body": body})
 

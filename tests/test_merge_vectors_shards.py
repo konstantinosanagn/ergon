@@ -19,9 +19,7 @@ def _mk_shard(tmp_path, name, rows, meta=None):
     p = tmp_path / name
     con = sqlite3.connect(str(p))
     _ensure_schema(con)
-    con.executemany(
-        "INSERT INTO job_vectors (id, sig, scale, vec) VALUES (?, ?, ?, ?)", rows
-    )
+    con.executemany("INSERT INTO job_vectors (id, sig, scale, vec) VALUES (?, ?, ?, ?)", rows)
     for k, v in (meta or {}).items():
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)", (k, v))
     con.commit()
@@ -86,10 +84,16 @@ def test_merge_unions_disjoint_shard_rows(tmp_path):
 def test_meta_carried_from_first_shard_not_clobbered(tmp_path):
     """First shard with a key wins (INSERT OR IGNORE); a later shard can't clobber it."""
     s0 = _mk_shard(
-        tmp_path, "index-vectors-shard-0.sqlite", [("a", "sa", 1.0, b"\x01")], meta={"model": "first"}
+        tmp_path,
+        "index-vectors-shard-0.sqlite",
+        [("a", "sa", 1.0, b"\x01")],
+        meta={"model": "first"},
     )
     s1 = _mk_shard(
-        tmp_path, "index-vectors-shard-1.sqlite", [("b", "sb", 1.0, b"\x02")], meta={"model": "second"}
+        tmp_path,
+        "index-vectors-shard-1.sqlite",
+        [("b", "sb", 1.0, b"\x02")],
+        meta={"model": "second"},
     )
     out = tmp_path / "index-vectors.sqlite"
     mvs.merge_shards([s0, s1], out)

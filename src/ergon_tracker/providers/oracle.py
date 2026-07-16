@@ -264,7 +264,11 @@ class OracleProvider(BaseProvider):
         # ExternalDescriptionStr empty" logic dropped entirely -- so those postings were never
         # recovered even though the JD sat in a sibling field of the SAME payload.
         parts: list[str] = []
-        for key in ("ExternalDescriptionStr", "ExternalResponsibilitiesStr", "ExternalQualificationsStr"):
+        for key in (
+            "ExternalDescriptionStr",
+            "ExternalResponsibilitiesStr",
+            "ExternalQualificationsStr",
+        ):
             value = item.get(key)
             if isinstance(value, str) and value.strip():
                 parts.append(value)

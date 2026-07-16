@@ -373,8 +373,7 @@ def test_tier3_rows_sql_shard_filter_equals_python_ref_in_shard(tmp_path):
         ("rippling", None),  # no url -> source bucket fallback
     ]
     rows = [
-        (str(i), src, None, url, None, f"h{i}", None)
-        for i, (src, url) in enumerate(samples * 12)
+        (str(i), src, None, url, None, f"h{i}", None) for i, (src, url) in enumerate(samples * 12)
     ]
     con = sqlite3.connect(tmp_path / "idx.sqlite")
     con.execute(

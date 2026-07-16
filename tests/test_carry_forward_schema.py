@@ -29,12 +29,10 @@ def _build_prev(path) -> None:
     con = connect(path)
     try:
         con.executescript(_older_schema_sql())
-        assert "degree_min" not in {
-            r[1] for r in con.execute("PRAGMA table_info(jobs)")
-        }, "prev must lack degree_min to reproduce the schema-v2 drift"
-        con.execute(
-            "INSERT INTO companies(company_key, display_name) VALUES('acme', 'Acme')"
+        assert "degree_min" not in {r[1] for r in con.execute("PRAGMA table_info(jobs)")}, (
+            "prev must lack degree_min to reproduce the schema-v2 drift"
         )
+        con.execute("INSERT INTO companies(company_key, display_name) VALUES('acme', 'Acme')")
         con.executemany(
             "INSERT INTO jobs(id, content_hash, company_key, source, company, title, remote, "
             "level, employment_type, first_seen, last_seen, fetched_at, build_id) "

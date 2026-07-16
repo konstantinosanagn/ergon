@@ -87,7 +87,8 @@ def _expected(i: int) -> dict[str, object]:
 def _canned_good_jd(i: int) -> str:
     exp = _expected(i)
     degree_phrase = (
-        "Bachelor's degree in CS required." if exp["degree_min"] == "bachelor"
+        "Bachelor's degree in CS required."
+        if exp["degree_min"] == "bachelor"
         else "Master's degree required."
     )
     salary_min = int(exp["salary_min"])  # type: ignore[arg-type]
@@ -124,9 +125,7 @@ def test_good_rows_recover_salary_years_degree_into_index(tmp_path):
     calls: list[str] = []
     fetch = _make_fetcher(failing_ids=set(), none_ids=set(), calls=calls)
 
-    stats = anyio.run(
-        lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW)
-    )
+    stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW))
     assert stats == {"fetched": n, "failed": 0, "missing": 0}
 
     con = sqlite3.connect(idx)
@@ -161,9 +160,7 @@ def test_failing_and_none_rows_marked_attempts_and_not_merged(tmp_path):
     good_ids = {0, 2, 5}
     fetch = _make_fetcher(failing_ids=failing_ids, none_ids=none_ids, calls=calls)
 
-    stats = anyio.run(
-        lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW)
-    )
+    stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW))
     # non-fatal: all 6 refs were attempted despite 3 dead ones.
     assert stats["fetched"] == len(good_ids)
     assert stats["failed"] == len(failing_ids) + len(none_ids)
@@ -272,9 +269,7 @@ def test_drain_converges_to_zero_across_capped_runs(tmp_path):
         raise AssertionError("drain did not converge within the safety bound")
 
     assert missing_history[-1] == 0
-    assert all(
-        missing_history[i] > missing_history[i + 1] for i in range(len(missing_history) - 1)
-    )
+    assert all(missing_history[i] > missing_history[i + 1] for i in range(len(missing_history) - 1))
     assert fetched_total == n
     assert len(calls) == n
     assert len(set(calls)) == n  # every id fetched exactly once across the whole drain

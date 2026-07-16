@@ -10,7 +10,14 @@ from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
 
 
 def _raw(payload):
-    return RawJob(source="smartrecruiters", source_job_id="1", company="Co", url="http://x", token="co", payload=payload)
+    return RawJob(
+        source="smartrecruiters",
+        source_job_id="1",
+        company="Co",
+        url="http://x",
+        token="co",
+        payload=payload,
+    )
 
 
 def test_smartrecruiters_maps_experience_level():

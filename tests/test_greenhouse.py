@@ -155,4 +155,6 @@ def test_salary_ignores_pay_language_boilerplate() -> None:
 def test_salary_none_when_no_pay_metadata() -> None:
     assert _sal(None) is None
     assert _sal([]) is None
-    assert _sal([{"name": "Workplace Type", "value_type": "single_select", "value": "Remote"}]) is None
+    assert (
+        _sal([{"name": "Workplace Type", "value_type": "single_select", "value": "Remote"}]) is None
+    )

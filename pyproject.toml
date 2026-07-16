@@ -48,8 +48,8 @@ dev = [
   "respx>=0.21",
   "vcrpy>=6",
   "pytest-cov",
-  "ruff>=0.5",
-  "mypy>=1.10",
+  "ruff==0.15.17",  # PINNED: a floating ruff reformats across versions -> CI format-check drift (was red for days). Bump deliberately.
+  "mypy==2.1.0",    # PINNED for the same reproducibility reason: a floating type-checker surprises CI with new errors.
   "openpyxl>=3.1",
   "numpy>=1.26",
 ]

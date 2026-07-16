@@ -51,7 +51,9 @@ def test_detail_cache_downloads_verifies_and_opens(tmp_path):
 def test_detail_cache_absent_asset_returns_none(tmp_path):
     remote = tmp_path / "remote"
     remote.mkdir()  # nothing published
-    assert DetailCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache").ensure_fresh() is None
+    assert (
+        DetailCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache").ensure_fresh() is None
+    )
 
 
 def test_detail_cache_rejects_corrupt_download(tmp_path):
@@ -61,7 +63,9 @@ def test_detail_cache_rejects_corrupt_download(tmp_path):
     m = json.loads((remote / "manifest-detail.json").read_text())
     m["sha256"] = "0" * 64
     (remote / "manifest-detail.json").write_text(json.dumps(m))
-    assert DetailCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache").ensure_fresh() is None
+    assert (
+        DetailCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache").ensure_fresh() is None
+    )
 
 
 def test_detail_cache_warm_hit_does_not_redownload(tmp_path):

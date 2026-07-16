@@ -721,11 +721,7 @@ async def reconcile_detail_tier(
         requeued = (
             _requeue_for_location_backfill(
                 det_con,
-                [
-                    str(r["id"])
-                    for r in tier3_rows
-                    if r.get("source") in _LOCATION_CAPABLE_SOURCES
-                ],
+                [str(r["id"]) for r in tier3_rows if r.get("source") in _LOCATION_CAPABLE_SOURCES],
             )
             if location_backfill
             else 0

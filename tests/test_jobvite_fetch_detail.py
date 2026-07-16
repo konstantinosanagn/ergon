@@ -28,7 +28,9 @@ class _FakeFetcher:
 
 
 def _ref(url: str | None = _URL) -> DetailRef:
-    return DetailRef(id="1", source="jobvite", token=None, apply_url=url, listing_url=None, content_sig="s")
+    return DetailRef(
+        id="1", source="jobvite", token=None, apply_url=url, listing_url=None, content_sig="s"
+    )
 
 
 _PAGE = (
@@ -51,7 +53,9 @@ def test_fetch_detail_returns_jsonld_description() -> None:
 
 def test_fetch_detail_body_yields_yoe_and_degree_through_enrich() -> None:
     body = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(_PAGE)))
-    job = JobPosting.create(source="jobvite", source_job_id="1", company="", title="", description_html=body)
+    job = JobPosting.create(
+        source="jobvite", source_job_id="1", company="", title="", description_html=body
+    )
     enrich_in_place(job)
     # salary is absent (jobvite doesn't disclose), but the body still powers the other extractors
     assert job.years_experience_min == 5
@@ -59,9 +63,11 @@ def test_fetch_detail_body_yields_yoe_and_degree_through_enrich() -> None:
 
 
 def test_fetch_detail_missing_url_or_jsonld_returns_none() -> None:
-    assert anyio.run(lambda: JobviteProvider().fetch_detail(_ref(None), _FakeFetcher(_PAGE))) is None
+    assert (
+        anyio.run(lambda: JobviteProvider().fetch_detail(_ref(None), _FakeFetcher(_PAGE))) is None
+    )
     for page in ("<html><body>no json-ld</body></html>", "", "not html"):
-        res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+        res = anyio.run(lambda p=page: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(p)))
         assert res is None
 
 

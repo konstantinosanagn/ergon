@@ -32,7 +32,9 @@ class _FakeFetcher:
 
 
 def _ref(url: str | None = _DETAIL_URL) -> DetailRef:
-    return DetailRef(id="1", source="ukg", token=None, apply_url=url, listing_url=None, content_sig="s")
+    return DetailRef(
+        id="1", source="ukg", token=None, apply_url=url, listing_url=None, content_sig="s"
+    )
 
 
 # A trimmed OpportunityDetail SPA payload: PayRangeVisible is off, but the JSON `Description`
@@ -54,7 +56,9 @@ def test_fetch_detail_extracts_full_description_body() -> None:
 
 def test_fetch_detail_body_yields_prose_salary_through_enrich() -> None:
     body = anyio.run(lambda: UKGProvider().fetch_detail(_ref(), _FakeFetcher(_PAGE)))
-    job = JobPosting.create(source="ukg", source_job_id="1", company="", title="", description_html=body)
+    job = JobPosting.create(
+        source="ukg", source_job_id="1", company="", title="", description_html=body
+    )
     enrich_in_place(job)
     assert job.salary is not None
     assert job.salary.min_amount == 26.44 and job.salary.max_amount == 31.25
@@ -63,12 +67,16 @@ def test_fetch_detail_body_yields_prose_salary_through_enrich() -> None:
 
 def test_fetch_detail_non_detail_url_returns_none() -> None:
     # apply_url that isn't an OpportunityDetail page -> nothing to fetch.
-    res = anyio.run(lambda: UKGProvider().fetch_detail(_ref("https://recruiting.ultipro.com/x/JobBoard/g/"), _FakeFetcher(_PAGE)))
+    res = anyio.run(
+        lambda: UKGProvider().fetch_detail(
+            _ref("https://recruiting.ultipro.com/x/JobBoard/g/"), _FakeFetcher(_PAGE)
+        )
+    )
     assert res is None
     assert anyio.run(lambda: UKGProvider().fetch_detail(_ref(None), _FakeFetcher(_PAGE))) is None
 
 
 def test_fetch_detail_missing_description_returns_none() -> None:
     for page in ('{"PayRangeVisible":false}', '{"Description":""}', "not json at all", ""):
-        res = anyio.run(lambda: UKGProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+        res = anyio.run(lambda p=page: UKGProvider().fetch_detail(_ref(), _FakeFetcher(p)))
         assert res is None

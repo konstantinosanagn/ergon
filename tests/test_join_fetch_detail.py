@@ -11,6 +11,7 @@ the WHOLE chain is followed internally by httpx inside a single ``AsyncFetcher.r
 one rate-limit token per posting, not one per hop. Those tests use a real ``AsyncFetcher`` wired
 to an ``httpx.MockTransport`` so httpx's own redirect-following is exercised end to end, rather
 than a hand-rolled hop-by-hop helper (join.py no longer has one)."""
+
 from __future__ import annotations
 
 import anyio

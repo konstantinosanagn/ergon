@@ -135,9 +135,7 @@ def test_single_host_never_exceeds_per_host_concurrency_cap() -> None:
         return httpx.Response(200, json={"ok": True})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    fetcher = AsyncFetcher(
-        client=client, concurrency=50, per_host_rate=1000, per_host_period=1.0
-    )
+    fetcher = AsyncFetcher(client=client, concurrency=50, per_host_rate=1000, per_host_period=1.0)
 
     async def main() -> None:
         async with fetcher, anyio.create_task_group() as tg:

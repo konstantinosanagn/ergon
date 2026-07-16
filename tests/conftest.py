@@ -16,9 +16,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     # Live tests make real network calls; skip them unless explicitly opted in. This lives in the
     # ROOT conftest (not a nested tests/live/conftest.py) so there is only one top-level `conftest`
     # module — a second one shadows this file's `load_fixture` and breaks suite-wide collection.

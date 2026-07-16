@@ -4,6 +4,7 @@ Offline only -- a FakeFetcher stands in for AsyncFetcher; no live network calls.
 ``tests/test_workday_fetch_detail.py``, including its non-raising discipline for a truthy
 non-dict payload shape, plus eightfold's specific tenant-derivation asymmetry (host vs.
 token-fallback vs. unresolvable white-label domain)."""
+
 from __future__ import annotations
 
 import anyio
@@ -175,7 +176,11 @@ def test_eightfold_fetch_detail_truthy_non_dict_payload_is_none() -> None:
 def test_eightfold_fetch_detail_no_urls_is_none() -> None:
     payload = _ef_payload()
     ref = DetailRef(
-        id="9", source="eightfold", token=None, apply_url=None, listing_url=None,
+        id="9",
+        source="eightfold",
+        token=None,
+        apply_url=None,
+        listing_url=None,
         content_sig="s",
     )
     desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
@@ -200,8 +205,9 @@ def test_eightfold_fetch_detail_fetch_failure_is_none() -> None:
 
 
 def test_base_fetch_detail_is_none() -> None:
-    ref = DetailRef(id="1", source="x", token=None, apply_url=None, listing_url=None,
-                     content_sig="s")
+    ref = DetailRef(
+        id="1", source="x", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
 
@@ -211,8 +217,12 @@ def test_eightfold_fetch_detail_recovers_location_string() -> None:
 
     payload = {"job_description": "<p>JD.</p>", "location": "Phoenix, AZ USA 85040"}
     ref = DetailRef(
-        id="1", source="eightfold", token=None,
-        apply_url="https://acme.eightfold.ai/careers/job/42", listing_url=None, content_sig="s",
+        id="1",
+        source="eightfold",
+        token=None,
+        apply_url="https://acme.eightfold.ai/careers/job/42",
+        listing_url=None,
+        content_sig="s",
     )
     res = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert isinstance(res, DetailFetch)

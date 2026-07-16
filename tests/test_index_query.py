@@ -126,10 +126,15 @@ def test_last_seen_staleness_guard(tmp_path):
     # No guard -> both returned.
     assert len(search_rows(con, SearchQuery(keywords="engineer", limit=10))) == 2
     # Guard at 21 days -> the stale ghost is dropped, the fresh row survives.
-    guarded = search_rows(con, SearchQuery(keywords="engineer", max_last_seen_age_days=21, limit=10))
+    guarded = search_rows(
+        con, SearchQuery(keywords="engineer", max_last_seen_age_days=21, limit=10)
+    )
     assert [r["title"] for r in guarded] == ["Fresh Engineer"]
     # A generous window (60d) keeps both (never hides a slow-but-alive board).
-    assert len(search_rows(con, SearchQuery(keywords="engineer", max_last_seen_age_days=60, limit=10))) == 2
+    assert (
+        len(search_rows(con, SearchQuery(keywords="engineer", max_last_seen_age_days=60, limit=10)))
+        == 2
+    )
 
 
 def test_match_expr_one_and_two_tokens_unchanged():

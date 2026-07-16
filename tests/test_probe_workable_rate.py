@@ -12,7 +12,8 @@ import anyio
 import httpx
 
 _spec = importlib.util.spec_from_file_location(
-    "probe_workable_rate", Path(__file__).resolve().parent.parent / "scripts" / "probe_workable_rate.py"
+    "probe_workable_rate",
+    Path(__file__).resolve().parent.parent / "scripts" / "probe_workable_rate.py",
 )
 probe = importlib.util.module_from_spec(_spec)
 # Register before exec: dataclasses with `from __future__ import annotations` resolve types via
@@ -55,7 +56,9 @@ def test_run_step_paces_and_collects_via_mock_transport():
     async def go():
         transport = httpx.MockTransport(handler)
         async with httpx.AsyncClient(transport=transport) as client:
-            return await probe.run_step(client, ["a", "b", "c"], rate=200.0, count=12, max_inflight=8)
+            return await probe.run_step(
+                client, ["a", "b", "c"], rate=200.0, count=12, max_inflight=8
+            )
 
     results = anyio.run(go)
     assert len(results) == 12

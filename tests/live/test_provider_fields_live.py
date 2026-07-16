@@ -11,9 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-with open(
-    Path(__file__).resolve().parents[2] / "src/ergon_tracker/registry/data/seed.json"
-) as _f:
+with open(Path(__file__).resolve().parents[2] / "src/ergon_tracker/registry/data/seed.json") as _f:
     _SEED = json.load(_f)["companies"]
 _H = {"User-Agent": "Mozilla/5.0 (populated-fill gate)"}
 
@@ -69,8 +67,9 @@ def test_workable_experience_populated():
     tot = filled = 0
     for t in _tokens("workable", 24):
         try:
-            d = httpx.get(f"https://apply.workable.com/api/v1/widget/accounts/{t}",
-                          headers=_H, timeout=15).json()
+            d = httpx.get(
+                f"https://apply.workable.com/api/v1/widget/accounts/{t}", headers=_H, timeout=15
+            ).json()
         except Exception:
             continue
         for p in d.get("jobs", []):
@@ -154,7 +153,7 @@ def test_personio_seniority_populated():
         for pos in re.findall(r"<position>(.*?)</position>", text, re.S):
             tot += 1
             m = re.search(r"<seniority>(.*?)</seniority>", pos, re.S)
-            val = (m.group(1).replace("<![CDATA[", "").replace("]]>", "").strip() if m else "")
+            val = m.group(1).replace("<![CDATA[", "").replace("]]>", "").strip() if m else ""
             if val:
                 filled += 1
     assert tot >= 30, f"too few sampled ({tot})"

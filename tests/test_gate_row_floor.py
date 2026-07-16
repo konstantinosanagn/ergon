@@ -20,7 +20,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from build_index import _last_published_rows  # noqa: E402
 
-_REQ = ("greenhouse", "A", "unknown", "mid", "fulltime", "2026-07-01", "2026-07-01", "2026-07-01", "b0")
+_REQ = (
+    "greenhouse",
+    "A",
+    "unknown",
+    "mid",
+    "fulltime",
+    "2026-07-01",
+    "2026-07-01",
+    "2026-07-01",
+    "b0",
+)
 
 
 def _tiny_index(path: Path, n: int) -> None:

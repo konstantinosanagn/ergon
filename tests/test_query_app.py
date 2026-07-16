@@ -18,8 +18,12 @@ pytestmark = pytest.mark.anyio
 
 def _job(sid, title, desc="", degree_min=None, country="United States"):
     j = JobPosting.create(
-        source="greenhouse", source_job_id=sid, company=f"Co{sid}", title=title,
-        description_text=desc, locations=[Location(raw=f"City, {country}", city="City", country=country)],
+        source="greenhouse",
+        source_job_id=sid,
+        company=f"Co{sid}",
+        title=title,
+        description_text=desc,
+        locations=[Location(raw=f"City, {country}", city="City", country=country)],
         remote=RemoteType.ONSITE,
     )
     if degree_min:
@@ -123,16 +127,24 @@ async def test_new_build_rotates_etag(index, tmp_path):
 # --- error handling -------------------------------------------------------------------------------
 async def test_error_cases(index):
     async with _client(_app(index)) as c:
-        assert (await c.request("QUERY", "/jobs", content=b"{bad json",
-                                headers={"content-type": "application/json"})).status_code == 400
+        assert (
+            await c.request(
+                "QUERY", "/jobs", content=b"{bad json", headers={"content-type": "application/json"}
+            )
+        ).status_code == 400
         assert (await _query(c, {"limit": "not-an-int"})).status_code == 400  # pydantic type error
         assert (await c.request("GET", "/jobs")).status_code == 405
         assert (await c.request("QUERY", "/nope", json={})).status_code == 404
-        big = await c.request("QUERY", "/jobs", content=b"x" * (64 * 1024 + 1),
-                              headers={"content-type": "application/json"})
+        big = await c.request(
+            "QUERY",
+            "/jobs",
+            content=b"x" * (64 * 1024 + 1),
+            headers={"content-type": "application/json"},
+        )
         assert big.status_code == 413
-        wrong = await c.request("QUERY", "/jobs", content=b"{}",
-                                headers={"content-type": "text/plain"})
+        wrong = await c.request(
+            "QUERY", "/jobs", content=b"{}", headers={"content-type": "text/plain"}
+        )
         assert wrong.status_code == 415
         allow = await c.request("GET", "/jobs")
         assert "QUERY" in allow.headers.get("allow", "")
@@ -156,7 +168,9 @@ async def test_health(index):
 async def test_empty_body_is_valid_query(index):
     async with _client(_app(index)) as c:
         r = await c.request("QUERY", "/jobs", content=b"")
-    assert r.status_code == 200 and r.json()["count"] >= 1  # empty body == match-all (bounded by limit)
+    assert (
+        r.status_code == 200 and r.json()["count"] >= 1
+    )  # empty body == match-all (bounded by limit)
 
 
 # --- concurrency + single-flight (the production-grade core) ---------------------------------------
@@ -175,6 +189,7 @@ class _CountingBackend:
         self.calls += 1
         if self._delay:
             import time
+
             time.sleep(self._delay)
         return self._real.search(query)
 
@@ -185,9 +200,7 @@ async def test_single_flight_coalesces_identical_misses(index):
     svc.backend = counting  # type: ignore[assignment]
     app = QueryApp(svc)
     async with _client(app) as c:
-        results = await asyncio_gather(
-            *[_query(c, {"keywords": "nurse"}) for _ in range(50)]
-        )
+        results = await asyncio_gather(*[_query(c, {"keywords": "nurse"}) for _ in range(50)])
     assert all(r.status_code == 200 for r in results)
     bodies = {r.content for r in results}
     assert len(bodies) == 1  # every concurrent caller got the identical payload

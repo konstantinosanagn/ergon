@@ -159,31 +159,112 @@ for _name in _COUNTRY_NAMES:
 # resolved ONLY in country position (see the enterprise block in normalize_geo), never as a bare
 # "City, XX" (which stays a US state).
 _ISO3_COUNTRY: dict[str, str] = {
-    "usa": "United States", "can": "Canada", "gbr": "United Kingdom", "deu": "Germany",
-    "fra": "France", "ind": "India", "mex": "Mexico", "bra": "Brazil", "jpn": "Japan",
-    "chn": "China", "aus": "Australia", "nld": "Netherlands", "esp": "Spain", "ita": "Italy",
-    "irl": "Ireland", "sgp": "Singapore", "pol": "Poland", "swe": "Sweden", "che": "Switzerland",
-    "prt": "Portugal", "isr": "Israel", "kor": "South Korea", "nzl": "New Zealand", "aut": "Austria",
-    "bel": "Belgium", "dnk": "Denmark", "nor": "Norway", "fin": "Finland", "cze": "Czech Republic",
-    "rou": "Romania", "ukr": "Ukraine", "arg": "Argentina", "chl": "Chile", "col": "Colombia",
-    "phl": "Philippines", "idn": "Indonesia", "vnm": "Vietnam", "tha": "Thailand", "mys": "Malaysia",
-    "zaf": "South Africa", "nga": "Nigeria", "egy": "Egypt", "tur": "Turkey", "grc": "Greece",
-    "hun": "Hungary", "are": "United Arab Emirates", "twn": "Taiwan", "hkg": "Hong Kong",
-    "sau": "Saudi Arabia", "ken": "Kenya", "mar": "Morocco",
+    "usa": "United States",
+    "can": "Canada",
+    "gbr": "United Kingdom",
+    "deu": "Germany",
+    "fra": "France",
+    "ind": "India",
+    "mex": "Mexico",
+    "bra": "Brazil",
+    "jpn": "Japan",
+    "chn": "China",
+    "aus": "Australia",
+    "nld": "Netherlands",
+    "esp": "Spain",
+    "ita": "Italy",
+    "irl": "Ireland",
+    "sgp": "Singapore",
+    "pol": "Poland",
+    "swe": "Sweden",
+    "che": "Switzerland",
+    "prt": "Portugal",
+    "isr": "Israel",
+    "kor": "South Korea",
+    "nzl": "New Zealand",
+    "aut": "Austria",
+    "bel": "Belgium",
+    "dnk": "Denmark",
+    "nor": "Norway",
+    "fin": "Finland",
+    "cze": "Czech Republic",
+    "rou": "Romania",
+    "ukr": "Ukraine",
+    "arg": "Argentina",
+    "chl": "Chile",
+    "col": "Colombia",
+    "phl": "Philippines",
+    "idn": "Indonesia",
+    "vnm": "Vietnam",
+    "tha": "Thailand",
+    "mys": "Malaysia",
+    "zaf": "South Africa",
+    "nga": "Nigeria",
+    "egy": "Egypt",
+    "tur": "Turkey",
+    "grc": "Greece",
+    "hun": "Hungary",
+    "are": "United Arab Emirates",
+    "twn": "Taiwan",
+    "hkg": "Hong Kong",
+    "sau": "Saudi Arabia",
+    "ken": "Kenya",
+    "mar": "Morocco",
 }
 _COUNTRY_ALIASES.update(_ISO3_COUNTRY)  # alpha-3 are safe to resolve anywhere
 
 _ISO2_COUNTRY: dict[str, str] = {
-    "us": "United States", "ca": "Canada", "gb": "United Kingdom", "de": "Germany", "fr": "France",
-    "in": "India", "mx": "Mexico", "br": "Brazil", "jp": "Japan", "cn": "China", "au": "Australia",
-    "nl": "Netherlands", "es": "Spain", "it": "Italy", "ie": "Ireland", "sg": "Singapore",
-    "pl": "Poland", "se": "Sweden", "ch": "Switzerland", "pt": "Portugal", "il": "Israel",
-    "kr": "South Korea", "nz": "New Zealand", "at": "Austria", "be": "Belgium", "dk": "Denmark",
-    "no": "Norway", "fi": "Finland", "cz": "Czech Republic", "ro": "Romania", "ua": "Ukraine",
-    "ar": "Argentina", "cl": "Chile", "co": "Colombia", "ph": "Philippines", "id": "Indonesia",
-    "vn": "Vietnam", "th": "Thailand", "my": "Malaysia", "za": "South Africa", "ng": "Nigeria",
-    "eg": "Egypt", "tr": "Turkey", "gr": "Greece", "hu": "Hungary", "ae": "United Arab Emirates",
-    "tw": "Taiwan", "hk": "Hong Kong", "sa": "Saudi Arabia", "ke": "Kenya", "uk": "United Kingdom",
+    "us": "United States",
+    "ca": "Canada",
+    "gb": "United Kingdom",
+    "de": "Germany",
+    "fr": "France",
+    "in": "India",
+    "mx": "Mexico",
+    "br": "Brazil",
+    "jp": "Japan",
+    "cn": "China",
+    "au": "Australia",
+    "nl": "Netherlands",
+    "es": "Spain",
+    "it": "Italy",
+    "ie": "Ireland",
+    "sg": "Singapore",
+    "pl": "Poland",
+    "se": "Sweden",
+    "ch": "Switzerland",
+    "pt": "Portugal",
+    "il": "Israel",
+    "kr": "South Korea",
+    "nz": "New Zealand",
+    "at": "Austria",
+    "be": "Belgium",
+    "dk": "Denmark",
+    "no": "Norway",
+    "fi": "Finland",
+    "cz": "Czech Republic",
+    "ro": "Romania",
+    "ua": "Ukraine",
+    "ar": "Argentina",
+    "cl": "Chile",
+    "co": "Colombia",
+    "ph": "Philippines",
+    "id": "Indonesia",
+    "vn": "Vietnam",
+    "th": "Thailand",
+    "my": "Malaysia",
+    "za": "South Africa",
+    "ng": "Nigeria",
+    "eg": "Egypt",
+    "tr": "Turkey",
+    "gr": "Greece",
+    "hu": "Hungary",
+    "ae": "United Arab Emirates",
+    "tw": "Taiwan",
+    "hk": "Hong Kong",
+    "sa": "Saudi Arabia",
+    "ke": "Kenya",
+    "uk": "United Kingdom",
 }
 
 _US_STATES = {
@@ -368,7 +449,9 @@ _NON_CITY_SEGMENTS = {
 # US-signal detection (used by enrich's conservative Workday-US country default).
 _ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
 _US_STATE_NAME_RE = re.compile(
-    r"\b(?:" + "|".join(re.escape(n) for n in sorted(_US_STATE_NAMES, key=len, reverse=True)) + r")\b",
+    r"\b(?:"
+    + "|".join(re.escape(n) for n in sorted(_US_STATE_NAMES, key=len, reverse=True))
+    + r")\b",
     re.IGNORECASE,
 )
 
@@ -379,7 +462,9 @@ _STATE_COUNTRY_DASH = re.compile(
     r"\b("
     + "|".join(
         re.escape(n)
-        for n in sorted(_US_STATE_NAMES | _COUNTRY_NAMES | set(_COUNTRY_ALIASES), key=len, reverse=True)
+        for n in sorted(
+            _US_STATE_NAMES | _COUNTRY_NAMES | set(_COUNTRY_ALIASES), key=len, reverse=True
+        )
     )
     + r")\s*-\s*",
     re.IGNORECASE,
@@ -418,6 +503,7 @@ def has_us_signal(raw: str | None) -> bool:
         len(tok) == 2 and tok.isupper() and tok.lower() in _US_STATES
         for tok in re.split(r"[^A-Za-z]+", raw)
     )
+
 
 # Generic sub-location / facility words. A segment built around one of these (e.g.
 # "Depot 2", "LA Depot") is not a city and must never be emitted as one.
@@ -609,9 +695,7 @@ def normalize_geo(loc: Location) -> Location:
     cleaned = re.sub(r"\s+[-–—]\s+", ",", raw)
     # Split each comma-part on a residual place-hyphen ("Las Vegas-Las Vegas", "Irvine-USA IRVINE
     # CA ...") BEFORE cleaning, so a duplicated/described city collapses to a resolvable segment.
-    raw_parts = [
-        sub for part in re.split(r"[,/|;]", cleaned) for sub in _split_place_hyphen(part)
-    ]
+    raw_parts = [sub for part in re.split(r"[,/|;]", cleaned) for sub in _split_place_hyphen(part)]
     segments = [c for c in (_clean(s) for s in raw_parts) if c]
     if not segments:
         return loc

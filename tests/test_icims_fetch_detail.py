@@ -9,6 +9,7 @@ Verified endpoint (recon, 7/7 hosts incl. framebuster-protected; re-confirmed li
 missing/garbage trailing slug, but ``in_iframe=1`` is REQUIRED (without it the page has no
 ``application/ld+json`` block at all). The detail page carries the JD in that JSON-LD
 ``JobPosting`` block."""
+
 from __future__ import annotations
 
 import anyio
@@ -130,11 +131,7 @@ def test_icims_fetch_detail_empty_description_is_none() -> None:
 
 def test_icims_fetch_detail_non_dict_jsonld_is_none() -> None:
     # A JSON-LD block that parses but isn't a dict (or list-of-dicts) shape must not raise.
-    html = (
-        '<html><body><script type="application/ld+json">'
-        '"just a string"'
-        "</script></body></html>"
-    )
+    html = '<html><body><script type="application/ld+json">"just a string"</script></body></html>'
     fetcher = _FakeFetcher(html)
     ref = DetailRef(
         id="7",
@@ -222,7 +219,11 @@ def test_icims_fetch_detail_unparseable_no_id_is_none() -> None:
 def test_icims_fetch_detail_no_urls_is_none() -> None:
     fetcher = _FakeFetcher(_page())
     ref = DetailRef(
-        id="12", source="icims", token=None, apply_url=None, listing_url=None,
+        id="12",
+        source="icims",
+        token=None,
+        apply_url=None,
+        listing_url=None,
         content_sig="s",
     )
     desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
@@ -248,7 +249,8 @@ def test_icims_fetch_detail_fetcher_exception_is_none() -> None:
 
 
 def test_base_fetch_detail_is_none() -> None:
-    ref = DetailRef(id="1", source="x", token=None, apply_url=None, listing_url=None,
-                     content_sig="s")
+    ref = DetailRef(
+        id="1", source="x", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher(_page())))
     assert desc is None

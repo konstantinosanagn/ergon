@@ -100,8 +100,6 @@ def test_normalize_missing_categories_key_is_none_department() -> None:
 
 def test_normalize_category_object_shape_uses_name() -> None:
     # Defensive: handle a category entry shaped as {"name": ...} like other aggregators use.
-    job = HimalayasProvider().normalize(
-        _raw(_payload(categories=[{"name": "Engineering"}]))
-    )
+    job = HimalayasProvider().normalize(_raw(_payload(categories=[{"name": "Engineering"}])))
 
     assert job.department == "Engineering"

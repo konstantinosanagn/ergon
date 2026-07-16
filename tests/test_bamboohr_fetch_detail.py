@@ -70,28 +70,38 @@ def test_fetch_detail_empty_description_returns_none() -> None:
 
 def test_fetch_detail_non_dict_payload_returns_none() -> None:
     for bad in (None, [], "nope", {"result": None}, {"result": {"jobOpening": "x"}}):
-        res = anyio.run(lambda: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(bad)))
+        res = anyio.run(lambda b=bad: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(b)))
         assert res is None
 
 
 def test_parse_detail_ref_from_url_and_token_fallback() -> None:
     assert BambooHRProvider._parse_detail_ref(_ref()) == ("evergreene", "109")
     # no url -> fall back to ref.token / ref.id
-    ref2 = DetailRef(id="42", source="bamboohr", token="acme", apply_url=None,
-                     listing_url=None, content_sig="s")
+    ref2 = DetailRef(
+        id="42", source="bamboohr", token="acme", apply_url=None, listing_url=None, content_sig="s"
+    )
     assert BambooHRProvider._parse_detail_ref(ref2) == ("acme", "42")
-    ref3 = DetailRef(id="", source="bamboohr", token=None, apply_url=None,
-                     listing_url=None, content_sig="s")
+    ref3 = DetailRef(
+        id="", source="bamboohr", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
     assert BambooHRProvider._parse_detail_ref(ref3) is None
 
 
 def test_fetch_detail_recovers_structured_location() -> None:
     from ergon_tracker.models import DetailFetch
 
-    payload = {"result": {"jobOpening": {
-        "description": "<p>Role.</p>",
-        "location": {"city": "Brooklyn", "state": "New York", "addressCountry": "United States"},
-    }}}
+    payload = {
+        "result": {
+            "jobOpening": {
+                "description": "<p>Role.</p>",
+                "location": {
+                    "city": "Brooklyn",
+                    "state": "New York",
+                    "addressCountry": "United States",
+                },
+            }
+        }
+    }
     res = anyio.run(lambda: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
     assert isinstance(res, DetailFetch)
     assert res.locations and res.locations[0].city == "Brooklyn"
@@ -100,9 +110,16 @@ def test_fetch_detail_recovers_structured_location() -> None:
 
 def test_detail_location_prefers_location_then_atslocation_else_empty() -> None:
     P = BambooHRProvider._detail_location
-    assert P({"atsLocation": {"city": "Austin", "state": "TX", "country": "United States"}})[0].city == "Austin"
+    assert (
+        P({"atsLocation": {"city": "Austin", "state": "TX", "country": "United States"}})[0].city
+        == "Austin"
+    )
     # location (with addressCountry) wins over atsLocation
-    both = P({"location": {"city": "Reno", "addressCountry": "United States"},
-              "atsLocation": {"city": "X", "country": "Y"}})
+    both = P(
+        {
+            "location": {"city": "Reno", "addressCountry": "United States"},
+            "atsLocation": {"city": "X", "country": "Y"},
+        }
+    )
     assert both[0].city == "Reno" and both[0].country == "United States"
     assert P({"location": {"city": None}, "atsLocation": {}}) == []

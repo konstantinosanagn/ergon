@@ -76,7 +76,12 @@ def test_normalize_maps_hourly_interval() -> None:
         **{
             "@type": "MonetaryAmount",
             "currency": "USD",
-            "value": {"@type": "QuantitativeValue", "minValue": 25, "maxValue": 40, "unitText": "HOUR"},
+            "value": {
+                "@type": "QuantitativeValue",
+                "minValue": 25,
+                "maxValue": 40,
+                "unitText": "HOUR",
+            },
         }
     )
     job = TeamtailorProvider().normalize(_raw(jp))

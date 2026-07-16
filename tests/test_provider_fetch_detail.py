@@ -1,6 +1,7 @@
 """Tier-3 detail fetcher: fetch_detail contract (base) + SmartRecruiters implementation.
 
 Offline only — a FakeFetcher stands in for AsyncFetcher; no live network calls."""
+
 from __future__ import annotations
 
 import anyio
@@ -19,8 +20,10 @@ class _FakeFetcher:
         return self._p
 
 
-def _sr_payload(job_description: str = "<p>Full JD. 5+ years. Bachelor's required.</p>",
-                 qualifications: str | None = "<p>BS in CS or equivalent.</p>") -> dict:
+def _sr_payload(
+    job_description: str = "<p>Full JD. 5+ years. Bachelor's required.</p>",
+    qualifications: str | None = "<p>BS in CS or equivalent.</p>",
+) -> dict:
     sections: dict = {"jobDescription": {"text": job_description}}
     if qualifications is not None:
         sections["qualifications"] = {"text": qualifications}
@@ -37,9 +40,7 @@ def test_smartrecruiters_fetch_detail_returns_description() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc is not None
     assert "Full JD" in desc
     assert "BS in CS" in desc
@@ -58,15 +59,15 @@ def test_smartrecruiters_fetch_detail_recovers_from_secondary_sections() -> None
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc == "BS required"
 
 
 def test_smartrecruiters_fetch_detail_none_when_no_section_has_text() -> None:
     # Only when EVERY JD-relevant section is empty does fetch_detail return None.
-    payload = {"jobAd": {"sections": {"jobDescription": {"text": ""}, "qualifications": {"text": ""}}}}
+    payload = {
+        "jobAd": {"sections": {"jobDescription": {"text": ""}, "qualifications": {"text": ""}}}
+    }
     ref = DetailRef(
         id="1",
         source="smartrecruiters",
@@ -75,9 +76,10 @@ def test_smartrecruiters_fetch_detail_none_when_no_section_has_text() -> None:
         listing_url=None,
         content_sig="s",
     )
-    assert anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    ) is None
+    assert (
+        anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
+        is None
+    )
 
 
 def test_smartrecruiters_fetch_detail_unparseable_apply_url_is_none() -> None:
@@ -90,21 +92,21 @@ def test_smartrecruiters_fetch_detail_unparseable_apply_url_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc is None
 
 
 def test_smartrecruiters_fetch_detail_no_urls_is_none() -> None:
     payload = _sr_payload()
     ref = DetailRef(
-        id="1", source="smartrecruiters", token=None, apply_url=None, listing_url=None,
+        id="1",
+        source="smartrecruiters",
+        token=None,
+        apply_url=None,
+        listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc is None
 
 
@@ -119,9 +121,7 @@ def test_smartrecruiters_fetch_detail_non_dict_job_ad_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc is None
 
 
@@ -136,9 +136,7 @@ def test_smartrecruiters_fetch_detail_non_dict_job_description_is_none() -> None
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc is None
 
 
@@ -152,16 +150,15 @@ def test_smartrecruiters_fetch_detail_derives_token_from_apply_url_when_ref_toke
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(
-        lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload))
-    )
+    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
     assert desc is not None
     assert "Full JD" in desc
 
 
 def test_base_fetch_detail_is_none() -> None:
-    ref = DetailRef(id="1", source="x", token=None, apply_url=None, listing_url=None,
-                     content_sig="s")
+    ref = DetailRef(
+        id="1", source="x", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
 

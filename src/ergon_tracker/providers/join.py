@@ -61,9 +61,7 @@ _HOST_PATTERNS = (re.compile(r"join\.com/companies/([^/?#\s]+)", re.IGNORECASE),
 # Per-job detail page shape (Tier-3 JD recovery): ``join.com/companies/{token}/jobs/{id_param}``
 # — same as ``_JOB_URL`` above but matched loosely to validate an already-built apply/listing URL
 # without needing to re-derive the token/id_param from it.
-_JOB_DETAIL_RE = re.compile(
-    r"join\.com/companies/[^/?#\s]+/jobs/[^/?#\s]+", re.IGNORECASE
-)
+_JOB_DETAIL_RE = re.compile(r"join\.com/companies/[^/?#\s]+/jobs/[^/?#\s]+", re.IGNORECASE)
 
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.IGNORECASE | re.DOTALL

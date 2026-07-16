@@ -159,7 +159,10 @@ def test_serving_never_builds_VectorIndex(tmp_path, monkeypatch):
     monkeypatch.setattr(rich, "VectorIndex", boom)
     q = SearchQuery(keywords="python kubernetes", semantic=True, limit=2)
     out = router._vector_rerank(q, [nu, py], want=2)  # runs the real vector path
-    assert out is not None and [j.id for j in out] == [py.id, nu.id]  # served, VectorIndex untouched
+    assert out is not None and [j.id for j in out] == [
+        py.id,
+        nu.id,
+    ]  # served, VectorIndex untouched
 
 
 def test_try_index_ranked_falls_back_to_query_rerank_when_vector_path_raises(tmp_path, monkeypatch):
@@ -182,7 +185,9 @@ def test_try_index_ranked_falls_back_to_query_rerank_when_vector_path_raises(tmp
     fake = _RerankFake()
     monkeypatch.setattr(router, "_rich_path", lambda: rich_path)
     monkeypatch.setattr(router, "get_semantic_reranker", lambda: fake)  # synthetic query embed
-    monkeypatch.setattr("ergon_tracker.semantic.get_semantic_reranker", lambda: fake)  # fallback rank
+    monkeypatch.setattr(
+        "ergon_tracker.semantic.get_semantic_reranker", lambda: fake
+    )  # fallback rank
 
     def boom(*a, **k):  # noqa: ANN002, ANN003
         raise RuntimeError("vector_search exploded")

@@ -4,6 +4,7 @@ Offline only — a FakeFetcher stands in for AsyncFetcher; no live network calls
 ``tests/test_workday_fetch_detail.py``'s non-raising discipline: any unparseable ref, fetch
 failure, non-JSON payload, or shape mismatch (including a truthy non-dict payload) returns
 ``None``, never an exception."""
+
 from __future__ import annotations
 
 import anyio
@@ -179,7 +180,11 @@ def test_rippling_fetch_detail_unparseable_urls_is_none() -> None:
 def test_rippling_fetch_detail_no_urls_no_token_is_none() -> None:
     payload = {"description": {"role": "<p>Should never be fetched</p>"}}
     ref = DetailRef(
-        id="11", source="rippling", token=None, apply_url=None, listing_url=None,
+        id="11",
+        source="rippling",
+        token=None,
+        apply_url=None,
+        listing_url=None,
         content_sig="s",
     )
     desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
@@ -204,8 +209,9 @@ def test_rippling_fetch_detail_fetcher_raises_is_none() -> None:
 
 
 def test_base_fetch_detail_is_none() -> None:
-    ref = DetailRef(id="1", source="x", token=None, apply_url=None, listing_url=None,
-                     content_sig="s")
+    ref = DetailRef(
+        id="1", source="x", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({})))
     assert desc is None
 
@@ -291,4 +297,4 @@ def test_fetch_detail_recovers_worklocations_strings() -> None:
     payload = {"description": "<p>Role.</p>", "workLocations": ["London, United Kingdom", ""]}
     res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
     assert isinstance(res, DetailFetch)
-    assert [l.raw for l in res.locations] == ["London, United Kingdom"]  # empties skipped
+    assert [loc.raw for loc in res.locations] == ["London, United Kingdom"]  # empties skipped

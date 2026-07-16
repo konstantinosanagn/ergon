@@ -639,7 +639,9 @@ def test_backfill_from_index_embeds_unvectored_backlog(tmp_path):
     )
     assert s4["embedded"] == 1  # b re-embedded (upgraded)
     rc = open_rich(rich)
-    assert rc.execute("SELECT sig FROM job_vectors WHERE id=?", (idb,)).fetchone()[0] != bsig_backfill
+    assert (
+        rc.execute("SELECT sig FROM job_vectors WHERE id=?", (idb,)).fetchone()[0] != bsig_backfill
+    )
     rc.close()
 
 
@@ -658,7 +660,13 @@ def test_backfill_respects_embed_budget(tmp_path):
     con.close()
     rich = tmp_path / "r.sqlite"
     s = reconcile_rich_tier_from_fresh(
-        rich, main, fresh, build_id="b1", reranker=FAKE, backfill_from_index=True, max_embed_per_run=4
+        rich,
+        main,
+        fresh,
+        build_id="b1",
+        reranker=FAKE,
+        backfill_from_index=True,
+        max_embed_per_run=4,
     )
     assert s["embedded"] == 4 and s["missing"] == 2  # budget capped; rest next run
 
@@ -674,7 +682,9 @@ def test_sharded_embed_is_byte_identical_to_unsharded(tmp_path):
 
     from ergon_tracker.index.rich import _shard_of
 
-    jobs = [_job(f"id{i}", f"Role {i}", f"alpha beta gamma description number {i}") for i in range(50)]
+    jobs = [
+        _job(f"id{i}", f"Role {i}", f"alpha beta gamma description number {i}") for i in range(50)
+    ]
     main, fresh = _main_and_fresh(tmp_path, jobs, "shardeq")
 
     # --- reference: one unsharded run ---
@@ -704,16 +714,26 @@ def test_sharded_embed_is_byte_identical_to_unsharded(tmp_path):
 
     merged = str(tmp_path / "vectors_merged.sqlite")
     r = subprocess.run(
-        [sys.executable, "scripts/merge_vectors_shards.py", "--shards-dir", str(shard_dir), "--out", merged],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            "scripts/merge_vectors_shards.py",
+            "--shards-dir",
+            str(shard_dir),
+            "--out",
+            merged,
+        ],
+        capture_output=True,
+        text=True,
     )
     assert r.returncode == 0, r.stderr
 
     def _vecs(path):
         con = sqlite3.connect(path)
         try:
-            return {i: (sig, scale, bytes(vec))
-                    for i, sig, scale, vec in con.execute("SELECT id, sig, scale, vec FROM job_vectors")}
+            return {
+                i: (sig, scale, bytes(vec))
+                for i, sig, scale, vec in con.execute("SELECT id, sig, scale, vec FROM job_vectors")
+            }
         finally:
             con.close()
 

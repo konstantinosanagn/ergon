@@ -344,9 +344,7 @@ def _backfill_from_index(
             if budget is not None and len(eligible) > budget - embedded:
                 eligible = eligible[: budget - embedded]
             if eligible:
-                _embed_rows_into(
-                    con, eligible, reranker=reranker, batch=batch, single_process=True
-                )
+                _embed_rows_into(con, eligible, reranker=reranker, batch=batch, single_process=True)
                 con.commit()
                 embedded += len(eligible)
                 done.update(r[0] for r in eligible)

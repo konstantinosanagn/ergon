@@ -591,9 +591,7 @@ def build_delta(
         # schema-v2 regression). New columns are simply not part of the change test for one build.
         prev_cols = {r[1] for r in con.execute("PRAGMA prev.table_info(jobs)").fetchall()}
         same = " AND ".join(
-            f"p.{c} IS c.{c}"
-            for c in _JOB_COLS
-            if c not in _DELTA_VOLATILE_COLS and c in prev_cols
+            f"p.{c} IS c.{c}" for c in _JOB_COLS if c not in _DELTA_VOLATILE_COLS and c in prev_cols
         )
         con.execute(
             f"INSERT INTO delta_upserts({cols}) SELECT {cols} FROM curr.jobs c "  # noqa: S608

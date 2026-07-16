@@ -169,7 +169,9 @@ class JobviteProvider(BaseProvider):
         for job in self.extract_jsonld_jobs(html):
             description = job.get("description")
             if isinstance(description, str) and description.strip():
-                locations = self.jsonld_locations(job.get("jobLocation"))  # shared BaseProvider helper
+                locations = self.jsonld_locations(
+                    job.get("jobLocation")
+                )  # shared BaseProvider helper
                 if locations:
                     return DetailFetch(text=description, locations=locations)
                 return description

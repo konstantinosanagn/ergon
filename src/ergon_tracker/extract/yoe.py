@@ -653,7 +653,9 @@ class YoeExtractor:
             return True
         if m.group("n2") is not None:  # explicit range — valid unless "edad" vetoed it above
             return True
-        return bool(_CUE_ES.search(text[max(0, m.start() - 40) : m.start()]) or _CUE_ES.search(after))
+        return bool(
+            _CUE_ES.search(text[max(0, m.start() - 40) : m.start()]) or _CUE_ES.search(after)
+        )
 
     def _parse_en(self, text: str) -> tuple[int | None, int | None]:
         # First valid phrase wins — unless it opens a degree-alternation ladder ("BS + 8 years
@@ -697,7 +699,13 @@ class YoeExtractor:
             # "6 or more". Without this we wrongly report (6, 10).
             suffix = (m.group("suffix") or "").lower()
             if "+" in m.group(0) or suffix in {
-                "or more", "or above", "or greater", "or higher", "plus", "minimum", "min",
+                "or more",
+                "or above",
+                "or greater",
+                "or higher",
+                "plus",
+                "minimum",
+                "min",
             }:
                 return (lo, None)
             return (lo, hi)

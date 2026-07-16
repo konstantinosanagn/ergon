@@ -397,7 +397,9 @@ class WorkdayProvider(BaseProvider):
         # is a "N Locations" placeholder for multi-location reqs). Return it so the merge fills the
         # index row's NULL country -- Workday is ~44k of the whole index's country gap.
         locations = self._cxs_locations(job_posting_info)
-        return DetailFetch(text=job_description, locations=locations) if locations else job_description
+        return (
+            DetailFetch(text=job_description, locations=locations) if locations else job_description
+        )
 
     @staticmethod
     def _cxs_locations(jpi: dict[str, Any]) -> list[Location]:

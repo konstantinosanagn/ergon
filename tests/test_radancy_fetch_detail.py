@@ -6,6 +6,7 @@ Offline only -- a FakeFetcher stands in for AsyncFetcher; no live network calls.
 per-tenant ``div.job-description`` selector is unreliable: on ~4/7 tenants the first match is a
 short 62-172 char meta/summary chip, not the JD body. These tests cover the selector-chain +
 length-threshold + whole-page-fallback logic that guards against that."""
+
 from __future__ import annotations
 
 import anyio
@@ -71,7 +72,7 @@ def test_radancy_fetch_detail_falls_back_to_whole_page_when_chip_is_short() -> N
     html = (
         "<html><body>"
         f'<div class="job-description">{short_chip}</div>'
-        f"<div class=\"content-wrapper\"><p>{real_jd}</p></div>"
+        f'<div class="content-wrapper"><p>{real_jd}</p></div>'
         "</body></html>"
     )
     fetcher = _FakeFetcher(html)

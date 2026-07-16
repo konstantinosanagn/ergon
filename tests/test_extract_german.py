@@ -75,9 +75,7 @@ def test_german_degree_masterabschluss() -> None:
 
 
 def test_german_degree_ausbildung_is_not_bachelor() -> None:
-    inp = ExtractInput(
-        title="Rolle", description_text="Abgeschlossene Ausbildung", language="de"
-    )
+    inp = ExtractInput(title="Rolle", description_text="Abgeschlossene Ausbildung", language="de")
     degree_min, degree_required = _DEGREE.extract(inp)
     assert degree_min != "bachelor"
     assert degree_min in (None, "vocational")

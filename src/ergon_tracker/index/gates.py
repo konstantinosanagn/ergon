@@ -79,7 +79,9 @@ def evaluate_gates(
             floor = int(basis * min_ratio)
             src = "prev" if prev_row_count else "history[live prev MISSING]"
             rep.results.append(
-                GateResult("row_floor", rows >= floor, f"{rows} rows (floor {floor}, {src} {basis})")
+                GateResult(
+                    "row_floor", rows >= floor, f"{rows} rows (floor {floor}, {src} {basis})"
+                )
             )
         else:
             reason = "cold start override" if (basis and allow_cold_start) else "cold start"

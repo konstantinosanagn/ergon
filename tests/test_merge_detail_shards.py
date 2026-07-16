@@ -148,8 +148,7 @@ def test_merge_prefers_freshest_row_regardless_of_shard_order(tmp_path):
 
         con = open_detail(str(out))
         row = con.execute(
-            "SELECT sig, fetched_at, snippet, salary_min, salary_max "
-            "FROM job_detail WHERE id='x'"
+            "SELECT sig, fetched_at, snippet, salary_min, salary_max FROM job_detail WHERE id='x'"
         ).fetchone()
         con.close()
         assert row == expected, f"order {label}: fresh row must survive the merge"

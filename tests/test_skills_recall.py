@@ -38,7 +38,19 @@ COLLISION_PRECISION_GATE = 0.97
 
 # Canonicals that are also common English words: a match the labeler didn't name here is a genuine
 # word-sense error (unlike an unambiguous skill like "kubernetes", which is human under-listing).
-_COLLISION_PRONE = {"excel", "rest", "spring", "swift", "golang", "sap", "rails", "ruby", "scala", "seo", "git"}
+_COLLISION_PRONE = {
+    "excel",
+    "rest",
+    "spring",
+    "swift",
+    "golang",
+    "sap",
+    "rails",
+    "ruby",
+    "scala",
+    "seo",
+    "git",
+}
 
 
 def _load() -> list[dict]:
@@ -82,7 +94,11 @@ def test_precision_word_sense_collisions() -> None:
         if bad:
             offenders.append({"bad": sorted(bad), "text": r["text"]})
     precision = (ext - collisions) / ext if ext else 1.0
-    print(f"skills collision-precision: {ext - collisions}/{ext} = {precision:.1%} ({collisions} collisions)")
+    print(
+        f"skills collision-precision: {ext - collisions}/{ext} = {precision:.1%} ({collisions} collisions)"
+    )
     if precision < COLLISION_PRECISION_GATE:
         detail = "\n".join(f"  COLLISION={o['bad']} :: {o['text'][:90]!r}" for o in offenders[:8])
-        pytest.fail(f"collision-precision {precision:.1%} below gate {COLLISION_PRECISION_GATE:.0%}.\n{detail}")
+        pytest.fail(
+            f"collision-precision {precision:.1%} below gate {COLLISION_PRECISION_GATE:.0%}.\n{detail}"
+        )

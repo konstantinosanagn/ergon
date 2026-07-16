@@ -85,17 +85,33 @@ def level_from_years(min_years: int | None, max_years: int | None) -> JobLevel:
 # time so "mid-senior" wins over "senior"/"mid". Keys are matched against a lowercased, space-and-
 # hyphen-normalized form of the input. Unknown/empty -> UNKNOWN (the text extractor then fills in).
 _ATS_VOCAB: dict[str, JobLevel] = {
-    "internship": JobLevel.INTERN, "intern": JobLevel.INTERN, "trainee": JobLevel.INTERN,
-    "entry level": JobLevel.ENTRY, "entry": JobLevel.ENTRY, "graduate": JobLevel.ENTRY,
-    "junior": JobLevel.JUNIOR, "associate": JobLevel.JUNIOR,
-    "mid senior level": JobLevel.SENIOR, "mid senior": JobLevel.SENIOR,
-    "mid level": JobLevel.MID, "mid": JobLevel.MID, "intermediate": JobLevel.MID,
-    "experienced": JobLevel.MID, "professional": JobLevel.MID,
-    "senior level": JobLevel.SENIOR, "senior": JobLevel.SENIOR,
-    "staff": JobLevel.STAFF, "principal": JobLevel.PRINCIPAL,
-    "lead": JobLevel.LEAD, "team lead": JobLevel.LEAD,
-    "manager supervisor": JobLevel.MANAGER, "manager": JobLevel.MANAGER, "management": JobLevel.MANAGER,
-    "director": JobLevel.DIRECTOR, "vp": JobLevel.EXECUTIVE, "executive": JobLevel.EXECUTIVE,
+    "internship": JobLevel.INTERN,
+    "intern": JobLevel.INTERN,
+    "trainee": JobLevel.INTERN,
+    "entry level": JobLevel.ENTRY,
+    "entry": JobLevel.ENTRY,
+    "graduate": JobLevel.ENTRY,
+    "junior": JobLevel.JUNIOR,
+    "associate": JobLevel.JUNIOR,
+    "mid senior level": JobLevel.SENIOR,
+    "mid senior": JobLevel.SENIOR,
+    "mid level": JobLevel.MID,
+    "mid": JobLevel.MID,
+    "intermediate": JobLevel.MID,
+    "experienced": JobLevel.MID,
+    "professional": JobLevel.MID,
+    "senior level": JobLevel.SENIOR,
+    "senior": JobLevel.SENIOR,
+    "staff": JobLevel.STAFF,
+    "principal": JobLevel.PRINCIPAL,
+    "lead": JobLevel.LEAD,
+    "team lead": JobLevel.LEAD,
+    "manager supervisor": JobLevel.MANAGER,
+    "manager": JobLevel.MANAGER,
+    "management": JobLevel.MANAGER,
+    "director": JobLevel.DIRECTOR,
+    "vp": JobLevel.EXECUTIVE,
+    "executive": JobLevel.EXECUTIVE,
 }
 _ATS_KEYS = sorted(_ATS_VOCAB, key=len, reverse=True)  # longest-first: "mid senior" before "senior"
 
@@ -254,7 +270,9 @@ _ROMAN_SENIOR = re.compile(r"\b(?:III|IV)\b")
 _ROMAN_MID = re.compile(r"\bII\b")
 _ROMAN_ENTRY = re.compile(r"\bI\b")
 # A multi-rung range ("I/II", "II/III", "I/II/III", "I - III") — spans levels, so not one rung.
-_ROMAN_RANGE = re.compile(r"\b(?:I{1,3}|IV|V)\s*[/\-–]\s*(?:I{1,3}|IV|V)(?:\s*[/\-–]\s*(?:I{1,3}|IV|V))?\b")
+_ROMAN_RANGE = re.compile(
+    r"\b(?:I{1,3}|IV|V)\s*[/\-–]\s*(?:I{1,3}|IV|V)(?:\s*[/\-–]\s*(?:I{1,3}|IV|V))?\b"
+)
 _ARABIC = re.compile(r"\b([1-4])\b")
 
 _LADDER_MAP: dict[int, JobLevel] = {
