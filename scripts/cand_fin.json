@@ -1,7 +1,0 @@
-[
-  {"company": "citigroup", "ats": "workday", "token": "citi|wd5|2", "domain": "citigroup.com"},
-  {"company": "bank of america", "ats": "workday", "token": "ghr|wd1|Lateral-US", "domain": "bankofamerica.com"},
-  {"company": "wells fargo", "ats": "workday", "token": "wf|wd1|WellsFargoJobs", "domain": "wellsfargo.com"},
-  {"company": "american express", "ats": "oracle", "token": "egug.fa.us2.oraclecloud.com|CX_1", "domain": "americanexpress.com"},
-  {"company": "fidelity investments", "ats": "workday", "token": "fmr|wd1|FidelityCareers", "domain": "fidelity.com"}
-]

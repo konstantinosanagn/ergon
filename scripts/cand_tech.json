@@ -1,8 +1,0 @@
-[
-  {"company": "novitium pharma", "ats": "schemaorg", "token": "novitiumpharma.com", "domain": "novitiumpharma.com"},
-  {"company": "valuemomentum", "ats": "apicapture", "token": "valuemomentum", "domain": "valuemomentum.com"},
-  {"company": "dell technologies", "ats": "oracle", "token": "iawmqy.fa.ocs.oraclecloud.com|CX_1001", "domain": "dell.com"},
-  {"company": "doordash", "ats": "greenhouse", "token": "doordashusa", "domain": "doordash.com"},
-  {"company": "ernst young", "ats": "successfactors", "token": "careers.ey.com|ey", "domain": "ey.com"},
-  {"company": "mckinsey", "ats": "apicapture", "token": "mckinsey", "domain": "mckinsey.com"}
-]

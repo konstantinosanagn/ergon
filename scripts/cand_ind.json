@@ -1,8 +1,0 @@
-[
-  {"company": "lockheed martin", "ats": "dejobs", "token": "lockheed-martin", "domain": "lockheedmartinjobs.com"},
-  {"company": "raytheon", "ats": "workday", "token": "globalhr|wd5|REC_RTX_Ext_Gateway", "domain": "careers.rtx.com"},
-  {"company": "johnson johnson", "ats": "workday", "token": "jj|wd5|JJ", "domain": "careers.jnj.com"},
-  {"company": "merck", "ats": "workday", "token": "msd|wd5|SearchJobs", "domain": "jobs.merck.com"},
-  {"company": "moderna", "ats": "workday", "token": "modernatx|wd1|M_tx", "domain": "modernatx.com"},
-  {"company": "costco", "ats": "icims", "token": "careers.costco.com", "domain": "careers.costco.com"}
-]
