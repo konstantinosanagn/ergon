@@ -9,8 +9,15 @@ def allocate(available: dict[str, int], total: int, floor: int) -> dict[str, int
         return {}
     if sum(avail.values()) <= total:
         return dict(avail)  # take everything
-    out = {k: min(v, floor) for k, v in avail.items()}
-    remaining = total - sum(out.values())
+    # Floor pass, bounded by the running budget so the guaranteed floors can never exceed `total`
+    # (matters only in the degenerate floor*strata > total regime; smallest strata first so a tight
+    # budget still spreads across strata instead of being exhausted by one large one).
+    out: dict[str, int] = {}
+    remaining = total
+    for k in sorted(avail, key=lambda k: avail[k]):
+        give = min(avail[k], floor, remaining)
+        out[k] = give
+        remaining -= give
     # Distribute the remainder proportionally to unused availability, largest-remainder rounding.
     while remaining > 0:
         headroom = {k: avail[k] - out[k] for k in avail if avail[k] > out[k]}
