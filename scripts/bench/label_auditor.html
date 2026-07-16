@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Label Auditor — Filter Benchmark v2</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2b303b;
+    --text: #e6e8ec;
+    --muted: #9aa2b1;
+    --accent: #5b9dff;
+    --good: #3ecf8e;
+    --bad: #ff6b6b;
+    --warn: #ffb454;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --panel-2: #eef0f4;
+      --border: #d7dbe3;
+      --text: #1a1d24;
+      --muted: #5a6272;
+      --accent: #2564eb;
+      --good: #15803d;
+      --bad: #b91c1c;
+      --warn: #b45309;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100%;
+  }
+  #app {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 20px 60px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  input[type="file"] { font-size: 13px; color: var(--text); }
+  select, input[type="text"] {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  label.field-label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  /* progress bar */
+  .progress-wrap {
+    width: 100%;
+    height: 8px;
+    background: var(--panel-2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.15s ease;
+  }
+  .tally {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .tally b { color: var(--text); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+  }
+  .badge.extractor { color: var(--good); border-color: var(--good); }
+  .badge.fleet { color: var(--accent); border-color: var(--accent); }
+  .badge.correct { color: var(--warn); border-color: var(--warn); }
+  .badge.skip { color: var(--muted); border-color: var(--muted); }
+
+  #empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px 18px;
+    margin-bottom: 10px;
+  }
+  .meta-item .k {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .meta-item .v {
+    font-size: 14px;
+    word-break: break-word;
+  }
+  .meta-item .v a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .meta-item .v a:hover { text-decoration: underline; }
+
+  .jd-pane {
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .field-review {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .value-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .value-card .k {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .value-card .v {
+    font-size: 15px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .reason-line {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .reason-line b { color: var(--warn); }
+
+  .field-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 4px 0 0;
+  }
+  .item-index {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .verdict-bar {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .verdict-bar button {
+    font-size: 13px;
+    padding: 10px 14px;
+    min-width: 130px;
+  }
+  .verdict-bar kbd {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    margin-right: 6px;
+  }
+  .current-verdict {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .correction-box {
+    margin-top: 10px;
+    display: none;
+    gap: 8px;
+    align-items: center;
+  }
+  .correction-box.open { display: flex; }
+  .correction-box input[type="text"] { flex: 1; min-width: 200px; }
+
+  footer {
+    margin-top: 20px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .filters .row > * { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>Label Auditor</h1>
+      <div class="sub">Filter Benchmark v2 &middot; human adjudication of extractor vs. fleet labels</div>
+    </div>
+    <div class="row">
+      <input type="file" id="file-input" accept=".jsonl,application/json,text/plain">
+      <button id="download-btn" class="primary" disabled>Download corrections.jsonl</button>
+      <button id="reset-btn" disabled>Reset progress</button>
+    </div>
+  </header>
+
+  <div class="panel filters" id="filters-panel" style="display:none;">
+    <div class="row">
+      <div>
+        <label class="field-label" for="field-filter">Field</label><br>
+        <select id="field-filter"><option value="">All fields</option></select>
+      </div>
+      <div>
+        <label class="field-label" for="source-filter">Source</label><br>
+        <select id="source-filter"><option value="">All sources</option></select>
+      </div>
+      <div>
+        <label class="field-label" for="jump-unresolved">&nbsp;</label><br>
+        <button id="jump-unresolved">Jump to next unresolved</button>
+      </div>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+    <div class="tally" id="tally"></div>
+  </div>
+
+  <div id="empty-state">
+    Load <code>bench/audit_queue.jsonl</code> above to begin. Nothing is uploaded anywhere —
+    this page runs entirely in your browser.
+  </div>
+
+  <div id="review-panel" style="display:none;">
+    <div class="panel">
+      <div class="row" style="justify-content: space-between;">
+        <div class="field-title" id="field-name"></div>
+        <div class="item-index" id="item-index"></div>
+      </div>
+
+      <div class="meta-grid" id="meta-grid"></div>
+
+      <div class="k" style="font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:6px;">
+        Job description
+      </div>
+      <div class="jd-pane" id="jd-pane"></div>
+    </div>
+
+    <div class="panel">
+      <div class="field-review">
+        <div class="value-card">
+          <div class="k">Extractor value</div>
+          <div class="v" id="extractor-value"></div>
+        </div>
+        <div class="value-card">
+          <div class="k">Fleet value</div>
+          <div class="v" id="fleet-value"></div>
+        </div>
+      </div>
+      <div class="reason-line">Triage reason: <b id="reason-value"></b></div>
+
+      <div class="verdict-bar">
+        <button id="verdict-e"><kbd>e</kbd>Extractor right</button>
+        <button id="verdict-f"><kbd>f</kbd>Fleet right</button>
+        <button id="verdict-c"><kbd>c</kbd>Enter correction</button>
+        <button id="verdict-s"><kbd>s</kbd>Skip / ambiguous</button>
+        <span class="current-verdict" id="current-verdict"></span>
+      </div>
+      <div class="correction-box" id="correction-box">
+        <input type="text" id="correction-input" placeholder="Correct value&hellip;">
+        <input type="text" id="correction-note" placeholder="Note (optional)&hellip;">
+        <button id="correction-submit" class="primary">Save</button>
+        <button id="correction-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="row" style="justify-content: space-between;">
+      <button id="prev-btn">&larr; Previous</button>
+      <button id="next-btn">Next &rarr;</button>
+    </div>
+  </div>
+
+  <footer>
+    All state lives in this browser tab (localStorage) and in the downloaded file. No network calls.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
+  var STORAGE_PREFIX = "label_auditor_v1";
+  var queueKey = "";                 // localStorage key derived from loaded file contents
+  var items = [];                    // full parsed audit_queue.jsonl, in original order
+  var filteredIndices = [];          // indices into `items` matching current filters
+  var cursor = 0;                    // position within filteredIndices
+  var verdicts = {};                 // "id field" -> {id, field, verdict, value?, note?}
+
+  var el = {};
+  [
+    "file-input", "download-btn", "reset-btn", "filters-panel", "field-filter", "source-filter",
+    "jump-unresolved", "progress-bar", "tally", "empty-state", "review-panel", "field-name",
+    "item-index", "meta-grid", "jd-pane", "extractor-value", "fleet-value", "reason-value",
+    "verdict-e", "verdict-f", "verdict-c", "verdict-s", "current-verdict", "correction-box",
+    "correction-input", "correction-note", "correction-submit", "correction-cancel",
+    "prev-btn", "next-btn"
+  ].forEach(function (id) {
+    el[id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = document.getElementById(id);
+  });
+
+  // ---------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------
+  function verdictKey(id, field) { return String(id) + " " + String(field); }
+
+  function formatValue(v) {
+    if (v === null || v === undefined) return "—"; // em dash
+    if (typeof v === "object") {
+      try { return JSON.stringify(v); } catch (e) { return String(v); }
+    }
+    if (typeof v === "boolean") return v ? "true" : "false";
+    var s = String(v);
+    return s.length ? s : "—";
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function saveState() {
+    if (!queueKey) return;
+    try {
+      var payload = { verdicts: verdicts, cursorItemKey: currentItemKey() };
+      localStorage.setItem(queueKey, JSON.stringify(payload));
+    } catch (e) {
+      // localStorage full or unavailable; adjudication still works for this session.
+      console.warn("label_auditor: could not persist state", e);
+    }
+  }
+
+  function loadState() {
+    if (!queueKey) return;
+    try {
+      var raw = localStorage.getItem(queueKey);
+      if (!raw) return;
+      var payload = JSON.parse(raw);
+      verdicts = payload.verdicts || {};
+    } catch (e) {
+      console.warn("label_auditor: could not restore state", e);
+    }
+  }
+
+  function currentItemKey() {
+    var it = currentItem();
+    return it ? verdictKey(it.id, it.field) : null;
+  }
+
+  function currentItem() {
+    if (cursor < 0 || cursor >= filteredIndices.length) return null;
+    return items[filteredIndices[cursor]];
+  }
+
+  // A simple, dependency-free content hash so different loaded files get distinct
+  // localStorage slots (and reloading the *same* file resumes progress).
+  function hashString(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) {
+      h = ((h << 5) + h) ^ s.charCodeAt(i);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  // ---------------------------------------------------------------------
+  // JSONL parsing
+  // ---------------------------------------------------------------------
+  function parseJsonl(text) {
+    var out = [];
+    var lines = text.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      try {
+        out.push(JSON.parse(line));
+      } catch (e) {
+        console.warn("label_auditor: skipping unparseable line " + (i + 1), e);
+      }
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------
+  // File loading
+  // ---------------------------------------------------------------------
+  el.fileInput.addEventListener("change", function (evt) {
+    var file = evt.target.files && evt.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var text = String(reader.result || "");
+      items = parseJsonl(text);
+      queueKey = STORAGE_PREFIX + ":" + hashString(text.length + ":" + text.slice(0, 2000));
+      verdicts = {};
+      loadState();
+      buildFilterOptions();
+      applyFilters();
+      // Resume at first unresolved item if we restored state, else index 0.
+      var resumeIdx = 0;
+      var firstUnresolved = findFirstUnresolvedIndex();
+      if (firstUnresolved !== -1) resumeIdx = firstUnresolved;
+      cursor = resumeIdx;
+      render();
+      el.emptyState.style.display = "none";
+      el.reviewPanel.style.display = "";
+      el.filtersPanel.style.display = "";
+      // The <input type="file"> retains focus after a selection; our keyboard-shortcut
+      // guard treats a focused input/select/textarea as "typing" and swallows e/f/c/s, so
+      // shortcuts would silently do nothing until the human clicked elsewhere. Blur it so
+      // the one-key verdict flow works immediately after loading.
+      el.fileInput.blur();
+      el.downloadBtn.disabled = false;
+      el.resetBtn.disabled = false;
+    };
+    reader.readAsText(file);
+  });
+
+  function findFirstUnresolvedIndex() {
+    for (var i = 0; i < filteredIndices.length; i++) {
+      var it = items[filteredIndices[i]];
+      if (!verdicts[verdictKey(it.id, it.field)]) return i;
+    }
+    return -1;
+  }
+
+  // ---------------------------------------------------------------------
+  // Filters
+  // ---------------------------------------------------------------------
+  function buildFilterOptions() {
+    var fields = {};
+    var sources = {};
+    items.forEach(function (it) {
+      if (it.field) fields[it.field] = true;
+      var src = it.source;
+      if (src) sources[src] = true;
+    });
+
+    fillSelect(el.fieldFilter, Object.keys(fields).sort(), "All fields");
+    fillSelect(el.sourceFilter, Object.keys(sources).sort(), "All sources");
+  }
+
+  function fillSelect(selectEl, values, allLabel) {
+    var current = selectEl.value;
+    selectEl.innerHTML = "";
+    var optAll = document.createElement("option");
+    optAll.value = "";
+    optAll.textContent = allLabel;
+    selectEl.appendChild(optAll);
+    values.forEach(function (v) {
+      var opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      selectEl.appendChild(opt);
+    });
+    if (values.indexOf(current) !== -1) selectEl.value = current;
+  }
+
+  function applyFilters() {
+    var fieldSel = el.fieldFilter.value;
+    var sourceSel = el.sourceFilter.value;
+    var currentKey = currentItemKey();
+
+    filteredIndices = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (fieldSel && it.field !== fieldSel) continue;
+      if (sourceSel && (it.source || "") !== sourceSel) continue;
+      filteredIndices.push(i);
+    }
+
+    // Try to keep the currently-viewed item in view after a filter change.
+    if (currentKey) {
+      var idx = filteredIndices.findIndex(function (i) {
+        var it = items[i];
+        return verdictKey(it.id, it.field) === currentKey;
+      });
+      cursor = idx !== -1 ? idx : 0;
+    } else {
+      cursor = 0;
+    }
+  }
+
+  el.fieldFilter.addEventListener("change", function () { applyFilters(); render(); });
+  el.sourceFilter.addEventListener("change", function () { applyFilters(); render(); });
+  el.jumpUnresolved.addEventListener("click", function () {
+    var idx = findFirstUnresolvedIndex();
+    if (idx !== -1) { cursor = idx; render(); }
+  });
+
+  // ---------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------
+  var CONTEXT_FIELDS = [
+    ["title", "Title"],
+    ["source", "Source (ATS)"],
+    ["company", "Company"],
+    ["location_raw", "Location"]
+  ];
+
+  function render() {
+    var it = currentItem();
+    updateProgress();
+    if (!it) {
+      el.fieldName.textContent = filteredIndices.length ? "" : "No items match the current filters.";
+      el.itemIndex.textContent = "";
+      el.metaGrid.innerHTML = "";
+      el.jdPane.textContent = "";
+      el.extractorValue.textContent = "";
+      el.fleetValue.textContent = "";
+      el.reasonValue.textContent = "";
+      el.currentVerdict.textContent = "";
+      closeCorrectionBox();
+      return;
+    }
+
+    el.fieldName.textContent = it.field;
+    el.itemIndex.textContent = (cursor + 1) + " / " + filteredIndices.length +
+      "  (id: " + escapeHtml(String(it.id)) + ")";
+
+    var metaHtml = "";
+    CONTEXT_FIELDS.forEach(function (pair) {
+      var key = pair[0], label = pair[1];
+      if (it[key] === undefined || it[key] === null || it[key] === "") return;
+      metaHtml += '<div class="meta-item"><div class="k">' + escapeHtml(label) + '</div>' +
+        '<div class="v">' + escapeHtml(formatValue(it[key])) + '</div></div>';
+    });
+    if (it.url) {
+      metaHtml += '<div class="meta-item"><div class="k">Apply URL</div>' +
+        '<div class="v"><a href="' + escapeHtml(it.url) + '" target="_blank" rel="noopener noreferrer">' +
+        escapeHtml(it.url) + '</a></div></div>';
+    }
+    el.metaGrid.innerHTML = metaHtml;
+
+    el.jdPane.textContent = (it.description_text !== undefined && it.description_text !== null && it.description_text !== "")
+      ? it.description_text
+      : "(no description_text provided in this queue item)";
+
+    el.extractorValue.textContent = formatValue(it.extractor_value);
+    el.fleetValue.textContent = formatValue(it.fleet_value);
+    el.reasonValue.textContent = it.reason || "—";
+
+    var v = verdicts[verdictKey(it.id, it.field)];
+    if (v) {
+      var label = v.verdict === "correct" ? "correction: " + formatValue(v.value) : v.verdict;
+      el.currentVerdict.innerHTML = 'saved verdict: <span class="badge ' +
+        (v.verdict === "extractor" ? "extractor" : v.verdict === "fleet" ? "fleet" :
+          v.verdict === "correct" ? "correct" : "skip") + '">' + escapeHtml(label) + "</span>";
+    } else {
+      el.currentVerdict.textContent = "no verdict yet";
+    }
+
+    closeCorrectionBox();
+  }
+
+  function updateProgress() {
+    var total = items.length;
+    var done = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (verdicts[verdictKey(items[i].id, items[i].field)]) done++;
+    }
+    var pct = total ? Math.round((done / total) * 100) : 0;
+    el.progressBar.style.width = pct + "%";
+
+    var counts = { extractor: 0, fleet: 0, correct: 0, ambiguous: 0 };
+    Object.keys(verdicts).forEach(function (k) {
+      var v = verdicts[k].verdict;
+      if (counts[v] !== undefined) counts[v]++;
+    });
+
+    el.tally.innerHTML =
+      "<span><b>" + done + " / " + total + "</b> adjudicated (" + pct + "%)</span>" +
+      '<span><span class="badge extractor">extractor</span> ' + counts.extractor + "</span>" +
+      '<span><span class="badge fleet">fleet</span> ' + counts.fleet + "</span>" +
+      '<span><span class="badge correct">correct</span> ' + counts.correct + "</span>" +
+      '<span><span class="badge skip">skip</span> ' + counts.ambiguous + " (not exported)</span>" +
+      "<span>filtered view: " + filteredIndices.length + " item(s)</span>";
+  }
+
+  // ---------------------------------------------------------------------
+  // Verdicts
+  // ---------------------------------------------------------------------
+  function recordVerdict(verdict, extra) {
+    var it = currentItem();
+    if (!it) return;
+    var rec = { id: it.id, field: it.field, verdict: verdict };
+    if (extra && extra.value !== undefined) rec.value = extra.value;
+    if (extra && extra.note) rec.note = extra.note;
+    verdicts[verdictKey(it.id, it.field)] = rec;
+    saveState();
+    render();
+    advance();
+  }
+
+  function clearVerdict() {
+    var it = currentItem();
+    if (!it) return;
+    delete verdicts[verdictKey(it.id, it.field)];
+    saveState();
+    render();
+  }
+
+  function advance() {
+    if (cursor < filteredIndices.length - 1) {
+      cursor++;
+      render();
+    }
+  }
+
+  function retreat() {
+    if (cursor > 0) {
+      cursor--;
+      render();
+    }
+  }
+
+  el.verdictE.addEventListener("click", function () { recordVerdict("extractor"); });
+  el.verdictF.addEventListener("click", function () { recordVerdict("fleet"); });
+  el.verdictS.addEventListener("click", function () { recordVerdict("ambiguous"); });
+  el.verdictC.addEventListener("click", openCorrectionBox);
+  el.nextBtn.addEventListener("click", advance);
+  el.prevBtn.addEventListener("click", retreat);
+  el.resetBtn.addEventListener("click", function () {
+    if (!confirm("Clear all saved verdicts for this loaded queue? This cannot be undone.")) return;
+    verdicts = {};
+    saveState();
+    render();
+  });
+
+  function openCorrectionBox() {
+    var it = currentItem();
+    if (!it) return;
+    el.correctionBox.classList.add("open");
+    var existing = verdicts[verdictKey(it.id, it.field)];
+    el.correctionInput.value = (existing && existing.verdict === "correct") ? formatValue(existing.value) : "";
+    el.correctionNote.value = (existing && existing.note) || "";
+    el.correctionInput.focus();
+  }
+
+  function closeCorrectionBox() {
+    el.correctionBox.classList.remove("open");
+  }
+
+  el.correctionCancel.addEventListener("click", closeCorrectionBox);
+  el.correctionSubmit.addEventListener("click", function () {
+    var value = el.correctionInput.value;
+    var note = el.correctionNote.value;
+    recordVerdict("correct", { value: value, note: note || undefined });
+  });
+  el.correctionInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); el.correctionSubmit.click(); }
+    if (e.key === "Escape") { e.preventDefault(); closeCorrectionBox(); }
+  });
+  el.correctionNote.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); el.correctionSubmit.click(); }
+    if (e.key === "Escape") { e.preventDefault(); closeCorrectionBox(); }
+  });
+
+  // ---------------------------------------------------------------------
+  // Keyboard shortcuts (disabled while typing in an input/select/textarea)
+  // ---------------------------------------------------------------------
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName || "").toLowerCase();
+    var typing = tag === "input" || tag === "select" || tag === "textarea";
+    if (typing) return;
+    if (!items.length) return;
+
+    switch (e.key) {
+      case "e": case "E": recordVerdict("extractor"); break;
+      case "f": case "F": recordVerdict("fleet"); break;
+      case "c": case "C": openCorrectionBox(); break;
+      case "s": case "S": recordVerdict("ambiguous"); break;
+      case "ArrowRight": advance(); break;
+      case "ArrowLeft": retreat(); break;
+      case "Backspace": case "Delete": clearVerdict(); break;
+      default: return;
+    }
+    e.preventDefault();
+  });
+
+  // ---------------------------------------------------------------------
+  // Download corrections.jsonl
+  // ---------------------------------------------------------------------
+  el.downloadBtn.addEventListener("click", function () {
+    // NOTE: resolve_gold.py::resolve only understands verdict in {"correct","extractor","fleet"}
+    // and raises ValueError on anything else. "ambiguous" (skip) is tracked locally for progress
+    // purposes but deliberately omitted from the exported file -- "skip writes nothing" per the
+    // data contract, so a skipped item just falls through to resolve()'s normal
+    // agree/fleet-fallback handling instead of blowing up the resolver.
+    var lines = Object.keys(verdicts)
+      .map(function (k) { return verdicts[k]; })
+      .filter(function (v) { return v.verdict !== "ambiguous"; })
+      .map(function (v) {
+        var rec = { id: v.id, field: v.field, verdict: v.verdict };
+        if (v.value !== undefined) rec.value = v.value;
+        if (v.note) rec.note = v.note;
+        return JSON.stringify(rec);
+      });
+    var blob = new Blob([lines.join("\n") + (lines.length ? "\n" : "")], { type: "application/x-ndjson" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "corrections.jsonl";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+
+})();
+</script>
+</body>
+</html>
