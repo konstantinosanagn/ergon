@@ -604,6 +604,33 @@ def build_detail_shard_only(index_db: Path, out: Path, *, shard: int, num_shards
     return stats
 
 
+def build_embed_shard_only(index_db: Path, out: Path, *, shard: int, num_shards: int) -> dict:
+    """Embed-matrix entry point (``--embed-shard-only``): run ONLY the sharded vector embed for shard
+    ``shard`` of ``num_shards`` against the already-built core index (``index_db``) + the crawl's
+    published fresh DB (``out / "fresh-rich.sqlite"``), writing its partial to
+    ``out / f"index-vectors-shard-{shard}.sqlite"``. Never crawls, builds, or republishes the core
+    index -- the same decoupling as ``build_detail_shard_only``:
+
+    - ``.github/workflows/embed-vectors.yml`` pre-seeds the partial by ``cp``-ing the prior combined
+      ``index-vectors.sqlite`` into it (carry-forward); ``reconcile_rich_tier_from_fresh(shard=...)``
+      prunes that seed down to ONLY this shard's slice (``rich._shard_of``), so the 20 partials stay
+      DISJOINT and ``scripts/merge_vectors_shards.py`` unions them cleanly.
+    - Sharding only changes WHICH runner embeds WHICH row; the embedding is deterministic, so the
+      merged result is byte-identical to a single unsharded run (proven in test_rich_index.py)."""
+    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+
+    fresh = out / "fresh-rich.sqlite"  # published by build-index.yml from the crawl's fresh DB
+    part = out / f"index-vectors-shard-{shard}.sqlite"
+    return reconcile_rich_tier_from_fresh(
+        part,
+        index_db,
+        fresh,
+        build_id=_build_id(),
+        shard=shard,
+        num_shards=num_shards,
+    )
+
+
 def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
     """Build the slim broad-query tier (no snippet, FTS over title+company) and gzip it.
 
@@ -987,6 +1014,7 @@ def main(argv: list[str]) -> None:
     )
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
     detail_shard_only = False  # drain-matrix mode: sharded reconcile only, no crawl/build/merge
+    embed_shard_only = False  # embed-matrix mode: sharded vector embed only, no crawl/build
     shard: int | None = None
     num_shards: int | None = None
     i = 0
@@ -1014,6 +1042,9 @@ def main(argv: list[str]) -> None:
             i += 1
         elif argv[i] == "--detail-shard-only":
             detail_shard_only = True
+            i += 1
+        elif argv[i] == "--embed-shard-only":
+            embed_shard_only = True
             i += 1
         elif argv[i] == "--shard":
             shard = int(argv[i + 1])
@@ -1051,6 +1082,28 @@ def main(argv: list[str]) -> None:
             f"detail shard {shard}/{num_shards}: fetched={stats['fetched']} "
             f"failed={stats['failed']} missing={stats['missing']} -> "
             f"{out / f'index-detail-shard-{shard}.sqlite'}"
+        )
+        return
+
+    if embed_shard_only:
+        # Embed-matrix mode (see .github/workflows/embed-vectors.yml): ONLY the sharded vector embed
+        # for shard `shard` of `num_shards`, against the already-downloaded core index + the crawl's
+        # fresh DB. Never crawls, builds, or republishes the core index -- the merge job
+        # (merge_vectors_shards.py) unions the 20 partials into index-vectors.sqlite.
+        if shard is None or num_shards is None:
+            print("--embed-shard-only requires --shard/--num-shards")
+            raise SystemExit(2)
+        if not db.exists():
+            print(
+                f"--embed-shard-only requires an existing index db at {db} "
+                "(download+gunzip the prior index.sqlite.gz first)"
+            )
+            raise SystemExit(2)
+        stats = build_embed_shard_only(db, out, shard=shard, num_shards=num_shards)
+        print(
+            f"embed shard {shard}/{num_shards}: embedded={stats['embedded']} "
+            f"pruned={stats['pruned']} missing={stats['missing']} -> "
+            f"{out / f'index-vectors-shard-{shard}.sqlite'}"
         )
         return
 
@@ -1154,6 +1207,13 @@ def main(argv: list[str]) -> None:
                 )
             except Exception as exc:  # noqa: BLE001 - never let the rich tier break the core build
                 print(f"  ! rich tier skipped (non-fatal): {type(exc).__name__}: {exc}")
+        # Publish the crawl's fresh_rich DB (full-description embed_text) so the sharded
+        # embed-vectors.yml matrix can consume it -- gzip it to a persistent artifact BEFORE the
+        # unlink below frees the raw file. The embed shards download + gunzip `fresh-rich.sqlite.gz`
+        # to `fresh-rich.sqlite`, which build_embed_shard_only reads. Gated on `ok` so a gate-failed
+        # build never ships a fresh DB out of sync with the (unpublished) index.
+        if ok and fresh_path.exists():
+            _gzip_file(fresh_path, out / "fresh-rich.sqlite.gz")
         fresh_path.unlink(missing_ok=True)  # free disk before the shard VACUUMs
         if ok and detail:  # Tier-3 reconcile + merge against the already-published core index
             # NON-FATAL: the detail tier is an optional enhancement, same contract as rich above.

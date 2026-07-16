@@ -661,3 +661,62 @@ def test_backfill_respects_embed_budget(tmp_path):
         rich, main, fresh, build_id="b1", reranker=FAKE, backfill_from_index=True, max_embed_per_run=4
     )
     assert s["embedded"] == 4 and s["missing"] == 2  # budget capped; rest next run
+
+
+def test_sharded_embed_is_byte_identical_to_unsharded(tmp_path):
+    """NO-QUALITY-LOSS proof for the sharded embed: embedding a corpus via N shards (each embeds its
+    hash-slice) + merge produces the EXACT same vectors sidecar as a single unsharded run. Sharding
+    only changes which runner embeds which row; the embedding is deterministic, so the merged union
+    must equal the single-run result -- byte-for-byte on (id, sig, scale, vec)."""
+    import sqlite3
+    import subprocess
+    import sys
+
+    from ergon_tracker.index.rich import _shard_of
+
+    jobs = [_job(f"id{i}", f"Role {i}", f"alpha beta gamma description number {i}") for i in range(50)]
+    main, fresh = _main_and_fresh(tmp_path, jobs, "shardeq")
+
+    # --- reference: one unsharded run ---
+    single = str(tmp_path / "vectors_single.sqlite")
+    st_single = reconcile_rich_tier_from_fresh(single, main, fresh, build_id="b", reranker=FAKE)
+
+    # --- sharded: N cold shards (each seeded empty) + the REAL merge script ---
+    N = 4
+    shard_dir = tmp_path / "shards"
+    shard_dir.mkdir()
+    per_shard_counts = []
+    for s in range(N):
+        part = str(shard_dir / f"index-vectors-shard-{s}.sqlite")
+        st = reconcile_rich_tier_from_fresh(
+            part, main, fresh, build_id="b", reranker=FAKE, shard=s, num_shards=N
+        )
+        per_shard_counts.append(st["embedded"])
+        # each shard must ONLY hold its own slice (disjoint invariant)
+        con = sqlite3.connect(part)
+        ids = [r[0] for r in con.execute("SELECT id FROM job_vectors")]
+        con.close()
+        assert all(_shard_of(i, N) == s for i in ids), f"shard {s} leaked out-of-slice ids"
+
+    # every live row embedded exactly once across shards (no dupes, no drops) -- matches the
+    # unsharded run's embed count exactly.
+    assert sum(per_shard_counts) == st_single["embedded"]
+
+    merged = str(tmp_path / "vectors_merged.sqlite")
+    r = subprocess.run(
+        [sys.executable, "scripts/merge_vectors_shards.py", "--shards-dir", str(shard_dir), "--out", merged],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stderr
+
+    def _vecs(path):
+        con = sqlite3.connect(path)
+        try:
+            return {i: (sig, scale, bytes(vec))
+                    for i, sig, scale, vec in con.execute("SELECT id, sig, scale, vec FROM job_vectors")}
+        finally:
+            con.close()
+
+    ref, got = _vecs(single), _vecs(merged)
+    assert set(ref) == set(got), "id set differs between unsharded and sharded+merge"
+    assert ref == got, "sharded+merge vectors are NOT byte-identical to the unsharded run"

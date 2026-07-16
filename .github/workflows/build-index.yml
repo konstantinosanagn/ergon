@@ -216,6 +216,53 @@ jobs:
             done
           fi
 
+      - name: Publish the crawl's fresh-rich embed-text DB (for embed-vectors.yml to consume)
+        # ADDITIVE (does NOT remove the inline --rich embed above -- we validate the sharded
+        # embed-vectors.yml path against this baseline before cutting the inline embed). The crawl
+        # captures FULL descriptions to the fresh DB's `fresh_rich` table (src/ergon_tracker/index/
+        # rich.py::write_fresh_rich); on disk that DB is `dist/fresh.sqlite` (scripts/build_index.py:
+        # `fresh_path = out / "fresh.sqlite"`). Publishing it here lets each embed-vectors shard read
+        # the same embed-text source the inline reconcile uses, instead of re-crawling.
+        #
+        # NOTE on the name: the DB is `fresh.sqlite`; the embed-vectors contract reads it as
+        # `dist/fresh-rich.sqlite`, so it is published under `fresh-rich.sqlite.gz`. This step checks
+        # both on-disk names for forward-compat with the parallel Python change (which preserves the
+        # fresh DB under `fresh-rich.sqlite` rather than unlinking `fresh.sqlite` after the inline
+        # reconcile -- build_index.py currently deletes `fresh.sqlite` at the end of --incremental, so
+        # until that lands this step is a best-effort no-op on the daily run). Best-effort throughout:
+        # a missing fresh DB or a publish hiccup must NEVER fail the core index build.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # build_index.py (--incremental) now gzips the fresh DB to dist/fresh-rich.sqlite.gz itself
+          # (before it unlinks the raw fresh.sqlite to free disk), so prefer that. Fall back to
+          # gzipping a raw fresh DB if for some reason the Python step didn't produce the .gz.
+          if [ ! -f dist/fresh-rich.sqlite.gz ]; then
+            SRC=""
+            for f in dist/fresh-rich.sqlite dist/fresh.sqlite; do
+              [ -f "$f" ] && SRC="$f" && break
+            done
+            if [ -z "$SRC" ]; then
+              echo "no fresh DB on disk (fresh-rich.sqlite.gz / .sqlite / fresh.sqlite absent) -- nothing to publish"
+              exit 0
+            fi
+            echo "gzipping $SRC -> dist/fresh-rich.sqlite.gz"
+            if command -v pigz >/dev/null 2>&1; then
+              pigz -c "$SRC" > dist/fresh-rich.sqlite.gz
+            else
+              gzip -c "$SRC" > dist/fresh-rich.sqlite.gz
+            fi
+          else
+            echo "using build_index.py-produced dist/fresh-rich.sqlite.gz"
+          fi
+          if gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest dist/fresh-rich.sqlite.gz --clobber
+          else
+            gh release create index-latest dist/fresh-rich.sqlite.gz --title index-latest \
+              --notes "Daily ergon-tracker search-index snapshot."
+          fi
+
       - name: Upload build artifacts (diagnostics, retained even on failure)
         if: always()
         uses: actions/upload-artifact@v4

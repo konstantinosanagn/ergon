@@ -18,6 +18,7 @@ change-detection survives without it.)
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -353,6 +354,15 @@ def _backfill_from_index(
     return embedded, done
 
 
+def _shard_of(id_: str, num_shards: int) -> int:
+    """Deterministic shard for a posting id: ``sha1(id) mod num_shards``. Pure function of the id, so
+    every id belongs to exactly ONE shard across every run/runner -- the invariant that makes the
+    sharded embed's 20 partials DISJOINT (clean union at merge) AND makes the sharded result provably
+    identical to a single-runner run (sharding only changes WHICH runner embeds a row, never the
+    row's embedding, which is deterministic given the model + text). No quality loss, by construction."""
+    return int(hashlib.sha1(id_.encode("utf-8")).hexdigest(), 16) % num_shards
+
+
 def reconcile_rich_tier_from_fresh(
     rich_path: Path | str,
     main_index_path: Path | str,
@@ -364,6 +374,8 @@ def reconcile_rich_tier_from_fresh(
     chunk_size: int = 10_000,
     max_embed_per_run: int | None | Literal["auto"] = "auto",
     backfill_from_index: bool | Literal["auto"] = "auto",
+    shard: int | None = None,
+    num_shards: int | None = None,
 ) -> dict[str, int]:
     """Incremental (cron) cascade — same contract as :func:`reconcile_rich_tier` but reads the freshly-
     crawled ``(id, sig, embed_text)`` from the streaming fresh DB (disk, memory-safe via
@@ -390,12 +402,25 @@ def reconcile_rich_tier_from_fresh(
     do_backfill = (
         _resolve_backfill_from_index() if backfill_from_index == "auto" else backfill_from_index
     )
+    if (shard is None) != (num_shards is None):
+        raise ValueError("shard and num_shards must be given together (or neither)")
+    sharded = num_shards is not None
+    if sharded:
+        if not (0 <= shard < num_shards):  # type: ignore[operator]
+            raise ValueError(f"shard must be in [0, num_shards); got {shard}/{num_shards}")
+        if do_backfill:
+            # The backfill accelerator streams the WHOLE index; unsharded it would embed the full
+            # backlog on EVERY shard (20x duplicate work + non-disjoint partials that break the merge
+            # union). It's an opt-in unsharded-only path -- fail loud rather than silently corrupt.
+            raise ValueError("backfill_from_index is not supported with sharding; run it unsharded")
 
     main = sqlite3.connect(f"file:{main_index_path}?mode=ro", uri=True)
     try:
         live_ids = {r[0] for r in main.execute("SELECT id FROM jobs")}
     finally:
         main.close()
+    if sharded:
+        live_ids = {i for i in live_ids if _shard_of(i, num_shards) == shard}  # type: ignore[arg-type]
 
     con = sqlite3.connect(str(rich_path))
     try:
@@ -403,6 +428,14 @@ def reconcile_rich_tier_from_fresh(
         # id→sig for every row already in the sidecar. Held in memory by design: ~150MB at 1.4M rows
         # (two short strings each) buys O(1) new/changed detection per fresh row (see docstring).
         have = dict(con.execute("SELECT id, sig FROM job_vectors"))
+        if sharded:
+            # The shard workflow seeds this partial by copying the FULL prev sidecar (carry-forward).
+            # Drop every row NOT in this shard's slice so the output partial is scoped to shard
+            # `shard` alone -- disjoint from every other shard, so the merge is a clean union. With
+            # `live_ids` already slice-filtered above, the whole embed pipeline below then operates on
+            # this slice only (the `r[0] in live_ids` chunk filter admits slice ids exclusively).
+            _delete_ids(con, [i for i in have if _shard_of(i, num_shards) != shard])  # type: ignore[arg-type]
+            have = {i: s for i, s in have.items() if _shard_of(i, num_shards) == shard}  # type: ignore[arg-type]
         orphans = [i for i in have if i not in live_ids]
         _delete_ids(con, orphans)
 

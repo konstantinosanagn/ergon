@@ -1,0 +1,248 @@
+name: embed-vectors
+
+# Sharded parallel vector-embedding pass. Today build-index.yml embeds the rich-tier vectors inline
+# on ONE runner (the --rich reconcile, ~2.4h cold). This workflow fans that embed out across a 20-job
+# matrix so the whole rows-needing-embedding delta finishes in ~1 run instead of ramping over many
+# daily builds. Mirrors drain-detail.yml's fan-out/merge shape exactly.
+#
+# THE SLICE INVARIANT: each shard embeds a DISJOINT 1/20 hash-slice of the rows needing embedding
+# (scripts/build_index.py --embed-shard-only --shard N --num-shards 20), producing a partial
+# index-vectors-shard-N.sqlite that holds ONLY shard N's slice. The merge job unions the 20 partials
+# into one index-vectors.sqlite. No two shards ever embed the same row, so the union is a clean
+# disjoint concatenation (same structural guarantee as drain-detail's per-shard sidecars).
+#
+# DECOUPLED FROM THE CORE INDEX PUBLISH: this workflow ONLY publishes the vectors sidecar
+# (index-vectors.sqlite.gz + manifest-vectors.json). It never touches/republishes index.sqlite. It
+# reads the core index + the crawl's fresh-rich embed-text DB that build-index.yml publishes to the
+# index-latest release. Sharing `concurrency: group: build-index` with build-index.yml (and
+# drain-detail.yml) means the three never run simultaneously, so there is no index/asset race.
+on:
+  workflow_dispatch:
+    inputs:
+      rich_max_embed:
+        description: "Per-shard embed budget (ERGON_RICH_MAX_EMBED). Big by design -- each shard only holds 1/20 of the delta, so a high cap still fits the per-shard timeout. Override to bound a validation run."
+        default: "300000"
+  # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded embed path is validated by a bounded live
+  # run (a small rich_max_embed across all 20 shards, measuring per-shard rows/s + merge correctness
+  # against the inline --rich baseline). Re-add a `schedule:` cron for ongoing maintenance ONLY after
+  # that measures clean -- the shared concurrency group below already serializes this with the daily
+  # build so they never race.
+
+permissions:
+  contents: write   # to publish the merged vectors sidecar as a release asset (merge job)
+
+concurrency:
+  group: build-index   # SAME group as build-index.yml / drain-detail.yml -- never runs simultaneously
+  cancel-in-progress: false
+
+env:
+  NUM_SHARDS: 20
+
+jobs:
+  # Warm the fastembed model cache ONCE (read/write actions/cache@v4), so the 20 matrix shards below
+  # all get a cache HIT and none of them writes. This is the "warm once, fan out read-only" pattern:
+  # 20 shards each saving the same ~130MB model on a shared key is the classic matrix write-contention
+  # gotcha (racing saves, "cache already exists" churn), so the shards restore READ-ONLY instead.
+  warm-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install package
+        # [semantic] pulls fastembed (the embedding model runtime). Same install line as build-index.yml.
+        run: uv venv && uv pip install -e ".[semantic]"
+
+      - name: Cache fastembed model (read/write -- populate once for the matrix)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-BAAI-bge-small-en-v1.5
+
+      - name: Warm the model cache (download BAAI/bge-small-en-v1.5 into FASTEMBED_CACHE_PATH)
+        env:
+          # Explicit path (matches the shard step + build-index.yml): env values are not shell-expanded,
+          # so `~` would be taken literally by fastembed. Instantiating TextEmbedding triggers the
+          # one-time ~130MB ONNX download into this dir; actions/cache saves it in the post-job step.
+          FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+        run: |
+          uv run python - <<'PY'
+          from fastembed import TextEmbedding
+          # Instantiation alone pulls the model into FASTEMBED_CACHE_PATH (no embed call needed).
+          TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+          print("fastembed model warmed")
+          PY
+
+  embed:
+    needs: warm-cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false     # one shard's failure (runner OOM, dead download, etc.) must not cancel the other 19
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up disk space (reclaim the ~40GB of preinstalled toolchains we never use)
+        # The shards stage several multi-GB SQLite files on the ~20GB root disk at once -- the
+        # downloaded index.sqlite, fresh-rich.sqlite, the prior index-vectors.sqlite, and this shard's
+        # seeded/growing copy. The hosted runner ships ~40GB of toolchains (dotnet ~23G, android ~12G,
+        # ghc ~5G) this embed never touches (uv fetches its own Python), so removing them buys ample
+        # headroom. Best-effort: never block the embed on cleanup.
+        continue-on-error: true
+        run: |
+          echo "before:"; df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/share/swift || true
+          sudo apt-get clean || true
+          echo "after:"; df -h /
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install package
+        # [semantic] pulls fastembed for the embedding pass. Same install line as build-index.yml.
+        run: uv venv && uv pip install -e ".[semantic]"
+
+      - name: Restore fastembed model cache (READ-ONLY -- warm-cache already populated it)
+        # actions/cache/restore@v4 (NOT the read/write actions/cache@v4): the shards must never write
+        # this cache. 20 matrix jobs racing to save the same key is the write-contention gotcha the
+        # upstream warm-cache job exists to avoid. Restore-only = guaranteed hit, zero save churn.
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-BAAI-bge-small-en-v1.5
+
+      - name: Download core index + fresh-rich + prior vectors (best-effort; first run has none)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          # index.sqlite.gz: the core index (source of truth for which rows are live + need embedding).
+          # fresh-rich.sqlite.gz: the crawl window's fresh_rich embed-text DB (published by build-index.yml).
+          # index-vectors.sqlite.gz: the prior merged vectors sidecar -- seeded per-shard below for
+          # carry-forward so already-embedded, sig-current rows in this shard's slice are never re-embedded.
+          gh release download index-latest --dir dist --pattern 'index.sqlite.gz' || echo "no prev index"
+          gh release download index-latest --dir dist --pattern 'fresh-rich.sqlite.gz' || echo "no fresh-rich db"
+          gh release download index-latest --dir dist --pattern 'index-vectors.sqlite.gz' || echo "no prev vectors"
+          [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
+          [ -f dist/fresh-rich.sqlite.gz ] && gunzip -kf dist/fresh-rich.sqlite.gz || true
+          [ -f dist/index-vectors.sqlite.gz ] && gunzip -kf dist/index-vectors.sqlite.gz || true
+
+      - name: Embed shard ${{ matrix.shard }} of ${{ env.NUM_SHARDS }}
+        env:
+          # Stable model cache dir (matches the restore step + warm-cache). Explicit path: env values
+          # are not shell-expanded, so `~` would be taken literally by fastembed.
+          FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+          # Per-shard embed budget: high because each shard only holds 1/20 of the rows-needing-embedding
+          # delta, so a big cap still fits the 120-min timeout.
+          ERGON_RICH_MAX_EMBED: "${{ github.event.inputs.rich_max_embed || '300000' }}"
+        run: |
+          if [ ! -f dist/index.sqlite ] || [ ! -f dist/fresh-rich.sqlite ]; then
+            echo "missing dist/index.sqlite or dist/fresh-rich.sqlite -- nothing to embed yet (first-ever run before build-index.yml has published the core index + fresh-rich db)"
+            exit 0
+          fi
+          # Seed THIS shard's partial from the prior merged vectors sidecar (best-effort carry-forward).
+          # Harmless to seed with the FULL prior db: --embed-shard-only only reads/writes the rows in
+          # shard N's slice and leaves the partial containing ONLY that slice, so another shard's rows
+          # just ride along unused in this copy (mirrors drain-detail's seed-with-combined pattern).
+          [ -f dist/index-vectors.sqlite ] && cp dist/index-vectors.sqlite "dist/index-vectors-shard-${{ matrix.shard }}.sqlite" || true
+          uv run python scripts/build_index.py --embed-shard-only \
+            --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} --out dist
+
+      - name: Upload shard vectors artifact
+        # !cancelled() so a shard that FAILS mid-embed (e.g. a runner resource wall) still uploads the
+        # partial it committed up to the failure -- turns a hard shard failure into incremental progress.
+        # if-no-files-found: warn covers the "nothing to embed yet" early-exit above.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectors-shard-${{ matrix.shard }}
+          path: dist/index-vectors-shard-${{ matrix.shard }}.sqlite
+          if-no-files-found: warn
+
+  merge:
+    needs: embed
+    if: ${{ !cancelled() }}   # a timed-out/failed shard must not skip the merge -- the other 19 shards' work still needs publishing; only a manual cancellation of the whole run skips this
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
+        run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
+
+      - name: Install package
+        # [semantic] so the manifest/gzip reuse block below can import scripts.build_index cleanly.
+        run: uv venv && uv pip install -e ".[semantic]"
+
+      - name: Download whatever shard vectors artifacts exist
+        # A timed-out/failed shard simply never uploaded its artifact (see the embed job's
+        # if-no-files-found: warn) -- this must merge the shards that DID finish rather than hard-failing
+        # because the full set of NUM_SHARDS isn't present. if-no-artifact-found: warn covers the
+        # (unlikely) all-shards-failed case; the count-and-guard below turns that into one clear failure.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vectors-shard-*
+          path: dist/shards
+          merge-multiple: true
+          if-no-artifact-found: warn
+
+      - name: Count downloaded shards
+        run: |
+          n=$(find dist/shards -maxdepth 1 -name 'index-vectors-shard-*.sqlite' 2>/dev/null | wc -l | tr -d ' ')
+          echo "downloaded $n/${NUM_SHARDS} shard vectors db(s)"
+          if [ "$n" -eq 0 ]; then
+            echo "no shard vectors dbs were downloaded -- every shard must have failed before uploading; nothing to merge" >&2
+            exit 1
+          fi
+
+      - name: Merge shard partials into one combined index-vectors.sqlite
+        run: |
+          mkdir -p dist
+          uv run python scripts/merge_vectors_shards.py --shards-dir dist/shards --out dist/index-vectors.sqlite
+
+      - name: Gzip + write manifest-vectors.json
+        # Reuses build_index.py's own _gzip_file/_write_vectors_manifest/_build_id (no duplicated
+        # gzip/manifest logic) -- `scripts` is importable as a namespace package from the repo root
+        # (same convention the test suite uses: pythonpath = ["."]). Mirrors drain-detail's merge.
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+
+          from scripts.build_index import _build_id, _gzip_file, _write_vectors_manifest
+
+          out = Path("dist")
+          db = out / "index-vectors.sqlite"
+          build_id = _build_id()
+          sha, nbytes = _gzip_file(db, out / "index-vectors.sqlite.gz")
+          _write_vectors_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
+          print(f"index-vectors.sqlite.gz: build_id={build_id} sha256={sha} bytes={nbytes}")
+          PY
+
+      - name: Publish the merged vectors sidecar to the stable index-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Paired-asset guard (mirrors build-index.yml): publish index-vectors.sqlite.gz ONLY together
+          # with manifest-vectors.json, so a partial/interrupted merge never ships a db under a manifest
+          # that doesn't describe it (or vice versa -- RichCache.ensure_fresh gates on the manifest).
+          # Deliberately does NOT touch index.sqlite/manifest.json -- see the decoupling note up top.
+          if [ ! -f dist/index-vectors.sqlite.gz ] || [ ! -f dist/manifest-vectors.json ]; then
+            echo "missing index-vectors.sqlite.gz or manifest-vectors.json -- refusing to publish an unpaired asset"
+            exit 1
+          fi
+          ASSETS="dist/index-vectors.sqlite.gz dist/manifest-vectors.json"
+          if gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest $ASSETS --clobber
+          else
+            gh release create index-latest $ASSETS --title index-latest \
+              --notes "Daily ergon-tracker search-index snapshot."
+          fi
