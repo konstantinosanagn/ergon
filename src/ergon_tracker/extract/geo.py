@@ -548,8 +548,7 @@ def _folded_cities() -> dict[str, str]:
 
 def _fold(s: str) -> str:
     """Accent-fold to ASCII-ish and lowercase (e.g. "İstanbul" -> "istanbul")."""
-    decomposed = unicodedata.normalize("NFKD", s)
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).lower()
+    return _fold_ascii(s).lower()
 
 
 def _fold_ascii(s: str) -> str:
@@ -851,7 +850,8 @@ def _resolve_city(segments: list[str], *, known_country: str | None) -> tuple[st
             continue
         # A multi-word segment led by a compass descriptor ("Northeast FA", "Southwest Region")
         # is a sales-territory tag, not a city — the real city is a later segment.
-        if low.split()[0] in _NON_CITY_SEGMENTS and len(low.split()) > 1:
+        words = low.split()
+        if words[0] in _NON_CITY_SEGMENTS and len(words) > 1:
             continue
         if _is_sublocation(seg):
             continue

@@ -240,22 +240,15 @@ class _Cluster:
 
 def _merge_cluster(members: list[tuple[int, JobPosting]]) -> JobPosting:
     """Collapse one cluster of duplicate postings into a single canonical JobPosting."""
-    # Primary = most authoritative, then most complete, then earliest seen (stable).
-    primary_index, primary = min(
+    # Order by authority, then completeness, then earliest seen. The index tiebreaker is unique,
+    # so there are no ties: the head is the primary, the tail are the secondary donors (best first).
+    by_priority = sorted(
         members,
         key=lambda im: (_authority_rank(im[1].source), -_completeness(im[1]), im[0]),
     )
+    primary = by_priority[0][1]
     merged = primary.model_copy(deep=True)
-
-    # Secondaries in the same priority order so the best donor fills first.
-    secondaries = [
-        job
-        for idx, job in sorted(
-            members,
-            key=lambda im: (_authority_rank(im[1].source), -_completeness(im[1]), im[0]),
-        )
-        if not (idx == primary_index and job is primary)
-    ]
+    secondaries = [job for _, job in by_priority[1:]]
 
     for sec in secondaries:
         for field in _FILLABLE_FIELDS:

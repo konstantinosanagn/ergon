@@ -25,7 +25,7 @@ from .extract.sector import SectorExtractor, SectorIndex, load_sector_index  # n
 from .extract.sponsorship import detect_sponsorship  # noqa: F401
 from .extract.visa import h1b_last_filed, is_h1b_sponsor, load_sponsor_index  # noqa: F401
 from .extract.yoe import YoeExtractor  # noqa: F401
-from .models import JobLevel, JobPosting, Salary
+from .models import JobLevel, JobPosting
 
 __all__ = ["enrich_in_place", "infer_level", "normalize_geo", "load_sector_index", "SectorIndex"]
 
@@ -73,9 +73,7 @@ def enrich_in_place(
 
     comp = get_extractor("comp")
     if comp is not None and job.salary is None:
-        parsed: Salary | None = comp.extract(inp)
-        if parsed is not None:
-            job.salary = parsed
+        job.salary = comp.extract(inp)
 
     sector = get_extractor("sector")
     if sector is not None and job.sector is None:

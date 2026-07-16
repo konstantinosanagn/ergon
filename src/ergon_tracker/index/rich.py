@@ -56,8 +56,6 @@ def _sig(job: JobPosting) -> str:
     The main index's content_hash deliberately ignores the description, so a description-only edit isn't
     a "change" there. But the description IS this tier's payload, so we fold it in — the cascade then
     re-embeds whenever anything it stores actually changed."""
-    import hashlib
-
     from .mapping import content_hash
 
     return hashlib.sha1(f"{content_hash(job)}|{job.description_text or ''}".encode()).hexdigest()[
@@ -319,8 +317,6 @@ def _backfill_from_index(
     """
     if budget is not None and budget <= 0:
         return 0, set()
-    import hashlib
-
     embedded = 0
     done: set[str] = set()
     main = sqlite3.connect(f"file:{main_index_path}?mode=ro", uri=True)

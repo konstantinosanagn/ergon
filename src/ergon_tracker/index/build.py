@@ -183,7 +183,6 @@ def append_jobs(con: object, jobs: Iterable[JobPosting], *, build_id: str) -> in
     rows inserted. Memory is O(batch), so the caller can stream arbitrarily many batches.
     """
     import sqlite3
-    from collections.abc import Iterable
 
     assert isinstance(con, sqlite3.Connection)
     batch: list[JobPosting] = list(jobs) if isinstance(jobs, Iterable) else []
