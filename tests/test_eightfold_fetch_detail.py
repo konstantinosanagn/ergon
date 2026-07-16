@@ -59,8 +59,11 @@ def test_eightfold_fetch_detail_white_label_with_token_uses_token_as_tenant() ->
     assert fetcher.calls == ["https://starbucks.eightfold.ai/api/apply/v2/jobs/99887766"]
 
 
-def test_eightfold_fetch_detail_white_label_without_token_is_none() -> None:
-    payload = _ef_payload()
+def test_eightfold_fetch_detail_white_label_without_token_uses_own_host() -> None:
+    # White-label custom domain, no token: the {tenant}.eightfold.ai subdomain is NOT derivable, but
+    # the SAME apply/v2 detail resource is served on the ref's OWN host. Fetch from there instead of
+    # dropping the row -- this recovers ~94% of failed eightfold rows (hsbc/bayer/netflix/...).
+    payload = _ef_payload("<p>Real JD from the vanity host.</p>")
     fetcher = _FakeFetcher(payload)
     ref = DetailRef(
         id="3",
@@ -71,8 +74,8 @@ def test_eightfold_fetch_detail_white_label_without_token_is_none() -> None:
         content_sig="s",
     )
     desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, fetcher))
-    assert desc is None
-    assert fetcher.calls == []
+    assert desc == "<p>Real JD from the vanity host.</p>"
+    assert fetcher.calls == ["https://careers.starbucks.com/api/apply/v2/jobs/99887766"]
 
 
 def test_eightfold_fetch_detail_falls_back_to_listing_url_for_id_with_token_tenant() -> None:
@@ -93,13 +96,11 @@ def test_eightfold_fetch_detail_falls_back_to_listing_url_for_id_with_token_tena
     assert fetcher.calls == ["https://acme.eightfold.ai/api/apply/v2/jobs/13579"]
 
 
-def test_eightfold_fetch_detail_tenant_never_falls_back_to_listing_url_host() -> None:
-    # The important asymmetry: id derivation falls back to listing_url, but tenant derivation
-    # does NOT -- it only ever looks at apply_url's host (else the token). Here listing_url is
-    # a perfectly valid eightfold host, but apply_url is absent and there's no token, so tenant
-    # resolution must fail and no fetch must happen, even though a tenant COULD be read off
-    # listing_url if we (incorrectly) fell back to it.
-    payload = _ef_payload()
+def test_eightfold_fetch_detail_recovers_from_listing_url_host() -> None:
+    # apply_url absent, listing_url is a valid eightfold host: id derivation already falls back to
+    # listing_url, and the detail fetch now uses that SAME host's apply/v2 resource (the row's source
+    # is eightfold, so the host is trusted) instead of dropping the row.
+    payload = _ef_payload("<p>JD via the listing_url host.</p>")
     fetcher = _FakeFetcher(payload)
     ref = DetailRef(
         id="4b",
@@ -110,8 +111,8 @@ def test_eightfold_fetch_detail_tenant_never_falls_back_to_listing_url_host() ->
         content_sig="s",
     )
     desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, fetcher))
-    assert desc is None
-    assert fetcher.calls == []
+    assert desc == "<p>JD via the listing_url host.</p>"
+    assert fetcher.calls == ["https://acme.eightfold.ai/api/apply/v2/jobs/13579"]
 
 
 def test_eightfold_fetch_detail_missing_job_description_is_none() -> None:

@@ -319,33 +319,55 @@ class EightfoldProvider(BaseProvider):
             return token.strip().lower()
         return None
 
+    @classmethod
+    def _detail_url(cls, src: str | None, ref: DetailRef, job_id: str) -> str | None:
+        """Build the ``/api/apply/v2/jobs/{id}`` detail URL for ``job_id``.
+
+        White-label eightfold tenants (hsbc/bayer/netflix/...) serve the IDENTICAL apply/v2 detail
+        resource on their OWN careers host, from which no ``{tenant}.eightfold.ai`` subdomain is
+        derivable -- so the old "no tenant -> skip" path silently dropped ~94% of failed eightfold
+        rows even though a 200 with the full ``job_description`` sat on the ref's own host.
+
+        Precedence is tenant-FIRST so rows that already resolved stay byte-identical: when a tenant is
+        derivable (``{tenant}.eightfold.ai`` host, or a bare tenant-slug ``ref.token``) use the
+        canonical backend. ONLY when no tenant is derivable (the white-label custom-domain-no-token
+        case = the ~94%) fall back to the ref's OWN host. That host is trusted (this row's ``source``
+        is already eightfold, so our crawler stored it), and ``src`` is the exact URL ``job_id`` was
+        parsed from, so host and id can never drift."""
+        tenant = cls._tenant_for_detail(ref)
+        if tenant is not None:
+            return _DETAIL_API.format(tenant=tenant, id=job_id)
+        parts = urlsplit(src) if src else None
+        if parts and parts.scheme in ("http", "https") and parts.netloc:
+            return f"{parts.scheme}://{parts.netloc}/api/apply/v2/jobs/{job_id}"
+        return None
+
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via the per-tenant detail resource (Tier-3 recovery).
 
         ``{id}`` is the trailing path segment of ``ref.apply_url`` (shape
-        ``https://{host}/careers/job/{id}``), falling back to ``ref.listing_url`` when
-        ``apply_url`` is absent.
-
-        ``{tenant}`` derivation is ASYMMETRIC by design:
-        1. If ``ref.apply_url``'s host is ``{tenant}.eightfold.ai``, that subdomain IS the
-           tenant (via :meth:`matches`).
-        2. Else, if ``ref.token`` is present and looks like a bare tenant slug (no dots or
-           scheme -- i.e. not itself a custom domain/URL), use it as the tenant.
-        3. Else return ``None``. Roughly a quarter of Eightfold tenants are white-labeled onto
-           a custom domain with no tenant recoverable from the URL, and ``DetailRef`` carries no
-           ``company`` field to fall back on -- those degrade gracefully to a skipped fetch,
-           which is acceptable and non-fatal (not every Tier-3 candidate needs to resolve).
+        ``https://{host}/careers/job/{id}``), falling back to ``ref.listing_url``. The apply/v2
+        detail URL is then built from that SAME URL's host (see :meth:`_detail_url`): white-label
+        tenants (hsbc/bayer/netflix/...) serve the identical resource on their own careers host, so
+        fetching from the ref's host recovers them -- previously they were skipped as "no tenant
+        derivable" (which silently dropped ~94% of failed eightfold rows). The
+        ``{tenant}.eightfold.ai`` form is the fallback for refs that carry only a bare tenant slug.
 
         Non-raising: any unparseable URL, fetch failure, non-JSON/non-dict payload, or a
         missing/empty/non-string ``job_description`` returns ``None``, never an exception.
         """
-        job_id = self._job_id_from_url(ref.apply_url) or self._job_id_from_url(ref.listing_url)
-        if not job_id:
+        src: str | None = None
+        job_id: str | None = None
+        for candidate in (ref.apply_url, ref.listing_url):
+            jid = self._job_id_from_url(candidate)
+            if jid:
+                src, job_id = candidate, jid
+                break
+        if job_id is None:
             return None
-        tenant = self._tenant_for_detail(ref)
-        if tenant is None:
+        url = self._detail_url(src, ref, job_id)
+        if url is None:
             return None
-        url = _DETAIL_API.format(tenant=tenant, id=job_id)
         try:
             data = await fetcher.get_json(url)
         except Exception:
