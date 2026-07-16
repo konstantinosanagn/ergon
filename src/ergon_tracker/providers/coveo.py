@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib.resources import files
 from typing import TYPE_CHECKING, Any
 
@@ -279,10 +279,12 @@ class CoveoProvider(BaseProvider):
 
     @staticmethod
     def _date(v: Any) -> datetime | None:
-        # Coveo dates are epoch millis or ISO strings.
+        # Coveo dates are epoch millis or ISO strings. Both branches return a NAIVE UTC datetime
+        # (the ISO branch strips the "Z"); the epoch branch mirrors that via tz-aware -> naive so
+        # the two stay consistent, without the deprecated datetime.utcfromtimestamp.
         if isinstance(v, (int, float)) and v > 0:
             try:
-                return datetime.utcfromtimestamp(v / 1000)
+                return datetime.fromtimestamp(v / 1000, tz=timezone.utc).replace(tzinfo=None)
             except (ValueError, OverflowError, OSError):
                 return None
         if isinstance(v, str) and v.strip():
