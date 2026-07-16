@@ -5,9 +5,16 @@ Run it (after ``pip install 'ergon-tracker[mcp]'``)::
     ergon-tracker-mcp            # stdio transport (for Claude Desktop / MCP clients)
 
 Tools:
-- ``search_jobs``     — unified search across ATS feeds + aggregators
-- ``resolve_company`` — detect which ATS a company/URL uses + its board token
-- ``list_sources``    — registered providers + registry size
+- ``search_jobs``       — unified search across ATS feeds + aggregators (index-served for broad
+                          queries, live for a named company)
+- ``whats_new``         — change feed: roles first-seen/updated in the last N days
+- ``match_resume``      — paste a résumé (or JD) → ranks open roles by fit (semantic)
+- ``assess_fit``        — one résumé vs one JD → structured gap analysis (apply-assist)
+- ``h1b_jobs``          — open roles AT known H-1B sponsors, ranked by sponsor strength
+- ``list_h1b_sponsors`` — browse employers known to sponsor H-1B (US DoL LCA data)
+- ``resolve_company``   — detect which ATS a company/URL uses + its board token
+- ``list_sources``      — registered providers + registry size
+- ``list_companies``    — the companies we track (by status)
 
 The tools are thin adapters over the existing ``ergon_tracker`` API. ``search_jobs`` returns a
 compact view of each posting (no raw payload / HTML) to keep tool responses small.
@@ -29,7 +36,19 @@ from .registry.store import SeedRegistry
 from .serialization import job_to_dict
 
 _INSTRUCTIONS = """\
-ergon-tracker: unified job search across company ATS feeds (49k+ boards) + aggregators.
+ergon-tracker: free, unified job search over 30+ company ATS feeds + aggregators, with a daily
+prebuilt index so broad queries are fast and never rate-limited.
+
+Tools — pick by intent:
+- search_jobs        — the workhorse. Roles by keyword + typed filters (location, salary, level,
+                       years of experience, degree, sector, remote, employment type, recency, visa).
+- whats_new          — "what changed": roles first-seen or updated in the last N days.
+- match_resume       — paste a résumé (or a JD) → ranks open roles by fit (semantic embeddings).
+- assess_fit         — one résumé vs one target JD → structured gap analysis to tailor an application.
+- h1b_jobs           — open roles AT known H-1B sponsors, ranked by sponsor strength.
+- list_h1b_sponsors  — "does <company> sponsor H-1B?" / the biggest sponsors (US DoL LCA data).
+- resolve_company    — which ATS a company/URL uses + its board token.
+- list_sources / list_companies — coverage introspection.
 
 Index vs. live — how to choose your `search_jobs` call:
 - "roles at <company>" → pass `companies=[...]` (domains/careers URLs). This fetches LIVE from
