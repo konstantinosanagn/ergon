@@ -434,6 +434,7 @@ _COMPOUND_CITY_SUFFIXES = {
 # "Any City" (Workday placeholder), "Remote Work"/"Work" (remote sentinels), "Select"/"University".
 _NON_CITY_SEGMENTS = {
     "any city",
+    "anywhere",  # "Remote - Anywhere" placeholder; never a city
     "work",
     "remote work",
     "select",
@@ -686,6 +687,27 @@ def normalize_geo(loc: Location) -> Location:
     raw = loc.raw.strip()
     if "remote" in raw.lower():
         loc.is_remote = True
+    # A parenthetical often carries the DISAMBIGUATING country/state ("Remote (US)", "London
+    # (Canada)", "Hamilton (New Zealand)"). _NOISE_RE strips all parentheticals as noise a few lines
+    # down, which silently drops that qualifier and lets an ambiguous city fall to the wrong gazetteer
+    # default (London -> UK, Hamilton -> Canada). Resolve an EXPLICIT country/US-state token from the
+    # parentheses first — only authoritative tokens (country names/aliases or full US state names,
+    # never a bare 2-letter code like "(CA)" which is California-or-Canada) — so it wins over the
+    # gazetteer without inventing a signal.
+    if loc.country is None:
+        for _inner in re.findall(r"\(([^)]*)\)", raw):
+            for _piece in re.split(r"[,/;]", _inner):
+                _key = _piece.strip().lower()
+                if _key in _COUNTRY_ALIASES:
+                    loc.country = _COUNTRY_ALIASES[_key]
+                elif _key in _US_STATE_NAMES:
+                    loc.country = "United States"
+                    if loc.region is None:
+                        loc.region = _piece.strip()
+                if loc.country is not None:
+                    break
+            if loc.country is not None:
+                break
     # PeopleSoft "Country-State-City" / "State-City" (hyphen-delimited): split ONLY a hyphen that
     # follows a known state/country NAME, so "Kansas-Topeka" and "United States-Texas-Garden City"
     # split while hyphenated place names ("Winston-Salem", "St. Leon-Rot", "Baden-Württemberg") and

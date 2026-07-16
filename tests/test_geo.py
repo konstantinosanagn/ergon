@@ -57,6 +57,36 @@ def test_no_place_yields_no_city() -> None:
     assert _geo("Remote").city is None
 
 
+def test_parenthetical_country_qualifier_wins_over_gazetteer() -> None:
+    # A parenthetical country/state qualifier disambiguates an otherwise-ambiguous city; without
+    # this it was stripped as noise and the city fell to the wrong gazetteer default (London -> UK,
+    # Hamilton -> Canada) — the "location shows the wrong country" class a user reported.
+    assert _geo("London (Canada)").country == "Canada"
+    assert _geo("London (Canada)").city == "London"
+    assert _geo("Hamilton (New Zealand)").country == "New Zealand"
+    assert _geo("Toronto (Canada)").country == "Canada"
+    assert _geo("Springfield (Illinois)").country == "United States"
+
+
+def test_parenthetical_country_sets_remote_country() -> None:
+    # "Remote (US)" previously lost its only country signal to the parenthetical-noise strip.
+    for raw in ("Remote (US)", "Remote (USA)", "Remote (United States)"):
+        loc = _geo(raw)
+        assert loc.is_remote is True
+        assert loc.country == "United States"
+
+
+def test_parenthetical_bare_state_code_not_forced_us() -> None:
+    # A bare 2-letter code in parens is ambiguous (CA = California or Canada) — must NOT force US.
+    loc = _geo("Vancouver (CA)")
+    assert loc.country != "United States"  # stays Canada via the gazetteer, not mislabeled US
+
+
+def test_anywhere_is_not_a_city() -> None:
+    assert _geo("Remote - Anywhere").city is None
+    assert _geo("Remote - Anywhere").is_remote is True
+
+
 def test_does_not_overwrite_preset_fields() -> None:
     loc = Location(raw="Berlin, Germany", city="Munich", country="Austria")
     normalize_geo(loc)
