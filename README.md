@@ -91,6 +91,7 @@ ergon-tracker search "software engineer" --city "New York" --max-years 2 --stric
   --salary-min 140000 --salary-currency USD --posted-within-days 30
 ergon-tracker search "deep learning" --semantic                  # embedding-ranked
 ergon-tracker search "backend" --visa-sponsor --sponsorship      # known H-1B sponsor + posting doesn't refuse
+ergon-tracker match-resume resume.pdf --country USA --limit 20   # rank roles by fit to a résumé file
 ergon-tracker sponsors "stripe"                                  # known H-1B sponsors + last-filed date
 ergon-tracker resolve stripe.com                                 # -> {ats: greenhouse, token: stripe}
 ergon-tracker sources                                            # every registered provider

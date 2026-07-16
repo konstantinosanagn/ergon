@@ -229,5 +229,94 @@ def search(
             err_console.print(f"[yellow]source {h.source} failed:[/] {h.error}")
 
 
+@app.command("match-resume")
+def match_resume(
+    resume_file: str = typer.Argument(
+        ...,
+        help="path to a résumé file (.txt/.md/.rst read directly; .pdf needs `pip install pypdf`)",
+    ),
+    keywords: str | None = typer.Option(
+        None,
+        "--keywords",
+        "-k",
+        help="optional skills to focus retrieval; the résumé drives ranking",
+    ),
+    location: str | None = typer.Option(None, "--location", "-l"),
+    remote: bool = typer.Option(False, "--remote"),
+    level: str | None = typer.Option(None, "--level", help="intern/senior/staff/manager/..."),
+    sector: str | None = typer.Option(None, "--sector", help='e.g. "Fintech", "AI/ML"'),
+    country: str | None = typer.Option(None, "--country", help="USA/US -> United States, UK, ..."),
+    city: str | None = typer.Option(None, "--city", help='metro-aware (e.g. "New York")'),
+    salary_min: float | None = typer.Option(None, "--salary-min"),
+    visa_sponsor: bool = typer.Option(
+        False, "--visa-sponsor", help="only employers known to sponsor H-1B (DoL LCA data)"
+    ),
+    employment_type: str | None = typer.Option(
+        None, "--employment-type", help="full_time/part_time/contract/internship/temporary"
+    ),
+    limit: int = typer.Option(20, "--limit", "-n"),
+    as_json: bool = typer.Option(False, "--json", help="emit JSON instead of a table"),
+) -> None:
+    """Rank open roles by semantic fit to a résumé FILE (.txt/.md/.pdf). Served from the index."""
+    from .models import EmploymentType, JobLevel, SearchQuery
+    from .resume import rank_by_resume, read_resume_file
+
+    try:
+        text = read_resume_file(resume_file)
+    except (FileNotFoundError, ImportError, OSError) as exc:
+        err_console.print(f"[red]could not read résumé:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    if not text.strip():
+        err_console.print(f"[yellow]résumé file is empty:[/] {resume_file}")
+        raise typer.Exit(code=1)
+
+    try:
+        query = SearchQuery(
+            keywords=keywords,
+            location=location,
+            remote=remote or None,
+            level=JobLevel(level) if level else None,
+            sector=sector,
+            country=country,
+            city=city,
+            salary_min=salary_min,
+            visa_sponsor=True if visa_sponsor else None,
+            employment_type=EmploymentType(employment_type) if employment_type else None,
+            max_age_days=365,  # don't match a résumé against years-stale postings
+            limit=limit,
+        )
+    except ValueError as exc:
+        err_console.print(f"[red]invalid level/employment-type:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    ranked, ranked_by = rank_by_resume(text, query, limit)
+    if ranked is None:
+        err_console.print(
+            "[yellow]prebuilt index unavailable[/] — résumé match is served from the daily index."
+        )
+        raise typer.Exit(code=1)
+    if not ranked:
+        err_console.print("[yellow]no candidates matched the filters[/] — loosen them.")
+        return
+
+    if as_json:
+        console.print_json(
+            json.dumps([{"fit_score": j.score, **j.model_dump(mode="json")} for j in ranked])
+        )
+        return
+    table = Table(title=f"{len(ranked)} roles by fit ({ranked_by})")
+    table.add_column("fit", style="yellow", justify="right")
+    table.add_column("company", style="cyan")
+    table.add_column("title")
+    table.add_column("location")
+    table.add_column("level", style="magenta")
+    table.add_column("source", style="dim")
+    for job in ranked:
+        loc = job.locations[0].as_text() if job.locations else ""
+        fit = f"{job.score:.3f}" if job.score is not None else "—"
+        table.add_row(fit, job.company, job.title, loc, job.level.value, job.source)
+    console.print(table)
+
+
 if __name__ == "__main__":
     app()

@@ -427,35 +427,18 @@ def match_resume(
         max_age_days=365,  # don't match a résumé against years-stale postings
         limit=limit,
     )
-    from .index.router import try_index
+    from .resume import rank_by_resume
 
-    # Wide, filtered candidate pool from the index; then rerank the WHOLE pool by the full résumé.
-    pool = try_index(query.model_copy(update={"limit": max(limit * 8, 120)}))
-    if pool is None:
+    ranked, ranked_by = rank_by_resume(resume, query, limit)
+    if ranked is None:
         return {
             "count": 0,
             "jobs": [],
             "note": "prebuilt index unavailable — résumé match is served from the daily index",
         }
-    if not pool:
+    if not ranked:
         return {"count": 0, "jobs": [], "note": "no candidates matched the filters; loosen them"}
 
-    ranked_by = "semantic_fit"
-    try:
-        from .semantic import get_semantic_reranker
-
-        scores = get_semantic_reranker().rerank(resume, pool)
-        for j, s in zip(pool, scores, strict=True):
-            j.score = round(float(s), 4)
-    except Exception:  # noqa: BLE001 - semantic extra absent / model error -> lexical fallback
-        from .ranking import rank
-
-        rank(pool, keywords or resume, reranker=None)  # sets lexical job.score in place
-        ranked_by = "lexical (install the server's `semantic` extra for embedding fit)"
-
-    ranked = sorted(pool, key=lambda j: j.score if j.score is not None else 0.0, reverse=True)[
-        :limit
-    ]
     jobs = [{**_job_to_dict(j), "fit_score": j.score} for j in ranked]
     return {"count": len(jobs), "ranked_by": ranked_by, "jobs": jobs}
 
