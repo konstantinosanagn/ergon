@@ -1,7 +1,7 @@
 # ergon-tracker
 
-Unified, free job search over **30+ sources** (company ATS feeds + aggregators) in one Python
-package. It fetches live postings, canonicalizes them into one schema, **dedupes** the same role
+Unified, free job search over **50+ sources** (46 company-ATS adapters + 8 aggregators) in one
+Python package. It fetches live postings, canonicalizes them into one schema, **dedupes** the same role
 posted on many sites, enriches each posting (level, location, salary, years of experience, degree,
 sector, **H-1B visa sponsorship**), and ranks by relevance — as an **SDK**, a **CLI**, and an
 **MCP server** so humans *and* AI agents can use it.
@@ -122,15 +122,16 @@ Client config (Claude Desktop / Claude Code): **[docs/mcp-quickstart.md](docs/mc
 ## The prebuilt index (broad search, throttle-proof)
 
 Broad queries (no `companies=`) are served from a **free daily SQLite/FTS5 snapshot** of every ATS
-we track, published to a stable GitHub Release. The SDK downloads it once (cached under
+we track (**~1.5M active jobs across ~44k companies** — see [INDEX_STATUS.md](INDEX_STATUS.md)),
+published to a stable GitHub Release. The SDK downloads it once (cached under
 `~/.cache/ergon-tracker`), verifies it (sha256 + schema version), and queries it **locally** — so
 broad search is fast and makes **zero ATS requests at query time**.
 
-- **Built by one CI crawler, not by users** — a tiered incremental crawl with per-host rate limiting
-  and conditional requests (ETag → `304`); vector embeddings for semantic search are built by a
-  parallel matrix job.
-- **Auto-fresh** — each query checks the release manifest's `build_id` and pulls the newer snapshot
-  (small row-level delta when possible). Every response carries `as_of` so freshness is visible.
+- **Built by one CI crawler, not by users** — a tiered incremental crawl with per-host rate limiting;
+  vector embeddings for semantic search are built by a parallel matrix job.
+- **Auto-fresh** — each query compares the release manifest's `build_id` against the local cache and
+  pulls the newer snapshot (a small row-level SQLite delta when possible). Every response carries
+  `as_of` so freshness is visible.
 - **Sector-sharded** — a `sector=` query pulls only that shard (a few MB).
 - **Tiered download** — broad *structured-filter* queries (no keywords) already use a compact **slim
   tier** (~1/3 the bytes, identical results). `ERGON_INDEX=slim` extends that to broad **keyword**
@@ -138,13 +139,16 @@ broad search is fast and makes **zero ATS requests at query time**.
   **title + company** only (description-body matches need the full index). Default keeps full recall.
 - `ERGON_INDEX=off` forces everything live. Current coverage: **[INDEX_STATUS.md](INDEX_STATUS.md)**.
 
-## Sources (30+)
+## Sources (50+)
 
-Run `ergon-tracker sources` for the exact live list.
+Run `ergon-tracker sources` for the exact live list (54 registered providers).
 
-**Company ATS (20+):** Greenhouse · Lever · Ashby · Workday · SmartRecruiters · Workable · Recruitee ·
-Personio · BambooHR · Breezy · Teamtailor · join.com · Rippling · Pinpoint · SuccessFactors · Oracle
-Recruiting Cloud · Oracle Taleo · iCIMS · Eightfold · Avature · JazzHR · Phenom
+**Company ATS (46 adapters):** Greenhouse · Lever · Ashby · Workday · SmartRecruiters · Workable ·
+Recruitee · Personio · BambooHR · Breezy · Teamtailor · join.com · Rippling · Pinpoint ·
+SuccessFactors · Oracle Recruiting Cloud · Oracle Taleo · iCIMS · Eightfold · Avature · JazzHR ·
+Phenom · Jobvite · BrassRing · Radancy · dejobs · Paylocity · ADP · Dayforce · Paycom · UKG · Ceipal ·
+PageUp · PeopleAdmin · Coveo · JobDiva · SchemaOrg (generic JobPosting) · apicapture (captured-API
+replay for proxied giants: Amazon/Apple/Google/Goldman-class) · …and more.
 
 **Aggregators (8):** RemoteOK · Remotive · Arbeitnow · Jobicy · Himalayas · TheMuse · **Adzuna**
 (keyed) · **USAJOBS** (keyed)

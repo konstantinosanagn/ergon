@@ -9,9 +9,10 @@
 > [`landscape-job-fetching-tools.md`](./landscape-job-fetching-tools.md); v2 index design in
 > [`superpowers/specs/2026-06-19-v2-tiered-index-design.md`](./superpowers/specs/2026-06-19-v2-tiered-index-design.md).
 
-## Where we stand right now (measured 2026-06-20)
+## Where we stand right now (measured 2026-07-16)
 
-- **Us:** **49,051 verified-live boards**, ~1.07M live jobs, 45 providers, daily tiered index
+- **Us:** **~44k companies live in the index, ~1.49M active jobs** (build-2026-07-16-66; 58k companies
+  in the seed registry), 54 providers, daily tiered index
   (full / sector-shards / slim / row-deltas / multi-build chaining), SDK + CLI + **working MCP**,
   deterministic enrichment (level/comp/yoe/sector/geo), cross-source provenance merge, H-1B/visa.
 - **jobhive** (our one real data competitor): **63,390 *listed* tenants** (counted across its 26

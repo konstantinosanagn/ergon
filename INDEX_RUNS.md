@@ -4,6 +4,10 @@ Per-run notes for the broad-discovery search index (spec:
 `docs/superpowers/specs/2026-06-18-search-index-design.md`; M1 plan:
 `docs/superpowers/plans/2026-06-18-search-index-m1.md`).
 
+> **This is a historical build log from the M1/M2 bring-up (2026-06-18).** It is not kept
+> current per-build. For live index scale/coverage see `INDEX_STATUS.md` and the GitHub Release
+> `index-latest` (`coverage.json`); the index now rebuilds daily via `.github/workflows/build-index.yml`.
+
 ## 2026-06-18 — M1 (pipeline proof) complete + live dogfood
 
 **Status:** M1 done — all 12 tasks implemented TDD, full suite green (683+ tests), ruff clean

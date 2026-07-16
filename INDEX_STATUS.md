@@ -1,122 +1,139 @@
 # Index Status
 
-Build `build-2026-06-19` — **379,760** jobs (379,760 active, 0 expired) across **9,079** companies.
+> Point-in-time snapshot of the daily prebuilt index. The **live** figures are always in the GitHub Release `index-latest` (`coverage.json` / `manifest.json`); this file is a committed copy and may lag by a build or two.
 
-- Salary disclosed: 75,592 (20% of active)
-- Visa-sponsor history: 138,393
-- Sponsorship offered: 951
+Build `build-2026-07-16-66` — **1,489,365** active jobs across **44,432** companies.
+
+- Salary disclosed: 392,532 (26% of active)
+- Known H-1B visa sponsor (employer): 500,048
+- Sponsorship offered (posting text): 2,811
 
 ## By provider (ATS)
 
 | Provider | Jobs |
 | --- | ---: |
-| smartrecruiters | 150,899 |
-| workday | 51,866 |
-| lever | 46,892 |
-| greenhouse | 41,502 |
-| ashby | 39,292 |
-| breezy | 23,395 |
-| teamtailor | 12,543 |
-| workable | 4,867 |
-| personio | 3,811 |
-| recruitee | 2,777 |
-| bamboohr | 1,916 |
+| workday | 534,365 |
+| smartrecruiters | 152,354 |
+| greenhouse | 134,568 |
+| oracle | 70,898 |
+| workable | 66,680 |
+| jazzhr | 58,727 |
+| lever | 58,396 |
+| icims | 53,717 |
+| ashby | 48,584 |
+| join | 43,118 |
+| successfactors | 42,339 |
+| dejobs | 32,345 |
+| breezy | 27,908 |
+| apicapture | 27,402 |
+| eightfold | 26,353 |
+| rippling | 13,905 |
+| recruitee | 13,009 |
+| teamtailor | 12,702 |
+| radancy | 11,768 |
+| taleo | 11,306 |
+| phenom | 10,104 |
+| pinpoint | 9,430 |
+| personio | 7,940 |
+| ukg | 4,501 |
+| peopleadmin | 2,717 |
+| brassring | 2,361 |
+| bamboohr | 1,989 |
+| themuse | 1,568 |
+| jobdiva | 1,511 |
+| adp | 1,041 |
+| jobvite | 895 |
+| ceipal | 823 |
+| coveo | 714 |
+| peoplesoft | 691 |
+| avature | 677 |
+| schemaorg | 568 |
+| applicantpro | 358 |
+| pageup | 347 |
+| taleobe | 305 |
+| ripplehire | 269 |
+| zwayam | 76 |
+| peopleclick | 36 |
 
 ## By sector
 
 | Sector | Jobs |
 | --- | ---: |
-| Healthcare | 23,248 |
-| Consulting/Services | 22,021 |
-| Software/SaaS | 15,429 |
-| Semiconductors/Hardware | 13,154 |
-| Biotech/Pharma | 10,429 |
-| Manufacturing/Industrial | 9,884 |
-| E-commerce/Retail | 8,266 |
-| Banking/Finance | 8,237 |
-| AI/ML | 5,375 |
-| Fintech | 5,325 |
-| Logistics/SupplyChain | 4,729 |
-| Automotive/Mobility | 4,675 |
-| Media/Entertainment | 3,569 |
-| Aerospace/Defense | 3,284 |
-| Travel/Hospitality | 3,154 |
-| Energy/Climate | 3,034 |
-| Education | 2,927 |
-| Cybersecurity | 2,448 |
-| Telecom | 2,431 |
-| Insurance | 2,197 |
-| Consumer/Lifestyle | 1,837 |
-| Gaming | 1,633 |
-| RealEstate/PropTech | 1,418 |
-| Government/Public | 1,253 |
-| Other | 1,113 |
-| Crypto/Web3 | 1,031 |
-| Food/Beverage | 995 |
+| Healthcare | 136,648 |
+| E-commerce/Retail | 101,833 |
+| Consulting/Services | 55,135 |
+| Banking/Finance | 55,108 |
+| Food/Beverage | 49,827 |
+| Manufacturing/Industrial | 36,111 |
+| Software/SaaS | 33,042 |
+| Semiconductors/Hardware | 30,731 |
+| Biotech/Pharma | 29,479 |
+| Education | 25,630 |
+| Consumer/Lifestyle | 19,476 |
+| Energy/Climate | 18,887 |
+| Aerospace/Defense | 18,517 |
+| Travel/Hospitality | 16,901 |
+| Logistics/SupplyChain | 16,384 |
+| Automotive/Mobility | 15,869 |
+| Media/Entertainment | 14,731 |
+| Insurance | 8,107 |
+| AI/ML | 7,187 |
+| RealEstate/PropTech | 6,928 |
+| Fintech | 6,333 |
+| Government/Public | 5,873 |
+| Telecom | 5,771 |
+| Gaming | 5,320 |
+| Cybersecurity | 4,346 |
+| Crypto/Web3 | 1,402 |
+| Other | 843 |
 
 ## By level
 
 | Level | Jobs |
 | --- | ---: |
-| unknown | 249,671 |
-| senior | 35,796 |
-| manager | 33,284 |
-| director | 13,109 |
-| lead | 11,889 |
-| entry | 10,496 |
-| intern | 5,817 |
-| staff | 5,305 |
-| mid | 4,906 |
-| principal | 3,933 |
-| executive | 3,127 |
-| junior | 2,427 |
+| unknown | 606,851 |
+| senior | 227,926 |
+| entry | 181,524 |
+| mid | 154,872 |
+| manager | 123,133 |
+| director | 45,119 |
+| lead | 43,084 |
+| junior | 39,665 |
+| intern | 24,740 |
+| executive | 16,782 |
+| staff | 13,383 |
+| principal | 12,286 |
 
 ## Top countries
 
 | Country | Jobs |
 | --- | ---: |
-| United States | 195,540 |
-| GB | 11,373 |
-| India | 10,352 |
-| FR | 8,532 |
-| United Kingdom | 8,234 |
-| Canada | 6,763 |
-| DE | 6,115 |
-| Germany | 4,667 |
-| CA | 4,261 |
-| IN | 4,133 |
-| AU | 3,541 |
-| Singapore | 2,971 |
-| France | 2,740 |
-| NG | 2,583 |
-| ES | 2,297 |
-| SE | 2,272 |
-| China | 2,044 |
-| Brazil | 1,995 |
-| Japan | 1,887 |
-| Australia | 1,812 |
+| United States | 827,534 |
+| Germany | 56,912 |
+| India | 47,804 |
+| United Kingdom | 47,543 |
+| Canada | 43,600 |
+| France | 25,399 |
+| Australia | 13,701 |
+| Singapore | 12,475 |
+| Spain | 11,545 |
+| Mexico | 10,972 |
+| China | 10,857 |
+| Philippines | 10,399 |
+| Brazil | 8,639 |
+| Netherlands | 8,587 |
+| Poland | 8,401 |
+| Malaysia | 8,301 |
+| Japan | 7,018 |
+| Switzerland | 6,479 |
+| Ireland | 5,308 |
+| Italy | 4,992 |
 
-## Top companies
+## Remote
 
-| Company | Jobs |
+| Mode | Jobs |
 | --- | ---: |
-| Domino's | 22,878 |
-| CROSSMARK | 10,259 |
-| Dev | 4,300 |
-| Bosch Group | 3,940 |
-| ProSidian Consulting, LLC | 3,105 |
-| SGS | 2,963 |
-| Veolia Environnement SA | 2,854 |
-| JYSK | 2,716 |
-| Tsmg | 2,586 |
-| American Logistics Authority | 2,466 |
-| Jobs for Humanity | 2,411 |
-| AECOM | 2,257 |
-| Home Instead | 2,177 |
-| Eurofins | 2,154 |
-| micron | 2,121 |
-| Nexthire | 2,108 |
-| Lextorah LDS | 1,974 |
-| Turner & Townsend | 1,961 |
-| Integrated Resources INC | 1,935 |
-| Greene King | 1,811 |
+| unknown | 1,018,403 |
+| onsite | 303,097 |
+| remote | 110,678 |
+| hybrid | 57,187 |
