@@ -38,6 +38,16 @@ For multi-location ("Berlin / London"), use the FIRST. US "City, ST" → city + 
 ### remote  (bool)
 `true` if the posting is remote or hybrid; else `false`.
 
+### employment_type  (string)
+One of: `full_time, part_time, contract, internship, temporary, other, unknown`.
+- Judge from what the posting states (title, an explicit "Employment Type" field, or phrasing in
+  the description like "This is a contract position" / "6-month internship").
+- `other` = the posting states a type that isn't one of the above (e.g. "seasonal", "apprenticeship").
+- `unknown` = the posting doesn't say. Do NOT default to `full_time` just because that's the most
+  common case — only label it when the posting actually states or clearly implies it (e.g. a
+  standard salaried listing with benefits and no other type mentioned is still `unknown` unless
+  the posting says "full-time").
+
 ### salary  (object or null)
 `{"min": <number|null>, "max": <number|null>, "currency": "USD"|..., "interval":
 "year"|"hour"|"month"|"week"|"day"}` — ONLY if the posting states pay (in `structured_salary`
@@ -48,6 +58,26 @@ Do not infer from market norms.
 `{"min": <int|null>, "max": <int|null>}` — the required years of experience if stated
 ("5+ years" → {min:5,max:null}; "3-5 years" → {min:3,max:5}). `null` if not stated. Ignore
 non-experience durations (vesting, "founded N years ago", tenure of benefits).
+
+### posted_at  (string or null)  — recency
+ISO date `"YYYY-MM-DD"` for the date the POSTING ITSELF states it went live ("Posted on...",
+"Date posted:", a dated header/metadata field, etc.). This is the STATED date, never the date you
+are labeling on, never inferred from "how stale this reads," and never derived from unrelated
+dates in the text (an application deadline, a start date, "founded in 2019"). `null` if the
+posting doesn't state when it was posted.
+
+### visa_sponsor  (bool or null)
+Whether the EMPLOYER is a known H-1B sponsor. This is company-level, positive-evidence-only, and
+is **matched against the DoL LCA sponsor dataset by company name/domain — it is never inferred
+from the job description text.** Do not read the posting for sponsorship language to label this
+field — what the POSTING itself says about sponsorship (e.g. "we are able to sponsor a visa" /
+"must not require sponsorship") is a separate, posting-level signal, distinct from this
+employer-level DoL match.
+- `true` only when the company matches a confirmed entry in the DoL set.
+- `null` (not `false`) when the company doesn't appear in the DoL set — absence of a match is NOT
+  evidence the employer doesn't sponsor (the dataset is historical/incomplete); never guess `false`.
+- When labeling a sample for precision-checking, verify the matched employer name/domain actually
+  corresponds to the DoL record (not a same-named different company) before confirming `true`.
 
 ## Output format
 Write JSONL (one object per line) to your assigned output path. Each line = the input row plus
