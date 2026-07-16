@@ -30,19 +30,26 @@ from ergon_tracker.index.db import SCHEMA_VERSION  # noqa: E402
 _GZIP_LEVEL = int(os.environ.get("ERGON_GZIP_LEVEL", "6"))
 
 
+# Per-run accumulator of phase durations, populated by `_phase`. Persisted into history.jsonl at the
+# end of the build so ETAs are queryable from history (data-driven) instead of read off each live run.
+_PHASE_TIMINGS: dict[str, float] = {}
+
+
 @contextmanager
 def _phase(label: str):
     """Time a build phase and make it OBSERVABLE: log ``[phase] start/done in Ns`` to stdout (streams
-    into the workflow step log live) AND append a ``- label — Ns`` line to the GitHub run-page step
-    summary (``$GITHUB_STEP_SUMMARY``) when running in Actions. Turns the build from a silent
-    black box into a timed timeline -- so ETAs and the crawl/build/embed split are MEASURED, recorded
-    per run, not guessed. Never raises from the observability itself (a bad summary write is swallowed)."""
+    into the workflow step log live), append a ``- label — Ns`` line to the GitHub run-page step
+    summary (``$GITHUB_STEP_SUMMARY``) when running in Actions, AND record the duration in
+    ``_PHASE_TIMINGS`` for the history.jsonl timing record. Turns the build from a silent black box
+    into a timed, RECORDED timeline -- so the crawl/build/embed split and the next ETA are grounded in
+    measured history, not guessed. Never raises from the observability itself (writes are swallowed)."""
     print(f"[phase] {label} ...", flush=True)
     t0 = time.perf_counter()
     try:
         yield
     finally:
         dt = time.perf_counter() - t0
+        _PHASE_TIMINGS[label] = round(dt, 1)
         print(f"[phase] {label}: done in {dt:.0f}s", flush=True)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
@@ -1277,6 +1284,20 @@ def main(argv: list[str]) -> None:
         print(
             f"incremental build: crawled {len(outcome)} due boards, {fresh_jobs_count} fresh jobs, "
             f"{n} total{' -> published' if ok else ' (gates FAILED, kept previous)'}"
+        )
+        # Persist the measured phase breakdown so future ETAs are queryable from history.jsonl
+        # (grep kind=timing) rather than read off a live run. Separate JSONL line from the main
+        # build record above (which is written before the embed phase completes).
+        append_history(
+            out / "history.jsonl",
+            {
+                "build_id": build_id,
+                "date": _today(),
+                "kind": "timing",
+                "phase_seconds": dict(_PHASE_TIMINGS),
+                "total_seconds": round(sum(_PHASE_TIMINGS.values()), 1),
+                "published": ok,
+            },
         )
         if not ok:
             raise SystemExit(1)
