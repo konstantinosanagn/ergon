@@ -20,6 +20,7 @@ coverage.xml
 .jobspine/
 *.sqlite
 *.sqlite3
+bench/*.jsonl
 
 # Large/intermediate extraction artifacts (gold lives in tests/data/, kept).
 # Ignore /data/ contents but keep the curated registry CSVs (data/companies/),
