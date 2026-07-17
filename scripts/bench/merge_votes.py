@@ -42,7 +42,15 @@ def merge_votes(votes: dict[str, list[Any]]) -> tuple[dict[str, Any], dict[str, 
     split: dict[str, bool] = {}
 
     for field, field_votes in votes.items():
-        assert len(field_votes) == 3, f"Field {field} has {len(field_votes)} votes, expected 3"
+        # Real fleet coverage is ragged: a labeler can miss a row or drop a file, so a field may
+        # carry 1-3 votes (not always 3). Take the STRICT majority of whatever is present; a value
+        # is gold only when it holds > half the votes. n=1 -> that lone vote (majority of 1);
+        # n=2 agree -> gold, differ -> split; n=3 -> 2-or-3 agree -> gold, all-differ -> split.
+        n = len(field_votes)
+        if n == 0:
+            gold[field] = None
+            split[field] = True
+            continue
 
         # Normalize all votes for comparison
         normalized = [_normalize_vote(v) for v in field_votes]
@@ -52,22 +60,19 @@ def merge_votes(votes: dict[str, list[Any]]) -> tuple[dict[str, Any], dict[str, 
         for nv in normalized:
             vote_counts[nv] = vote_counts.get(nv, 0) + 1
 
-        # Determine if there's a majority
-        # A majority exists if any vote appears 2 or 3 times
         majority_vote = None
         majority_count = 0
-
         for nv, count in vote_counts.items():
             if count > majority_count:
                 majority_vote = nv
                 majority_count = count
 
-        if majority_count >= 2:
-            # We have a majority (2 or 3 votes agree)
+        if majority_count * 2 > n:
+            # A strict majority (> half the present votes) agree.
             gold[field] = _denormalize_vote(majority_vote)
             split[field] = False
         else:
-            # All 3 votes are different (1/1/1 tie)
+            # No strict majority (e.g. 1/1/1 or a 1/1 two-way tie).
             gold[field] = None
             split[field] = True
 

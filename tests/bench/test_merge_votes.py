@@ -140,3 +140,20 @@ def test_merge_votes_empty_dict():
     gold, split = merge_votes(votes)
     assert gold == {}
     assert split == {}
+
+
+def test_merge_votes_ragged_counts_one_and_two_votes():
+    # Real fleet coverage is ragged (a labeler misses a row / drops a file), so a field may carry
+    # fewer than 3 votes. Take the strict majority of whatever is present.
+    gold, split = merge_votes(
+        {
+            "solo": ["senior"],  # lone vote -> gold, no split
+            "pair_agree": ["mid", "mid"],  # 2/2 -> gold, no split
+            "pair_differ": ["mid", "senior"],  # 1/1 tie -> split, gold None
+            "empty": [],  # no votes -> split, gold None
+        }
+    )
+    assert gold["solo"] == "senior" and split["solo"] is False
+    assert gold["pair_agree"] == "mid" and split["pair_agree"] is False
+    assert gold["pair_differ"] is None and split["pair_differ"] is True
+    assert gold["empty"] is None and split["empty"] is True
