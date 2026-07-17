@@ -1,6 +1,6 @@
 # Filter Benchmark v2 -- Report
 
-Generated: 2026-07-17T18:47:37.159594+00:00  |  Rows: **1726**
+Generated: 2026-07-17T20:24:20.244556+00:00  |  Rows: **1726**
 
 ## Per-Field Metrics
 
@@ -16,7 +16,7 @@ Coverage is data availability (did the ATS state it); precision/recall are extra
 | employment_type | 1726 | 45.2% | 31.9% | 35.4% | [32.1%, 38.8%] |
 | salary | 1726 | 38.9% | 80.0% | 81.8% | [78.7%, 84.6%] |
 | yoe | 1726 | 46.8% | 67.9% | 77.7% | [74.7%, 80.5%] |
-| degree | 1726 | 37.0% | 55.5% | 69.6% | [65.9%, 73.0%] |
+| degree | 1726 | 37.0% | 74.9% | 93.9% | [91.8%, 95.5%] |
 | sponsorship | 1726 | 3.5% | 93.6% | 73.3% | [61.0%, 82.9%] |
 | posted_at | 1726 | 0.7% | 0.0% | 0.0% | [0.0%, 24.3%] |
 | visa_sponsor | 1726 | 0.0% | 0.0% | 0.0% | [0.0%, 0.0%] |
@@ -157,17 +157,17 @@ The headline per-ATS diagnostic: which providers are dragging a field down, fiel
 
 | Provider | N | Coverage | Precision | Recall |
 |---|---:|---:|---:|---:|
-| ashby | 184 | 14.1% | 77.4% | 92.3% |
-| dejobs | 518 | 80.9% | 59.0% | 69.5% |
-| greenhouse | 181 | 30.9% | 73.5% | 89.3% |
-| jazzhr | 154 | 39.0% | 43.8% | 70.0% |
+| ashby | 184 | 14.1% | 83.9% | 100.0% |
+| dejobs | 518 | 80.9% | 80.3% | 94.5% |
+| greenhouse | 181 | 30.9% | 77.9% | 94.6% |
+| jazzhr | 154 | 39.0% | 59.4% | 95.0% |
 | join | 71 | 18.3% | 50.0% | 69.2% |
 | lever | 225 | 0.0% | 0.0% | 0.0% |
 | personio | 203 | 7.9% | 42.9% | 75.0% |
 | pinpoint | 12 | 16.7% | 100.0% | 100.0% |
 | recruitee | 23 | 0.0% | 0.0% | 0.0% |
 | teamtailor | 60 | 5.0% | 16.7% | 66.7% |
-| workable | 95 | 45.3% | 26.7% | 27.9% |
+| workable | 95 | 45.3% | 93.3% | 97.7% |
 
 ### sponsorship
 
@@ -226,7 +226,7 @@ Sorted by coverage (ascending) so data-sparse fields are never mistaken for extr
 | visa_sponsor | 0.0% | 0.0% | 0.0% |
 | posted_at | 0.7% | 0.0% | -0.7% |
 | sponsorship | 3.5% | 93.6% | 90.1% |
-| degree | 37.0% | 55.5% | 18.5% |
+| degree | 37.0% | 74.9% | 37.9% |
 | salary | 38.9% | 80.0% | 41.2% |
 | employment_type | 45.2% | 31.9% | -13.3% |
 | yoe | 46.8% | 67.9% | 21.1% |

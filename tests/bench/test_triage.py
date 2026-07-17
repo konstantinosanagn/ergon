@@ -211,3 +211,13 @@ def test_build_queue_both_unknown_is_never_queued():
     label = {"id": "row-x", "gold": gold, "split": {}}
     queue = build_queue([_row("row-x")], [pred], [label], calib=1000)
     assert all(item["field"] != "sector" for item in queue)
+
+
+def test_degree_canonicalization_buckets_equivalent_tiers():
+    from scripts.bench.triage import agreement
+    # extractor "highschool" vs fleet "none" (fleet rubric had no highschool) -> same bucket -> agree
+    assert agreement({"degree": "highschool"}, {"degree": "none"}, "degree") == "agree"
+    assert agreement({"degree": "phd_md"}, {"degree": "phd"}, "degree") == "agree"
+    assert agreement({"degree": "bachelors"}, {"degree": "bachelor"}, "degree") == "agree"
+    # genuinely different tiers still conflict
+    assert agreement({"degree": "bachelor"}, {"degree": "master"}, "degree") == "conflict"

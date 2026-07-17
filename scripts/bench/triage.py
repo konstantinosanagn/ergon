@@ -54,6 +54,36 @@ def _norm_categorical(value: Any) -> Any:
     return value
 
 
+# Degree tiers the extractor and the fleet spell differently map to one bucket, so equivalent
+# answers aren't scored as disagreements: the extractor emits "highschool"/"phd_md" while the fleet
+# rubric used "none"/"phd". highschool (a high-school-only requirement) sits in the same
+# no-college-degree bucket the fleet recorded as "none" for max_degree filtering purposes.
+_DEGREE_CANON = {
+    "none": "none",
+    "highschool": "none",
+    "high school": "none",
+    "hs": "none",
+    "associate": "associate",
+    "associates": "associate",
+    "bachelor": "bachelor",
+    "bachelors": "bachelor",
+    "master": "master",
+    "masters": "master",
+    "mba": "master",
+    "phd": "phd",
+    "phd_md": "phd",
+    "doctorate": "phd",
+    "md": "phd",
+}
+
+
+def _norm_degree(value: Any) -> Any:
+    if isinstance(value, str):
+        key = value.strip().lower()
+        return _DEGREE_CANON.get(key, key)
+    return value
+
+
 def _norm_date(value: Any) -> Any:
     """Normalize a ``posted_at`` value to DATE granularity: ``predict.py`` emits a full ISO
     datetime (``.isoformat()``) while fleet labels record date granularity (``"YYYY-MM-DD"``), so
@@ -105,6 +135,8 @@ def agreement(pred: dict[str, Any], gold: dict[str, Any], field: str) -> str:
         return "agree" if bool(p) == bool(g) else "conflict"
     if field == "posted_at":
         return "agree" if _norm_date(p) == _norm_date(g) else "conflict"
+    if field == "degree":
+        return "agree" if _norm_degree(p) == _norm_degree(g) else "conflict"
     return "agree" if _norm_categorical(p) == _norm_categorical(g) else "conflict"
 
 
