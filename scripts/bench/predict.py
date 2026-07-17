@@ -84,5 +84,16 @@ def predict(row: dict[str, Any]) -> dict[str, Any]:
         "posted_at": job.posted_at.isoformat() if job.posted_at else None,
         "visa_sponsor": job.visa_sponsor,
     }
+    # Direct-ATS-payload fields are NOT inferred by any extractor — the "prediction" is the value the
+    # provider gave, which the corpus row carries (see crawl_corpus.row_from_job). Reflect those
+    # provider-stated values so employment_type / posted_at / remote are actually measurable (else
+    # they always read as "extractor asserted nothing"). Absent keys leave the enrich-derived value.
+    if row.get("employment_type"):
+        out["employment_type"] = row["employment_type"]
+    if row.get("posted_at"):
+        out["posted_at"] = row["posted_at"]
+    if row.get("remote") not in (None, ""):
+        out["remote"] = str(row["remote"]).strip().lower() in ("remote", "hybrid", "true", "1")
+
     assert set(out) == set(FIELDS)
     return out

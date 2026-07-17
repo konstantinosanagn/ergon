@@ -46,7 +46,11 @@ def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     p = Path(path)
     if not p.is_file():
         return []
-    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    # Split on "\n" ONLY, not str.splitlines(): job-description text carries exotic Unicode line
+    # separators (U+2028, U+0085/NEL, VT/FF, ...) that json.dumps(ensure_ascii=False) leaves
+    # unescaped inside the string. splitlines() would break one valid JSONL record into invalid
+    # fragments; "\n" matches exactly the record delimiter write_jsonl emits.
+    return [json.loads(line) for line in p.read_text(encoding="utf-8").split("\n") if line.strip()]
 
 
 def write_jsonl(path: str | Path, rows: list[dict[str, Any]]) -> None:
