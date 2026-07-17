@@ -54,6 +54,15 @@ def _norm_categorical(value: Any) -> Any:
     return value
 
 
+def _norm_date(value: Any) -> Any:
+    """Normalize a ``posted_at`` value to DATE granularity: ``predict.py`` emits a full ISO
+    datetime (``.isoformat()``) while fleet labels record date granularity (``"YYYY-MM-DD"``), so
+    truncate both sides to the first 10 chars before comparing."""
+    if isinstance(value, str):
+        return value.strip().lower()[:10]
+    return value
+
+
 def _salary_agrees(pred: Any, gold: Any) -> bool:
     for key in ("min", "max"):
         pv, gv = pred.get(key), gold.get(key)
@@ -65,7 +74,12 @@ def _salary_agrees(pred: Any, gold: Any) -> bool:
         if abs(pv - gv) / base > _SALARY_TOLERANCE:
             return False
     pc, gc = pred.get("currency"), gold.get("currency")
-    return not (pc and gc and str(pc).strip().lower() != str(gc).strip().lower())
+    if pc and gc and str(pc).strip().lower() != str(gc).strip().lower():
+        return False
+    pi, gi = pred.get("interval"), gold.get("interval")
+    return not (
+        pi is not None and gi is not None and str(pi).strip().lower() != str(gi).strip().lower()
+    )
 
 
 def _yoe_agrees(pred: Any, gold: Any) -> bool:
@@ -89,6 +103,8 @@ def agreement(pred: dict[str, Any], gold: dict[str, Any], field: str) -> str:
         return "agree" if _yoe_agrees(p, g) else "conflict"
     if field in _BOOL_FIELDS:
         return "agree" if bool(p) == bool(g) else "conflict"
+    if field == "posted_at":
+        return "agree" if _norm_date(p) == _norm_date(g) else "conflict"
     return "agree" if _norm_categorical(p) == _norm_categorical(g) else "conflict"
 
 

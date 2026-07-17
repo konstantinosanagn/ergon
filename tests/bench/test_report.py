@@ -248,6 +248,15 @@ def test_build_report_missing_source_groups_under_unknown():
     assert set(report["matrix"]["level"]) == {"unknown"}
 
 
+def test_build_report_missing_source_recovers_from_colon_prefixed_id():
+    # Corpus producers encode id = "<source>:<source_job_id>"; when the top-level "source" is
+    # absent, the matrix must recover it from the id prefix rather than dropping to "unknown".
+    row = _resolved_row("greenhouse:1", "")
+    del row["source"]
+    report = build_report([row], [])
+    assert set(report["matrix"]["level"]) == {"greenhouse"}
+
+
 def test_build_report_calibration_reflects_corrections():
     resolved = [_resolved_row("r1", "greenhouse")]
     corrections = [{"id": "r1", "field": "level", "verdict": "extractor"}]

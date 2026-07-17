@@ -41,9 +41,13 @@ def _rows_for_field(resolved: list[dict[str, Any]], field: str) -> list[dict[str
         entry = row.get("fields", {}).get(field)
         if entry is None:
             continue
+        source = row.get("source")
+        if not source:
+            row_id = row.get("id")
+            source = str(row_id).split(":", 1)[0] if row_id and ":" in str(row_id) else "unknown"
         rows.append(
             {
-                "source": row.get("source") or "unknown",
+                "source": source,
                 "gold": {field: entry.get("value")},
                 "pred": {field: entry.get("extractor_value")},
             }

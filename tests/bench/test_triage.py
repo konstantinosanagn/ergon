@@ -95,6 +95,31 @@ def test_agreement_bool_field_exact_match():
     assert agreement(pred, gold, "remote") == "conflict"
 
 
+def test_agreement_salary_same_amounts_different_interval_conflicts():
+    # Same min/max/currency but interval year vs hour must NOT agree.
+    pred = _value({"salary": {"min": 150000, "max": 180000, "currency": "USD", "interval": "year"}})
+    gold = _value({"salary": {"min": 150000, "max": 180000, "currency": "USD", "interval": "hour"}})
+    assert agreement(pred, gold, "salary") == "conflict"
+
+
+def test_agreement_salary_interval_present_on_only_one_side_still_agrees():
+    pred = _value({"salary": {"min": 150000, "max": 180000, "currency": "USD", "interval": "year"}})
+    gold = _value({"salary": {"min": 150000, "max": 180000, "currency": "USD"}})
+    assert agreement(pred, gold, "salary") == "agree"
+
+
+def test_agreement_posted_at_datetime_vs_date_same_day_agrees():
+    pred = _value({"posted_at": "2026-07-10T00:00:00"})
+    gold = _value({"posted_at": "2026-07-10"})
+    assert agreement(pred, gold, "posted_at") == "agree"
+
+
+def test_agreement_posted_at_different_days_conflicts():
+    pred = _value({"posted_at": "2026-07-10T00:00:00"})
+    gold = _value({"posted_at": "2026-07-11"})
+    assert agreement(pred, gold, "posted_at") == "conflict"
+
+
 # ---------------------------------------------------------------------------
 # build_queue(): triage ordering over 4 synthetic rows, one per class
 # ---------------------------------------------------------------------------
