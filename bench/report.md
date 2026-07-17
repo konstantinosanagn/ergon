@@ -1,6 +1,6 @@
 # Filter Benchmark v2 -- Report
 
-Generated: 2026-07-17T20:24:20.244556+00:00  |  Rows: **1726**
+Generated: 2026-07-17T22:08:04.965864+00:00  |  Rows: **1726**
 
 ## Per-Field Metrics
 
@@ -9,7 +9,7 @@ Coverage is data availability (did the ATS state it); precision/recall are extra
 | Field | N | Coverage | Precision | Recall | 95% CI (recall) |
 |---|---:|---:|---:|---:|---|
 | level | 1726 | 54.9% | 58.6% | 74.7% | [71.8%, 77.3%] |
-| sector | 1726 | 98.4% | 95.3% | 27.3% | [25.3%, 29.5%] |
+| sector | 1726 | 98.4% | 84.0% | 61.2% | [58.8%, 63.5%] |
 | country | 1726 | 97.6% | 99.7% | 85.6% | [83.9%, 87.2%] |
 | city | 1726 | 82.9% | 88.8% | 93.9% | [92.6%, 95.0%] |
 | remote | 1726 | 99.4% | 87.3% | 87.8% | [86.2%, 89.3%] |
@@ -45,17 +45,17 @@ The headline per-ATS diagnostic: which providers are dragging a field down, fiel
 
 | Provider | N | Coverage | Precision | Recall |
 |---|---:|---:|---:|---:|
-| ashby | 184 | 91.8% | 0.0% | 0.0% |
-| dejobs | 518 | 99.2% | 92.0% | 49.0% |
-| greenhouse | 181 | 99.4% | 100.0% | 16.1% |
-| jazzhr | 154 | 100.0% | 0.0% | 0.0% |
-| join | 71 | 98.6% | 50.0% | 1.4% |
-| lever | 225 | 100.0% | 0.0% | 0.0% |
-| personio | 203 | 100.0% | 100.0% | 89.7% |
+| ashby | 184 | 91.8% | 64.1% | 29.6% |
+| dejobs | 518 | 99.2% | 92.4% | 68.5% |
+| greenhouse | 181 | 99.4% | 58.1% | 51.7% |
+| jazzhr | 154 | 100.0% | 98.7% | 48.1% |
+| join | 71 | 98.6% | 62.5% | 14.3% |
+| lever | 225 | 100.0% | 91.1% | 86.2% |
+| personio | 203 | 100.0% | 100.0% | 100.0% |
 | pinpoint | 12 | 100.0% | 0.0% | 0.0% |
-| recruitee | 23 | 100.0% | 0.0% | 0.0% |
+| recruitee | 23 | 100.0% | 100.0% | 69.6% |
 | teamtailor | 60 | 100.0% | 0.0% | 0.0% |
-| workable | 95 | 92.6% | 0.0% | 0.0% |
+| workable | 95 | 92.6% | 51.1% | 53.4% |
 
 ### country
 
@@ -233,7 +233,7 @@ Sorted by coverage (ascending) so data-sparse fields are never mistaken for extr
 | level | 54.9% | 58.6% | 3.7% |
 | city | 82.9% | 88.8% | 5.9% |
 | country | 97.6% | 99.7% | 2.1% |
-| sector | 98.4% | 95.3% | -3.1% |
+| sector | 98.4% | 84.0% | -14.4% |
 | remote | 99.4% | 87.3% | -12.1% |
 
 ## Calibration
@@ -252,7 +252,6 @@ The lowest-precision provider x field cells with at least 20 rows -- the first p
 | employment_type | dejobs | 518 | 0.0% | 56.2% | 0.0% |
 | posted_at | dejobs | 518 | 0.0% | 0.0% | 0.0% |
 | visa_sponsor | dejobs | 518 | 0.0% | 0.0% | 0.0% |
-| sector | lever | 225 | 0.0% | 100.0% | 0.0% |
 | degree | lever | 225 | 0.0% | 0.0% | 0.0% |
 | sponsorship | lever | 225 | 0.0% | 0.0% | 0.0% |
 | posted_at | lever | 225 | 0.0% | 0.0% | 0.0% |
@@ -260,7 +259,8 @@ The lowest-precision provider x field cells with at least 20 rows -- the first p
 | sponsorship | personio | 203 | 0.0% | 0.0% | 0.0% |
 | posted_at | personio | 203 | 0.0% | 0.0% | 0.0% |
 | visa_sponsor | personio | 203 | 0.0% | 0.0% | 0.0% |
-| sector | ashby | 184 | 0.0% | 91.8% | 0.0% |
 | sponsorship | ashby | 184 | 0.0% | 0.0% | 0.0% |
 | posted_at | ashby | 184 | 0.0% | 6.5% | 0.0% |
 | visa_sponsor | ashby | 184 | 0.0% | 0.0% | 0.0% |
+| employment_type | greenhouse | 181 | 0.0% | 64.1% | 0.0% |
+| posted_at | greenhouse | 181 | 0.0% | 0.0% | 0.0% |

@@ -65,7 +65,14 @@ def predict(row: dict[str, Any]) -> dict[str, Any]:
         locations=[location],
         salary=_structured_salary_from_row(row.get("structured_salary")),
     )
-    enrich_in_place(job)
+    # Mirror production (engine.py's worker): the sector extractor's Stage-1 gazetteer lookup is
+    # keyed by the registry token (company_key) and, as a fallback, the company's domain. Without
+    # these the corpus only exercises the weak name/brand fallbacks. company_domain lives directly
+    # on JobPosting (set before enrichment, same as engine.py does for target.domain); company_key
+    # is passed into enrich_in_place, same as engine.py's `company_key=target.label`.
+    if row.get("company_domain") and not job.company_domain:
+        job.company_domain = row["company_domain"]
+    enrich_in_place(job, company_key=row.get("company_key"))
 
     loc = job.locations[0] if job.locations else Location()
     is_remote = job.remote in (RemoteType.REMOTE, RemoteType.HYBRID) or loc.is_remote
