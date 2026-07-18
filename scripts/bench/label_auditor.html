@@ -259,6 +259,21 @@
   .correction-box.open { display: flex; }
   .correction-box input[type="text"] { flex: 1; min-width: 200px; }
 
+  .helper-line {
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+    margin: -2px 0 6px;
+  }
+
+  .comment-box {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .comment-box input[type="text"] { width: 100%; }
+
   footer {
     margin-top: 20px;
     color: var(--muted);
@@ -274,7 +289,7 @@
   <header>
     <div>
       <h1>Label Auditor</h1>
-      <div class="sub">Filter Benchmark v2 &middot; human adjudication of extractor vs. fleet labels</div>
+      <div class="sub">Filter Benchmark v2 &middot; human adjudication of extractor vs. AI labelers (fleet consensus)</div>
     </div>
     <div class="row">
       <input type="file" id="file-input" accept=".jsonl,application/json,text/plain">
@@ -329,7 +344,8 @@
           <div class="v" id="extractor-value"></div>
         </div>
         <div class="value-card">
-          <div class="k">Fleet value</div>
+          <div class="k" title="the majority answer from 3 independent AI labelers — our candidate ground truth.">AI labelers (fleet consensus)</div>
+          <div class="helper-line">The majority answer from 3 independent AI labelers &mdash; our candidate ground truth.</div>
           <div class="v" id="fleet-value"></div>
         </div>
       </div>
@@ -337,16 +353,19 @@
 
       <div class="verdict-bar">
         <button id="verdict-e"><kbd>e</kbd>Extractor right</button>
-        <button id="verdict-f"><kbd>f</kbd>Fleet right</button>
+        <button id="verdict-f"><kbd>f</kbd>AI labelers right</button>
         <button id="verdict-c"><kbd>c</kbd>Enter correction</button>
         <button id="verdict-s"><kbd>s</kbd>Skip / ambiguous</button>
         <span class="current-verdict" id="current-verdict"></span>
       </div>
       <div class="correction-box" id="correction-box">
         <input type="text" id="correction-input" placeholder="Correct value&hellip;">
-        <input type="text" id="correction-note" placeholder="Note (optional)&hellip;">
         <button id="correction-submit" class="primary">Save</button>
         <button id="correction-cancel">Cancel</button>
+      </div>
+      <div class="comment-box" id="comment-box">
+        <label class="field-label" for="comment-input">Comment (optional) &mdash; attach a note to this item, with or without a verdict</label>
+        <input type="text" id="comment-input" placeholder="e.g. &ldquo;JD is ambiguous&rdquo;, &ldquo;wrong company mapping&rdquo;, &ldquo;this ATS truncates the description&rdquo;&hellip;">
       </div>
     </div>
 
@@ -373,7 +392,9 @@
   var items = [];                    // full parsed audit_queue.jsonl, in original order
   var filteredIndices = [];          // indices into `items` matching current filters
   var cursor = 0;                    // position within filteredIndices
-  var verdicts = {};                 // "id field" -> {id, field, verdict, value?, note?}
+  var verdicts = {};                 // "id field" -> {id, field, verdict, value?}
+  var comments = {};                 // "id field" -> {id, field, note} -- free-text human comments,
+                                      // independent of (and optionally alongside) a verdict.
 
   var el = {};
   [
@@ -381,7 +402,7 @@
     "jump-unresolved", "progress-bar", "tally", "empty-state", "review-panel", "field-name",
     "item-index", "meta-grid", "jd-pane", "extractor-value", "fleet-value", "reason-value",
     "verdict-e", "verdict-f", "verdict-c", "verdict-s", "current-verdict", "correction-box",
-    "correction-input", "correction-note", "correction-submit", "correction-cancel",
+    "correction-input", "correction-submit", "correction-cancel", "comment-box", "comment-input",
     "prev-btn", "next-btn"
   ].forEach(function (id) {
     el[id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = document.getElementById(id);
@@ -414,7 +435,7 @@
   function saveState() {
     if (!queueKey) return;
     try {
-      var payload = { verdicts: verdicts, cursorItemKey: currentItemKey() };
+      var payload = { verdicts: verdicts, comments: comments, cursorItemKey: currentItemKey() };
       localStorage.setItem(queueKey, JSON.stringify(payload));
     } catch (e) {
       // localStorage full or unavailable; adjudication still works for this session.
@@ -429,6 +450,7 @@
       if (!raw) return;
       var payload = JSON.parse(raw);
       verdicts = payload.verdicts || {};
+      comments = payload.comments || {};
     } catch (e) {
       console.warn("label_auditor: could not restore state", e);
     }
@@ -484,6 +506,7 @@
       items = parseJsonl(text);
       queueKey = STORAGE_PREFIX + ":" + hashString(text.length + ":" + text.slice(0, 2000));
       verdicts = {};
+      comments = {};
       loadState();
       buildFilterOptions();
       applyFilters();
@@ -601,6 +624,7 @@
       el.fleetValue.textContent = "";
       el.reasonValue.textContent = "";
       el.currentVerdict.textContent = "";
+      el.commentInput.value = "";
       closeCorrectionBox();
       return;
     }
@@ -631,15 +655,25 @@
     el.fleetValue.textContent = formatValue(it.fleet_value);
     el.reasonValue.textContent = it.reason || "—";
 
-    var v = verdicts[verdictKey(it.id, it.field)];
+    var itemKey = verdictKey(it.id, it.field);
+    var v = verdicts[itemKey];
+    var verdictHtml;
     if (v) {
-      var label = v.verdict === "correct" ? "correction: " + formatValue(v.value) : v.verdict;
-      el.currentVerdict.innerHTML = 'saved verdict: <span class="badge ' +
+      var label = v.verdict === "correct" ? "correction: " + formatValue(v.value) :
+        v.verdict === "fleet" ? "AI labelers (fleet consensus)" : v.verdict;
+      verdictHtml = 'saved verdict: <span class="badge ' +
         (v.verdict === "extractor" ? "extractor" : v.verdict === "fleet" ? "fleet" :
           v.verdict === "correct" ? "correct" : "skip") + '">' + escapeHtml(label) + "</span>";
     } else {
-      el.currentVerdict.textContent = "no verdict yet";
+      verdictHtml = "no verdict yet";
     }
+    var c = comments[itemKey];
+    if (c && c.note) {
+      verdictHtml += ' <span class="badge" style="color:var(--muted);border-color:var(--muted);">+ comment</span>';
+    }
+    el.currentVerdict.innerHTML = verdictHtml;
+
+    el.commentInput.value = (c && c.note) || "";
 
     closeCorrectionBox();
   }
@@ -659,12 +693,15 @@
       if (counts[v] !== undefined) counts[v]++;
     });
 
+    var commentCount = Object.keys(comments).length;
+
     el.tally.innerHTML =
       "<span><b>" + done + " / " + total + "</b> adjudicated (" + pct + "%)</span>" +
       '<span><span class="badge extractor">extractor</span> ' + counts.extractor + "</span>" +
-      '<span><span class="badge fleet">fleet</span> ' + counts.fleet + "</span>" +
+      '<span><span class="badge fleet">AI labelers</span> ' + counts.fleet + "</span>" +
       '<span><span class="badge correct">correct</span> ' + counts.correct + "</span>" +
       '<span><span class="badge skip">skip</span> ' + counts.ambiguous + " (not exported)</span>" +
+      "<span>" + commentCount + " comment(s) saved</span>" +
       "<span>filtered view: " + filteredIndices.length + " item(s)</span>";
   }
 
@@ -676,11 +713,25 @@
     if (!it) return;
     var rec = { id: it.id, field: it.field, verdict: verdict };
     if (extra && extra.value !== undefined) rec.value = extra.value;
-    if (extra && extra.note) rec.note = extra.note;
     verdicts[verdictKey(it.id, it.field)] = rec;
     saveState();
     render();
     advance();
+  }
+
+  // The comment box is independent of (and can accompany) any verdict -- saved on every
+  // keystroke so it survives even if the human navigates away without pressing e/f/c/s.
+  function saveComment() {
+    var it = currentItem();
+    if (!it) return;
+    var key = verdictKey(it.id, it.field);
+    var text = el.commentInput.value;
+    if (text && text.trim().length) {
+      comments[key] = { id: it.id, field: it.field, note: text };
+    } else {
+      delete comments[key];
+    }
+    saveState();
   }
 
   function clearVerdict() {
@@ -724,7 +775,6 @@
     el.correctionBox.classList.add("open");
     var existing = verdicts[verdictKey(it.id, it.field)];
     el.correctionInput.value = (existing && existing.verdict === "correct") ? formatValue(existing.value) : "";
-    el.correctionNote.value = (existing && existing.note) || "";
     el.correctionInput.focus();
   }
 
@@ -735,17 +785,15 @@
   el.correctionCancel.addEventListener("click", closeCorrectionBox);
   el.correctionSubmit.addEventListener("click", function () {
     var value = el.correctionInput.value;
-    var note = el.correctionNote.value;
-    recordVerdict("correct", { value: value, note: note || undefined });
+    recordVerdict("correct", { value: value });
   });
   el.correctionInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); el.correctionSubmit.click(); }
     if (e.key === "Escape") { e.preventDefault(); closeCorrectionBox(); }
   });
-  el.correctionNote.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); el.correctionSubmit.click(); }
-    if (e.key === "Escape") { e.preventDefault(); closeCorrectionBox(); }
-  });
+
+  el.commentInput.addEventListener("input", saveComment);
+  el.commentInput.addEventListener("blur", saveComment);
 
   // ---------------------------------------------------------------------
   // Keyboard shortcuts (disabled while typing in an input/select/textarea)
@@ -773,20 +821,39 @@
   // Download corrections.jsonl
   // ---------------------------------------------------------------------
   el.downloadBtn.addEventListener("click", function () {
-    // NOTE: resolve_gold.py::resolve only understands verdict in {"correct","extractor","fleet"}
-    // and raises ValueError on anything else. "ambiguous" (skip) is tracked locally for progress
-    // purposes but deliberately omitted from the exported file -- "skip writes nothing" per the
-    // data contract, so a skipped item just falls through to resolve()'s normal
-    // agree/fleet-fallback handling instead of blowing up the resolver.
-    var lines = Object.keys(verdicts)
-      .map(function (k) { return verdicts[k]; })
-      .filter(function (v) { return v.verdict !== "ambiguous"; })
-      .map(function (v) {
+    // NOTE: resolve_gold.py::resolve understands verdict in {"correct","extractor","fleet"} for
+    // gold-setting purposes and now gracefully SKIPS anything else (e.g. "comment") rather than
+    // raising. "ambiguous" (skip) is tracked locally for progress purposes but deliberately
+    // omitted from export as an adjudication -- "skip writes nothing" per the data contract, so a
+    // skipped item just falls through to resolve()'s normal agree/fleet-fallback handling. A
+    // human comment (with or without a real verdict) is still exported: it rides along as
+    // `note` on an adjudicated record, or -- for a skip/no-verdict item with a comment -- as its
+    // own `{"verdict": "comment"}` observation so it isn't silently lost.
+    var allKeys = {};
+    Object.keys(verdicts).forEach(function (k) { allKeys[k] = true; });
+    Object.keys(comments).forEach(function (k) { allKeys[k] = true; });
+
+    var lines = [];
+    Object.keys(allKeys).forEach(function (k) {
+      var v = verdicts[k];
+      var c = comments[k];
+      var note = (c && c.note) || undefined;
+
+      if (v && v.verdict !== "ambiguous") {
         var rec = { id: v.id, field: v.field, verdict: v.verdict };
         if (v.value !== undefined) rec.value = v.value;
-        if (v.note) rec.note = v.note;
-        return JSON.stringify(rec);
-      });
+        if (note) rec.note = note;
+        lines.push(JSON.stringify(rec));
+        return;
+      }
+
+      // No actionable verdict (none saved, or a skip/"ambiguous") -- if the human left a
+      // comment, still emit it as a standalone observation instead of dropping it.
+      if (note) {
+        var src = v || c;
+        lines.push(JSON.stringify({ id: src.id, field: src.field, verdict: "comment", note: note }));
+      }
+    });
     var blob = new Blob([lines.join("\n") + (lines.length ? "\n" : "")], { type: "application/x-ndjson" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");

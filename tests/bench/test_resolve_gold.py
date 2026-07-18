@@ -294,3 +294,19 @@ def test_calibration_stats_ignores_correction_for_unknown_row():
     corrections = [{"id": "row-missing", "field": "level", "verdict": "extractor"}]
     stats = calibration_stats(resolved, corrections)
     assert stats["n_corrections"] == 0
+
+
+def test_resolve_tolerates_comment_only_verdict():
+    # A comment-only auditor record (verdict not in correct/extractor/fleet) must NOT crash resolve;
+    # it carries a note, not a decision -> that field falls through to automatic resolution.
+    from scripts.bench.resolve_gold import resolve
+
+    labels = [{"id": "greenhouse:1", "gold": {"level": "senior"}, "split": {}}]
+    preds = [{"level": "senior"}]
+    corrections = [
+        {"id": "greenhouse:1", "field": "level", "verdict": "comment", "note": "JD ambiguous"}
+    ]
+    out = resolve(labels, preds, corrections)  # must not raise
+    # extractor==fleet ("senior") so it auto-accepts despite the comment
+    assert out[0]["fields"]["level"]["value"] == "senior"
+    assert out[0]["fields"]["level"]["review_state"] == "auto"

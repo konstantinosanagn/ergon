@@ -72,16 +72,24 @@ def resolve(
             fleet_value = gold.get(field)
             correction = by_key.get((rid, field))
 
-            if correction is not None:
+            # Only the three adjudication verdicts set gold. A non-adjudication verdict
+            # ("comment"/"skip"/"ambiguous" from the auditor) carries just a note/observation, not a
+            # decision -- treat it as if there were no correction and fall through to the automatic
+            # resolution below, so a comment-only record can never crash resolve.
+            adjudicated = correction is not None and correction.get("verdict") in (
+                "correct",
+                "extractor",
+                "fleet",
+            )
+            if adjudicated:
+                assert correction is not None
                 verdict = correction["verdict"]
                 if verdict == "correct":
                     value = correction.get("value")
                 elif verdict == "extractor":
                     value = extractor_value
-                elif verdict == "fleet":
+                else:  # "fleet"
                     value = fleet_value
-                else:
-                    raise ValueError(f"unknown correction verdict {verdict!r}")
                 review_state = "human"
             elif split.get(field):
                 value = fleet_value
