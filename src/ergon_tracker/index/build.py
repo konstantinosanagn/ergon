@@ -300,6 +300,70 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
         con.execute("DETACH DATABASE prev")
 
 
+def apply_freshness_expiries(con: object, freshness_db_path: Path | str) -> int:
+    """Carry forward a prior daily freshness-sweep's expiries onto the just-built index.
+
+    Phase 2 of the daily freshness sweep (docs/superpowers/specs/2026-07-18-daily-freshness-sweep-
+    design.md): the sweep runs as a SEPARATE daily workflow that checks board membership and
+    publishes departed-posting ids to a gzipped SQLite sidecar, ``index-freshness.sqlite.gz``,
+    downloaded + gunzipped alongside the detail/liveness sidecars before each build. Pinned sidecar
+    contract (the sweep's writer, a later phase, matches this exactly): one table
+    ``expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)``.
+
+    Without this, a full rebuild would carry-forward (or re-crawl) a posting the sweep already
+    confirmed gone from its board, resurrecting it under ``status='active'`` until the next sweep.
+
+    ATTACHes ``freshness_db_path`` and flips still-``active`` rows whose id is in the sidecar to
+    ``status='expired'``, stamping ``expired_at``/``expiry_reason`` (reason defaults to
+    ``'departed_board'`` when the sidecar leaves it NULL). NEVER hard-deletes -- ``COUNT(*) FROM
+    jobs`` is unaffected, so the row_floor publish gate can never trip on this pass (mirrors
+    ``carry_forward``'s and ``liveness._expire_row``'s never-delete contract). NEVER raises: an
+    absent, malformed (missing table), or corrupt (bad gzip / not-a-database) sidecar degrades to a
+    no-op and returns 0, so a sweep hiccup can never break the daily build (mirrors
+    ``carry_forward``'s degrade-on-ATTACH-failure contract). Returns the number of rows flipped.
+    """
+    import logging
+    import sqlite3
+
+    assert isinstance(con, sqlite3.Connection)
+    log = logging.getLogger("ergon_tracker.index")
+    path = Path(freshness_db_path)
+    if not path.exists():
+        return 0
+    try:
+        con.execute("ATTACH DATABASE ? AS freshness", (str(path),))
+    except sqlite3.Error as exc:
+        log.warning("apply_freshness_expiries: cannot ATTACH sidecar (%s); skipping", exc)
+        return 0
+    try:
+        tables = {
+            r[0]
+            for r in con.execute(
+                "SELECT name FROM freshness.sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "expired_ids" not in tables:
+            log.warning(
+                "apply_freshness_expiries: sidecar at %s lacks expired_ids table; skipping", path
+            )
+            return 0
+        cur = con.execute(
+            "UPDATE jobs SET status='expired', "
+            "expired_at=(SELECT expired_at FROM freshness.expired_ids WHERE id=jobs.id), "
+            "expiry_reason=COALESCE("
+            "(SELECT reason FROM freshness.expired_ids WHERE id=jobs.id),'departed_board') "
+            "WHERE status='active' AND id IN (SELECT id FROM freshness.expired_ids)"
+        )
+        con.commit()
+        return cur.rowcount
+    except sqlite3.DatabaseError as exc:
+        log.warning("apply_freshness_expiries: sidecar read failed mid-update (%s); skipping", exc)
+        con.rollback()
+        return 0
+    finally:
+        con.execute("DETACH DATABASE freshness")
+
+
 def _aggregate_companies_streamed(con: object) -> list[Any]:
     """Aggregate Company rows by streaming the jobs cursor (memory O(#companies), not O(#jobs)).
 
