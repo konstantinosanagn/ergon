@@ -25,6 +25,7 @@ cloud namespace, or ``"{cid}|{host}|{company}"`` to carry a display name. Exampl
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -214,7 +215,19 @@ class ADPProvider(BaseProvider):
         if not isinstance(data, dict):
             raise RuntimeError(f"adp detail: malformed payload for {ref!s}")
         if not data.get("itemID"):
-            return None  # verified soft-404: skeleton payload, no echoed itemID -> gone
+            # Verified soft-404: a gone id returns a SKELETON 200 that omits itemID AND every
+            # real-record field. Make the gone-verdict two-factor (defends a hypothetical future
+            # ENVELOPED-but-live shape, e.g. the record nested under a wrapper key): only treat the
+            # missing top-level itemID as "gone" if NO record content is present anywhere. If the
+            # payload still carries a requisitionDescription or a (nested) itemID, the missing
+            # top-level key is an unrecognised shape -> INDETERMINATE (raise), never expire a live row.
+            blob = json.dumps(data)
+            if "requisitionDescription" in blob or '"itemID"' in blob:
+                raise RuntimeError(
+                    f"adp detail: itemID absent at top level but record content present "
+                    f"(unrecognised shape) for {ref!s}"
+                )
+            return None  # true skeleton payload -> confirmed gone
         desc = data.get("requisitionDescription")
         if not isinstance(desc, str) or not desc.strip():
             raise RuntimeError(f"adp detail: no requisitionDescription for {ref!s}")

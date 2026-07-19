@@ -212,6 +212,16 @@ async def test_fetch_detail_skeleton_soft_404_returns_none() -> None:
     assert res is None
 
 
+async def test_fetch_detail_enveloped_record_without_top_itemid_raises() -> None:
+    """Defensive two-factor guard: a 200 lacking a TOP-LEVEL itemID but still carrying record
+    content (a hypothetical future enveloped-but-live shape) is an unrecognised shape -> RAISES,
+    never the skeleton soft-404 -> None path (which would false-expire a live posting)."""
+    enveloped = {"jobRequisition": {"itemID": "x1", "requisitionDescription": "<p>Join.</p>"}}
+    fetcher = _FakeFetcher(payload=enveloped)
+    with pytest.raises(RuntimeError):
+        await ADPProvider().fetch_detail(_detail_ref(), fetcher)
+
+
 async def test_fetch_detail_missing_url_raises() -> None:
     fetcher = _FakeFetcher(payload={})
     with pytest.raises(RuntimeError):
