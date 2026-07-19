@@ -1,0 +1,191 @@
+name: freshness-sweep
+
+# Daily sharded board-freshness sweep (docs/superpowers/specs/2026-07-18-daily-freshness-sweep-
+# design.md). Re-verifies that every stored ACTIVE posting still exists on its board at least once
+# a day by checking BOARDS, not postings (~25x fewer requests than a full re-crawl), fetching id
+# sets only (no JD/enrich/dedup/insert). Confirmed-departed ids are written to a small
+# `index-freshness.sqlite` sidecar and published; the next daily build-index.yml run carries them
+# forward via `apply_freshness_expiries` (flips status='expired', never hard-deletes -- COUNT(*)
+# unchanged, so the row_floor publish gate can never trip on this pass).
+#
+# THE CORRECTNESS INVARIANT (same shape as drain-detail.yml's, ported to freshness by
+# `ergon_tracker.index.freshness_shard.shard_boards`): every board's politeness bucket
+# (`rate_key_for_host`, the exact string `AsyncFetcher` keys its per-process token bucket on) hashes
+# to exactly ONE shard, so no two shards independently rate-limit the same collapsed backend.
+# join.com is additionally carved OUT of the hash range entirely and pinned to shard 0 (its
+# ~19,937-board, ~50-min floor can't be sped up by concurrency -- giving it a dedicated shard lets
+# the rest of the sweep overlap it instead of queuing behind it).
+#
+# RUNS IN PARALLEL WITH build-index.yml, on a DISTINCT concurrency group (NOT `build-index`,
+# unlike drain-detail.yml/embed-vectors.yml which deliberately share it): the sweep only ever reads
+# the core index (never writes it) and only ever writes the freshness sidecar (never index.sqlite),
+# so there is no asset race with the daily build writing index.sqlite/manifest.json at the same
+# time. Scheduled a few hours after build-index.yml's 04:17 UTC start (own cron minute, not :00) so
+# a fresh `index.sqlite.gz` is very likely already published for this run to download -- not a hard
+# dependency (falls back to whatever index-latest currently has; a merge-time race with the daily
+# build's own publish just means this run swept a slightly older snapshot's board list, which is
+# harmless since board membership, not row content, is what's being checked).
+on:
+  schedule:
+    - cron: "17 8 * * *"   # 08:17 UTC daily -- clear of build-index (04:17) and embed-vectors (06:00)
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: "Per-shard in-flight board-fetch concurrency (--concurrency, also sets ERGON_FRESHNESS_CONCURRENCY as a belt-and-suspenders cap on the underlying engine). Matches the engine's own built-in default; raise only after a live smoke measures headroom."
+        default: "32"
+      search_index_board_limit:
+        description: "ERGON_FRESHNESS_SEARCH_INDEX_BOARD_LIMIT -- per-run cap on search-index-source (oracle/smartrecruiters/successfactors) boards each shard re-verifies via the costlier per-posting-404-confirm path. Matches the engine's own built-in default."
+        default: "200"
+
+permissions:
+  contents: write   # to publish the merged freshness sidecar as a release asset (merge job)
+
+concurrency:
+  group: freshness-sweep   # OWN group -- deliberately distinct from build-index/drain-detail/embed-vectors so this runs IN PARALLEL with the daily build, never queuing behind it
+  cancel-in-progress: false
+
+env:
+  NUM_SHARDS: 20
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180   # generous headroom over the ~50-min join.com floor (shard 0)
+    strategy:
+      fail-fast: false     # one shard's failure (dead host, runner hiccup, etc.) must not cancel the other 19
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install package
+        run: uv venv && uv pip install -e "."
+
+      - name: Download current index (best-effort; first run has none)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download index-latest --dir dist --pattern 'index.sqlite.gz' || echo "no prev index"
+          [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
+
+      - name: Sweep shard ${{ matrix.shard }} of ${{ env.NUM_SHARDS }}
+        # continue-on-error: a single shard's failure (a hung host, a runner resource wall, an
+        # unexpected exception) must be NON-FATAL to the overall sweep -- the other 19 shards'
+        # confirmed departures are still real and worth publishing. Mirrors drain-detail.yml's
+        # per-shard resilience (there via `!cancelled()` on the upload step; here additionally at
+        # the run step itself since `scripts/freshness_sweep.py`'s `main()` can return non-zero on
+        # bad --shard/--num-shards args, which must never fail the whole matrix).
+        continue-on-error: true
+        env:
+          # Belt-and-suspenders env caps on top of the explicit CLI flags below -- see the engine's
+          # own defaults in `ergon_tracker/index/freshness.py` (`_FRESHNESS_CONCURRENCY`,
+          # `_SEARCH_INDEX_BOARD_LIMIT`). The CLI's `--concurrency` already threads through to both
+          # `AsyncFetcher` and `sweep_all_boards` explicitly, so these are a documented ceiling, not
+          # load-bearing on their own.
+          ERGON_FRESHNESS_CONCURRENCY: "${{ github.event.inputs.concurrency || '32' }}"
+          ERGON_FRESHNESS_SEARCH_INDEX_BOARD_LIMIT: "${{ github.event.inputs.search_index_board_limit || '200' }}"
+        run: |
+          if [ ! -f dist/index.sqlite ]; then
+            echo "no prior index.sqlite available -- nothing to sweep yet (first-ever run before build-index.yml has published once)"
+            exit 0
+          fi
+          uv run python -m scripts.freshness_sweep \
+            --index dist/index.sqlite \
+            --out "dist/index-freshness-shard-${{ matrix.shard }}.sqlite" \
+            --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} \
+            --concurrency "${{ github.event.inputs.concurrency || '32' }}"
+
+      - name: Upload shard sidecar artifact
+        # !cancelled() so a shard that FAILS mid-sweep still uploads whatever it wrote (the CLI
+        # writes its sidecar once at the end, not incrementally, so a genuine crash mid-run yields
+        # no file here -- if-no-files-found: warn covers that, same as drain-detail.yml/
+        # embed-vectors.yml). Turns a hard shard failure into incremental progress, not a lost run.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: freshness-shard-${{ matrix.shard }}
+          path: dist/index-freshness-shard-${{ matrix.shard }}.sqlite
+          if-no-files-found: warn   # e.g. the "nothing to sweep yet" early-exit, or a hard crash
+
+  merge:
+    needs: sweep
+    if: ${{ !cancelled() }}   # a timed-out/failed shard must not skip the merge -- the other 19 shards' confirmed departures still need publishing; only a manual cancellation of the whole run skips this
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
+        run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
+
+      - name: Install package
+        run: uv venv && uv pip install -e "."
+
+      - name: Download whatever shard sidecar artifacts exist
+        # A timed-out/failed shard simply never uploaded its artifact (see the sweep job's
+        # if-no-files-found: warn above) -- this must merge whichever shards DID finish rather than
+        # hard-failing because the full set of NUM_SHARDS isn't present. if-no-artifact-found: warn
+        # covers the (unlikely) all-shards-failed case too; the explicit count-and-guard below turns
+        # that into one clear failure message rather than a confusing downstream error.
+        uses: actions/download-artifact@v4
+        with:
+          pattern: freshness-shard-*
+          path: dist/shards
+          merge-multiple: true
+          if-no-artifact-found: warn
+
+      - name: Count downloaded shards
+        run: |
+          n=$(find dist/shards -maxdepth 1 -name 'index-freshness-shard-*.sqlite' 2>/dev/null | wc -l | tr -d ' ')
+          echo "downloaded $n/${NUM_SHARDS} shard sidecar(s)"
+          if [ "$n" -eq 0 ]; then
+            echo "no shard sidecars were downloaded -- every shard must have failed before uploading; nothing to merge" >&2
+            exit 1
+          fi
+
+      - name: Merge shard sidecars into one combined index-freshness.sqlite
+        run: |
+          mkdir -p dist
+          uv run python scripts/merge_freshness_shards.py --shards-dir dist/shards --out dist/index-freshness.sqlite
+
+      - name: Gzip index-freshness.sqlite
+        # Reuses build_index.py's own `_gzip_file` (no duplicated gzip logic) -- `scripts` is
+        # importable as a namespace package when run from the repo root (same convention the test
+        # suite uses: `pythonpath = ["."]`), same pattern as drain-detail.yml/embed-vectors.yml.
+        # No manifest file: unlike the detail/vectors sidecars, `apply_freshness_expiries` (the
+        # only consumer) has no paired-manifest gate -- it ATTACHes and reads
+        # `index-freshness.sqlite` directly, degrading to a no-op on an absent/malformed file, so
+        # publishing the lone gzipped db is the complete, correct contract here.
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+
+          from scripts.build_index import _gzip_file
+
+          out = Path("dist")
+          db = out / "index-freshness.sqlite"
+          sha, nbytes = _gzip_file(db, out / "index-freshness.sqlite.gz")
+          print(f"index-freshness.sqlite.gz: sha256={sha} bytes={nbytes}")
+          PY
+
+      - name: Publish the merged freshness sidecar to the stable index-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f dist/index-freshness.sqlite.gz ]; then
+            echo "missing index-freshness.sqlite.gz -- refusing to publish"
+            exit 1
+          fi
+          if gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest dist/index-freshness.sqlite.gz --clobber
+          else
+            gh release create index-latest dist/index-freshness.sqlite.gz --title index-latest \
+              --notes "Daily ergon-tracker search-index snapshot."
+          fi

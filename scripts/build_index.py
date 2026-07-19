@@ -221,6 +221,34 @@ async def _fold_network_into_fresh(fresh_path, network_pages: int, build_id: str
     return {normalize_company(j.company) for j in net}
 
 
+def _apply_freshness(db_path: Path, out: Path) -> int:
+    """Carry forward a prior daily freshness-sweep's expiries onto the just-built (not-yet-
+    published) index db -- Phase 2 of the freshness sweep (docs/superpowers/specs/2026-07-18-daily-
+    freshness-sweep-design.md). Called BEFORE the gated publish (and, transitively, before
+    shards/slim/delta are derived) so every downstream artifact inherits the expiries, mirroring how
+    the detail/liveness sidecars are consumed.
+
+    The sweep itself is a SEPARATE daily workflow (a later phase) that publishes
+    ``index-freshness.sqlite.gz`` to the ``index-latest`` release; the build workflow downloads +
+    gunzips it to ``dist/index-freshness.sqlite`` before the build (same pattern as the detail/
+    liveness sidecar downloads). NON-FATAL: an absent/malformed sidecar (first run, or every run
+    before the sweep workflow ships) must never break the core build.
+    """
+    from ergon_tracker.index.build import apply_freshness_expiries
+    from ergon_tracker.index.db import connect
+
+    freshness_db = out / "index-freshness.sqlite"
+    try:
+        con = connect(db_path)
+        try:
+            return apply_freshness_expiries(con, freshness_db)
+        finally:
+            con.close()
+    except Exception as exc:  # noqa: BLE001 - never let a sidecar hiccup break the core build
+        print(f"  ! freshness carry-forward skipped (non-fatal): {type(exc).__name__}: {exc}")
+        return 0
+
+
 def _today() -> str:
     from datetime import datetime, timezone
 
@@ -1366,6 +1394,13 @@ def main(argv: list[str]) -> None:
             n = build_index_from_fresh_db(
                 fresh_path, db_tmp, build_id=build_id, prev_db=prev_db, crawled_keys=crawled_keys
             )
+        # Carry forward a prior daily freshness-sweep's expiries onto db_tmp BEFORE the gated
+        # publish, so the promoted index (and every downstream shard/slim/delta derived from it)
+        # never resurrects a posting the sweep already confirmed departed its board. Non-fatal;
+        # never touches row count (row_floor gate unaffected).
+        freshness_expired = _apply_freshness(db_tmp, out)
+        if freshness_expired:
+            print(f"  + carried forward {freshness_expired} freshness-sweep expiries")
         # Preserve the prior index (move aside, instant on same fs) so we can diff it for the delta
         # AFTER the gated promote overwrites `db`. Build_index_from_fresh_db has already read it.
         prev_snap = None
@@ -1495,6 +1530,11 @@ def main(argv: list[str]) -> None:
     jobs = anyio.run(_crawl, limit, network_pages)
     db_tmp = out / "index.tmp.sqlite"
     n = build_index(jobs, db_tmp, build_id=build_id)
+    # Carry forward a prior daily freshness-sweep's expiries onto db_tmp BEFORE the gated publish
+    # (mirrors the incremental path above) so shards/slim/delta all inherit them. Non-fatal.
+    freshness_expired = _apply_freshness(db_tmp, out)
+    if freshness_expired:
+        print(f"  + carried forward {freshness_expired} freshness-sweep expiries")
     full_prev_rows = _count_jobs(db) if db.exists() else None
     if not _gated_publish(
         db_tmp,

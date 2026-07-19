@@ -86,6 +86,7 @@ jobs:
           gh release download index-latest --dir dist --pattern 'manifest-detail.json' || echo "no prev detail manifest"
           gh release download index-latest --dir dist --pattern 'index-liveness.sqlite.gz' || echo "no prev liveness tier"
           gh release download index-latest --dir dist --pattern 'manifest-liveness.json' || echo "no prev liveness manifest"
+          gh release download index-latest --dir dist --pattern 'index-freshness.sqlite.gz' || echo "no prev freshness sidecar"
           [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
           # decompress the persisted Tier-3 detail sidecar so a manual --detail run carries forward
           # already-recovered fields + the retry/cursor state (only new/changed sigs re-fetch);
@@ -97,6 +98,13 @@ jobs:
           # row from a cold streak of 0, and an unconfirmed source could never accumulate the 2
           # consecutive weekly misses it needs to actually expire); absent on first run -> built cold.
           [ -f dist/index-liveness.sqlite.gz ] && gunzip -kf dist/index-liveness.sqlite.gz || true
+          # decompress the persisted freshness-sweep sidecar (published by the SEPARATE daily
+          # freshness-sweep.yml workflow, a later phase) so build_index.py's freshness carry-forward
+          # (apply_freshness_expiries, called just before the gated publish) can flip departed
+          # postings to status='expired' before a full rebuild would otherwise resurrect them;
+          # absent until that workflow ships (or on any run before its first publish) -> non-fatal
+          # no-op (see apply_freshness_expiries's docstring).
+          [ -f dist/index-freshness.sqlite.gz ] && gunzip -kf dist/index-freshness.sqlite.gz || true
           # decompress the persisted vectors sidecar so the incremental reconcile carries forward its
           # embeddings (only new/changed postings re-embed); absent on first run -> built cold.
           # One-time back-compat: the legacy asset carries the pre-migration schema (job_text + FTS).

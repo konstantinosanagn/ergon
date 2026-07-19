@@ -9,11 +9,14 @@ from ergon_tracker.providers.lever import LeverProvider
 
 
 def test_opted_in_providers_return_exact_fetch_url():
-    # The conditional URL MUST equal the exact representation fetch requests, so the stored
-    # validator (ETag/Last-Modified) corresponds to the same payload.
+    # Greenhouse is the one deliberate exception: its conditional_url is the LIGHT (no-content)
+    # board URL, NOT fetch()'s exact ?content=true URL -- see test_greenhouse.py for the
+    # raws_from_body fallback that keeps this safe (a changed-board 200 on the light URL can't
+    # be silently reused; it forces a real fetch()). Every other opted-in provider below still
+    # must match fetch()'s exact URL, so its stored ETag/Last-Modified validates the same payload.
     assert (
         GreenhouseProvider().conditional_url("stripe")
-        == "https://boards-api.greenhouse.io/v1/boards/stripe/jobs?content=true"
+        == "https://boards-api.greenhouse.io/v1/boards/stripe/jobs"
     )
     assert (
         LeverProvider().conditional_url("spotify")

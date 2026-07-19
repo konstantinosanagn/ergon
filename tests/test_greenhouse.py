@@ -53,6 +53,49 @@ async def test_fetch_builds_rawjobs_and_hits_content_endpoint() -> None:
     assert r0.payload["title"] == "Acquisition Manager"
 
 
+# --- conditional_url quick win: light (no-content) URL for the membership/change-check path,
+# with a raws_from_body fallback guard so a changed board's light-URL body is never silently
+# normalized into content-less postings. -----------------------------------------------------
+
+
+def test_conditional_url_drops_content_param() -> None:
+    # The light URL still validates via ETag (304 on unchanged) at ~1/12.5th the bytes of a miss,
+    # but deliberately does NOT equal fetch()'s exact ?content=true URL (see raws_from_body below
+    # for why that's safe rather than a content-capture regression).
+    assert (
+        GreenhouseProvider().conditional_url("airbnb")
+        == "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs"
+    )
+
+
+def test_raws_from_body_parses_full_content_body() -> None:
+    # A body that DOES carry `content` (e.g. reused from a ?content=true fetch) still parses
+    # normally -- the fallback guard only fires on content-less bodies.
+    body = json.dumps(_fixture()).encode()
+    raws = GreenhouseProvider().raws_from_body("airbnb", body)
+    assert raws is not None
+    assert len(raws) == 2
+    assert raws[0].payload.get("content") is not None
+
+
+def test_raws_from_body_returns_none_for_light_conditional_body() -> None:
+    # The light conditional_url response omits `content` entirely on every posting -- this MUST
+    # signal "can't reuse this body" (None) rather than silently returning content-less RawJobs,
+    # so the caller (build_index.py's grab()) falls back to a real fetch().
+    light = _fixture()
+    for job in light["jobs"]:
+        job.pop("content", None)
+    body = json.dumps(light).encode()
+    assert GreenhouseProvider().raws_from_body("airbnb", body) is None
+
+
+def test_raws_from_body_empty_jobs_list_still_parses() -> None:
+    # An empty board has no postings to check for `content` on either representation -- must not
+    # be misdetected as a content-less body and spuriously forced into a refetch.
+    body = json.dumps({"jobs": []}).encode()
+    assert GreenhouseProvider().raws_from_body("airbnb", body) == []
+
+
 async def test_normalize_maps_every_field() -> None:
     with respx.mock:
         respx.get(BOARD_URL).mock(return_value=httpx.Response(200, json=_fixture()))

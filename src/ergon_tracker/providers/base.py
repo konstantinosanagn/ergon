@@ -126,6 +126,15 @@ class Provider(Protocol):
         to the same representation. Used by the crawler for cross-build conditional requests."""
         ...
 
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
+        """Fetch the full JD detail resource for one posting (Tier-3 recovery / freshness-sweep
+        per-posting confirm). Every registered provider satisfies this via ``BaseProvider``'s
+        default (unsupported -> ``None``) or an override; declared here so callers that resolve a
+        provider through ``get_provider`` (e.g. ``index/freshness.py``'s search-index confirm
+        path) can call it without an unchecked ``getattr``. See ``BaseProvider.fetch_detail`` for
+        the full non-raising contract."""
+        ...
+
 
 class BaseProvider:
     """Optional convenience base with shared helpers. Subclasses must set ``name`` and

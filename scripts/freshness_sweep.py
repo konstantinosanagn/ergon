@@ -1,0 +1,265 @@
+"""Phase 3 of the daily freshness sweep: standalone CLI entry point.
+
+Runs one host-shard's board-membership check against an ALREADY-BUILT index and writes the
+confirmed-departed ids to a small sidecar sqlite db -- the PINNED contract
+``ergon_tracker.index.build.apply_freshness_expiries`` (Phase 2) already knows how to carry
+forward: ``expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)``.
+
+Usage:
+  python -m scripts.freshness_sweep --index dist/index.sqlite --out dist/index-freshness.sqlite
+  # sharded (one shard of a 20-way host-sharded matrix, see freshness_shard.py):
+  python -m scripts.freshness_sweep --index dist/index.sqlite --out dist/shard-03.sqlite \\
+      --shard 3 --num-shards 20 --concurrency 32
+
+THE INDEX PASSED VIA ``--index`` IS NEVER MUTATED: it is opened read-only for the whole run, only
+to (1) enumerate this shard's active boards and (2) read the rows needed to re-verify them. The
+real engine (``ergon_tracker.index.freshness.sweep_all_boards``) mutates status='active' rows to
+status='expired' IN PLACE by design (see freshness.py's module docstring) -- so rather than fight
+that contract, this CLI gives it an isolated, throwaway TEMP COPY (built via
+``ergon_tracker.index.db.fresh_db`` + a row-for-row copy of just this shard's active jobs/
+job_sources rows) to mutate, then reads back whichever rows the engine flipped to 'expired' as the
+confirmed-departed set, and discards the temp copy. See ``_detect_departed`` below.
+
+Each shard writes its OWN ``--out`` sidecar; merging shards into one published
+``index-freshness.sqlite`` is a later phase (the workflow / merge step), not this CLI's job.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import sqlite3
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon_tracker.index.db import connect, fresh_db  # noqa: E402
+from ergon_tracker.index.freshness import (  # noqa: E402
+    DETERMINISTIC_SOURCES,
+    SEARCH_INDEX_SOURCES,
+    sweep_all_boards,
+)
+from ergon_tracker.index.freshness_shard import shard_boards  # noqa: E402
+from ergon_tracker.providers.base import load_builtins  # noqa: E402
+
+# The only sources the engine (`DETERMINISTIC_SOURCES | SEARCH_INDEX_SOURCES`) knows how to sweep
+# -- boards on any other source are never selected, so a shard never wastes a slot on a board the
+# engine would silently skip anyway.
+_SWEPT_SOURCES: tuple[str, ...] = tuple(sorted(DETERMINISTIC_SOURCES | SEARCH_INDEX_SOURCES))
+
+# Chunk size for parameterized `IN (...)` selects/copies -- mirrors freshness.py's `_UPDATE_CHUNK`,
+# staying well under SQLite's bound-variable ceiling for a large shard.
+_COPY_CHUNK = 500
+
+_SIDECAR_SCHEMA = (
+    "CREATE TABLE expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)"
+)
+
+
+def _active_boards(con: sqlite3.Connection) -> list[tuple[str, str]]:
+    """Every distinct ``(source, board_token)`` with at least one ``status='active'`` row, read
+    from the index ``con`` opened READ-ONLY by the caller -- restricted to `_SWEPT_SOURCES` so an
+    unrecognized source's boards never enter the shard partition at all."""
+    placeholders = ",".join("?" for _ in _SWEPT_SOURCES)
+    rows = con.execute(
+        "SELECT DISTINCT source, board_token FROM jobs "
+        f"WHERE status='active' AND board_token IS NOT NULL AND source IN ({placeholders})",  # noqa: S608
+        _SWEPT_SOURCES,
+    ).fetchall()
+    return [(str(r["source"]), str(r["board_token"])) for r in rows]
+
+
+def _copy_boards_into(
+    dst: sqlite3.Connection, src: sqlite3.Connection, boards: list[tuple[str, str]]
+) -> None:
+    """Copy every ``status='active'`` ``jobs`` row (+ its ``job_sources`` rows) for ``boards`` from
+    the read-only ``src`` index into the writable, freshly-created (empty) ``dst`` temp copy, so
+    ``sweep_all_boards`` can mutate ``dst`` in place without ``src`` ever being touched.
+
+    Column lists are read off each SELECT's own ``cursor.description`` (not hardcoded) so the copy
+    stays correct across any schema drift between this CLI and the index's actual columns --
+    ``dst`` was built by ``fresh_db`` from the SAME package's ``schema.sql``, so the column sets
+    always match.
+    """
+    dst.execute("PRAGMA foreign_keys = OFF")  # dst.companies is intentionally never populated
+
+    by_source: dict[str, list[str]] = {}
+    for source, token in boards:
+        by_source.setdefault(source, []).append(token)
+
+    job_ids: list[str] = []
+    for source, tokens in by_source.items():
+        for start in range(0, len(tokens), _COPY_CHUNK):
+            chunk = tokens[start : start + _COPY_CHUNK]
+            placeholders = ",".join("?" for _ in chunk)
+            cur = src.execute(
+                "SELECT * FROM jobs WHERE status='active' AND source=? "
+                f"AND board_token IN ({placeholders})",  # noqa: S608
+                [source, *chunk],
+            )
+            cols = [d[0] for d in cur.description]
+            col_list = ",".join(cols)
+            ph = ",".join("?" for _ in cols)
+            for row in cur.fetchall():
+                dst.execute(f"INSERT INTO jobs ({col_list}) VALUES ({ph})", tuple(row))  # noqa: S608
+                job_ids.append(str(row["id"]))
+
+    for start in range(0, len(job_ids), _COPY_CHUNK):
+        chunk = job_ids[start : start + _COPY_CHUNK]
+        placeholders = ",".join("?" for _ in chunk)
+        cur = src.execute(
+            f"SELECT * FROM job_sources WHERE job_id IN ({placeholders})",
+            chunk,  # noqa: S608
+        )
+        cols = [d[0] for d in cur.description]
+        col_list = ",".join(cols)
+        ph = ",".join("?" for _ in cols)
+        for row in cur.fetchall():
+            dst.execute(f"INSERT INTO job_sources ({col_list}) VALUES ({ph})", tuple(row))  # noqa: S608
+    dst.commit()
+
+
+def _write_sidecar(out_path: Path, rows: list[tuple[str, str, str | None]]) -> None:
+    """Write the PINNED freshness sidecar contract exactly (see
+    ``ergon_tracker.index.build.apply_freshness_expiries``'s docstring, which the daily build's
+    carry-forward reads against byte-for-byte): one table ``expired_ids(id TEXT PRIMARY KEY,
+    expired_at TEXT NOT NULL, reason TEXT)``. Always creates the table even with zero rows, so a
+    downstream merge/build step always sees a well-formed sidecar rather than special-casing an
+    empty shard."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.unlink(missing_ok=True)
+    con = sqlite3.connect(str(out_path))
+    try:
+        con.execute(_SIDECAR_SCHEMA)
+        con.executemany("INSERT INTO expired_ids(id, expired_at, reason) VALUES (?,?,?)", rows)
+        con.commit()
+    finally:
+        con.close()
+
+
+async def _detect_departed(
+    index_path: Path, boards: list[tuple[str, str]], *, concurrency: int
+) -> tuple[dict[str, dict[str, int]], list[tuple[str, str, str | None]]]:
+    """DETECT confirmed-departed ids WITHOUT ever mutating the real index at ``index_path``.
+
+    Opens ``index_path`` read-only, copies ``boards``' active rows into an isolated, throwaway
+    temp copy of the index schema (``fresh_db``), runs the real engine (``sweep_all_boards``)
+    against THAT copy (its ``status='expired'`` UPDATEs land only in the temp copy), then reads
+    back whichever rows it flipped -- the confirmed-departed set -- as ``(id, expired_at, reason)``
+    rows ready for the sidecar. The temp copy is always discarded, regardless of outcome.
+
+    Per-board failures are already non-fatal inside the engine itself (``board_live_ids``/
+    ``confirm_departed`` never raise -- an errored board just contributes 0 departures and an
+    ``errored`` count); nothing extra is needed here for that guarantee.
+    """
+    load_builtins()
+    src = connect(index_path, read_only=True)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="freshness-shard-"))
+    try:
+        tmp_path = tmp_dir / "shard-copy.sqlite"
+        fresh_db(tmp_path)
+        dst = connect(tmp_path)
+        try:
+            _copy_boards_into(dst, src, boards)
+            async with AsyncFetcher(concurrency=concurrency) as fetcher:
+                stats = await sweep_all_boards(
+                    boards,
+                    dst,
+                    fetcher,
+                    concurrency=concurrency,
+                    now=lambda: datetime.now(timezone.utc).isoformat(),
+                )
+            expired_rows = dst.execute(
+                "SELECT id, expired_at, expiry_reason FROM jobs WHERE status='expired'"
+            ).fetchall()
+            departed = [
+                (str(r["id"]), str(r["expired_at"]), r["expiry_reason"]) for r in expired_rows
+            ]
+            return stats, departed
+        finally:
+            dst.close()
+    finally:
+        src.close()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _log_stats(stats: dict[str, dict[str, int]]) -> None:
+    for source in sorted(stats):
+        parts = " ".join(f"{k}={v}" for k, v in stats[source].items())
+        print(f"[freshness] {source}: {parts}")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Daily freshness sweep: detect confirmed-departed board-membership ids for one "
+            "host-shard and write them to a sidecar sqlite db. Never mutates --index."
+        )
+    )
+    parser.add_argument(
+        "--index", required=True, type=Path, help="Path to the built index.sqlite (read-only)."
+    )
+    parser.add_argument(
+        "--out", required=True, type=Path, help="Path to write this shard's expired_ids sidecar."
+    )
+    parser.add_argument(
+        "--shard", type=int, default=0, help="This shard's 0-based index (default 0)."
+    )
+    parser.add_argument(
+        "--num-shards", type=int, default=1, help="Total number of shards (default 1)."
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=32,
+        help="In-flight board-fetch concurrency cap, also AsyncFetcher's global cap (default 32).",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+    if not args.index.exists():
+        print(f"[freshness] index not found: {args.index}", file=sys.stderr)
+        return 1
+
+    con = connect(args.index, read_only=True)
+    try:
+        all_boards = _active_boards(con)
+    finally:
+        con.close()
+
+    try:
+        this_shard = shard_boards(all_boards, args.shard, args.num_shards)
+    except ValueError as exc:
+        print(f"[freshness] invalid shard arguments: {exc}", file=sys.stderr)
+        return 2
+
+    print(
+        f"[freshness] shard {args.shard}/{args.num_shards}: {len(this_shard)}/{len(all_boards)} boards"
+    )
+
+    if not this_shard:
+        _write_sidecar(args.out, [])
+        print(f"[freshness] no boards on this shard; wrote empty sidecar -> {args.out}")
+        return 0
+
+    import anyio
+
+    stats, departed = anyio.run(
+        lambda: _detect_departed(args.index, this_shard, concurrency=args.concurrency)
+    )
+    _log_stats(stats)
+    _write_sidecar(args.out, departed)
+    print(f"[freshness] wrote {len(departed)} departed ids -> {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
