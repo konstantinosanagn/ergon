@@ -212,6 +212,13 @@ class JobPosting(BaseModel):
     years_experience_min: int | None = None
     years_experience_max: int | None = None
     apply_url: str | None = None
+    # The ATS board token this posting was crawled from (e.g. a Greenhouse/Workday board slug),
+    # set by the crawler from the registry entry that yielded it -- NOT filled by provider.normalize
+    # (a provider has no registry context). None for postings crawled outside the per-board registry
+    # path (e.g. the workable_network aggregator feed). Flows into the index's jobs.board_token
+    # column via mapping.to_row so build-time passes (e.g. the liveness sidecar) can resolve which
+    # board to re-fetch for a posting without a separate registry lookup.
+    board_token: str | None = None
     posted_at: datetime | None = None
     updated_at: datetime | None = None
     provenance: list[Provenance] = Field(default_factory=list)

@@ -67,6 +67,17 @@ def test_to_row_sets_role_family_and_company_key():
     assert row["snippet"].startswith("Build payments")
 
 
+def test_to_row_sets_board_token():
+    # Prereq for the liveness pass (index/liveness.py): board_token must survive into the built
+    # row so a build-time pass can resolve which board to re-fetch without a registry lookup.
+    job = _job().model_copy(update={"board_token": "acme-board-1"})
+    row = to_row(job, build_id="b1")
+    assert row["board_token"] == "acme-board-1"
+
+    unset = to_row(_job(), build_id="b1")  # board_token defaults to None when never assigned
+    assert unset["board_token"] is None
+
+
 def test_content_hash_stable_and_change_sensitive():
     from ergon_tracker.index.mapping import content_hash
     from ergon_tracker.models import JobLevel, JobPosting, Salary

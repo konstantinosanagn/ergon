@@ -183,6 +183,7 @@ async def _crawl(limit_companies: int, network_pages: int = 0) -> list:
                 continue
             if entry.get("domain") and not job.company_domain:
                 job.company_domain = entry["domain"]
+            job.board_token = entry["token"]  # registry token this board was crawled with
             enrich_in_place(job, company_key=key, infer_level_from_experience=True)
             jobs.append(job)
 
@@ -429,6 +430,121 @@ def _sharded_embed() -> bool:
     (~10x faster across 20 runners). Default off keeps the inline embed for local/manual builds and
     any environment that doesn't run the matrix. This is the daily-build cutover lever."""
     return os.environ.get("ERGON_SHARDED_EMBED", "") == "1"
+
+
+def _liveness_max_boards() -> int | None:
+    """Per-run bound on the number of DUE boards the liveness pass re-fetches, ``ERGON_LIVENESS_
+    MAX_BOARDS`` (env), default 2000. A board re-fetch here costs the same as one normal crawl
+    fetch (``provider.fetch(token, ...)``) -- left unbounded, a single run would re-fetch every
+    active board whose recheck window elapsed, doubling that run's crawl cost. The bounded,
+    rotating-cursor window (``liveness.py::_select_board_window``) still reaches every due board
+    within a few runs, same shape as the Tier-3 detail drain."""
+    v = os.environ.get("ERGON_LIVENESS_MAX_BOARDS")
+    return int(v) if v else 2000
+
+
+def _liveness_recheck_days() -> int:
+    """``ERGON_LIVENESS_RECHECK_DAYS`` (env), default 7 -- see ``liveness.RECHECK_DAYS``."""
+    from ergon_tracker.index.liveness import RECHECK_DAYS
+
+    return RECHECK_DAYS
+
+
+def _write_liveness_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
+    """Write ``manifest-liveness.json`` alongside the gz — mirrors ``_write_detail_manifest``: the
+    sidecar (``checked_at``/``dead_streak``/``verdict`` per posting id) must persist build-to-build
+    for the recheck-cadence + dead-streak logic to mean anything, so it's published as a release
+    asset the same way ``index-detail.sqlite.gz`` is, for the next build to download and carry
+    forward as its starting sidecar."""
+    from ergon_tracker.index.liveness import LIVENESS_SCHEMA_VERSION
+
+    (out / "manifest-liveness.json").write_text(
+        json.dumps(
+            {
+                "build_id": build_id,
+                "schema_version": LIVENESS_SCHEMA_VERSION,
+                "sha256": sha,
+                "bytes": nbytes,
+            },
+            indent=2,
+        )
+    )
+
+
+async def _reconcile_liveness(liveness_db: Path, index_db: Path) -> dict:
+    """Dispatch glue for the liveness pass: a real ``AsyncFetcher`` + ``get_provider`` lookup for
+    both the Stage-1 board re-fetch and the Stage-2 detail confirm, injected into
+    ``reconcile_liveness_tier`` (which itself never touches the network stack -- see
+    ``index/liveness.py``'s module docstring). Mirrors ``_reconcile_detail``'s shape exactly.
+    """
+    from datetime import datetime, timezone
+
+    from ergon_tracker.http import AsyncFetcher
+    from ergon_tracker.index.liveness import _LIVENESS_CONCURRENCY, reconcile_liveness_tier
+    from ergon_tracker.models import SearchQuery, make_job_id
+    from ergon_tracker.providers.base import get_provider, load_builtins
+
+    load_builtins()
+
+    # Match AsyncFetcher's own global cap to reconcile_liveness_tier's own concurrency bound
+    # (ERGON_LIVENESS_CONCURRENCY) -- same reasoning as _reconcile_detail: AsyncFetcher's default
+    # (16) would otherwise become the binding limiter instead of the liveness-tuned figure.
+    async with AsyncFetcher(concurrency=_LIVENESS_CONCURRENCY) as fetcher:
+
+        async def _fetch_board(source: str, token: str) -> set[str] | None:
+            prov = get_provider(source)
+            if prov is None:
+                return None
+            try:
+                raws = await prov.fetch(token, SearchQuery(), fetcher)
+            except Exception:  # noqa: BLE001 - a dead/blocked/erroring board -> skip it this run
+                return None
+            ids: set[str] = set()
+            for raw in raws:
+                try:
+                    ids.add(make_job_id(raw.source, str(raw.source_job_id)))
+                except Exception:  # noqa: BLE001 - one malformed raw must not drop the whole board
+                    continue
+            return ids
+
+        async def _fetch_detail(ref):
+            prov = get_provider(ref.source)
+            if prov is None:
+                return None
+            return await prov.fetch_detail(ref, fetcher)
+
+        return await reconcile_liveness_tier(
+            str(liveness_db),
+            str(index_db),
+            fetch_board=_fetch_board,
+            fetch_detail=_fetch_detail,
+            now=lambda: datetime.now(timezone.utc).isoformat(),
+            recheck_days=_liveness_recheck_days(),
+            max_boards=_liveness_max_boards(),
+        )
+
+
+def build_and_publish_liveness(db_path: Path, out: Path, *, build_id: str) -> dict:
+    """Liveness reconcile against the ALREADY-PUBLISHED core index, then re-publish
+    ``index.sqlite.gz``/``manifest.json`` so any status flips actually reach a downloading user
+    (mirrors ``build_and_publish_detail``'s ORDERING exactly -- see its docstring for the full
+    rationale). Also publishes the liveness sidecar itself (``index-liveness.sqlite.gz`` +
+    ``manifest-liveness.json``) so the NEXT build can download + carry it forward, preserving the
+    recheck cadence across days instead of re-checking every active row on every single build.
+
+    Unlike the detail tier, there is no separate merge step: ``reconcile_liveness_tier`` writes
+    the ``status='expired'`` flip directly onto ``jobs`` as part of the reconcile pass itself.
+    """
+    import anyio
+
+    liveness_db = out / "index-liveness.sqlite"
+    stats = anyio.run(lambda: _reconcile_liveness(liveness_db, db_path))
+    sha, nbytes = _gzip_file(liveness_db, out / "index-liveness.sqlite.gz")
+    _write_liveness_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
+    # Re-publish the core index so any status='expired' flips just written land in the gzip/
+    # manifest a downloading user actually fetches (see ORDERING note above).
+    publish_artifacts(db_path, out, build_id=build_id)
+    return stats
 
 
 def _write_detail_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
@@ -976,6 +1092,7 @@ async def _crawl_due(
                     continue
                 if e.get("domain") and not job.company_domain:
                     job.company_domain = e["domain"]
+                job.board_token = e["token"]  # registry token this board was crawled with
                 enrich_in_place(job, company_key=regkey, infer_level_from_experience=True)
                 board_jobs.append(job)
                 outcome[bkey]["companies"].add(normalize_company(job.company))
@@ -1064,6 +1181,7 @@ def main(argv: list[str]) -> None:
     detail = (
         False  # opt-in: also run the Tier-3 detail reconcile + merge (manual-only; see workflow)
     )
+    liveness = False  # opt-in: also run the apply-URL liveness pass (dead-link detection)
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
     detail_shard_only = False  # drain-matrix mode: sharded reconcile only, no crawl/build/merge
     embed_shard_only = False  # embed-matrix mode: sharded vector embed only, no crawl/build
@@ -1091,6 +1209,9 @@ def main(argv: list[str]) -> None:
             i += 1
         elif argv[i] == "--detail":
             detail = True
+            i += 1
+        elif argv[i] == "--liveness":
+            liveness = True
             i += 1
         elif argv[i] == "--detail-shard-only":
             detail_shard_only = True
@@ -1285,6 +1406,21 @@ def main(argv: list[str]) -> None:
                 )
             except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
                 print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")
+        if ok and liveness:  # apply-URL liveness pass against the already-published core index
+            # NON-FATAL: same contract as rich/detail above. The main index is already gated +
+            # promoted, so a board-fetch/classify failure here must NOT crash the build or undo
+            # the core publish — log it and carry on (yesterday's statuses stay live).
+            try:
+                lstats = build_and_publish_liveness(db, out, build_id=build_id)
+                print(
+                    f"  + liveness tier (checked={lstats['checked']} "
+                    f"flipped_dead={lstats['flipped_dead']} "
+                    f"confirmed_alive={lstats['confirmed_alive']} "
+                    f"boards_fetched={lstats['boards_fetched']} "
+                    f"boards_failed={lstats['boards_failed']}) -> index-liveness.sqlite.gz"
+                )
+            except Exception as exc:  # noqa: BLE001 - never let the liveness tier break the build
+                print(f"  ! liveness tier skipped (non-fatal): {type(exc).__name__}: {exc}")
         if ok and sharded:
             ns = build_and_publish_shards_from_db(db, out, build_id=build_id)
             print(f"  + published {ns} sector shards")
@@ -1357,6 +1493,18 @@ def main(argv: list[str]) -> None:
             )
         except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
             print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")
+    if liveness:  # apply-URL liveness pass against the already-published core index (non-fatal)
+        try:
+            lstats = build_and_publish_liveness(db, out, build_id=build_id)
+            print(
+                f"  + published liveness tier (checked={lstats['checked']} "
+                f"flipped_dead={lstats['flipped_dead']} "
+                f"confirmed_alive={lstats['confirmed_alive']} "
+                f"boards_fetched={lstats['boards_fetched']} "
+                f"boards_failed={lstats['boards_failed']}) -> index-liveness.sqlite.gz"
+            )
+        except Exception as exc:  # noqa: BLE001 - never let the liveness tier break the core build
+            print(f"  ! liveness tier skipped (non-fatal): {type(exc).__name__}: {exc}")
     print(f"built index: {n} jobs -> {out}/index.sqlite.gz (+manifest.json)")
 
 

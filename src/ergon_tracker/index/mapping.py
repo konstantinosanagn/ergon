@@ -94,7 +94,7 @@ def to_row(job: JobPosting, *, build_id: str, now: str | None = None) -> dict[st
         ),
         "apply_url": job.apply_url,
         "listing_url": job.apply_url,
-        "board_token": None,
+        "board_token": job.board_token,
         "posted_at": _iso(job.posted_at),
         "updated_at": _iso(job.updated_at),
         "closes_at": None,
