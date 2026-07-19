@@ -249,6 +249,27 @@ def _apply_freshness(db_path: Path, out: Path) -> int:
         return 0
 
 
+def _backfill_board_tokens(db_path: Path) -> int:
+    """Populate jobs.board_token for carried-forward active rows (NULL until re-crawled) from the
+    seed registry + verified apply-URL derivation, so the freshness sweep covers ~all boards
+    immediately instead of ramping over the ~5-day crawl cycle. NON-FATAL: a hiccup here must never
+    break the core build; the crawl still fills board_token the normal way."""
+    from ergon_tracker.index.build import backfill_board_tokens
+    from ergon_tracker.index.db import connect
+
+    try:
+        con = connect(db_path)
+        try:
+            n = backfill_board_tokens(con)
+            con.commit()
+            return n
+        finally:
+            con.close()
+    except Exception as exc:  # noqa: BLE001 - never let the backfill break the core build
+        print(f"  ! board_token backfill skipped (non-fatal): {type(exc).__name__}: {exc}")
+        return 0
+
+
 def _today() -> str:
     from datetime import datetime, timezone
 
@@ -1394,6 +1415,11 @@ def main(argv: list[str]) -> None:
             n = build_index_from_fresh_db(
                 fresh_path, db_tmp, build_id=build_id, prev_db=prev_db, crawled_keys=crawled_keys
             )
+        # Backfill board_token for carried-forward rows (registry + verified URL derivation) so the
+        # freshness sweep covers ~all boards immediately, not just the crawl-visited subset.
+        bf = _backfill_board_tokens(db_tmp)
+        if bf:
+            print(f"  + backfilled board_token on {bf} rows (freshness-sweep coverage)")
         # Carry forward a prior daily freshness-sweep's expiries onto db_tmp BEFORE the gated
         # publish, so the promoted index (and every downstream shard/slim/delta derived from it)
         # never resurrects a posting the sweep already confirmed departed its board. Non-fatal;
@@ -1530,6 +1556,9 @@ def main(argv: list[str]) -> None:
     jobs = anyio.run(_crawl, limit, network_pages)
     db_tmp = out / "index.tmp.sqlite"
     n = build_index(jobs, db_tmp, build_id=build_id)
+    bf = _backfill_board_tokens(db_tmp)
+    if bf:
+        print(f"  + backfilled board_token on {bf} rows (freshness-sweep coverage)")
     # Carry forward a prior daily freshness-sweep's expiries onto db_tmp BEFORE the gated publish
     # (mirrors the incremental path above) so shards/slim/delta all inherit them. Non-fatal.
     freshness_expired = _apply_freshness(db_tmp, out)
