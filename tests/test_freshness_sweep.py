@@ -12,14 +12,19 @@ import sqlite3
 import anyio
 
 from ergon_tracker.index.db import fresh_db
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.index.freshness import (
     DETERMINISTIC_SOURCES,
+    SEARCH_INDEX_SOURCES,
     board_live_ids,
+    confirm_departed,
     departed_ids,
+    sweep_all_boards,
     sweep_boards,
+    sweep_search_index_boards,
 )
 from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import RawJob, SearchQuery
+from ergon_tracker.models import DetailFetch, RawJob, SearchQuery
 
 _NOW = "2026-07-18T00:00:00+00:00"
 
@@ -444,5 +449,519 @@ def test_sweep_empty_boards_iterable_returns_empty_dict(tmp_path):
     idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
     con = sqlite3.connect(idx)
     stats = anyio.run(lambda: sweep_boards([], con, fetcher=object(), now=lambda: _NOW))
+    con.close()
+    assert stats == {}
+
+
+# --- PHASE 1: search-index sources (candidate + per-posting confirm) --------------------------
+#
+# oracle/smartrecruiters/successfactors reshuffle/paginate their lists (measured 50-100% list-miss
+# false-positive rate), so a stored id missing from a fresh board list is only a CANDIDATE, never
+# a confirmed departure -- it must be confirmed via the provider's per-posting fetch_detail before
+# anything is expired. icims/eightfold skip the bulk relist entirely (their bulk lists are
+# pathologically bloated) and per-posting-confirm directly against the board's stored active ids.
+
+
+def _ref(job_id: str, *, source: str = "oracle", apply_url: str | None = None) -> DetailRef:
+    return DetailRef(
+        id=job_id,
+        source=source,
+        token="acme",
+        apply_url=apply_url or f"http://x/{job_id}",
+        listing_url=None,
+        content_sig="sig",
+    )
+
+
+# --- confirm_departed: pure per-posting confirm wrapper, non-raising --------------------------
+
+
+def test_confirm_departed_true_when_detail_is_none(monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    class _P:
+        async def fetch_detail(self, ref, fetcher):
+            return None
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+    verdict = anyio.run(lambda: confirm_departed(_ref("x"), fetcher=object()))
+    assert verdict is True  # confirmed dead
+
+
+def test_confirm_departed_false_when_str_detail_has_text(monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    class _P:
+        async def fetch_detail(self, ref, fetcher):
+            return "Real JD text"
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+    verdict = anyio.run(lambda: confirm_departed(_ref("x"), fetcher=object()))
+    assert verdict is False  # confirmed alive -- list miss was a false positive
+
+
+def test_confirm_departed_false_when_detailfetch_has_text(monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    class _P:
+        async def fetch_detail(self, ref, fetcher):
+            return DetailFetch(text="Real JD text")
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+    verdict = anyio.run(lambda: confirm_departed(_ref("x"), fetcher=object()))
+    assert verdict is False
+
+
+def test_confirm_departed_true_when_detailfetch_has_empty_text(monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    class _P:
+        async def fetch_detail(self, ref, fetcher):
+            return DetailFetch(text="")
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+    verdict = anyio.run(lambda: confirm_departed(_ref("x"), fetcher=object()))
+    assert verdict is True
+
+
+def test_confirm_departed_none_on_exception(monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    class _P:
+        async def fetch_detail(self, ref, fetcher):
+            raise RuntimeError("timeout")
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+    verdict = anyio.run(lambda: confirm_departed(_ref("x"), fetcher=object()))
+    assert verdict is None  # could not determine -- caller must NOT expire on this
+
+
+def test_confirm_departed_none_when_provider_unknown(monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: None)
+    verdict = anyio.run(lambda: confirm_departed(_ref("x", source="nope"), fetcher=object()))
+    assert verdict is None
+
+
+# --- sweep_search_index_boards: bulk-relist-confirm sources (oracle/smartrecruiters/successfactors)
+
+
+def _make_search_index_provider(*, fetch_present: set[str] | None, detail_verdicts: dict[str, str]):
+    """``fetch_present``: raw source_job_ids the bulk list returns (``None`` simulates a failed
+    board fetch). ``detail_verdicts``: ``job_id`` (the ``jobs.id``, recoverable from the ref's
+    ``apply_url`` suffix, which the synthetic index always sets to ``http://x/{job_id}``) ->
+    ``"alive" | "dead" | "error"``, defaulting to ``"dead"`` for any id not listed."""
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                if fetch_present is None:
+                    raise RuntimeError("simulated board fetch failure")
+                return [_raw(i, source=name) for i in fetch_present]
+
+            async def fetch_detail(self, ref, fetcher):
+                job_id = (ref.apply_url or "").rsplit("/", 1)[-1]
+                verdict = detail_verdicts.get(job_id, "dead")
+                if verdict == "error":
+                    raise RuntimeError("boom")
+                return "Real JD text" if verdict == "alive" else None
+
+        return _P()
+
+    return get_provider
+
+
+def test_search_index_bulk_relist_confirms_candidates_oracle_style(tmp_path, monkeypatch):
+    # 3 active rows; bulk-list returns only 1 -> 2 candidates (reshuffled-list false positives).
+    # fetch_detail says candidate A is LIVE, candidate B is DEAD -> only B expires, A stays active,
+    # row count unchanged.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("or-a", source="oracle", source_job_id="1"),
+            _job_row("or-b", source="oracle", source_job_id="2"),
+            _job_row("or-c", source="oracle", source_job_id="3"),
+        ],
+    )
+    monkeypatch.setattr(
+        freshness,
+        "get_provider",
+        _make_search_index_provider(
+            fetch_present={"1"}, detail_verdicts={"or-b": "alive", "or-c": "dead"}
+        ),
+    )
+
+    before = _count_jobs(idx)
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("oracle", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["oracle"]["checked"] == 1
+    assert stats["oracle"]["candidates"] == 2
+    assert stats["oracle"]["expired"] == 1
+    assert stats["oracle"]["confirmed_alive"] == 1
+    assert stats["oracle"]["unconfirmed"] == 0
+    assert stats["oracle"]["errored"] == 0
+    assert _job_status(idx, "or-a") == ("active", None)  # never missing from the list at all
+    assert _job_status(idx, "or-b") == ("active", None)  # candidate, but confirmed alive
+    assert _job_status(idx, "or-c") == ("expired", "departed_board")  # candidate, confirmed dead
+    assert _count_jobs(idx) == before  # never a hard delete -> row_floor-safe
+
+
+def test_search_index_bulk_relist_no_candidates_skips_confirm(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                return [_raw("1", source=name)]  # full overlap -> no candidates
+
+            async def fetch_detail(self, ref, fetcher):
+                raise AssertionError("must not confirm when there are no candidates")
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("smartrecruiters", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["smartrecruiters"] == {
+        "checked": 1,
+        "candidates": 0,
+        "expired": 0,
+        "confirmed_alive": 0,
+        "unconfirmed": 0,
+        "errored": 0,
+    }
+    assert _job_status(idx, "sr-a") == ("active", None)
+
+
+def test_search_index_bulk_relist_board_error_derives_no_candidates(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
+    monkeypatch.setattr(
+        freshness,
+        "get_provider",
+        _make_search_index_provider(fetch_present=None, detail_verdicts={}),
+    )
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("smartrecruiters", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["smartrecruiters"]["errored"] == 1
+    assert stats["smartrecruiters"]["candidates"] == 0
+    assert stats["smartrecruiters"]["expired"] == 0
+    assert _job_status(idx, "sr-a") == ("active", None)
+
+
+# --- sweep_search_index_boards: per-posting-confirm sources (icims/eightfold) ------------------
+
+
+def test_search_index_per_posting_confirm_icims_style(tmp_path, monkeypatch):
+    # No bulk relist for icims/eightfold -- every stored active id is confirmed directly.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("ic-a", source="icims", source_job_id="1"),
+            _job_row("ic-b", source="icims", source_job_id="2"),
+        ],
+    )
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                raise AssertionError("bulk relist must never be called for icims/eightfold")
+
+            async def fetch_detail(self, ref, fetcher):
+                job_id = (ref.apply_url or "").rsplit("/", 1)[-1]
+                return None if job_id == "ic-b" else "Real JD text"
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    before = _count_jobs(idx)
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("icims", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["icims"]["checked"] == 1
+    assert stats["icims"]["candidates"] == 2
+    assert stats["icims"]["expired"] == 1
+    assert stats["icims"]["confirmed_alive"] == 1
+    assert _job_status(idx, "ic-a") == ("active", None)  # confirmed alive
+    assert _job_status(idx, "ic-b") == ("expired", "departed_board")  # confirmed dead
+    assert _count_jobs(idx) == before
+
+
+def test_search_index_per_posting_confirm_eightfold_style(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("ef-a", source="eightfold", source_job_id="1"),
+            _job_row("ef-b", source="eightfold", source_job_id="2"),
+        ],
+    )
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                raise AssertionError("bulk relist must never be called for icims/eightfold")
+
+            async def fetch_detail(self, ref, fetcher):
+                job_id = (ref.apply_url or "").rsplit("/", 1)[-1]
+                return DetailFetch(text="Real JD") if job_id == "ef-a" else DetailFetch(text="")
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("eightfold", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["eightfold"]["expired"] == 1
+    assert stats["eightfold"]["confirmed_alive"] == 1
+    assert _job_status(idx, "ef-a") == ("active", None)
+    assert _job_status(idx, "ef-b") == ("expired", "departed_board")
+
+
+def test_search_index_per_posting_board_limit_bounds_candidates(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    n = 10
+    jobs = [_job_row(f"ic-{i}", source="icims", source_job_id=str(i)) for i in range(n)]
+    idx = _build_index(tmp_path, jobs)
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                raise AssertionError("bulk relist must never be called for icims/eightfold")
+
+            async def fetch_detail(self, ref, fetcher):
+                return "Real JD text"
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("icims", "acme")],
+            con,
+            fetcher=object(),
+            board_active_id_limit=3,
+            now=lambda: _NOW,
+        )
+    )
+    con.close()
+
+    assert stats["icims"]["candidates"] == 3  # bounded, not all 10
+
+
+# --- error path: a candidate whose fetch_detail raises/times out is NOT expired ----------------
+
+
+def test_search_index_confirm_error_keeps_row_active(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                return []  # "1" missing from list -> candidate
+
+            async def fetch_detail(self, ref, fetcher):
+                raise RuntimeError("timeout")
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    before = _count_jobs(idx)
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("smartrecruiters", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["smartrecruiters"]["candidates"] == 1
+    assert stats["smartrecruiters"]["unconfirmed"] == 1
+    assert stats["smartrecruiters"]["expired"] == 0
+    assert _job_status(idx, "sr-a") == ("active", None)  # errored confirm -> kept, retry next run
+    assert _count_jobs(idx) == before
+
+
+# --- deterministic source still routes through Phase-0 logic (no fetch_detail confirm) ---------
+
+
+def test_search_index_sweep_excludes_deterministic_sources(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("gh-a", source="greenhouse", source_job_id="1")])
+
+    def get_provider(name):
+        raise AssertionError(
+            f"get_provider must never be called for a deterministic source: {name}"
+        )
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("greenhouse", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats == {}  # excluded up front -- never fetched, never touched
+    assert _job_status(idx, "gh-a") == ("active", None)
+
+
+def test_sweep_all_boards_composes_phase0_and_phase1_without_cross_calling(tmp_path, monkeypatch):
+    # greenhouse (deterministic) departs on a single list-miss, with NO fetch_detail confirm.
+    # oracle (search-index) only reaches fetch_detail for its own candidate.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("gh-a", source="greenhouse", source_job_id="1"),
+            _job_row("or-a", source="oracle", source_job_id="1"),
+        ],
+    )
+
+    detail_calls: list[str] = []
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                return []  # both boards report empty lists
+
+            async def fetch_detail(self, ref, fetcher):
+                detail_calls.append(ref.id)
+                return None  # confirmed dead
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_all_boards(
+            [("greenhouse", "acme"), ("oracle", "acme")], con, fetcher=object(), now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert set(stats.keys()) == {"greenhouse", "oracle"}
+    assert stats["greenhouse"] == {"checked": 1, "departed": 1, "expired": 1, "errored": 0}
+    assert stats["oracle"]["candidates"] == 1
+    assert stats["oracle"]["expired"] == 1
+    assert detail_calls == ["or-a"]  # fetch_detail only ever called for the search-index candidate
+    assert _job_status(idx, "gh-a") == ("expired", "departed_board")
+    assert _job_status(idx, "or-a") == ("expired", "departed_board")
+
+
+def test_search_index_sources_constant_matches_spec():
+    assert {
+        "oracle",
+        "smartrecruiters",
+        "successfactors",
+        "icims",
+        "eightfold",
+    } == SEARCH_INDEX_SOURCES
+    assert SEARCH_INDEX_SOURCES.isdisjoint(DETERMINISTIC_SOURCES)
+
+
+# --- concurrency: bounded confirm-fetch pool, no deadlock, honors the cap ----------------------
+
+
+def test_search_index_confirm_honors_concurrency_cap(tmp_path, monkeypatch):
+    import ergon_tracker.index.freshness as freshness
+
+    n = 20
+    jobs = [_job_row(f"ef-{i}", source="eightfold", source_job_id=str(i)) for i in range(n)]
+    idx = _build_index(tmp_path, jobs)
+    cap = 4
+
+    state = {"inflight": 0, "max_inflight": 0}
+    lock = anyio.Lock()
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                raise AssertionError("bulk relist must never be called for icims/eightfold")
+
+            async def fetch_detail(self, ref, fetcher):
+                async with lock:
+                    state["inflight"] += 1
+                    state["max_inflight"] = max(state["max_inflight"], state["inflight"])
+                await anyio.sleep(0.01)  # hold the slot long enough for overlap to occur
+                async with lock:
+                    state["inflight"] -= 1
+                return "Real JD text"  # everyone confirmed alive
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards(
+            [("eightfold", "acme")], con, fetcher=object(), concurrency=cap, now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    assert stats["eightfold"]["candidates"] == n
+    assert stats["eightfold"]["confirmed_alive"] == n
+    assert 1 <= state["max_inflight"] <= cap  # bounded by the shared cap, real overlap happened
+
+
+def test_search_index_sweep_empty_boards_iterable_returns_empty_dict(tmp_path):
+    idx = _build_index(tmp_path, [_job_row("or-a", source="oracle", source_job_id="1")])
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_search_index_boards([], con, fetcher=object(), now=lambda: _NOW)
+    )
     con.close()
     assert stats == {}
