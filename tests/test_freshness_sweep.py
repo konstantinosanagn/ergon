@@ -321,7 +321,9 @@ def test_sweep_mixed_boards_only_sweeps_the_deterministic_one(tmp_path, monkeypa
 
         class _P:
             async def fetch(self, token, query, fetcher):
-                return []  # gh-a departs
+                # A non-empty live board that no longer lists gh-a (source_job_id "1") -- so gh-a
+                # genuinely departs. (An empty live set would trip the safety valve, not expire.)
+                return [_raw("999", source="greenhouse")]
 
         return _P()
 
@@ -364,6 +366,38 @@ def test_sweep_no_active_rows_on_board_still_checks_but_expires_nothing(tmp_path
 
     assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 0}
     assert _job_status(idx, "gh-a") == ("active", None)
+
+
+def test_sweep_empty_live_set_never_expires_a_whole_board(tmp_path, monkeypatch):
+    # A provider that silently returns [] on a transient failure (e.g. jazzhr/dejobs on a 429/5xx)
+    # must NOT cause every stored active posting on that board to be expired. board_live_ids yields
+    # set() (not None) for it, so the safety valve must treat "empty live set + non-empty stored"
+    # as undetermined -- counted as errored, expiring nothing.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("gh-a", source="greenhouse", source_job_id="1"),
+            _job_row("gh-b", source="greenhouse", source_job_id="2"),
+        ],
+    )
+
+    class _P:
+        async def fetch(self, token, query, fetcher):
+            return []  # a silently-swallowed transient failure looks exactly like this
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards([("greenhouse", "acme")], con, fetcher=object(), now=lambda: _NOW)
+    )
+    con.close()
+
+    assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 1}
+    assert _job_status(idx, "gh-a") == ("active", None)  # NOT expired
+    assert _job_status(idx, "gh-b") == ("active", None)  # NOT expired
 
 
 def test_sweep_job_id_and_source_job_id_spaces_differ_correctly(tmp_path, monkeypatch):
@@ -874,7 +908,10 @@ def test_sweep_all_boards_composes_phase0_and_phase1_without_cross_calling(tmp_p
     def get_provider(name):
         class _P:
             async def fetch(self, token, query, fetcher):
-                return []  # both boards report empty lists
+                # A non-empty live board that lists neither stored posting (source_job_id "1"):
+                # greenhouse's "1" genuinely departs; oracle's "1" becomes a confirm candidate.
+                # (An empty live set would trip the deterministic safety valve instead.)
+                return [_raw("999", source=name)]
 
             async def fetch_detail(self, ref, fetcher):
                 detail_calls.append(ref.id)

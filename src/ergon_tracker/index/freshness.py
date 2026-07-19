@@ -276,10 +276,18 @@ async def sweep_boards(
             live_ids = await board_live_ids(source, token, fetcher)
         board_map = stored.get((source, token), {})
         stored_ids = set(board_map.keys())
-        missing = departed_ids(stored_ids, live_ids)
+        # Safety valve: an EMPTY live id-set while we still hold active postings for this board is
+        # indistinguishable from a silently-swallowed fetch failure -- some providers (e.g. jazzhr,
+        # dejobs) return ``[]`` on a transient 429/5xx/timeout instead of raising, so
+        # ``board_live_ids`` yields ``set()`` rather than ``None``, and a naive diff would expire
+        # the WHOLE board's live postings. Never expire 100% of a board off a single empty result:
+        # treat it as "undetermined" (like ``None``). A genuine full-closure is still caught by
+        # the query-time last_seen staleness filter and the tiered crawl/liveness pass.
+        undetermined = live_ids is None or (not live_ids and bool(stored_ids))
+        missing = set() if undetermined else departed_ids(stored_ids, live_ids)
         async with write_lock:
             counts[source]["checked"] += 1
-            if live_ids is None:
+            if undetermined:
                 counts[source]["errored"] += 1
                 return
             if not missing:
