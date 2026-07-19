@@ -46,6 +46,7 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+import httpx
 from selectolax.parser import HTMLParser, Node
 
 from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
@@ -53,6 +54,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["AvatureProvider"]
 
@@ -349,6 +351,79 @@ class AvatureProvider(BaseProvider):
                     return _html.unescape(loc.text(strip=True))
                 return ""
         return ""
+
+    # --- detail (Tier-3 JD recovery / freshness-sweep confirm) -----------
+
+    # A matched container below this length is probably a short field-value fragment (e.g. a
+    # single "General Information" row), not the JD body -- fall through to a broader selector.
+    _DETAIL_MIN_LEN = 200
+    _DETAIL_SELECTORS: tuple[str, ...] = ("main",)
+    # Verified live (recon 2026-07, synopsys.avature.net + ally.avature.net): a JobDetail URL
+    # whose numeric id doesn't correspond to any real posting on that tenant returns HTTP **403**
+    # (NOT 404) with a themed error page carrying this literal text -- e.g.
+    # ``<h2>An error has occurred</h2> ... <p class="paragraph">Page not found</p>``. A URL whose
+    # PATH doesn't match a known Avature route at all (e.g. a stale/renamed portal) gets a real
+    # HTTP 404 instead, already handled by the 404/410 branch below. Both are confirmed-gone
+    # signals for a single JobDetail id; only the 403+marker combination is soft-404 (a bare 403
+    # with no marker is NOT treated as gone -- could be an unrelated WAF/permission block).
+    _GONE_403_MARKER = "page not found"
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via its own JobDetail page (Tier-3 recovery / freshness
+        confirmation).
+
+        The detail URL IS ``ref.apply_url``/``ref.listing_url`` -- Avature's search-card link
+        (built by :meth:`_parse_rows`/:meth:`_fetch_data`/:meth:`_fetch_rss`) already points at
+        the per-posting ``JobDetail/{slug}/{id}`` page; there is no separate detail API. Avature
+        themes vary per tenant (see module docstring), so there's no single stable JD-only
+        selector -- we take the ``<main>`` element's text (verified live: it carries the full
+        "General Information" + "Descriptions & Requirements" panels, i.e. the JD, on both
+        recon tenants) and fall back to the whole page body when a theme has no ``<main>``.
+
+        Returns ``None`` ONLY on a confirmed-gone signal: a real HTTP 404/410, or Avature's
+        verified 403 soft-404 (see :attr:`_GONE_403_MARKER`). A missing derivable URL, any other
+        HTTP status (including a bare 403 without the marker -- could be an unrelated block, not
+        evidence of death), a fetch failure/timeout, or a 200 with no extractable text is
+        INDETERMINATE and RAISES, so the freshness sweep never expires a still-live posting on an
+        ambiguous signal."""
+        url = ref.apply_url or ref.listing_url
+        if not url:
+            raise RuntimeError(f"avature detail: no apply_url/listing_url for {ref!s}")
+        try:
+            html = await fetcher.get_text(url)
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status in (404, 410):
+                return None
+            if (
+                status == 403
+                and e.response is not None
+                and self._GONE_403_MARKER in e.response.text.lower()
+            ):
+                return None
+            raise
+        if not isinstance(html, str) or not html.strip():
+            raise RuntimeError(f"avature detail: empty page body for {ref!s}")
+        tree = HTMLParser(html)
+        text: str | None = None
+        for selector in self._DETAIL_SELECTORS:
+            node = tree.css_first(selector)
+            if node is None:
+                continue
+            chunk = node.text(separator=" ", strip=True)
+            if len(chunk) >= self._DETAIL_MIN_LEN:
+                text = node.html or chunk
+                break
+        if text is None:
+            body = tree.body
+            text = (
+                body.text(separator=" ", strip=True)
+                if body is not None
+                else tree.text(separator=" ", strip=True)
+            ) or None
+        if text is None:
+            raise RuntimeError(f"avature detail: no extractable text for {ref!s}")
+        return text
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

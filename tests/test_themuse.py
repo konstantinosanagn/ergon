@@ -11,7 +11,9 @@ import respx
 
 from conftest import load_fixture
 from ergon_tracker import RemoteType
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import EmploymentType, SearchQuery
 from ergon_tracker.providers.themuse import TheMuseProvider
 
@@ -204,3 +206,98 @@ def test_real_fixture_normalizes() -> None:
     assert first.title  # real title present
     assert first.company  # real company present
     assert first.apply_url and first.apply_url.startswith("https://www.themuse.com")
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+#
+# NOTE (see fetch_detail's docstring for full evidence): live probing found the landing page's
+# own 404 is NOT a verified gone-signal for this source (a real board -- IBM -- returns 404 on
+# this page for postings still alive per The Muse's own authoritative per-job API), so unlike
+# every other hardened provider, fetch_detail deliberately RAISES on 404/410 here instead of
+# returning None. These tests assert that deliberate deviation.
+
+DETAIL_URL = "https://www.themuse.com/jobs/crh/machine-operator-5f28d4"
+
+_MAIN_HTML = (
+    "<html><body><main><h1>Machine Operator</h1><p>"
+    + ("Handle assignments in a repetitive and sequential order. " * 20)
+    + "</p></main></body></html>"
+)
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed body, or raises a fixed exception."""
+
+    def __init__(self, *, html: str | None = None, exc: BaseException | None = None) -> None:
+        self._html = html
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_text(self, url: str, **kw: object) -> str:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        assert self._html is not None
+        return self._html
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
+    return DetailRef(
+        id="21897374", source="themuse", token=None, apply_url=apply_url,
+        listing_url=None, content_sig="s",
+    )
+
+
+async def test_fetch_detail_alive_returns_text() -> None:
+    fetcher = _FakeFetcher(html=_MAIN_HTML)
+    res = await TheMuseProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert isinstance(res, str)
+    assert "Handle assignments" in res
+
+
+async def test_fetch_detail_404_raises_not_none() -> None:
+    """Deliberate deviation from the standard contract: 404 is NOT trusted as gone here."""
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    with pytest.raises(RuntimeError):
+        await TheMuseProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_410_raises_not_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    with pytest.raises(RuntimeError):
+        await TheMuseProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await TheMuseProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await TheMuseProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_missing_url_raises() -> None:
+    fetcher = _FakeFetcher(html="<html></html>")
+    with pytest.raises(RuntimeError):
+        await TheMuseProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+
+
+async def test_fetch_detail_too_short_raises() -> None:
+    fetcher = _FakeFetcher(html="<html><body><main>too short</main></body></html>")
+    with pytest.raises(RuntimeError):
+        await TheMuseProvider().fetch_detail(_detail_ref(), fetcher)

@@ -949,6 +949,13 @@ def test_search_index_sources_constant_matches_spec():
         "workday",
         "radancy",
         "ukg",
+        # Phase 3 long-tail additions (bulk-relist-confirm; each got a real fetch_detail built)
+        "pinpoint",
+        "taleo",
+        "taleobe",
+        "avature",
+        "adp",
+        "phenom",
     } == SEARCH_INDEX_SOURCES
     assert SEARCH_INDEX_SOURCES.isdisjoint(DETERMINISTIC_SOURCES)
 

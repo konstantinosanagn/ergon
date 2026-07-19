@@ -139,6 +139,24 @@ _BULK_RELIST_CONFIRM_SOURCES: frozenset[str] = frozenset(
         "workday",
         "radancy",
         "ukg",
+        # Phase 3 (long-tail) additions -- each got a real fetch_detail built + live-verified
+        # (2026-07-19) to signal a removed posting definitively (None only then, raise on transient):
+        #   pinpoint  -- JSON-LD detail page, real HTTP 404 for a dead uuid.
+        #   taleo     -- jobdetail.ftl; never 404s, two-factor soft-404 (empty JD array + verified
+        #                "no longer available" marker) is the only None path.
+        #   taleobe   -- viewRequisition; two-factor soft-404 ("Job Not Available" + no JSON-LD).
+        #   avature   -- JobDetail page IS the detail; 403+"Page not found" marker / 404 = gone.
+        #   adp       -- per-item job-requisitions API; 200 payload missing itemID = gone.
+        #   phenom    -- reroute (Workday/SF) OR native /job/{seq} JSON-LD; 404/410 = gone.
+        # (themuse got a fetch_detail for JD recovery but is deliberately NOT here: its only
+        # gone-signal (landing-page 404) is unreliable -- verified live-alive IBM postings 404 on a
+        # stale frontend route -- so it can never safely confirm a departure.)
+        "pinpoint",
+        "taleo",
+        "taleobe",
+        "avature",
+        "adp",
+        "phenom",
     }
 )
 # - per-posting-only: the bulk list is pathologically bloated (icims ~33KB/job; eightfold ~97%

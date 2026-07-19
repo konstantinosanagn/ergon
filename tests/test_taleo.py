@@ -8,7 +8,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
 from ergon_tracker.providers.taleo import TaleoProvider
 
@@ -193,3 +195,131 @@ def test_legacy_ftl_stream_parser() -> None:
     # tenant with contestNo before location -> still classifies location by type
     assert by["149092"].locations[0].raw == "Kansas-Topeka, Missouri"
     assert by["149092"].apply_url.endswith("job=149092&lang=en")
+
+
+# --- fetch_detail: 404-vs-soft-404-vs-transient hardening contract ------------------------------
+
+DETAIL_URL = f"https://{HOST}/careersection/{CS}/jobdetail.ftl?job=266396&lang=en"
+
+
+def _fill_list(*items: str) -> str:
+    quoted = ",".join(f"'{it}'" for it in items)
+    return (
+        "<html><body><script>"
+        f"api.fillList('requisitionDescriptionInterface', 'descRequisition', [{quoted}]);"
+        "</script></body></html>"
+    )
+
+
+def _alive_html() -> str:
+    content = "!*!%3Cp%3EWe are hiring a senior data engineer in Richmond.%3C/p%3E"
+    return _fill_list(
+        "266396", "true", "266396", "false", "Job Title", "false", "266396", "false", "true",
+        "Data Engineer", "JOB123", content, content, "TX-Richmond", "TX-Richmond",
+    )
+
+
+def _gone_html() -> str:
+    return (
+        "<html><body><span>The job is no longer available.</span>"
+        "<span>The job description you are trying to view is no longer available.</span>"
+        "</body></html>"
+    )
+
+
+def _malformed_html() -> str:
+    """A 200 with neither a fillList array nor the gone-marker -- truly indeterminate."""
+    return "<html><body>Unexpected page shape.</body></html>"
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed body, or raises a fixed exception."""
+
+    def __init__(self, *, html: str | None = None, exc: BaseException | None = None) -> None:
+        self._html = html
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_text(self, url: str, **kw: object) -> str:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        assert self._html is not None
+        return self._html
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_URL, token: str | None = TOKEN) -> DetailRef:
+    return DetailRef(
+        id="266396", source="taleo", token=token, apply_url=apply_url, listing_url=None,
+        content_sig="s",
+    )
+
+
+async def test_fetch_detail_alive_returns_jd_text() -> None:
+    fetcher = _FakeFetcher(html=_alive_html())
+    res = await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert isinstance(res, str) and "senior data engineer" in res
+
+
+async def test_fetch_detail_soft_404_returns_none() -> None:
+    """A removed/nonexistent requisition renders NO fillList content and the fixed 'no longer
+    available' marker -- verified live (hyatt/hdr/drhorton.taleo.net all HTTP 200)."""
+    fetcher = _FakeFetcher(html=_gone_html())
+    res = await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_malformed_page_raises() -> None:
+    """No fillList array AND no gone-marker -- indeterminate, must never be treated as gone."""
+    fetcher = _FakeFetcher(html=_malformed_html())
+    with pytest.raises(RuntimeError):
+        await TaleoProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_missing_url_raises() -> None:
+    fetcher = _FakeFetcher(html=_alive_html())
+    with pytest.raises(RuntimeError):
+        await TaleoProvider().fetch_detail(_detail_ref(apply_url=None, token=None), fetcher)
+
+
+async def test_fetch_detail_rebuilds_url_from_token_when_apply_url_missing() -> None:
+    """No apply_url/listing_url -> derive the detail URL from token + ref.id instead of failing."""
+    fetcher = _FakeFetcher(html=_alive_html())
+    res = await TaleoProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert isinstance(res, str) and "senior data engineer" in res

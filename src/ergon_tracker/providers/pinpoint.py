@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -26,6 +28,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["PinpointProvider"]
 
@@ -109,6 +112,45 @@ class PinpointProvider(BaseProvider):
                 )
             )
         return raws
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via its own hosted detail page (Tier-3 recovery /
+        freshness-sweep confirm).
+
+        Verified live (3/3 probe tenants: trilongroup, princesscruises, kempinski): a posting's own
+        ``url`` (``https://{token}.pinpointhq.com/en/postings/{uuid}``) -- which is exactly
+        ``ref.apply_url`` as built by :meth:`fetch` -- renders a page embedding a
+        ``schema.org/JobPosting`` JSON-LD block whose ``description`` is the full HTML job body.
+        There is no separate per-posting JSON API: ``postings.json`` never filters server-side
+        (confirmed live -- ``?filter[id]=``/``?id=`` params are silently ignored and the full
+        1000-item board is returned regardless), so the hosted HTML detail page is the only
+        per-posting resource.
+
+        A fabricated/nonexistent uuid on the SAME tenant returns a genuine HTTP 404 (verified
+        across all 3 probe tenants, not a soft-404 shell), so ``None`` is returned ONLY on a real
+        404/410 from this page. Any other status, a timeout/5xx/429, or a 200 whose JSON-LD can't
+        be parsed into non-empty JD text is indeterminate and RAISES -- never returns ``None`` for
+        those, per the freshness-sweep confirm contract (a returned ``None`` expires a live-index
+        row, so an ambiguous signal must never produce one)."""
+        detail_url = ref.apply_url or ref.listing_url
+        if not detail_url:
+            raise RuntimeError(f"pinpoint detail: no derivable detail URL for {ref!s}")
+        try:
+            html = await fetcher.get_text(detail_url)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        if not isinstance(html, str) or not html.strip():
+            raise RuntimeError(f"pinpoint detail: empty page body for {ref!s}")
+        postings = self.extract_jsonld_jobs(html)
+        if not postings:
+            raise RuntimeError(f"pinpoint detail: no JobPosting JSON-LD for {ref!s}")
+        description = postings[0].get("description")
+        text = self._to_text(description) if isinstance(description, str) else None
+        if not text or not text.strip():
+            raise RuntimeError(f"pinpoint detail: no JD text for {ref!s}")
+        return text
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
