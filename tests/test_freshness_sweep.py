@@ -945,8 +945,93 @@ def test_search_index_sources_constant_matches_spec():
         "successfactors",
         "icims",
         "eightfold",
+        # Phase 2 additions (bulk-relist-confirm)
+        "workday",
+        "radancy",
+        "ukg",
     } == SEARCH_INDEX_SOURCES
     assert SEARCH_INDEX_SOURCES.isdisjoint(DETERMINISTIC_SOURCES)
+
+
+def test_deterministic_sources_include_phase2_additions():
+    # The Phase-2 sources proven (2026-07-19 recon) to return the COMPLETE board from fetch().
+    assert {
+        "recruitee",
+        "teamtailor",
+        "personio",
+        "bamboohr",
+        "brassring",
+        "jobdiva",
+        "jobvite",
+        "applicantpro",
+        "ripplehire",
+    } <= DETERMINISTIC_SOURCES
+
+
+def test_every_search_index_source_provider_overrides_fetch_detail():
+    # LANDMINE GUARD: sweep_search_index_boards confirms a departure candidate via the provider's
+    # fetch_detail returning None. BaseProvider's default fetch_detail ALWAYS returns None, so a
+    # source in SEARCH_INDEX_SOURCES whose provider does NOT override fetch_detail would confirm
+    # EVERY candidate as dead -> mass false-expiry. Every search-index source must override it.
+    from ergon_tracker.providers import get_provider, load_builtins
+    from ergon_tracker.providers.base import BaseProvider
+
+    load_builtins()
+    for source in sorted(SEARCH_INDEX_SOURCES):
+        prov = get_provider(source)
+        assert prov is not None, f"{source} has no registered provider"
+        assert (
+            type(prov).fetch_detail is not BaseProvider.fetch_detail
+        ), f"{source} is in SEARCH_INDEX_SOURCES but does not override fetch_detail (mass-expiry risk)"
+
+
+def test_sweep_partial_fetch_guard_skips_a_suspicious_mass_departure(tmp_path, monkeypatch):
+    # A sizeable board whose (non-empty) live set is missing MOST of its stored ids looks like a
+    # truncated/partial fetch, not real churn -- the fraction guard must treat it as undetermined
+    # (errored), expiring nothing, rather than wipe the un-fetched tail.
+    import ergon_tracker.index.freshness as freshness
+
+    jobs = [_job_row(f"gh-{i}", source="greenhouse", source_job_id=str(i)) for i in range(40)]
+    idx = _build_index(tmp_path, jobs)
+    # Live board returns only 10 of the 40 stored ids -> 30 "missing" = 75% > 50% guard.
+    monkeypatch.setattr(
+        freshness,
+        "get_provider",
+        _make_get_provider({("greenhouse", "acme"): {str(i) for i in range(10)}}),
+    )
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards([("greenhouse", "acme")], con, fetcher=object(), now=lambda: _NOW)
+    )
+    con.close()
+
+    assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 1}
+    assert _job_status(idx, "gh-0") == ("active", None)  # nothing expired
+    assert _job_status(idx, "gh-39") == ("active", None)
+
+
+def test_sweep_partial_fetch_guard_exempts_small_boards(tmp_path, monkeypatch):
+    # Small boards legitimately churn hard in percentage terms (3 of 4 closing) -- the fraction
+    # guard is size-gated and must NOT fire below the minimum board size, so real departures on a
+    # tiny board are still expired.
+    import ergon_tracker.index.freshness as freshness
+
+    jobs = [_job_row(f"gh-{i}", source="greenhouse", source_job_id=str(i)) for i in range(4)]
+    idx = _build_index(tmp_path, jobs)
+    # Only 1 of 4 still live -> 3 missing = 75%, but board size 4 < guard min (20) -> still expires.
+    monkeypatch.setattr(
+        freshness, "get_provider", _make_get_provider({("greenhouse", "acme"): {"0"}})
+    )
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards([("greenhouse", "acme")], con, fetcher=object(), now=lambda: _NOW)
+    )
+    con.close()
+
+    assert stats["greenhouse"]["expired"] == 3
+    assert stats["greenhouse"]["errored"] == 0
+    assert _job_status(idx, "gh-0") == ("active", None)  # the one still live
+    assert _job_status(idx, "gh-3") == ("expired", "departed_board")
 
 
 # --- concurrency: bounded confirm-fetch pool, no deadlock, honors the cap ----------------------

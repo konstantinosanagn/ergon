@@ -100,6 +100,21 @@ DETERMINISTIC_SOURCES: frozenset[str] = frozenset(
         "rippling",
         "join",
         "dejobs",
+        # Phase 2 additions -- each live-verified (2026-07-19 recon) to return the COMPLETE board
+        # from fetch(): either a single unpaginated GET (recruitee, teamtailor, personio, bamboohr,
+        # jobvite, applicantpro) or paginated to the server's own authoritative total-count that the
+        # fetched id-set matched exactly (jobdiva, brassring, ripplehire). Sources whose fetch()
+        # caps/reshuffles (apicapture, taleo, themuse, pinpoint, avature, taleobe) are deliberately
+        # NOT here -- an incomplete list on this single-miss path would mass-expire live postings.
+        "recruitee",
+        "teamtailor",
+        "personio",
+        "bamboohr",
+        "brassring",
+        "jobdiva",
+        "jobvite",
+        "applicantpro",
+        "ripplehire",
     }
 )
 
@@ -110,7 +125,21 @@ DETERMINISTIC_SOURCES: frozenset[str] = frozenset(
 # - bulk-relist-then-confirm: the board's bulk list is still cheap enough to re-fetch for
 #   membership; only the resulting missing-delta gets a per-posting ``fetch_detail`` confirm.
 _BULK_RELIST_CONFIRM_SOURCES: frozenset[str] = frozenset(
-    {"oracle", "smartrecruiters", "successfactors"}
+    {
+        "oracle",
+        "smartrecruiters",
+        "successfactors",
+        # Phase 2 additions -- each has a fetch() usable as a cheap candidate relist AND a
+        # live-verified real ``fetch_detail`` (2026-07-19 recon) that returns None on a genuine
+        # HTTP 404 (workday's cxs detail, radancy's apply-page GET, ukg's OpportunityDetail), so a
+        # list-miss candidate is only expired after a per-posting confirm. workday MUST be here (not
+        # deterministic): its list caps at 2000 with a lossy single-level facet fallback, so a bare
+        # list-miss is untrustworthy -- but the 404-confirm makes it safe, and this brings workday's
+        # ~37% index share into coverage.
+        "workday",
+        "radancy",
+        "ukg",
+    }
 )
 # - per-posting-only: the bulk list is pathologically bloated (icims ~33KB/job; eightfold ~97%
 #   facet redundancy) -- skip it for membership entirely and confirm directly against the stored
@@ -127,6 +156,17 @@ SEARCH_INDEX_SOURCES: frozenset[str] = _BULK_RELIST_CONFIRM_SOURCES | _PER_POSTI
 # exceeds this cap in aggregate host-fetch pressure by construction (one limiter instance per call,
 # not per source).
 _FRESHNESS_CONCURRENCY = int(os.environ.get("ERGON_FRESHNESS_CONCURRENCY", "32"))
+
+# Defensive cap on the deterministic single-miss path. A partial-but-NON-empty live fetch (a
+# provider that paginates and swallows a mid-crawl page error, returning only the first pages)
+# would make the un-fetched tail look "departed" -- the empty-set valve above only catches a FULLY
+# empty result. Real boards rarely shed most of their postings between daily sweeps, so never
+# expire more than this fraction of a board's stored-active set in a single deterministic pass;
+# above it, treat the board as undetermined (like the empty-set valve). Applied only to boards with
+# at least ``_MIN_BOARD_FOR_FRACTION_GUARD`` stored ids -- small boards legitimately churn hard in
+# percentage terms (e.g. 3 of 4 reqs closing), so the guard would false-trigger on them.
+_MAX_BOARD_EXPIRE_FRACTION = float(os.environ.get("ERGON_FRESHNESS_MAX_EXPIRE_FRACTION", "0.5"))
+_MIN_BOARD_FOR_FRACTION_GUARD = int(os.environ.get("ERGON_FRESHNESS_FRACTION_GUARD_MIN", "20"))
 
 # Per-board cap on how many stored active ids ``sweep_search_index_boards`` will per-posting-confirm
 # in one run for a ``_PER_POSTING_CONFIRM_SOURCES`` board (icims/eightfold have no cheap bulk-list
@@ -285,6 +325,17 @@ async def sweep_boards(
         # the query-time last_seen staleness filter and the tiered crawl/liveness pass.
         undetermined = live_ids is None or (not live_ids and bool(stored_ids))
         missing = set() if undetermined else departed_ids(stored_ids, live_ids)
+        # Partial-fetch guard (see _MAX_BOARD_EXPIRE_FRACTION): too-large a single-pass departure
+        # fraction on a sizeable board looks like a truncated/partial fetch (a paginated provider
+        # that swallowed a mid-crawl page error), not genuine churn -- treat as undetermined rather
+        # than expire the un-fetched tail.
+        if (
+            not undetermined
+            and len(stored_ids) >= _MIN_BOARD_FOR_FRACTION_GUARD
+            and len(missing) > _MAX_BOARD_EXPIRE_FRACTION * len(stored_ids)
+        ):
+            undetermined = True
+            missing = set()
         async with write_lock:
             counts[source]["checked"] += 1
             if undetermined:
