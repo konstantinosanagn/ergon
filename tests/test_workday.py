@@ -9,7 +9,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import RawJob, RemoteType, SearchQuery
 from ergon_tracker.providers.workday import WorkdayProvider
 
@@ -257,3 +259,97 @@ def test_real_fixture_normalizes() -> None:
     assert job.title == posting["title"]
     assert job.company == "nvidia"
     assert data["total"] == 2000
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+
+DETAIL_APPLY_URL = (
+    "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
+    "/job/US-CA-Santa-Clara/Engineer-0_JR1000"
+)
+DETAIL_CXS_URL = (
+    "https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite"
+    "/job/US-CA-Santa-Clara/Engineer-0_JR1000"
+)
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed payload, or raises a fixed exception."""
+
+    def __init__(self, *, payload: object = None, exc: BaseException | None = None) -> None:
+        self._payload = payload
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_json(self, url: str, **kw: object) -> object:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        return self._payload
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_CXS_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_APPLY_URL) -> DetailRef:
+    return DetailRef(
+        id="1",
+        source="workday",
+        token=TOKEN,
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await WorkdayProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await WorkdayProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await WorkdayProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await WorkdayProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_description() -> None:
+    payload = {"jobPostingInfo": {"jobDescription": "<p>Build chips.</p>"}}
+    fetcher = _FakeFetcher(payload=payload)
+    res = await WorkdayProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_CXS_URL]
+    assert res == "<p>Build chips.</p>"
+
+
+async def test_fetch_detail_unbuildable_url_raises() -> None:
+    # No apply_url/listing_url that resolves to a cxs URL is NOT evidence of death -> raise.
+    fetcher = _FakeFetcher(payload={})
+    with pytest.raises(RuntimeError):
+        await WorkdayProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+
+
+async def test_fetch_detail_unexpected_shape_raises() -> None:
+    # A 200 with an unclassifiable shape is indeterminate, not a verified soft-404 -> raise.
+    fetcher = _FakeFetcher(payload={"jobPostingInfo": {}})
+    with pytest.raises(RuntimeError):
+        await WorkdayProvider().fetch_detail(_detail_ref(), fetcher)

@@ -9,7 +9,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
 from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
 
@@ -261,9 +263,12 @@ async def test_fetch_detail_recovers_when_job_description_empty() -> None:
     assert body is not None and "5+ years" in body and "$88,000" in body
 
 
-async def test_fetch_detail_none_when_only_company_boilerplate() -> None:
+async def test_fetch_detail_raises_when_only_company_boilerplate() -> None:
     # companyDescription is deliberately excluded (boilerplate, not the role) -- a posting with only
-    # an empty jobDescription + companyDescription must still return None, not company marketing.
+    # an empty jobDescription + companyDescription has no JD-relevant text. Under the
+    # 404-vs-transient contract this is NOT a verified soft-404 (the posting still 200s with real
+    # data), so it must RAISE (indeterminate/keep), not return None (which would wrongly expire a
+    # still-live posting via the freshness sweep's confirm_departed).
     from ergon_tracker.index.detail import DetailRef
 
     posting = {
@@ -286,5 +291,93 @@ async def test_fetch_detail_none_when_only_company_boilerplate() -> None:
     with respx.mock:
         respx.get(url).mock(return_value=httpx.Response(200, json=posting))
         async with AsyncFetcher(per_host_rate=100) as f:
-            body = await SmartRecruitersProvider().fetch_detail(ref, f)
-    assert body is None
+            with pytest.raises(RuntimeError):
+                await SmartRecruitersProvider().fetch_detail(ref, f)
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+
+DETAIL_APPLY_URL = "https://jobs.smartrecruiters.com/Visa/744000129971988"
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed payload, or raises a fixed exception."""
+
+    def __init__(self, *, payload: object = None, exc: BaseException | None = None) -> None:
+        self._payload = payload
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_json(self, url: str, **kw: object) -> object:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        return self._payload
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_APPLY_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_APPLY_URL) -> DetailRef:
+    return DetailRef(
+        id="x", source="smartrecruiters", token="Visa", apply_url=apply_url,
+        listing_url=None, content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await SmartRecruitersProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await SmartRecruitersProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await SmartRecruitersProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await SmartRecruitersProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_content() -> None:
+    payload = {
+        "jobAd": {
+            "sections": {
+                "jobDescription": {"text": "Build reliable services."},
+                "qualifications": {"text": "5+ years, BS in CS."},
+            }
+        }
+    }
+    fetcher = _FakeFetcher(payload=payload)
+    res = await SmartRecruitersProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls
+    assert res is not None and "Build reliable services." in res and "5+ years" in res
+
+
+async def test_fetch_detail_unbuildable_url_raises() -> None:
+    fetcher = _FakeFetcher(payload={})
+    with pytest.raises(RuntimeError):
+        await SmartRecruitersProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+
+
+async def test_fetch_detail_non_dict_payload_raises() -> None:
+    fetcher = _FakeFetcher(payload="oops-not-json-object")
+    with pytest.raises(RuntimeError):
+        await SmartRecruitersProvider().fetch_detail(_detail_ref(), fetcher)

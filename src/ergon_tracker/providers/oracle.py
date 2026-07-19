@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+import httpx
+
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
@@ -238,8 +240,17 @@ class OracleProvider(BaseProvider):
         back to ``ref.listing_url``) -- see :meth:`_detail_request`. Like the list endpoint, the
         payload wraps the requisition in ``items[0]`` (reuses :meth:`_first_item`). Concatenates
         ``ExternalDescriptionStr`` + ``ExternalResponsibilitiesStr`` + ``ExternalQualificationsStr``
-        when present. Non-raising: any unparseable URL, fetch failure, non-JSON payload, or shape
-        mismatch (including a truthy non-dict payload/item) returns ``None``, never an exception."""
+        when present.
+
+        Contract (see ``fetch_detail_contract.md``): returns ``None`` ONLY on a confirmed-gone
+        signal -- a real HTTP 404/410 from the details resource. ORC has no verified soft-404 body
+        for a single removed requisition (an empty ``items: []`` on the ``ById`` finder is NOT
+        distinguished from a malformed/unexpected payload here since neither is confirmed, from
+        recon, to specifically mean "this id no longer exists" rather than some other empty-result
+        shape). An unbuildable detail URL, any other HTTP status, a fetch failure/timeout, a
+        non-dict payload, an unresolvable ``items[0]``, or a 200 with no JD-relevant text field is
+        INDETERMINATE and RAISES, so the freshness sweep never expires a still-live posting on an
+        ambiguous signal."""
         request: tuple[str, dict[str, str]] | None = None
         for url in (ref.apply_url, ref.listing_url):
             if not url:
@@ -248,15 +259,17 @@ class OracleProvider(BaseProvider):
             if request:
                 break
         if request is None:
-            return None
+            raise RuntimeError(f"oracle detail: no derivable detail URL for {ref!s}")
         detail_url, params = request
         try:
             data = await fetcher.get_json(detail_url, params=params)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         item = self._first_item(data)
         if item is None:
-            return None
+            raise RuntimeError(f"oracle detail: unexpected shape for {ref!s}")
         # Collect EVERY JD-relevant field that carries text -- do NOT hard-require
         # ExternalDescriptionStr. Measured (sampling real drained-and-failed rows): ~25% of failed
         # oracle postings have an EMPTY ExternalDescriptionStr but real content in
@@ -273,7 +286,7 @@ class OracleProvider(BaseProvider):
             if isinstance(value, str) and value.strip():
                 parts.append(value)
         if not parts:
-            return None
+            raise RuntimeError(f"oracle detail: no JD text in payload for {ref!s}")
         text = "\n".join(parts)
         # The detail resource adds location the list feed lacks: PrimaryLocation (string, e.g.
         # "Orlando, FL, United States") + PrimaryLocationCountry (ISO-2, "US"). Both geo-resolve

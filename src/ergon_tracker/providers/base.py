@@ -132,7 +132,7 @@ class Provider(Protocol):
         default (unsupported -> ``None``) or an override; declared here so callers that resolve a
         provider through ``get_provider`` (e.g. ``index/freshness.py``'s search-index confirm
         path) can call it without an unchecked ``getattr``. See ``BaseProvider.fetch_detail`` for
-        the full non-raising contract."""
+        the full return/raise contract (``None`` == confirmed-gone; raise == indeterminate)."""
         ...
 
 
@@ -163,11 +163,23 @@ class BaseProvider:
         Default: unsupported — the base provider has no per-posting detail endpoint to call.
         Providers opt in by overriding this. Return the JD text as a ``str``, or — when the same
         detail response also yields a STRUCTURED pay field — a ``DetailFetch(text, salary)`` so the
-        reconcile prefers the structured range over re-parsing it from prose. Must be non-raising:
-        any missing field, shape mismatch, or fetch failure is a ``None`` return, not an exception —
-        the reconcile pass (``index.detail.reconcile_detail_tier``) counts a ``None`` as a failed
-        fetch and treats an exception the same way, but implementations should return ``None``
-        explicitly rather than rely on that fallback."""
+        reconcile prefers the structured range over re-parsing it from prose.
+
+        RETURN/RAISE CONTRACT (an override MUST obey this — the freshness sweep's
+        ``confirm_departed`` treats a returned ``None`` as "posting is GONE → expire it", and a
+        raised exception as "could not determine → KEEP it"):
+          - ALIVE  -> return the ``str``/``DetailFetch`` content.
+          - DEFINITIVELY GONE -> return ``None`` ONLY on a real not-found signal: an explicit HTTP
+            404/410, or a VERIFIED provider soft-404 body ("posting no longer available"). This is
+            the only path that expires a live-index row.
+          - INDETERMINATE / TRANSIENT -> RAISE (let it propagate): 5xx, 429, timeouts, connection/
+            circuit errors, any non-404 HTTP status, parse failures, an unbuildable detail URL, or a
+            200 whose shape you can't classify. A transient error is NEVER evidence of death.
+        The reconcile/drain pass (``index.detail.reconcile_detail_tier``) and ``index.liveness``
+        both catch a raised exception and treat it as a failed fetch (retried later), so raising is
+        safe for every caller. This base default returns ``None`` only because "no detail endpoint
+        exists" is a permanent capability gap, not a transient error — which is exactly why
+        base-default providers are excluded from the freshness/liveness confirm source sets."""
         return None
 
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:

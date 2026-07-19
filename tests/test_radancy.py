@@ -6,7 +6,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import SearchQuery, make_job_id
 from ergon_tracker.providers.radancy import RadancyProvider
 
@@ -113,3 +115,80 @@ async def test_empty_page_stops() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await RadancyProvider().fetch("jobs.acme.com|Acme", SearchQuery(), f)
     assert raws == []
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+
+DETAIL_URL = "https://jobs.acme.com/job/phoenix/senior-data-engineer/9/111"
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed body, or raises a fixed exception."""
+
+    def __init__(self, *, html: str | None = None, exc: BaseException | None = None) -> None:
+        self._html = html
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_text(self, url: str, **kw: object) -> str:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        assert self._html is not None
+        return self._html
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
+    return DetailRef(
+        id="111", source="radancy", token="jobs.acme.com|Acme", apply_url=apply_url,
+        listing_url=None, content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await RadancyProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await RadancyProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await RadancyProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await RadancyProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_content() -> None:
+    body = "x" * 500  # clears _DETAIL_MIN_LEN
+    html = f'<html><body><main><p>{body}</p></main></body></html>'
+    fetcher = _FakeFetcher(html=html)
+    res = await RadancyProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert isinstance(res, str) and body in res
+
+
+async def test_fetch_detail_missing_url_raises() -> None:
+    fetcher = _FakeFetcher(html="<html></html>")
+    with pytest.raises(RuntimeError):
+        await RadancyProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)

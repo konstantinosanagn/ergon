@@ -14,7 +14,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
 from ergon_tracker.providers.bamboohr import BambooHRProvider
 
@@ -127,3 +129,98 @@ async def test_fetch_empty_or_missing_result() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await BambooHRProvider().fetch("aca", SearchQuery(), f)
     assert raws == []
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+
+DETAIL_APPLY_URL = "https://aca.bamboohr.com/careers/109"
+DETAIL_URL = "https://aca.bamboohr.com/careers/109/detail"
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed payload, or raises a fixed exception."""
+
+    def __init__(self, *, payload: object = None, exc: BaseException | None = None) -> None:
+        self._payload = payload
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_json(self, url: str, **kw: object) -> object:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        return self._payload
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_APPLY_URL) -> DetailRef:
+    return DetailRef(
+        id="109",
+        source="bamboohr",
+        token="aca",
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    # Live-verified (2026-07-19, aca.bamboohr.com): a nonexistent job id 404s with
+    # {"type":"not_found","title":"Resource not found.",...} -- a real HTTP 404, not a 200
+    # soft-404 body.
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await BambooHRProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await BambooHRProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await BambooHRProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await BambooHRProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_description() -> None:
+    payload = {"result": {"jobOpening": {"description": "<p>Build historic restorations.</p>"}}}
+    fetcher = _FakeFetcher(payload=payload)
+    res = await BambooHRProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert res == "<p>Build historic restorations.</p>"
+
+
+async def test_fetch_detail_unparseable_ref_raises() -> None:
+    # No apply_url/listing_url/token+id from which (token, id) can be derived is NOT evidence
+    # of death -> raise.
+    fetcher = _FakeFetcher(payload={})
+    ref = DetailRef(
+        id="", source="bamboohr", token=None, apply_url=None, listing_url=None, content_sig="s"
+    )
+    with pytest.raises(RuntimeError):
+        await BambooHRProvider().fetch_detail(ref, fetcher)
+
+
+async def test_fetch_detail_missing_description_raises() -> None:
+    # A 200 with no usable description is indeterminate, not a verified soft-404 -> raise.
+    fetcher = _FakeFetcher(payload={"result": {"jobOpening": {}}})
+    with pytest.raises(RuntimeError):
+        await BambooHRProvider().fetch_detail(_detail_ref(), fetcher)

@@ -45,6 +45,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+import httpx
 from selectolax.parser import HTMLParser
 
 from ..models import (
@@ -352,13 +353,19 @@ class ICIMSProvider(BaseProvider):
             return None
 
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
-        """Fetch one posting's full JD via the classic per-posting detail page (Tier-3 recovery).
+        """Fetch one posting's full JD via the classic per-posting detail page (Tier-3 recovery /
+        freshness confirmation).
 
         The detail URL is derived deterministically from ``ref.apply_url`` (falling back to
         ``ref.listing_url``) — see :meth:`_detail_url`. The fetched HTML's ``application/ld+json``
         ``JobPosting`` block is parsed (reusing :meth:`BaseProvider.extract_jsonld_jobs`) and its
-        ``description`` returned. Non-raising: any unparseable URL, fetch failure, missing/empty
-        JSON-LD, or shape mismatch returns ``None``, never an exception."""
+        ``description`` returned.
+
+        Contract (see ``fetch_detail_contract.md``): returns ``None`` ONLY on a definitive
+        404/410 (iCIMS has no known soft-404 body — a removed posting 404s). A missing derivable
+        detail URL, any other HTTP status, a fetch failure/timeout, or a 200 whose body carries no
+        parseable ``JobPosting`` JSON-LD is INDETERMINATE and raises, so a transient hiccup or an
+        unrecognised page shape never gets mistaken for "posting gone"."""
         detail_url: str | None = None
         for url in (ref.apply_url, ref.listing_url):
             if not url:
@@ -367,19 +374,19 @@ class ICIMSProvider(BaseProvider):
             if detail_url:
                 break
         if detail_url is None:
-            return None
+            raise RuntimeError(f"icims detail: no derivable detail URL for {ref!s}")
         try:
             html = await fetcher.get_text(detail_url)
-        except Exception:
-            return None
-        if not isinstance(html, str) or not html:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         jobs = self.extract_jsonld_jobs(html)
         for job in jobs:
             description = job.get("description")
             if isinstance(description, str) and description.strip():
                 return description
-        return None
+        raise RuntimeError(f"icims detail: no JobPosting JSON-LD for {ref!s}")
 
     # --- shared ----------------------------------------------------------
 

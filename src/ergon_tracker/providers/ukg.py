@@ -30,6 +30,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+import httpx
+
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -195,26 +197,37 @@ class UKGProvider(BaseProvider):
         ``OpportunityDetail`` page (which IS ``ref.apply_url``), embedded as a JSON ``"Description"``
         string. Recovering it matters because UKG's structured pay field is almost always gated off
         (``PayRangeVisible=false``), yet ~40% of postings state the salary in the JD BODY (pay-
-        transparency-law text) -- which the enrich extractor mines once we capture it. Non-raising:
-        any missing URL, fetch failure, or absent/empty ``Description`` returns ``None``.
+        transparency-law text) -- which the enrich extractor mines once we capture it.
+
+        Returns ``None`` ONLY on a confirmed-gone signal: a real HTTP 404/410 re-fetching the
+        ``OpportunityDetail`` page. A missing/unbuildable URL is NOT evidence of death, and every
+        other indeterminate/transient condition -- other HTTP statuses, timeouts, rate limits, an
+        empty body, or a 200 whose page doesn't embed the expected ``"Description":"..."`` JSON
+        (regex miss or JSON-decode failure) -- RAISES instead, so the freshness sweep never
+        expires a still-live posting on an ambiguous signal (a regex/JSON miss on a 200 is NOT a
+        verified soft-404 marker for this provider).
         """
         url = ref.apply_url or ref.listing_url
         if not url or "OpportunityDetail" not in url:
-            return None
+            raise RuntimeError(f"ukg detail: no OpportunityDetail URL for {ref!s}")
         try:
             raw = await fetcher.get_text(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not raw:
-            return None
+            raise RuntimeError(f"ukg detail: empty page body for {ref!s}")
         m = _DETAIL_DESC_RE.search(raw)
         if not m:
-            return None
+            raise RuntimeError(f"ukg detail: no Description JSON found for {ref!s}")
         try:
             desc = json.loads(m.group(1))  # decodes \uXXXX / \" / \\ correctly
-        except (ValueError, TypeError):
-            return None
-        return desc if isinstance(desc, str) and desc.strip() else None
+        except (ValueError, TypeError) as e:
+            raise RuntimeError(f"ukg detail: Description JSON decode failed for {ref!s}") from e
+        if isinstance(desc, str) and desc.strip():
+            return desc
+        raise RuntimeError(f"ukg detail: empty Description for {ref!s}")
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

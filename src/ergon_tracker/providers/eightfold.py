@@ -61,6 +61,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+import httpx
+
 from ..models import (
     DetailFetch,
     EmploymentType,
@@ -353,8 +355,13 @@ class EightfoldProvider(BaseProvider):
         derivable" (which silently dropped ~94% of failed eightfold rows). The
         ``{tenant}.eightfold.ai`` form is the fallback for refs that carry only a bare tenant slug.
 
-        Non-raising: any unparseable URL, fetch failure, non-JSON/non-dict payload, or a
-        missing/empty/non-string ``job_description`` returns ``None``, never an exception.
+        Contract (see ``fetch_detail_contract.md``): returns ``None`` ONLY on a definitive
+        404/410 (eightfold has no known soft-404 body for a single removed posting — the
+        locked-tenant ``{"message": ...}`` shape used elsewhere in this module is a per-TENANT
+        auth gate, not per-posting evidence of removal, so it does NOT count as "gone" here).
+        A job id/detail URL that can't be derived, any other HTTP status, a fetch failure/timeout,
+        a non-dict payload, or a 200 with no usable ``job_description`` is INDETERMINATE and
+        raises, so it's never mistaken for "posting gone".
         """
         src: str | None = None
         job_id: str | None = None
@@ -364,19 +371,21 @@ class EightfoldProvider(BaseProvider):
                 src, job_id = candidate, jid
                 break
         if job_id is None:
-            return None
+            raise RuntimeError(f"eightfold detail: no job id derivable for {ref!s}")
         url = self._detail_url(src, ref, job_id)
         if url is None:
-            return None
+            raise RuntimeError(f"eightfold detail: no detail URL derivable for {ref!s}")
         try:
             data = await fetcher.get_json(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(data, dict):
-            return None
+            raise RuntimeError(f"eightfold detail: non-dict payload for {ref!s}")
         job_description = data.get("job_description")
         if not isinstance(job_description, str) or not job_description.strip():
-            return None
+            raise RuntimeError(f"eightfold detail: no job_description for {ref!s}")
         # The detail response also carries a location STRING ("Phoenix, AZ USA 85040" / "USA -
         # Remote"); build a raw Location and let enrich's geo derive the country (fills the index
         # row's NULL country). Format is inconsistent so no safe structured city/region split.

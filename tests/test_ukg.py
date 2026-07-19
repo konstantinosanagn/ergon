@@ -8,7 +8,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import SearchQuery, make_job_id
 from ergon_tracker.providers.ukg import UKGProvider
 
@@ -120,3 +122,86 @@ async def test_fetch_empty_board() -> None:
         async with AsyncFetcher(per_host_rate=1000) as f:
             raws = await UKGProvider().fetch(TOKEN, SearchQuery(), f)
     assert raws == []
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+
+DETAIL_URL = "https://recruiting.ultipro.com/ACME01/JobBoard/g-1/OpportunityDetail?opportunityId=id-0"
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed body, or raises a fixed exception."""
+
+    def __init__(self, *, text: str | None = None, exc: BaseException | None = None) -> None:
+        self._text = text
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_text(self, url: str, **kw: object) -> str:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        assert self._text is not None
+        return self._text
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
+    return DetailRef(
+        id="id-0", source="ukg", token=TOKEN, apply_url=apply_url,
+        listing_url=None, content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await UKGProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await UKGProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await UKGProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await UKGProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_description() -> None:
+    html = '<script>var o = {"Description":"<p>Full JD body.<\\/p>"};</script>'
+    fetcher = _FakeFetcher(text=html)
+    res = await UKGProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert res == "<p>Full JD body.</p>"
+
+
+async def test_fetch_detail_missing_url_raises() -> None:
+    fetcher = _FakeFetcher(text="")
+    with pytest.raises(RuntimeError):
+        await UKGProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+
+
+async def test_fetch_detail_no_description_json_raises() -> None:
+    # A 200 with no embedded Description JSON is indeterminate, not a verified soft-404 -> raise.
+    fetcher = _FakeFetcher(text="<html><body>Not Found or some other page</body></html>")
+    with pytest.raises(RuntimeError):
+        await UKGProvider().fetch_detail(_detail_ref(), fetcher)
