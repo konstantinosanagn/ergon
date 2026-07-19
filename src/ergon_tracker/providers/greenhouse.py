@@ -78,9 +78,13 @@ class GreenhouseProvider(BaseProvider):
         return None
 
     def conditional_url(self, token: str) -> str | None:
-        # Whole board in one response with a strong ETag (honors If-None-Match -> 304). Must
-        # match fetch's exact URL incl. ?content=true so the validator is for the same payload.
-        return _API.format(token=token) + "?content=true"
+        # The LIGHT (no-content) board response, not the full ?content=true one `fetch()` uses:
+        # it still carries ids + updated_at (everything a membership/change check needs) and
+        # honors If-None-Match -> 304 just the same, at ~1/12.5th the bytes on a miss. Must NOT
+        # equal fetch's URL -- raws_from_body (below) detects the missing `content` field and
+        # signals the caller to fall back to a real fetch() rather than silently returning
+        # content-less postings.
+        return _API.format(token=token)
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         # Greenhouse has no server-side filtering: pull the whole board in one request.
@@ -88,11 +92,20 @@ class GreenhouseProvider(BaseProvider):
         data = await fetcher.get_json(url, params={"content": "true"})
         return self._raws_from_data(data, token)
 
-    def raws_from_body(self, token: str, body: bytes) -> list[RawJob]:
-        """Parse an already-downloaded response body (from a conditional 200), avoiding a refetch."""
+    def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:
+        """Parse an already-downloaded response body (from a conditional 200), avoiding a refetch
+        -- UNLESS that body came from the light `conditional_url` (no `content` field on any
+        posting), in which case this returns ``None`` so the caller falls back to a real
+        `fetch()` (the full ?content=true request). Without this guard, a changed board detected
+        via the light conditional check would silently normalize every posting with
+        ``description_html=None`` -- a content-capture regression, not a bandwidth win."""
         import json
 
-        return self._raws_from_data(json.loads(body), token)
+        data = json.loads(body)
+        postings = data.get("jobs", []) if isinstance(data, dict) else []
+        if postings and not any(isinstance(p, dict) and "content" in p for p in postings):
+            return None
+        return self._raws_from_data(data, token)
 
     def _raws_from_data(self, data: Any, token: str) -> list[RawJob]:
         postings: list[dict[str, Any]] = data.get("jobs", []) if isinstance(data, dict) else []
