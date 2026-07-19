@@ -259,6 +259,26 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
             f"INSERT OR IGNORE INTO jobs({jobs_cols}) SELECT {jobs_cols} FROM prev.jobs "  # noqa: S608 - introspected cols
             "WHERE company_key IS NULL OR company_key NOT IN (SELECT k FROM _crawled)"
         )
+        # For companies we DID crawl this run, mapping.to_row() has already stamped every fresh
+        # row's first_seen with today's date unconditionally — including postings that already
+        # existed in the prior index and haven't changed. Restore first_seen from the prior index
+        # for those rows, keyed on the source-id-independent content_hash (so a reposted job with
+        # a rotated numeric id but identical content still keeps its original first_seen). Without
+        # this, every unchanged job on a daily-recrawled board is marked "first seen today" on
+        # every build, inflating whats_new indefinitely. last_seen is untouched (it SHOULD advance
+        # to today -- that's the freshness signal, not the discovery date).
+        con.execute(
+            "UPDATE jobs SET first_seen = ("
+            "  SELECT p.first_seen FROM prev.jobs p"
+            "  WHERE p.company_key = jobs.company_key AND p.content_hash = jobs.content_hash"
+            "  LIMIT 1"
+            ") "
+            "WHERE company_key IN (SELECT k FROM _crawled) "
+            "AND EXISTS ("
+            "  SELECT 1 FROM prev.jobs p"
+            "  WHERE p.company_key = jobs.company_key AND p.content_hash = jobs.content_hash"
+            ")"
+        )
         # Same intersection for job_sources so a future source-schema change can't silently drop
         # sources (replaces the positional `SELECT s.*`, which breaks the instant the schema drifts).
         src_names = [r[1] for r in con.execute("PRAGMA table_info(job_sources)").fetchall()]

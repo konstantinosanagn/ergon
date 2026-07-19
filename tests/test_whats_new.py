@@ -128,6 +128,32 @@ def test_mcp_tool_happy_path_end_to_end(tmp_path, monkeypatch):
     assert res["as_of"] == "b1"
 
 
+def test_mcp_tool_defaults_max_last_seen_age_days_21(tmp_path, monkeypatch):
+    # index-freshness fix: whats_new builds its own SearchQuery and never exposed a
+    # max_last_seen_age_days param -> it should default the staleness guard to 21, same as
+    # search_jobs, for consistency.
+    from ergon_tracker.index import cache as cache_mod
+    from ergon_tracker.index import query as query_mod
+
+    p = _build(tmp_path, [_job("1", "Engineer")])
+    monkeypatch.setattr(cache_mod.IndexCache, "ensure_fresh", lambda self: p)
+    monkeypatch.setattr(cache_mod, "cached_index_build_id", lambda *a, **k: "b1")
+
+    captured = {}
+    real_whats_new_rows = query_mod.whats_new_rows
+
+    def spy(con, q, since_iso, **kwargs):
+        captured["q"] = q
+        return real_whats_new_rows(con, q, since_iso, **kwargs)
+
+    monkeypatch.setattr(query_mod, "whats_new_rows", spy)
+
+    from ergon_tracker import mcp_server
+
+    mcp_server.whats_new(since_days=7)
+    assert captured["q"].max_last_seen_age_days == 21
+
+
 def test_mcp_tool_index_unavailable_is_graceful(monkeypatch):
     from ergon_tracker.index import cache as cache_mod
 

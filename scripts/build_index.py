@@ -998,6 +998,17 @@ async def _crawl_due(
                     if pending["rows"] >= 20000:
                         con.commit()
                         pending["rows"] = 0
+            if not outcome[bkey]["companies"]:
+                # The fetch SUCCEEDED (no exception, we got this far) but yielded no usable
+                # postings this run -- either raws was genuinely empty (the board emptied out) or
+                # every raw failed to normalize. Either way this board WAS crawled, just with zero
+                # results, so it must still register as crawled: carry_forward only carries
+                # forward companies NOT in crawled_keys, and a company key that never appears here
+                # (because no job survived to be normalize_company()'d) would silently keep its
+                # stale prior-index jobs forever. regkey is the registry's own company key for
+                # this board, so it's the right key even with zero normalized jobs to derive one
+                # from.
+                outcome[bkey]["companies"].add(regkey)
         except Exception:  # noqa: BLE001 - one bad board never sinks the crawl
             outcome[bkey]["error"] = True
             outcome[bkey]["companies"].clear()  # not "crawled" -> prev jobs carry forward

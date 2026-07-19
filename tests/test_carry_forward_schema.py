@@ -8,9 +8,12 @@ in build_delta's "p.degree_min IS c.degree_min" change test. Both now intersect 
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 
-from ergon_tracker.index.build import build_delta, carry_forward
+from ergon_tracker.dedup import normalize_company
+from ergon_tracker.index.build import build_delta, build_index_from_fresh_db, carry_forward
 from ergon_tracker.index.db import _schema_sql, connect, fresh_db
+from ergon_tracker.models import JobPosting, Location, RemoteType
 
 _N = 200
 
@@ -118,3 +121,68 @@ def test_build_delta_older_schema_prev(tmp_path):
     # new ids are upserts. (build_id differs but is a _DELTA_VOLATILE_COL, so it's excluded.)
     assert info["upserts"] == 5
     assert info["deletes"] == 0
+
+
+def _fresh_db_with_job(path, job, *, build_id) -> None:
+    """A fresh-crawl DB (the shape scripts/build_index.py writes via append_jobs) with one job."""
+    from ergon_tracker.index.build import append_jobs
+
+    fresh_db(path)
+    con = connect(path)
+    try:
+        con.execute("PRAGMA foreign_keys = OFF")  # companies aggregated later by finalize_index
+        append_jobs(con, [job], build_id=build_id)
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_first_seen_preserved_across_recrawl_of_same_company(tmp_path):
+    """A company that IS re-crawled (in crawled_keys) must keep first_seen from the prior index
+    for a job whose content is unchanged (same content_hash), even though mapping.to_row() stamps
+    every fresh row with today's date. Without this, every unchanged job on a daily-recrawled
+    board is (wrongly) marked "first seen today" on every build, inflating whats_new forever.
+    """
+    job = JobPosting.create(
+        source="greenhouse",
+        source_job_id="job-1",
+        company="Acme Inc",
+        title="Backend Engineer",
+        locations=[Location(raw="Remote", is_remote=True)],
+        remote=RemoteType.REMOTE,
+    )
+    ckey = normalize_company(job.company)
+
+    # --- Day 1: company first crawled, job lands with first_seen stamped by to_row(). ---
+    fresh1 = tmp_path / "fresh1.sqlite"
+    _fresh_db_with_job(fresh1, job, build_id="b0")
+    day1_index = tmp_path / "day1.sqlite"
+    build_index_from_fresh_db(fresh1, day1_index, build_id="b0")
+
+    # Backdate first_seen so we can tell "preserved" apart from "reset to today".
+    old_date = (date.today() - timedelta(days=10)).isoformat()
+    con = connect(day1_index)
+    con.execute(
+        "UPDATE jobs SET first_seen=?, last_seen=? WHERE id=?", (old_date, old_date, job.id)
+    )
+    con.commit()
+    con.close()
+
+    # --- Day 2: SAME job (same id, same content -> same content_hash) re-crawled for company X,
+    # which IS in crawled_keys (it was actively crawled this run, not skipped). ---
+    fresh2 = tmp_path / "fresh2.sqlite"
+    _fresh_db_with_job(fresh2, job, build_id="b1")
+    day2_index = tmp_path / "day2.sqlite"
+    build_index_from_fresh_db(
+        fresh2, day2_index, build_id="b1", prev_db=day1_index, crawled_keys={ckey}
+    )
+
+    con = connect(day2_index)
+    row = con.execute("SELECT first_seen, last_seen FROM jobs WHERE id=?", (job.id,)).fetchone()
+    con.close()
+    assert row["first_seen"] == old_date, (
+        f"first_seen was reset to today ({row['first_seen']!r}) instead of preserved "
+        f"({old_date!r}) for an unchanged job on a re-crawled board"
+    )
+    # last_seen SHOULD advance to today (that's the freshness signal query.py filters on).
+    assert row["last_seen"] != old_date
