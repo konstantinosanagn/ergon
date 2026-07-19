@@ -27,10 +27,10 @@ whose list APIs reshuffle/paginate non-deterministically (mirrors ``liveness.py`
 board-membership miss on one of these is only a CANDIDATE, never a departure by itself; it must be
 CONFIRMED via the provider's per-posting ``fetch_detail`` (already wired for Tier-3 JD recovery,
 see ``index/detail.py``'s ``DetailRef``/``reconcile_detail_tier``) before anything is expired.
-``fetch_detail``'s contract is non-raising: ``None``/empty means the posting is gone (confirmed
-dead); a real ``DetailFetch``/``str`` means it's still live (the list-miss was a false positive --
-KEEP the row active); an exception (should not happen per contract, but this module never trusts
-that blindly) is "could not determine" -- also KEEP, retry next run. Two routing strategies
+``fetch_detail``'s return/raise contract: a returned ``None``/empty means the posting is gone
+(a definitive 404/410 -- confirmed dead); a real ``DetailFetch``/``str`` means it's still live (the
+list-miss was a false positive -- KEEP the row active); a RAISED exception is "could not determine"
+(transient/indeterminate) -- also KEEP, retry next run. Two routing strategies
 (``sweep_search_index_boards``), per the design's measured per-provider strategy table:
 
 - ``oracle``/``smartrecruiters``/``successfactors`` (bulk list is cheap-ish): bulk-relist for the

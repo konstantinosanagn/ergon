@@ -12,6 +12,7 @@ back both delegate paths."""
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -141,7 +142,9 @@ def test_phenom_sapsf_host_delegates_to_successfactors() -> None:
     assert desc == _SF_HTML
 
 
-def test_phenom_genuine_phenom_host_is_none() -> None:
+def test_phenom_genuine_phenom_host_raises() -> None:
+    # No re-route target (genuine-phenom) -- phenom can't confirm existence, so it's indeterminate
+    # and must RAISE (keep), never return None (which the liveness confirm would read as dead).
     fetcher = _FakeFetcher(json_payload=_WD_JSON, html_payload=_SF_HTML)
     ref = DetailRef(
         id="6",
@@ -151,13 +154,13 @@ def test_phenom_genuine_phenom_host_is_none() -> None:
         listing_url="https://careers.molsoncoors.com/job/123",
         content_sig="s",
     )
-    desc = anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
     assert fetcher.get_json_calls == []
     assert fetcher.get_text_calls == []
 
 
-def test_phenom_both_urls_none_is_none() -> None:
+def test_phenom_both_urls_none_raises() -> None:
     fetcher = _FakeFetcher(json_payload=_WD_JSON, html_payload=_SF_HTML)
     ref = DetailRef(
         id="7",
@@ -167,13 +170,15 @@ def test_phenom_both_urls_none_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
     assert fetcher.get_json_calls == []
     assert fetcher.get_text_calls == []
 
 
-def test_phenom_workday_delegate_raises_is_none() -> None:
+def test_phenom_workday_delegate_raise_propagates() -> None:
+    # A delegated Workday transient (5xx/timeout) must PROPAGATE, not be swallowed to None -- else
+    # the liveness confirm expires a still-live posting on a transient blip.
     fetcher = _FakeFetcher(raise_on="get_json")
     ref = DetailRef(
         id="8",
@@ -185,11 +190,11 @@ def test_phenom_workday_delegate_raises_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
 
 
-def test_phenom_successfactors_delegate_raises_is_none() -> None:
+def test_phenom_successfactors_delegate_raise_propagates() -> None:
     fetcher = _FakeFetcher(raise_on="get_text")
     ref = DetailRef(
         id="9",
@@ -199,8 +204,8 @@ def test_phenom_successfactors_delegate_raises_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: PhenomProvider().fetch_detail(ref, fetcher))
 
 
 def test_base_fetch_detail_is_none() -> None:

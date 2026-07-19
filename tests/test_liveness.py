@@ -234,6 +234,33 @@ def test_confirm_source_detail_fetch_fails_flips_immediately(tmp_path):
     assert dead_streak == 1 and verdict == "dead"
 
 
+def test_confirm_source_detail_fetch_raises_keeps_alive(tmp_path):
+    # A RAISED fetch_detail (transient 5xx/timeout under the hardened contract) is NOT evidence of
+    # death: the row must be KEPT active and its streak left untouched, never expired on a single
+    # transient blip (regression guard for the confirm_errored path).
+    idx = _build_index(tmp_path, [_job_row("wd-1", source="workday", board_token="wd-board")])
+    liv = str(tmp_path / "liveness.sqlite")
+    fetch_board = _make_fetch_board({("workday", "wd-board"): set()})  # list-miss
+    calls: list[str] = []
+
+    async def fetch_detail(ref):  # transient confirm error -- raises, never returns None
+        calls.append(ref.id)
+        raise RuntimeError("503 from detail endpoint")
+
+    stats = anyio.run(
+        lambda: reconcile_liveness_tier(
+            liv, idx, fetch_board=fetch_board, fetch_detail=fetch_detail, now=lambda: _DAY0
+        )
+    )
+    assert calls == ["wd-1"]  # stage 2 was dispatched
+    assert stats["flipped_dead"] == 0  # NOT expired on a transient error
+    assert stats["confirm_errored"] == 1
+    status, reason = _liveness_status(idx, "wd-1")
+    assert status == "active" and reason is None
+    # streak left untouched (no record written on error) -- a later run retries cleanly
+    assert _sidecar_row(liv, "wd-1") is None
+
+
 # --- (c) present in the fresh board set -> live, streak reset ------------------------------
 
 
