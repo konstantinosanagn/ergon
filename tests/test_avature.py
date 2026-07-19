@@ -6,7 +6,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
 from ergon_tracker.providers.avature import AvatureProvider
 
@@ -270,3 +272,123 @@ async def test_data_endpoint_full_board() -> None:
     nj = AvatureProvider().normalize(j)
     assert nj.title == "Analyst, Planning" and nj.locations[0].raw == "New York, NY"
     assert nj.apply_url.endswith("/careerscorporate/JobDetailCorporate?jobId=57886")
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+#
+# Live-verified (2026-07, synopsys.avature.net + ally.avature.net): a JobDetail URL whose numeric
+# id doesn't correspond to any real posting on the tenant returns HTTP **403** (not 404) with a
+# themed error body containing "Page not found"; a URL whose PATH isn't a recognised Avature route
+# at all gets a genuine HTTP 404. Both are exercised below as confirmed-gone signals.
+
+DETAIL_URL = f"https://{HOST}/{PORTAL}/JobDetail/Some-Slug/20316"
+_GONE_403_BODY = (
+    '<html><body><section><div><h2>An error has occurred</h2></div>'
+    '<div class="section__content"><article class="article"><div class="article__content">'
+    '<p class="paragraph">Page not found</p></div></article></div></section></body></html>'
+)
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed body, or raises a fixed exception."""
+
+    def __init__(self, *, html: str | None = None, exc: BaseException | None = None) -> None:
+        self._html = html
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_text(self, url: str, **kw: object) -> str:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        assert self._html is not None
+        return self._html
+
+
+def _http_status_error(status: int, body: str = "") -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_URL)
+    response = httpx.Response(status, request=request, text=body)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
+    return DetailRef(
+        id="20316",
+        source="avature",
+        token=f"{HOST}|{PORTAL}",
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_403_soft_404_returns_none() -> None:
+    """The verified Avature soft-404: HTTP 403 + a themed 'Page not found' body."""
+    fetcher = _FakeFetcher(exc=_http_status_error(403, _GONE_403_BODY))
+    res = await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_bare_403_raises() -> None:
+    """A 403 WITHOUT the 'Page not found' marker is NOT treated as gone -- could be an unrelated
+    block (WAF/permission), not evidence the posting was removed."""
+    fetcher = _FakeFetcher(exc=_http_status_error(403, "<html><body>Forbidden</body></html>"))
+    with pytest.raises(httpx.HTTPStatusError):
+        await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_text() -> None:
+    body = "x" * 300  # clears _DETAIL_MIN_LEN
+    html = f"<html><body><main><p>{body}</p></main></body></html>"
+    fetcher = _FakeFetcher(html=html)
+    res = await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_URL]
+    assert isinstance(res, str) and body in res
+
+
+async def test_fetch_detail_falls_back_to_body_when_no_main() -> None:
+    """A theme with no <main> element still yields the whole-body text (never invented empty)."""
+    html = "<html><body><div>Full job description text here.</div></body></html>"
+    fetcher = _FakeFetcher(html=html)
+    res = await AvatureProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is not None and "Full job description text here." in res
+
+
+async def test_fetch_detail_missing_url_raises() -> None:
+    fetcher = _FakeFetcher(html="<html></html>")
+    with pytest.raises(RuntimeError):
+        await AvatureProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+
+
+async def test_fetch_detail_empty_body_raises() -> None:
+    fetcher = _FakeFetcher(html="   ")
+    with pytest.raises(RuntimeError):
+        await AvatureProvider().fetch_detail(_detail_ref(), fetcher)

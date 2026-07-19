@@ -36,12 +36,16 @@ import re
 from datetime import datetime, timezone
 from math import ceil
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
+
+import httpx
 
 from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["TaleoProvider"]
 
@@ -55,6 +59,32 @@ _HOST_RE = re.compile(r"([a-z0-9-]+\.taleo\.net)", re.IGNORECASE)
 _CS_RE = re.compile(r"/careersection/([a-z0-9_]+)/", re.IGNORECASE)
 # 9-digit portal id embedded in the career-section HTML.
 _PORTAL_RE = re.compile(r"portal=(\d+)")
+# Recognise a jobdetail.ftl URL and pull out (host, cs, jid) -- used to validate/normalize
+# ref.apply_url/listing_url before refetching it in fetch_detail.
+_DETAIL_URL_RE = re.compile(
+    r"https?://([a-z0-9-]+\.taleo\.net)/careersection/([a-z0-9_]+)/jobdetail\.ftl\?job=(\d+)",
+    re.IGNORECASE,
+)
+
+# --- jobdetail.ftl JD extraction (Tier-3 recovery / freshness confirm) --------------------------
+# The full JD is NOT static HTML -- it's shipped as a JS array literal the page's own script feeds
+# into ``requisitionDescriptionInterface`` via ``api.fillList(...)``. Each array item is a
+# single-quoted JS string; the JD/qualifications fields are prefixed ``!*!`` and URL-encoded HTML
+# (further double-encoded: literal ``"`` -> ``%22`` -> the entity ``&quot;`` -> ``%26quot;``), and
+# each appears TWICE (a duplicate "print" copy) -- verified live across hyatt/hdr/drhorton.taleo.net.
+_DETAIL_ARR_RE = re.compile(
+    r"api\.fillList\('requisitionDescriptionInterface',\s*'descRequisition',\s*\[(.*?)\]\);", re.S
+)
+# One JS single-quoted string literal, honouring backslash-escapes (``\\.``) so an escaped quote
+# inside a value never prematurely ends the match.
+_DETAIL_STR_RE = re.compile(r"'((?:\\.|[^'\\])*)'")
+# Verified live (fabricated req ids on hyatt/hdr/drhorton.taleo.net, all HTTP 200): a removed/
+# nonexistent requisition's jobdetail.ftl renders NO ``!*!``-prefixed content items in the
+# fillList array and instead embeds this fixed, provider-authored message. Used ONLY as a
+# confirmatory signal alongside an empty extracted JD -- never on its own -- so a live JD that
+# happens to mention "no longer available" in its own prose can never be mistaken for gone (the
+# extraction above would already have returned it as alive).
+_DETAIL_GONE_RE = re.compile(r"no longer available", re.IGNORECASE)
 
 # --- Legacy "jobsearch.ajax" career sections (no modern REST endpoint; REST returns 0) -----------
 # These embed the first results page directly in the jobsearch.ftl HTML as a "!|!"-delimited
@@ -251,6 +281,84 @@ class TaleoProvider(BaseProvider):
             url=url,
             payload=req,
         )
+
+    # --- detail (Tier-3 JD recovery / freshness confirm) -------------------------------------------
+
+    @classmethod
+    def _detail_url(cls, ref: DetailRef) -> str | None:
+        """Derive the per-requisition ``jobdetail.ftl`` URL for ``ref``.
+
+        Prefers ``ref.apply_url``/``ref.listing_url`` (both providers/``_to_raw``/``_raws_from_ftl``
+        already populate ``RawJob.url`` with this exact shape) -- re-derived through
+        :data:`_DETAIL_URL_RE` rather than trusted verbatim so a stray query-string difference
+        never changes the URL we actually fetch. Falls back to rebuilding from ``ref.token``
+        (``"{host}|{cs}|{portal}"`` -- ``cs`` is always populated once discovery ran, ``portal`` is
+        not needed here) + ``ref.id`` when no usable URL survives. Returns ``None`` (never raises)
+        when neither source yields a recognisable Taleo host/cs/job id.
+        """
+        for url in (ref.apply_url, ref.listing_url):
+            if not url:
+                continue
+            m = _DETAIL_URL_RE.match(url)
+            if m:
+                return _DETAIL.format(host=m.group(1).lower(), cs=m.group(2), jid=m.group(3))
+        host, cs, _portal = cls._split(ref.token or "")
+        if host and cs and ref.id:
+            return _DETAIL.format(host=host, cs=cs, jid=ref.id)
+        return None
+
+    @staticmethod
+    def _extract_jd(html_text: str) -> str | None:
+        """Pull the JD (+ qualifications) HTML out of the ``requisitionDescriptionInterface``
+        ``fillList`` array embedded in a ``jobdetail.ftl`` page -- see module-level regex
+        docstrings. Each real content field is duplicated (print copy); de-duped here. Returns
+        ``None`` when the array is missing/absent or carries no ``!*!``-prefixed content item
+        (which is exactly the shape a removed/nonexistent requisition renders)."""
+        m = _DETAIL_ARR_RE.search(html_text)
+        if not m:
+            return None
+        seen: set[str] = set()
+        parts: list[str] = []
+        for item in _DETAIL_STR_RE.findall(m.group(1)):
+            if not item.startswith("!*!"):
+                continue
+            decoded = _htmlmod.unescape(unquote(item[3:])).strip()
+            if not decoded or decoded in seen:
+                continue
+            seen.add(decoded)
+            parts.append(decoded)
+        return "\n".join(parts) if parts else None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one requisition's full JD via its own ``jobdetail.ftl`` page (Tier-3 recovery /
+        freshness-sweep confirm).
+
+        Live-verified (hyatt/hdr/drhorton.taleo.net): a removed OR never-existed requisition id
+        does **NOT** 404 -- ``jobdetail.ftl`` always answers HTTP 200, rendering a soft-shell page
+        whose ``fillList`` array carries no JD content and instead embeds a fixed "no longer
+        available" message (:data:`_DETAIL_GONE_RE`). So the confirmed-gone path here is the
+        VERIFIED-soft-404 branch the contract allows, gated on BOTH an empty extraction AND the
+        marker text (never the marker alone) so a live JD whose own prose happens to say "no longer
+        available" is never misread as gone -- :meth:`_extract_jd` would already have returned it.
+        A real HTTP 404/410 is still handled defensively (returns ``None``) in case some tenant
+        genuinely 404s, though none observed live did. Anything else -- unbuildable detail URL,
+        5xx/429/timeout, or a 200 whose ``fillList`` array is missing/unparseable AND carries no
+        gone-marker -- RAISES (indeterminate), per contract."""
+        detail_url = self._detail_url(ref)
+        if detail_url is None:
+            raise RuntimeError(f"taleo detail: no derivable detail URL for {ref!s}")
+        try:
+            html_text = await fetcher.get_text(detail_url)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        text = self._extract_jd(html_text)
+        if text:
+            return text
+        if _DETAIL_GONE_RE.search(html_text):
+            return None
+        raise RuntimeError(f"taleo detail: no JD content and no gone-signal for {ref!s}")
 
     # --- legacy jobsearch.ftl "!|!" stream -------------------------------------------------------
 

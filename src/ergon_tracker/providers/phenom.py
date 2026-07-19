@@ -38,7 +38,9 @@ import re
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
+
+import httpx
 
 from ..models import (
     DetailFetch,
@@ -66,6 +68,14 @@ _VIEW = "https://{host}/job/{seq}"
 _PHENOM_HOST_RE = re.compile(r"\.phenompeople\.com$", re.IGNORECASE)
 # Career-site URL paths that signal Phenom even on a vanity domain.
 _PHENOM_PATH_RE = re.compile(r"/(?:search-results|job/[A-Z0-9]{6,})", re.IGNORECASE)
+# jobSeqNo out of a phenom-native ``/job/{seq}[/slug]`` path (any length -- test fixtures and some
+# tenants use short numeric ids, so this is intentionally looser than ``_PHENOM_PATH_RE`` above,
+# which only needs to recognise the *shape*, not extract the id).
+_NATIVE_SEQ_RE = re.compile(r"/job/([A-Za-z0-9_-]+)")
+# 3xx statuses whose ``Location`` we follow ourselves (one hop) before re-checking -- see
+# ``_fetch_native``'s docstring for why the root ``/job/{seq}`` URL can't be trusted directly on
+# some tenants.
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 # checkRemote -> our enum (deterministic).
 _REMOTE = {
@@ -219,19 +229,23 @@ class PhenomProvider(BaseProvider):
     # --- detail (Tier-3 JD recovery, re-route to the underlying ATS) --------
 
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
-        """Re-route to the ATS that actually hosts the JD (Tier-3 recovery).
+        """Re-route to the ATS that actually hosts the JD (Tier-3 recovery), else fall back to a
+        phenom-NATIVE per-posting check.
 
         11,414 of 11,831 phenom rows are AGGREGATED listings whose ``apply_url`` points at
         Workday (11,083) or SuccessFactors (331) — ATSes we already have working
-        ``fetch_detail`` for. Rather than build a phenom-native detail fetcher, dispatch by the
-        ``apply_url`` (falling back to ``listing_url``) host to the matching provider.
+        ``fetch_detail`` for. Dispatch by the ``apply_url`` (falling back to ``listing_url``) host
+        to the matching provider recovers those for free.
 
-        Contract (see ``providers/base.py``): a returned ``None`` means DEFINITIVELY gone (only the
-        delegated Workday/SuccessFactors 404 produces one); an indeterminate case RAISES so the
-        freshness/liveness confirm never expires a live posting on it. Genuine-phenom postings
-        (canonical ``/job/{seq}``, fountain, driverapponline, ... — ~400 rows) have no re-route
-        target, so we cannot confirm existence -> RAISE (keep), never ``None``. Delegated transient
-        errors propagate (not swallowed), so a Workday/SF 5xx/timeout also keeps the row.
+        The remaining ~400 rows are GENUINE-phenom postings (canonical ``/job/{seq}`` on a
+        phenom-native career host, e.g. ``www.hhccareers.org`` — no Workday/SF re-route target).
+        For those, :meth:`_fetch_native` fetches the phenom detail page itself and parses its
+        ``JobPosting`` JSON-LD.
+
+        Contract (see ``providers/base.py``): a returned ``None`` means DEFINITIVELY gone (only a
+        delegated Workday/SuccessFactors 404, or a native 404/410, produces one); an indeterminate
+        case RAISES so the freshness/liveness confirm never expires a live posting on it. Delegated
+        or native transient errors propagate (not swallowed), so a 5xx/timeout also keeps the row.
         """
         url = ref.apply_url or ref.listing_url
         if not url:
@@ -254,7 +268,74 @@ class PhenomProvider(BaseProvider):
         if "successfactors.com" in host or "sapsf.com" in host:
             return await SuccessFactorsProvider().fetch_detail(ref, fetcher)
 
-        raise RuntimeError(f"phenom detail: no re-route target (genuine-phenom) for {ref!s}")
+        return await self._fetch_native(ref, fetcher)
+
+    @classmethod
+    def _native_seq(cls, url: str | None) -> str | None:
+        """Extract the phenom ``jobSeqNo`` out of a phenom-native ``/job/{seq}[/slug]`` URL path,
+        else ``None``."""
+        if not url:
+            return None
+        m = _NATIVE_SEQ_RE.search(urlsplit(url).path)
+        return m.group(1) if m else None
+
+    async def _fetch_native(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Phenom-NATIVE per-posting detail check for genuine-phenom rows (no re-route target).
+
+        LIVE-VERIFIED quirk (``www.hhccareers.org``, 2026-07): the plain ``https://{host}/job/
+        {seq}`` URL we store as ``apply_url``/``listing_url`` (see ``_VIEW``) does NOT reliably
+        resolve the posting on every tenant -- some career sites live under a locale prefix
+        (``phApp.baseUrl``, e.g. ``/us/en/``) and the bare root path unconditionally 303s to the
+        locale HOME page (``/us/en``) REGARDLESS of whether the id is real or fabricated, so it can
+        never be trusted as an existence signal by itself. The real per-posting resource on that
+        tenant is ``https://{host}/us/en/job/{seq}`` -- 200 with a ``JobPosting`` JSON-LD block for
+        a live posting, a real HTTP 410 for a fabricated/removed one.
+
+        So this: (1) requests the bare ``/job/{seq}`` URL WITHOUT following redirects; (2) if that
+        is already a definitive 404/410, returns ``None``; (3) if it's a 200, parses JSON-LD
+        directly from it (tenants with no locale prefix serve the JD at the bare path); (4) if it's
+        a 3xx, follows the ``Location`` ONE hop to discover the tenant's locale root, re-appends
+        ``/job/{seq}`` to build the real detail URL, and checks THAT one (404/410 -> ``None``, 200 ->
+        parse JSON-LD). Any other status, a redirect with no ``Location``, or a 200/post-redirect
+        body with no parseable ``JobPosting`` JSON-LD is INDETERMINATE and raises -- never guessed
+        as gone.
+        """
+        native_host = (ref.token or "").split("|", 1)[0].strip().lower()
+        seq = self._native_seq(ref.apply_url) or self._native_seq(ref.listing_url)
+        if not native_host or not seq:
+            raise RuntimeError(
+                f"phenom detail: no re-route target and no derivable native URL for {ref!s}"
+            )
+
+        bare_url = _VIEW.format(host=native_host, seq=seq)
+        resp = await fetcher.request("GET", bare_url, follow_redirects=False)
+
+        if resp.status_code in (404, 410):
+            return None
+
+        detail_html: str
+        if resp.status_code == 200:
+            detail_html = resp.text
+        elif resp.status_code in _REDIRECT_STATUSES:
+            location = resp.headers.get("location")
+            if not location:
+                raise RuntimeError(f"phenom detail: redirect with no Location for {ref!s}")
+            locale_root = urljoin(bare_url, location).rstrip("/")
+            detail_url = f"{locale_root}/job/{seq}"
+            try:
+                detail_html = await fetcher.get_text(detail_url)
+            except httpx.HTTPStatusError as e:
+                if e.response is not None and e.response.status_code in (404, 410):
+                    return None
+                raise
+        else:
+            raise RuntimeError(f"phenom detail: unexpected status {resp.status_code} for {ref!s}")
+
+        for job in self.extract_jsonld_jobs(detail_html):
+            description = job.get("description")
+            if isinstance(description, str) and description.strip():
+                return description
+        raise RuntimeError(f"phenom detail: no JobPosting JSON-LD for {ref!s}")
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

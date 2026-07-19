@@ -30,11 +30,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
+import httpx
+
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
     from ..models import SearchQuery
 
 __all__ = ["ADPProvider"]
@@ -43,6 +46,12 @@ _DEFAULT_HOST = "workforcenow.adp.com"
 _HOSTS = frozenset({"workforcenow.adp.com", "workforcenow.cloud.adp.com"})
 _API = "https://{host}/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions"
 _VIEW = "https://{host}/mascsr/default/mdf/recruitment/recruitment.html?cid={cid}&jobId={jid}&lang=en_US"
+# Per-posting detail resource: the SAME job-requisitions API, keyed by a path-segment id. Verified
+# live it accepts EITHER the internal ``itemID`` (e.g. "9201258168513_1") OR the ``ExternalJobID``
+# (e.g. "589881") that ``_VIEW``/``apply_url`` actually carries -- both resolve the same record, so
+# the detail URL is derivable straight from ``apply_url``'s ``jobId`` query param with no separate
+# itemID lookup needed.
+_DETAIL = "https://{host}/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions/{jid}?cid={cid}"
 _CID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
 _PAGE = 100
 
@@ -150,6 +159,66 @@ class ADPProvider(BaseProvider):
             url=_VIEW.format(host=host, cid=cid, jid=ext),
             payload=rec,
         )
+
+    # --- detail (Tier-3 JD recovery / freshness-sweep confirm) -----------
+
+    @staticmethod
+    def _detail_url(url: str) -> str | None:
+        """Derive the per-posting job-requisitions detail URL from a public ADP WFN careers URL
+        (``ref.apply_url``/``listing_url``, the ``_VIEW`` shape built by :meth:`_to_raw`).
+        Requires a recognised host, a well-formed ``cid`` GUID, and a non-empty ``jobId`` -- else
+        ``None`` (never raises; the caller turns a ``None`` here into a RAISE, not a confirmed-gone
+        signal, since an unbuildable URL is indeterminate, not evidence of death)."""
+        parts = urlsplit(url)
+        host = parts.netloc.split("@")[-1].split(":")[0].lower()
+        if host not in _HOSTS:
+            return None
+        q = parse_qs(parts.query)
+        cid = (q.get("cid") or [""])[0].strip().lower()
+        jid = (q.get("jobId") or [""])[0].strip()
+        if not _CID_RE.fullmatch(cid) or not jid:
+            return None
+        return _DETAIL.format(host=host, jid=jid, cid=cid)
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via the ADP job-requisitions detail resource (Tier-3
+        recovery / freshness confirmation).
+
+        The list-crawl JSON (:meth:`fetch`) never carries a description; the SAME API, hit with a
+        single id in the path (see :attr:`_DETAIL`/:meth:`_detail_url`), returns a full record
+        including ``requisitionDescription`` (HTML JD text). NOTE: the AsyncFetcher already
+        enforces ADP's harsh ~1 req/6s domain-wide rate cap (``http.py::_DOMAIN_RATE_OVERRIDES``
+        ``"adp.com"``) -- this method adds no throttling of its own.
+
+        Returns ``None`` ONLY on a confirmed-gone signal: a real HTTP 404/410, or ADP's verified
+        soft-404 -- a nonexistent id returns HTTP **200** with a SKELETON payload that omits every
+        field a real record carries, most decisively its own echoed ``itemID`` (live-verified
+        2026-07 against LCNB CORP with both a garbage id and a well-formed-but-unassigned one: both
+        came back with no ``itemID`` key at all, vs. a real record which always echoes it). A
+        missing/unbuildable detail URL, any other HTTP status, a fetch failure/timeout, a non-dict
+        payload, or a 200 that DOES carry ``itemID`` but no ``requisitionDescription`` text is
+        INDETERMINATE and RAISES, so a transient hiccup or an unrecognised response shape never
+        gets mistaken for "posting gone"."""
+        url = ref.apply_url or ref.listing_url
+        if not url:
+            raise RuntimeError(f"adp detail: no apply_url/listing_url for {ref!s}")
+        detail_url = self._detail_url(url)
+        if not detail_url:
+            raise RuntimeError(f"adp detail: no derivable detail URL for {ref!s}")
+        try:
+            data = await fetcher.get_json(detail_url, headers={"Accept": "application/json"})
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        if not isinstance(data, dict):
+            raise RuntimeError(f"adp detail: malformed payload for {ref!s}")
+        if not data.get("itemID"):
+            return None  # verified soft-404: skeleton payload, no echoed itemID -> gone
+        desc = data.get("requisitionDescription")
+        if not isinstance(desc, str) or not desc.strip():
+            raise RuntimeError(f"adp detail: no requisitionDescription for {ref!s}")
+        return desc
 
     @staticmethod
     def _location(rec: dict[str, Any]) -> Location | None:

@@ -19,6 +19,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import anyio
+import httpx
+from selectolax.parser import HTMLParser
 
 from ..extract.level import level_from_ats_vocab
 from ..models import EmploymentType, JobLevel, JobPosting, Location, RawJob, RemoteType
@@ -26,6 +28,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
     from ..models import SearchQuery
 
 _API = "https://www.themuse.com/api/public/jobs"
@@ -63,6 +66,10 @@ class TheMuseProvider(BaseProvider):
     PAGE_SIZE = 20
     MAX_PAGES = 5
     COMPANY_MAX_PAGES = 25  # a company board pulls deeper (the employer filter is server-side)
+
+    # Minimum <main> text length to trust as a real rendered JD page rather than a near-empty
+    # shell (verified live: real JDs render 4.6k-6.8k chars across all 3 probe companies).
+    _DETAIL_MIN_LEN = 200
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
@@ -138,6 +145,64 @@ class TheMuseProvider(BaseProvider):
             url=refs.get("landing_page") if isinstance(refs, dict) else None,
             payload=job,
         )
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one posting's full JD via its public landing page (Tier-3 recovery).
+
+        ``ref.apply_url``/``ref.listing_url`` are both the SAME public
+        ``https://www.themuse.com/jobs/{company}/{slug}`` page (the index stores
+        ``listing_url = apply_url`` for every source -- see ``index/mapping.py``). Fetching it
+        directly recovers the full JD text from the server-rendered ``<main>`` region; verified
+        live across all 3 probe companies (CRH/IBM/Navan) that a real posting's page renders the
+        exact same body text carried in the JSON API's ``contents`` field (e.g. CRH job 21897374's
+        page contains the same "Handle assignments in a repetitive..." text as its
+        ``/api/public/jobs/21897374`` JSON).
+
+        CONTRACT NOTE -- deliberately never returns ``None`` (this source's confirmed-gone branch is
+        UNUSED, unlike every other hardened provider). Live verification found this page's own 404
+        is NOT a reliable gone-signal: sampling 6 postings per probe company, CRH and Navan's
+        landing-page status matched The Muse's own authoritative per-job API
+        (``GET https://www.themuse.com/api/public/jobs/{id}``, confirmed to 404 only for a genuinely
+        fabricated id) 6/6 times, but ALL 6 sampled IBM postings 404 on this landing page while the
+        SAME ids are still HTTP 200 with full content on that authoritative API -- i.e. a
+        systematically broken/stale frontend route for at least one real board, unrelated to
+        whether the posting is actually alive. The authoritative API is exactly what the brief's
+        recon pointed at, but its ``{id}`` path segment is a numeric job id that is NOT recoverable
+        from ``apply_url``/``listing_url``: the landing-page URL's trailing slug is an unrelated
+        short code (confirmed against 3 real ids -- neither hex nor any transform of the numeric
+        id), and ``DetailRef`` carries no other field that could yield it. Since we can't reach the
+        authoritative endpoint without that id, and this page's 404 is proven unreliable for at
+        least one real board, a 404 here RAISES (indeterminate) instead of returning ``None`` --
+        returning ``None`` on this unverified signal risks mass-false-expiring boards like IBM's.
+        This provider therefore still recovers JD text for Tier-3 detail drain (the ALIVE path is
+        solid), but should NOT be added to freshness's ``_BULK_RELIST_CONFIRM_SOURCES`` unless/until
+        a per-posting numeric id becomes derivable from ``DetailRef``."""
+        url = ref.apply_url or ref.listing_url
+        if not url:
+            raise RuntimeError(f"themuse detail: no derivable detail URL for {ref!s}")
+        try:
+            html = await fetcher.get_text(url)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                # See docstring: NOT trusted as a confirmed-gone signal for this source -- a
+                # verified false-404 exists (IBM, 6/6 sampled), so this stays indeterminate.
+                raise RuntimeError(
+                    f"themuse detail: landing-page {e.response.status_code} is not a verified "
+                    f"gone-signal for {ref!s} (see fetch_detail docstring) -- treating as "
+                    "indeterminate, not confirmed-gone"
+                ) from e
+            raise
+        if not isinstance(html, str) or not html.strip():
+            raise RuntimeError(f"themuse detail: empty page body for {ref!s}")
+        tree = HTMLParser(html)
+        main = tree.css_first("main")
+        text = main.text(separator=" ", strip=True) if main is not None else None
+        if not text:
+            body = tree.body
+            text = body.text(separator=" ", strip=True) if body is not None else None
+        if not text or len(text) < self._DETAIL_MIN_LEN:
+            raise RuntimeError(f"themuse detail: no extractable JD text for {ref!s}")
+        return text
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

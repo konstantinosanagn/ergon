@@ -31,11 +31,14 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+import httpx
+
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
     from ..models import SearchQuery
 
 __all__ = ["TaleoBEProvider"]
@@ -43,6 +46,7 @@ __all__ = ["TaleoBEProvider"]
 _PER_PAGE = 10
 _MAX_PAGES = 100
 _BASE = "https://{hostpath}/ats/careers/v2/searchResults"
+_DETAIL_BASE = "https://{hostpath}/ats/careers/v2/viewRequisition"
 # One regex over the consistent CwsV2 markup: (url, rid, title) then ALL of the card's trailing
 # <div> cells (0-3 of them, tenant-dependent) — classified by _classify_divs, not by position.
 _ROW = re.compile(
@@ -52,6 +56,17 @@ _ROW = re.compile(
 )
 _DIV_CELL = re.compile(r"<div[^>]*>(.*?)</div>", re.S | re.I)
 _TAG = re.compile(r"<[^>]+>")
+
+# --- detail (Tier-3 JD recovery / freshness confirm) ---------------------------------------------
+# A ``viewRequisition`` detail page carries a ``rid=`` query param -- reused to validate/normalize
+# ref.apply_url/listing_url before refetching it.
+_RID_RE = re.compile(r"[?&]rid=(\d+)", re.IGNORECASE)
+# Verified live (fabricated rid on phg.tbe.taleo.net/phg01, HTTP 200): a removed/nonexistent
+# requisition renders NO ``application/ld+json`` JobPosting block and instead embeds this fixed,
+# provider-authored message (page ``document.title`` is also set to "Job Not Available"). Used
+# ONLY alongside a failed JSON-LD parse -- never on its own -- a live JD would already have been
+# returned by the JSON-LD branch first.
+_GONE_RE = re.compile(r"no longer available|job not available", re.IGNORECASE)
 
 # "City, ST" or "ST - City" shapes — used to recognize a location div by content, since div
 # *position* varies per tenant (see module docstring / inventory-D).
@@ -240,6 +255,58 @@ class TaleoBEProvider(BaseProvider):
             if new == 0:
                 break
         return raws
+
+    # --- detail (Tier-3 JD recovery / freshness confirm) ---------------------------------------
+
+    @classmethod
+    def _detail_url(cls, ref: DetailRef) -> str | None:
+        """Derive the per-requisition ``viewRequisition`` URL for ``ref``.
+
+        ``fetch``'s ``_parse_rows`` already sets ``RawJob.url`` to the exact scraped ``<a href>``
+        (unescaped), so ``ref.apply_url``/``ref.listing_url`` normally IS the detail URL already --
+        used as-is once validated (carries a ``rid=`` param). Falls back to rebuilding from
+        ``ref.token`` (``"{hostpath}|{org}|{cws}[|{company}]"``) + ``ref.id`` when no usable URL
+        survives. Returns ``None`` (never raises) when nothing recognisable is derivable."""
+        for url in (ref.apply_url, ref.listing_url):
+            if url and _RID_RE.search(url):
+                return url
+        hostpath, org, cws, _company = cls._parse(ref.token or "")
+        if hostpath and org and cws and ref.id:
+            return f"{_DETAIL_BASE.format(hostpath=hostpath)}?org={org}&cws={cws}&rid={ref.id}"
+        return None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """Fetch one requisition's full JD via its own ``viewRequisition`` detail page (Tier-3
+        recovery / freshness-sweep confirm).
+
+        Live-verified (NVR Inc / ``phg.tbe.taleo.net``): the detail page carries a
+        ``application/ld+json`` ``JobPosting`` block (reusing
+        :meth:`BaseProvider.extract_jsonld_jobs`) whose ``description`` is the full JD HTML. A
+        removed/nonexistent ``rid`` does **NOT** 404 -- it's a soft-shell HTTP 200 page with NO
+        JSON-LD block and a fixed "no longer available" / "Job Not Available" marker instead
+        (:data:`_GONE_RE`). The confirmed-gone path is therefore the VERIFIED-soft-404 branch the
+        contract allows, gated on BOTH a failed JSON-LD parse AND the marker text (never the
+        marker alone), so a live JD whose own prose says "no longer available" is never misread as
+        gone -- the JSON-LD branch above would already have returned it. A real HTTP 404/410 is
+        still handled defensively (returns ``None``) in case some tenant genuinely 404s, though
+        none observed live did. Anything else -- unbuildable detail URL, 5xx/429/timeout, or a 200
+        with neither JSON-LD nor a gone-marker -- RAISES (indeterminate), per contract."""
+        detail_url = self._detail_url(ref)
+        if detail_url is None:
+            raise RuntimeError(f"taleobe detail: no derivable detail URL for {ref!s}")
+        try:
+            html_text = await fetcher.get_text(detail_url)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        for job in self.extract_jsonld_jobs(html_text):
+            description = job.get("description")
+            if isinstance(description, str) and description.strip():
+                return description
+        if _GONE_RE.search(html_text):
+            return None
+        raise RuntimeError(f"taleobe detail: no JobPosting JSON-LD and no gone-signal for {ref!s}")
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
