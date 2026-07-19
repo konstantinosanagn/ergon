@@ -132,3 +132,84 @@ def test_zero_result_board_drops_its_stale_jobs_on_next_build(monkeypatch, tmp_p
         f"expected the departed job to be dropped (board crawled successfully with 0 results), "
         f"but {n} stale row(s) were carried forward"
     )
+
+
+class _FakeRegMismatch:
+    """A registry whose OWN key ('co-reg') differs from ``normalize_company()`` of the ATS-
+    returned company name ('Acme Inc' -> 'acme') -- the case ``_FakeReg`` above misses,
+    since there the two happen to coincide ('co' == normalize_company('Co'))."""
+
+    def all(self):
+        return {"co-reg": {"ats": "greenhouse", "token": "stripe", "domain": "acme.com"}}
+
+
+def test_zero_result_board_drops_stale_jobs_when_registry_key_differs_from_company_name(
+    monkeypatch, tmp_path
+):
+    """Same scenario as the zero-result test above, except the seed registry's key for the board
+    ('co-reg') differs from the ATS-derived ``company_key`` the PRIOR index actually stored for
+    its jobs ('acme', from ``normalize_company('Acme Inc')``). A fix that just adds the
+    registry key (``regkey``) to ``crawled_keys`` would drop the WRONG key -- ``carry_forward``
+    would never touch the stale 'acme' row. The robust fix must resolve the departed board's
+    real prior ``company_key`` via ``(source, board_token)`` from the prior index.
+    """
+    _patch(monkeypatch)
+    import ergon_tracker.registry.store as store_mod
+
+    monkeypatch.setattr(store_mod, "SeedRegistry", _FakeRegMismatch)
+
+    old_job = JobPosting.create(
+        source="greenhouse",
+        source_job_id="old-1",
+        company="Acme Inc",
+        title="Old Role",
+        board_token="stripe",
+    )
+    fresh1 = tmp_path / "fresh1.sqlite"
+    from ergon_tracker.index.build import append_jobs
+    from ergon_tracker.index.db import fresh_db
+
+    fresh_db(fresh1)
+    con1 = connect(fresh1)
+    try:
+        con1.execute("PRAGMA foreign_keys = OFF")
+        append_jobs(con1, [old_job], build_id="b0")
+        con1.commit()
+    finally:
+        con1.close()
+    day1_index = tmp_path / "day1.sqlite"
+    build_index_from_fresh_db(fresh1, day1_index, build_id="b0")
+    stored_company_key = (
+        connect(day1_index, read_only=True).execute("SELECT company_key FROM jobs").fetchone()[0]
+    )
+    assert stored_company_key == "acme", (
+        "sanity: the prior index must store the ATS-derived company_key ('acme'), not the "
+        f"registry's own key ('co-reg') -- got {stored_company_key!r}"
+    )
+
+    # --- Day 2: the SAME board is crawled successfully, now returns 0 postings. ---
+    bs = BoardState(provider="greenhouse", token="stripe", next_due="2000-01-01")
+    states = {bs.key: bs}
+    fresh2 = tmp_path / "fresh2.sqlite"
+    outcome, _cursor = anyio.run(bi._crawl_due, 10, states, fresh2, "b1", 0, False, day1_index)
+
+    crawled_keys: set = (
+        set().union(*(o["companies"] for o in outcome.values())) if outcome else set()
+    )
+    assert "acme" in crawled_keys, (
+        "zero-result carry-forward must resolve the departed board's PRIOR company_key "
+        "('acme') via board_token, not just the registry's own key "
+        f"('co-reg') -- got {crawled_keys!r}"
+    )
+
+    day2_index = tmp_path / "day2.sqlite"
+    build_index_from_fresh_db(
+        fresh2, day2_index, build_id="b1", prev_db=day1_index, crawled_keys=crawled_keys
+    )
+
+    n = connect(day2_index, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    assert n == 0, (
+        "expected the departed job to be dropped even though the registry key ('co-reg') "
+        f"differs from the ATS-derived company_key ('acme'), but {n} stale row(s) were "
+        "carried forward"
+    )

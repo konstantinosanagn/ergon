@@ -997,6 +997,7 @@ async def _crawl_due(
     build_id: str,
     cursor: int = 0,
     capture_rich: bool = False,
+    prev_db: Path | str | None = None,
 ) -> tuple[dict, int]:
     """Crawl the due boards in this run's rotating window, streaming jobs into ``fresh_db_path``.
 
@@ -1005,6 +1006,9 @@ async def _crawl_due(
     the CI timeout and durably seeds board_state; crash-isolated per board. When ``capture_rich`` is
     set, each board's FULL descriptions are also captured to the fresh DB's ``fresh_rich`` table (the
     index only keeps a snippet) so the incremental rich reconcile can index them — still O(window) on disk.
+
+    ``prev_db`` (optional): the prior published index, used ONLY to resolve a zero-result board's
+    real prior ``company_key`` by ``(source, board_token)`` -- see the zero-results branch below.
     """
     import anyio
 
@@ -1019,6 +1023,25 @@ async def _crawl_due(
     from ergon_tracker.providers.base import get_provider, load_builtins
 
     load_builtins()
+
+    # (source, board_token) -> the set of company_key values the PRIOR index actually stored for
+    # that board. `to_row` computes `company_key = normalize_company(job.company)` -- the
+    # ATS-returned name -- which commonly differs from the seed registry's OWN key (`regkey`,
+    # below) for the same board (e.g. a legal-name vs. brand-name mismatch). A zero-result board
+    # has no fresh job to derive that name from, so when it departs we resolve its real prior
+    # company_key(s) here instead of guessing with `regkey` (see the zero-results branch).
+    prior_company_keys_by_board: dict[tuple[str, str], set[str]] = {}
+    if prev_db is not None and Path(prev_db).exists():
+        pcon = connect(prev_db, read_only=True)
+        try:
+            for source, token, ckey in pcon.execute(
+                "SELECT DISTINCT source, board_token, company_key FROM jobs "
+                "WHERE board_token IS NOT NULL AND company_key IS NOT NULL"
+            ):
+                prior_company_keys_by_board.setdefault((source, token), set()).add(ckey)
+        finally:
+            pcon.close()
+
     window, next_cursor = _registry_window(cursor, limit_companies)
     boards = {}
     for key, e in window:
@@ -1122,10 +1145,20 @@ async def _crawl_due(
                 # results, so it must still register as crawled: carry_forward only carries
                 # forward companies NOT in crawled_keys, and a company key that never appears here
                 # (because no job survived to be normalize_company()'d) would silently keep its
-                # stale prior-index jobs forever. regkey is the registry's own company key for
-                # this board, so it's the right key even with zero normalized jobs to derive one
-                # from.
-                outcome[bkey]["companies"].add(regkey)
+                # stale prior-index jobs forever.
+                #
+                # regkey (the seed registry's OWN key for this board) is only a FALLBACK: the
+                # prior index's stored `company_key` is `normalize_company(job.company)` -- the
+                # ATS-returned name -- which commonly differs from regkey. Resolve the board's
+                # REAL prior company_key(s) by (source, board_token) so the drop reliably fires;
+                # only fall back to regkey when there's no prior row for this board (e.g. a
+                # brand-new board that happened to crawl empty on its first run -- nothing to
+                # drop either way).
+                prior_keys = prior_company_keys_by_board.get((e["ats"], e["token"]))
+                if prior_keys:
+                    outcome[bkey]["companies"].update(prior_keys)
+                else:
+                    outcome[bkey]["companies"].add(regkey)
         except Exception:  # noqa: BLE001 - one bad board never sinks the crawl
             outcome[bkey]["error"] = True
             outcome[bkey]["companies"].clear()  # not "crawled" -> prev jobs carry forward
@@ -1301,7 +1334,7 @@ def main(argv: list[str]) -> None:
         fresh_path = out / "fresh.sqlite"
         with _phase("crawl"):
             outcome, next_cursor = anyio.run(
-                _crawl_due, limit, states, fresh_path, build_id, cursor, rich
+                _crawl_due, limit, states, fresh_path, build_id, cursor, rich, prev_db
             )
         # Fold the first-party Workable network feed into the same fresh.sqlite (its rows flow into
         # the index alongside the crawled boards). Done before changed_companies_sql so new network

@@ -19,7 +19,7 @@ from ergon_tracker.index.db import connect  # noqa: E402
 
 
 async def _fake_crawl_due(
-    limit_companies, states, fresh_db_path, build_id, cursor=0, capture_rich=False
+    limit_companies, states, fresh_db_path, build_id, cursor=0, capture_rich=False, prev_db=None
 ):
     """Write a few jobs straight into the fresh DB (no network), return (outcome, next_cursor)."""
     from ergon_tracker.index.build import append_jobs

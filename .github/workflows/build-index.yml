@@ -19,6 +19,12 @@ on:
       detail_max:
         description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 25000; override to measure or throttle a single run."
         default: "25000"
+      liveness:
+        description: "Force the apply-URL liveness pass (--liveness) on a manual run. Also runs automatically on the daily schedule, mirroring --detail."
+        default: "false"
+      liveness_max_boards:
+        description: "Per-run cap on DUE boards the liveness pass re-fetches (ERGON_LIVENESS_MAX_BOARDS). Daily default 2000; override to measure or throttle a single run."
+        default: "2000"
       rich_backfill:
         description: "Rich COVERAGE ACCELERATOR (ERGON_RICH_BACKFILL_FROM_INDEX). '1' embeds the un-vectored backlog straight from the main index (snippet-quality, self-upgrades on next crawl) to reach ~100% coverage in 1-2 catch-up runs instead of ~7. Leave off for normal full-quality cron."
         default: ""
@@ -78,11 +84,19 @@ jobs:
           gh release download index-latest --dir dist --pattern 'manifest-vectors.json' || echo "no prev vectors manifest"
           gh release download index-latest --dir dist --pattern 'index-detail.sqlite.gz' || echo "no prev detail tier"
           gh release download index-latest --dir dist --pattern 'manifest-detail.json' || echo "no prev detail manifest"
+          gh release download index-latest --dir dist --pattern 'index-liveness.sqlite.gz' || echo "no prev liveness tier"
+          gh release download index-latest --dir dist --pattern 'manifest-liveness.json' || echo "no prev liveness manifest"
           [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
           # decompress the persisted Tier-3 detail sidecar so a manual --detail run carries forward
           # already-recovered fields + the retry/cursor state (only new/changed sigs re-fetch);
           # absent on first run (or every non-detail run, since it's manual-only) -> built cold.
           [ -f dist/index-detail.sqlite.gz ] && gunzip -kf dist/index-detail.sqlite.gz || true
+          # decompress the persisted liveness sidecar so the daily --liveness pass carries forward
+          # each posting's checked_at/dead_streak/verdict (recheck cadence + the dead_streak>=2
+          # transient-blip gate need this history -- without it every run would re-check every due
+          # row from a cold streak of 0, and an unconfirmed source could never accumulate the 2
+          # consecutive weekly misses it needs to actually expire); absent on first run -> built cold.
+          [ -f dist/index-liveness.sqlite.gz ] && gunzip -kf dist/index-liveness.sqlite.gz || true
           # decompress the persisted vectors sidecar so the incremental reconcile carries forward its
           # embeddings (only new/changed postings re-embed); absent on first run -> built cold.
           # One-time back-compat: the legacy asset carries the pre-migration schema (job_text + FTS).
@@ -131,6 +145,9 @@ jobs:
           ERGON_RICH_BACKFILL_FROM_INDEX: "${{ github.event.inputs.rich_backfill || '' }}"  # '1' on a catch-up dispatch: embed the un-vectored backlog directly (see rich._backfill_from_index)
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
           ERGON_DETAIL_CONCURRENCY: "24"             # Tier-3 detail: in-flight fetch concurrency (per-host politeness enforced separately by AsyncFetcher's token-bucket)
+          ERGON_LIVENESS_MAX_BOARDS: "${{ github.event.inputs.liveness_max_boards || '2000' }}"  # liveness: per-run cap on DUE boards re-fetched (rotating cursor, dispatch-overridable)
+          ERGON_LIVENESS_CONCURRENCY: "24"           # liveness: in-flight board/detail-confirm fetch concurrency (mirrors ERGON_DETAIL_CONCURRENCY; per-host politeness enforced separately)
+          ERGON_LIVENESS_RECHECK_DAYS: "7"           # liveness: don't re-check a row until this many days since its last check (see liveness.py::RECHECK_DAYS)
         run: |
           # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
@@ -163,10 +180,21 @@ jobs:
           # whole run (publish never runs). Non-fatal add-on like --rich: the core index publishes
           # first, so a detail failure never blocks the build. Also forceable on a manual run via
           # detail=true.
+          # --liveness now runs on the daily schedule too (mirrors --detail's activation exactly):
+          # the pass re-fetches DUE boards (rotating cursor, ERGON_LIVENESS_MAX_BOARDS-bounded) and
+          # flips confirmed-dead apply-links to status='expired' directly on the already-published
+          # core index -- see build_and_publish_liveness's docstring for the re-publish ordering.
+          # The carried-forward index-liveness.sqlite sidecar (decompressed above, same pattern as
+          # index-detail.sqlite) is what makes dead_streak accumulate across runs instead of
+          # resetting to 0 every build -- without it, sources gated on dead_streak>=2 (everything
+          # NOT in CONFIRM_VIA_DETAIL_SOURCES, e.g. dejobs) could never actually expire. Non-fatal
+          # add-on like --rich/--detail: the core index publishes first. Also forceable on a manual
+          # run via liveness=true.
           uv run python scripts/build_index.py --incremental \
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
             ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }} \
-            ${{ (github.event.inputs.detail == 'true' || github.event_name == 'schedule') && '--detail' || '' }}
+            ${{ (github.event.inputs.detail == 'true' || github.event_name == 'schedule') && '--detail' || '' }} \
+            ${{ (github.event.inputs.liveness == 'true' || github.event_name == 'schedule') && '--liveness' || '' }}
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
@@ -184,7 +212,7 @@ jobs:
           # some), so one missing file never fails the whole publish.
           ASSETS=""
           for f in index.sqlite.gz manifest.json index-slim.sqlite.gz manifest-slim.json \
-                   manifest-vectors.json manifest-detail.json \
+                   manifest-vectors.json manifest-detail.json manifest-liveness.json \
                    index-delta.sqlite.gz manifest-delta.json deltas.json \
                    gates.json board_state.json history.jsonl spec_health.json rediscover_queue.json \
                    shards.json coverage.json INDEX_STATUS.md crawl_cursor.json; do
@@ -203,6 +231,12 @@ jobs:
           # case above) can never ship an unpaired db under a manifest that doesn't describe it.
           [ -f dist/manifest-detail.json ] && [ -f dist/index-detail.sqlite.gz ] && \
             ASSETS="$ASSETS dist/index-detail.sqlite.gz" || true
+          # Same paired-asset guard for the liveness sidecar: publish index-liveness.sqlite.gz
+          # ONLY when manifest-liveness.json is also present, so a partial/interrupted download of
+          # the prior pair can never ship an unpaired db under a manifest that doesn't describe it
+          # (identical reasoning to the vectors/detail guards above).
+          [ -f dist/manifest-liveness.json ] && [ -f dist/index-liveness.sqlite.gz ] && \
+            ASSETS="$ASSETS dist/index-liveness.sqlite.gz" || true
           ASSETS="$ASSETS $(ls dist/shard-*.sqlite.gz 2>/dev/null)"
           ASSETS="$ASSETS $(ls dist/index-delta-*.sqlite.gz 2>/dev/null)"  # v2.2 chain deltas
           if [ -z "$ASSETS" ]; then echo "no assets to publish"; exit 0; fi
