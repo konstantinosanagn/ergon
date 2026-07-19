@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import anyio
+import httpx
 
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
@@ -369,9 +370,14 @@ class WorkdayProvider(BaseProvider):
         """Fetch one posting's full JD via the per-tenant cxs detail resource (Tier-3 recovery).
 
         The cxs URL is derived deterministically from ``ref.apply_url`` (falling back to
-        ``ref.listing_url``) — see :meth:`_cxs_detail_url`. Non-raising: any unparseable URL,
-        fetch failure, non-JSON payload, or shape mismatch (including a truthy non-dict at
-        ``jobPostingInfo``/``jobDescription``) returns ``None``, never an exception."""
+        ``ref.listing_url``) — see :meth:`_cxs_detail_url`. Returns ``None`` ONLY on a
+        confirmed-gone signal: a real HTTP 404/410 from the cxs resource (verified by recon —
+        Workday returns a genuine 404 status for a removed posting, not a soft-404 body), or an
+        unbuildable detail URL is treated the same as any other unclassifiable shape (see below).
+        Everything indeterminate/transient — other HTTP statuses, timeouts, rate limits,
+        non-JSON payload, or an unexpected 200 shape (non-dict payload, missing
+        ``jobPostingInfo``/``jobDescription``) — RAISES instead, so the freshness sweep never
+        expires a still-live posting on an ambiguous signal."""
         cxs_url: str | None = None
         for url in (ref.apply_url, ref.listing_url):
             if not url:
@@ -380,19 +386,21 @@ class WorkdayProvider(BaseProvider):
             if cxs_url:
                 break
         if cxs_url is None:
-            return None
+            raise RuntimeError(f"workday detail: no derivable cxs URL for {ref!s}")
         try:
             data = await fetcher.get_json(cxs_url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(data, dict):
-            return None
+            raise RuntimeError(f"workday detail: non-dict payload for {ref!s}")
         job_posting_info = data.get("jobPostingInfo")
         if not isinstance(job_posting_info, dict):
-            return None
+            raise RuntimeError(f"workday detail: missing jobPostingInfo for {ref!s}")
         job_description = job_posting_info.get("jobDescription")
         if not isinstance(job_description, str) or not job_description.strip():
-            return None
+            raise RuntimeError(f"workday detail: missing jobDescription for {ref!s}")
         # The SAME cxs response carries a STRUCTURED location the list feed lacks (its `locationsText`
         # is a "N Locations" placeholder for multi-location reqs). Return it so the merge fills the
         # index row's NULL country -- Workday is ~44k of the whole index's country gap.

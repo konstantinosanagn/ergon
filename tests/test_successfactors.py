@@ -6,7 +6,9 @@ import httpx
 import pytest
 import respx
 
+from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
+from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
 from ergon_tracker.providers.successfactors import SuccessFactorsProvider
 
@@ -170,3 +172,98 @@ async def test_root_csb_no_siteid_with_company_label() -> None:
     assert len(raws) == 1
     assert raws[0].source_job_id == "1406195133"
     assert raws[0].company == "LTIMindtree"  # explicit label, not the siteid sentinel
+
+
+# --- fetch_detail: 404-vs-transient hardening contract ----------------------
+
+DETAIL_APPLY_URL = f"https://{HOST}/{SITEID}/job/Some-Slug-12345/12345/"
+
+
+class _FakeFetcher:
+    """Stands in for AsyncFetcher: returns a fixed body, or raises a fixed exception."""
+
+    def __init__(self, *, text: str | None = None, exc: BaseException | None = None) -> None:
+        self._text = text
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get_text(self, url: str, **kw: object) -> str:
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        assert self._text is not None
+        return self._text
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", DETAIL_APPLY_URL)
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+def _detail_ref(apply_url: str | None = DETAIL_APPLY_URL) -> DetailRef:
+    return DetailRef(
+        id="12345", source="successfactors", token=f"{HOST}|{SITEID}", apply_url=apply_url,
+        listing_url=None, content_sig="s",
+    )
+
+
+async def test_fetch_detail_404_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(404))
+    res = await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_410_returns_none() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(410))
+    res = await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+    assert res is None
+
+
+async def test_fetch_detail_transient_error_raises() -> None:
+    fetcher = _FakeFetcher(exc=TransientHTTPError("503 from x"))
+    with pytest.raises(TransientHTTPError):
+        await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_503_status_raises() -> None:
+    fetcher = _FakeFetcher(exc=_http_status_error(503))
+    with pytest.raises(httpx.HTTPStatusError):
+        await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_alive_returns_content() -> None:
+    html = (
+        '<html><body><div id="jobdescription"><p>Full JD body text here.</p></div>'
+        "</body></html>"
+    )
+    fetcher = _FakeFetcher(text=html)
+    res = await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+    assert fetcher.calls == [DETAIL_APPLY_URL]
+    text = res.text if hasattr(res, "text") else res
+    assert "Full JD body text here." in text
+
+
+async def test_fetch_detail_missing_url_raises() -> None:
+    fetcher = _FakeFetcher(text="<html></html>")
+    with pytest.raises(RuntimeError):
+        await SuccessFactorsProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
+
+
+async def test_fetch_detail_empty_body_raises() -> None:
+    fetcher = _FakeFetcher(text="")
+    with pytest.raises(RuntimeError):
+        await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+async def test_fetch_detail_no_jd_node_raises() -> None:
+    # A 200 with a page that has no known JD shape (no #jobdescription, no itemprop=description,
+    # no .joblayouttoken) is indeterminate -- not a verified soft-404 -- so it must raise.
+    html = "<html><body><p>This page has some other unrelated content.</p></body></html>"
+    fetcher = _FakeFetcher(text=html)
+    with pytest.raises(RuntimeError):
+        await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)

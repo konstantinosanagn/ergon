@@ -27,10 +27,10 @@ whose list APIs reshuffle/paginate non-deterministically (mirrors ``liveness.py`
 board-membership miss on one of these is only a CANDIDATE, never a departure by itself; it must be
 CONFIRMED via the provider's per-posting ``fetch_detail`` (already wired for Tier-3 JD recovery,
 see ``index/detail.py``'s ``DetailRef``/``reconcile_detail_tier``) before anything is expired.
-``fetch_detail``'s contract is non-raising: ``None``/empty means the posting is gone (confirmed
-dead); a real ``DetailFetch``/``str`` means it's still live (the list-miss was a false positive --
-KEEP the row active); an exception (should not happen per contract, but this module never trusts
-that blindly) is "could not determine" -- also KEEP, retry next run. Two routing strategies
+``fetch_detail``'s return/raise contract: a returned ``None``/empty means the posting is gone
+(a definitive 404/410 -- confirmed dead); a real ``DetailFetch``/``str`` means it's still live (the
+list-miss was a false positive -- KEEP the row active); a RAISED exception is "could not determine"
+(transient/indeterminate) -- also KEEP, retry next run. Two routing strategies
 (``sweep_search_index_boards``), per the design's measured per-provider strategy table:
 
 - ``oracle``/``smartrecruiters``/``successfactors`` (bulk list is cheap-ish): bulk-relist for the
@@ -404,14 +404,16 @@ async def confirm_departed(ref: DetailRef, fetcher: AsyncFetcher) -> bool | None
     from a reshuffled/paginated board list -- not yet known to be a real departure).
 
     Returns:
-      - ``True``  -- CONFIRMED DEAD: ``fetch_detail`` returned ``None``/empty text, its documented
-        contract for "this posting is gone" (``providers/base.py``).
+      - ``True``  -- CONFIRMED DEAD: ``fetch_detail`` returned ``None``/empty text, which under its
+        return/raise contract (``providers/base.py``) means a DEFINITIVE not-found (an explicit HTTP
+        404/410 or a verified soft-404 body), the only signal that expires a row.
       - ``False`` -- CONFIRMED ALIVE: a real detail (non-empty text) came back -- the board-list
         miss was a reshuffle/pagination false positive, not a departure. The caller MUST keep this
         row active.
-      - ``None``  -- COULD NOT DETERMINE: unknown provider, or ``fetch_detail`` raised despite its
-        documented non-raising contract. The caller MUST keep this row active and let a later run
-        retry -- an error is never evidence of death.
+      - ``None``  -- COULD NOT DETERMINE: unknown provider, or ``fetch_detail`` RAISED -- its
+        contract for an INDETERMINATE/TRANSIENT failure (5xx/429/timeout/parse error/unbuildable
+        detail URL). The caller MUST keep this row active and let a later run retry -- an error (as
+        opposed to a definitive 404) is never evidence of death.
     """
     prov = get_provider(ref.source)
     if prov is None:

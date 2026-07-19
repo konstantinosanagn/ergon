@@ -10,6 +10,7 @@ length-threshold + whole-page-fallback logic that guards against that."""
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -85,26 +86,26 @@ def test_radancy_fetch_detail_falls_back_to_whole_page_when_chip_is_short() -> N
     assert fetcher.calls == [_APPLY_URL]
 
 
-def test_radancy_fetch_detail_empty_page_is_none() -> None:
+def test_radancy_fetch_detail_empty_page_raises() -> None:
     fetcher = _FakeFetcher("   ")
     ref = _ref()
-    desc = anyio.run(lambda: RadancyProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RadancyProvider().fetch_detail(ref, fetcher))
 
 
-def test_radancy_fetch_detail_no_urls_is_none() -> None:
+def test_radancy_fetch_detail_no_urls_raises() -> None:
     fetcher = _FakeFetcher("<html><body>irrelevant</body></html>")
     ref = _ref(apply_url=None, listing_url=None)
-    desc = anyio.run(lambda: RadancyProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RadancyProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []  # no fetch attempted when neither url is present
 
 
-def test_radancy_fetch_detail_fetch_raises_is_none() -> None:
+def test_radancy_fetch_detail_fetch_raises_propagates() -> None:
     fetcher = _FakeFetcher("<html></html>", raise_exc=True)
     ref = _ref()
-    desc = anyio.run(lambda: RadancyProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError, match="boom"):
+        anyio.run(lambda: RadancyProvider().fetch_detail(ref, fetcher))
 
 
 def test_radancy_fetch_detail_falls_back_to_listing_url() -> None:

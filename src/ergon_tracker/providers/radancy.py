@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from selectolax.parser import HTMLParser
 
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType
@@ -186,17 +187,23 @@ class RadancyProvider(BaseProvider):
         (:attr:`_DETAIL_SELECTORS`) and take the FIRST match whose text clears
         :attr:`_DETAIL_MIN_LEN`; if none clears it, fall back to the whole-page text (recon's
         robust default -- nav-chrome noise is acceptable, and it reliably surfaces the JD).
-        Non-raising: a missing URL, fetch failure, or empty page returns ``None``, never an
-        exception."""
+        Returns ``None`` ONLY on a confirmed-gone signal: a real HTTP 404/410 from the detail
+        page (Radancy has no separate soft-404 body verified by recon — the CMS page itself
+        4xx/5xxs). A missing derivable URL is NOT evidence of death, and every other
+        indeterminate/transient condition — other HTTP statuses, timeouts, rate limits, or an
+        empty page body — RAISES instead of returning ``None``, so the freshness sweep never
+        expires a still-live posting on an ambiguous signal."""
         url = ref.apply_url or ref.listing_url
         if not url:
-            return None
+            raise RuntimeError(f"radancy detail: no apply_url/listing_url for {ref!s}")
         try:
             html = await fetcher.get_text(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(html, str) or not html.strip():
-            return None
+            raise RuntimeError(f"radancy detail: empty page body for {ref!s}")
         tree = HTMLParser(html)
         text: str | None = None
         for selector in self._DETAIL_SELECTORS:
@@ -215,7 +222,7 @@ class RadancyProvider(BaseProvider):
                 else tree.text(separator=" ", strip=True)
             ) or None
         if text is None:
-            return None
+            raise RuntimeError(f"radancy detail: no extractable text for {ref!s}")
         # Most tenants embed a JSON-LD JobPosting whose `jobLocation` is a STRUCTURED address
         # (city/region/country) -> return it so the merge fills the index row's NULL country. Not
         # universal (some tenant templates carry no ld+json); those degrade to the bare-str body.

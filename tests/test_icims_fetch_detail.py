@@ -13,6 +13,7 @@ missing/garbage trailing slug, but ``in_iframe=1`` is REQUIRED (without it the p
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -82,7 +83,7 @@ def test_icims_fetch_detail_falls_back_to_listing_url() -> None:
     assert fetcher.calls == ["https://careers-costco.icims.com/jobs/55555/job?in_iframe=1"]
 
 
-def test_icims_fetch_detail_no_jsonld_is_none() -> None:
+def test_icims_fetch_detail_no_jsonld_raises() -> None:
     fetcher = _FakeFetcher("<html><body>no ld+json here</body></html>")
     ref = DetailRef(
         id="4",
@@ -92,11 +93,11 @@ def test_icims_fetch_detail_no_jsonld_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
 
 
-def test_icims_fetch_detail_no_job_posting_type_is_none() -> None:
+def test_icims_fetch_detail_no_job_posting_type_raises() -> None:
     html = (
         '<html><body><script type="application/ld+json">'
         '{"@type":"Organization","name":"Costco"}'
@@ -111,11 +112,11 @@ def test_icims_fetch_detail_no_job_posting_type_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
 
 
-def test_icims_fetch_detail_empty_description_is_none() -> None:
+def test_icims_fetch_detail_empty_description_raises() -> None:
     fetcher = _FakeFetcher(_page("   "))
     ref = DetailRef(
         id="6",
@@ -125,12 +126,12 @@ def test_icims_fetch_detail_empty_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
 
 
-def test_icims_fetch_detail_non_dict_jsonld_is_none() -> None:
-    # A JSON-LD block that parses but isn't a dict (or list-of-dicts) shape must not raise.
+def test_icims_fetch_detail_non_dict_jsonld_raises() -> None:
+    # A JSON-LD block that parses but isn't a dict (or list-of-dicts) shape is INDETERMINATE.
     html = '<html><body><script type="application/ld+json">"just a string"</script></body></html>'
     fetcher = _FakeFetcher(html)
     ref = DetailRef(
@@ -141,12 +142,12 @@ def test_icims_fetch_detail_non_dict_jsonld_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
 
 
-def test_icims_fetch_detail_malformed_jsonld_is_none() -> None:
-    # Invalid JSON in the ld+json block must not raise.
+def test_icims_fetch_detail_malformed_jsonld_raises() -> None:
+    # Invalid JSON in the ld+json block is INDETERMINATE.
     html = (
         '<html><body><script type="application/ld+json">'
         '{"@type": "JobPosting", "description": }'
@@ -161,11 +162,11 @@ def test_icims_fetch_detail_malformed_jsonld_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
 
 
-def test_icims_fetch_detail_non_string_description_is_none() -> None:
+def test_icims_fetch_detail_non_string_description_raises() -> None:
     html = (
         '<html><body><script type="application/ld+json">'
         '{"@type":"JobPosting","description":{"nested":"not-a-string"}}'
@@ -180,13 +181,13 @@ def test_icims_fetch_detail_non_string_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
 
 
-def test_icims_fetch_detail_non_icims_apply_url_is_none() -> None:
+def test_icims_fetch_detail_non_icims_apply_url_raises() -> None:
     # No iCIMS host suffix and no iCIMS-shaped path (no "/jobs/search", "/careers-home/jobs", or
-    # "/jobs/{id}/") -> matches() rejects it -> None without ever calling the fetcher.
+    # "/jobs/{id}/") -> matches() rejects it -> raises without ever calling the fetcher.
     fetcher = _FakeFetcher(_page())
     ref = DetailRef(
         id="10",
@@ -196,12 +197,12 @@ def test_icims_fetch_detail_non_icims_apply_url_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []
 
 
-def test_icims_fetch_detail_unparseable_no_id_is_none() -> None:
+def test_icims_fetch_detail_unparseable_no_id_raises() -> None:
     fetcher = _FakeFetcher(_page())
     ref = DetailRef(
         id="11",
@@ -211,12 +212,12 @@ def test_icims_fetch_detail_unparseable_no_id_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []
 
 
-def test_icims_fetch_detail_no_urls_is_none() -> None:
+def test_icims_fetch_detail_no_urls_raises() -> None:
     fetcher = _FakeFetcher(_page())
     ref = DetailRef(
         id="12",
@@ -226,12 +227,12 @@ def test_icims_fetch_detail_no_urls_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []
 
 
-def test_icims_fetch_detail_fetcher_exception_is_none() -> None:
+def test_icims_fetch_detail_fetcher_exception_raises() -> None:
     class _RaisingFetcher:
         async def get_text(self, url: str, **kw: object) -> str:
             raise TimeoutError("boom")
@@ -244,8 +245,8 @@ def test_icims_fetch_detail_fetcher_exception_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: ICIMSProvider().fetch_detail(ref, _RaisingFetcher()))
-    assert desc is None
+    with pytest.raises(TimeoutError):
+        anyio.run(lambda: ICIMSProvider().fetch_detail(ref, _RaisingFetcher()))
 
 
 def test_base_fetch_detail_is_none() -> None:

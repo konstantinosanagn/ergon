@@ -8,6 +8,7 @@ discipline for a truthy non-dict payload shape."""
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -125,7 +126,9 @@ def test_oracle_fetch_detail_falls_back_to_listing_url() -> None:
     }
 
 
-def test_oracle_fetch_detail_missing_description_is_none() -> None:
+def test_oracle_fetch_detail_missing_description_raises() -> None:
+    # Well-formed item, but no JD-relevant field present -- not a verified soft-404, so raise
+    # (indeterminate/keep) rather than return None (which would expire a still-live posting).
     payload: dict = {"items": [{"Id": "17517", "SomeOtherField": "x"}]}
     ref = DetailRef(
         id="4",
@@ -135,11 +138,11 @@ def test_oracle_fetch_detail_missing_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_empty_description_is_none() -> None:
+def test_oracle_fetch_detail_empty_description_raises() -> None:
     payload = _orc_payload("   ", None, None)
     ref = DetailRef(
         id="5",
@@ -149,12 +152,12 @@ def test_oracle_fetch_detail_empty_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_non_dict_description_is_none() -> None:
-    # ``ExternalDescriptionStr`` truthy but not a string must not raise.
+def test_oracle_fetch_detail_non_dict_description_raises() -> None:
+    # ``ExternalDescriptionStr`` truthy but not a string -- no usable JD text -- indeterminate, raise.
     payload = {"items": [{"Id": "17517", "ExternalDescriptionStr": {"nested": "not-a-string"}}]}
     ref = DetailRef(
         id="6",
@@ -164,12 +167,13 @@ def test_oracle_fetch_detail_non_dict_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_truthy_non_dict_payload_is_none() -> None:
-    # A whole payload that's truthy but not a dict (e.g. a bare list/string) must not raise.
+def test_oracle_fetch_detail_truthy_non_dict_payload_raises() -> None:
+    # A whole payload that's truthy but not a dict (e.g. a bare list/string) is an unclassifiable
+    # shape -- not a verified soft-404 -- so it must raise, not silently expire the posting.
     payload = "oops"
     ref = DetailRef(
         id="7",
@@ -179,13 +183,14 @@ def test_oracle_fetch_detail_truthy_non_dict_payload_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_non_dict_item_is_none() -> None:
-    # ``items`` truthy but its first element not a dict must not raise (the SmartRecruiters-class
-    # regression, at the envelope level this time).
+def test_oracle_fetch_detail_non_dict_item_raises() -> None:
+    # ``items`` truthy but its first element not a dict is an unclassifiable shape -- not a
+    # verified soft-404 -- so it must RAISE (indeterminate/keep), not return None (which would
+    # expire a still-live posting on an ambiguous signal).
     payload = {"items": ["oops"]}
     ref = DetailRef(
         id="12",
@@ -195,11 +200,12 @@ def test_oracle_fetch_detail_non_dict_item_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_non_oracle_apply_url_is_none() -> None:
+def test_oracle_fetch_detail_non_oracle_apply_url_raises() -> None:
+    # An unbuildable detail URL is NOT evidence of death -- raise (keep), never expire.
     payload = _orc_payload()
     ref = DetailRef(
         id="8",
@@ -209,11 +215,11 @@ def test_oracle_fetch_detail_non_oracle_apply_url_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_no_job_segment_is_none() -> None:
+def test_oracle_fetch_detail_no_job_segment_raises() -> None:
     payload = _orc_payload()
     ref = DetailRef(
         id="9",
@@ -223,11 +229,11 @@ def test_oracle_fetch_detail_no_job_segment_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_no_sites_segment_is_none() -> None:
+def test_oracle_fetch_detail_no_sites_segment_raises() -> None:
     payload = _orc_payload()
     ref = DetailRef(
         id="10",
@@ -237,11 +243,11 @@ def test_oracle_fetch_detail_no_sites_segment_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_oracle_fetch_detail_no_urls_is_none() -> None:
+def test_oracle_fetch_detail_no_urls_raises() -> None:
     payload = _orc_payload()
     ref = DetailRef(
         id="11",
@@ -251,8 +257,8 @@ def test_oracle_fetch_detail_no_urls_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
 def test_base_fetch_detail_is_none() -> None:
@@ -305,7 +311,8 @@ def test_oracle_fetch_detail_recovers_when_description_empty_but_secondary_popul
     assert desc == "<p>Own the roadmap.</p>\n<p>BS in CS, 5+ years.</p>"
 
 
-def test_oracle_fetch_detail_none_when_all_sections_empty() -> None:
+def test_oracle_fetch_detail_raises_when_all_sections_empty() -> None:
+    # No JD-relevant text on a 200 is indeterminate (not a verified soft-404) -- raise, don't expire.
     payload = _orc_payload(description="", responsibilities=None, qualifications=None)
     fetcher = _FakeFetcher(payload)
     ref = DetailRef(
@@ -316,4 +323,5 @@ def test_oracle_fetch_detail_none_when_all_sections_empty() -> None:
         listing_url=None,
         content_sig="s",
     )
-    assert anyio.run(lambda: OracleProvider().fetch_detail(ref, fetcher)) is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: OracleProvider().fetch_detail(ref, fetcher))

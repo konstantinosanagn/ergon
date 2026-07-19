@@ -39,6 +39,7 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+import httpx
 from selectolax.parser import HTMLParser
 
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
@@ -284,8 +285,17 @@ class SuccessFactorsProvider(BaseProvider):
         the list crawl (see ``_parse_rows``/``_fetch_rss``), so we simply re-fetch that same URL
         and pull the JD out of the search-result page's ``#jobdescription`` node (the CSB shape),
         falling back to the class-only ``.jobdescription`` (some white-label sites drop the id).
-        Non-raising: no url, a failed/empty fetch, or an absent/empty JD node all return ``None``,
-        never an exception.
+
+        Contract (see ``fetch_detail_contract.md``): returns ``None`` ONLY on a confirmed-gone
+        signal -- a real HTTP 404/410 re-fetching the job page. SuccessFactors is known to also
+        serve a 200 "no longer available"-style page for some removed postings on certain
+        tenants, but no such marker text is verified in this codebase (no fixture/test captures
+        one), so it is NOT invented here -- treating an unverified 200 body as "gone" risks wrongly
+        expiring a still-live posting. A missing/unbuildable URL is NOT evidence of death, and
+        every other indeterminate/transient condition -- other HTTP statuses, timeouts, rate
+        limits, an empty body, or a 200 whose page yields no JD node in any known tenant shape --
+        RAISES instead, so the freshness sweep never expires a still-live posting on an ambiguous
+        signal.
         """
         # The RSS <link> href is XML-escaped and (measured) often DOUBLE-escaped ("&amp;amp;"), which
         # poisons the query so SuccessFactors serves a JD-less shell -- so unescape to a fixpoint here
@@ -293,17 +303,19 @@ class SuccessFactorsProvider(BaseProvider):
         # existing index rows keep the escaped URL until re-crawled).
         url = _unescape_url(ref.apply_url or ref.listing_url or "")
         if not url:
-            return None
+            raise RuntimeError(f"successfactors detail: no derivable detail URL for {ref!s}")
         try:
             html = await fetcher.get_text(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not html:
-            return None
+            raise RuntimeError(f"successfactors detail: empty page body for {ref!s}")
         tree = HTMLParser(html)
         jd_html = self._extract_jd(tree)
         if not jd_html:
-            return None
+            raise RuntimeError(f"successfactors detail: no JD node found for {ref!s}")
         locations = self._microdata_locations(tree)
         return DetailFetch(text=jd_html, locations=locations) if locations else jd_html
 

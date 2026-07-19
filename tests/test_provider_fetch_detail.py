@@ -5,6 +5,7 @@ Offline only — a FakeFetcher stands in for AsyncFetcher; no live network calls
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.http import AsyncFetcher
 from ergon_tracker.index.detail import DetailRef
@@ -63,8 +64,8 @@ def test_smartrecruiters_fetch_detail_recovers_from_secondary_sections() -> None
     assert desc == "BS required"
 
 
-def test_smartrecruiters_fetch_detail_none_when_no_section_has_text() -> None:
-    # Only when EVERY JD-relevant section is empty does fetch_detail return None.
+def test_smartrecruiters_fetch_detail_raises_when_no_section_has_text() -> None:
+    # Only when EVERY JD-relevant section is empty does fetch_detail raise.
     payload = {
         "jobAd": {"sections": {"jobDescription": {"text": ""}, "qualifications": {"text": ""}}}
     }
@@ -76,13 +77,11 @@ def test_smartrecruiters_fetch_detail_none_when_no_section_has_text() -> None:
         listing_url=None,
         content_sig="s",
     )
-    assert (
+    with pytest.raises(RuntimeError):
         anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
-        is None
-    )
 
 
-def test_smartrecruiters_fetch_detail_unparseable_apply_url_is_none() -> None:
+def test_smartrecruiters_fetch_detail_unparseable_apply_url_raises() -> None:
     payload = _sr_payload()
     ref = DetailRef(
         id="1",
@@ -92,11 +91,11 @@ def test_smartrecruiters_fetch_detail_unparseable_apply_url_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_smartrecruiters_fetch_detail_no_urls_is_none() -> None:
+def test_smartrecruiters_fetch_detail_no_urls_raises() -> None:
     payload = _sr_payload()
     ref = DetailRef(
         id="1",
@@ -106,12 +105,12 @@ def test_smartrecruiters_fetch_detail_no_urls_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_smartrecruiters_fetch_detail_non_dict_job_ad_is_none() -> None:
-    # ``jobAd`` truthy but not a dict (e.g. an unexpected string shape) must not raise.
+def test_smartrecruiters_fetch_detail_non_dict_job_ad_raises() -> None:
+    # ``jobAd`` truthy but not a dict (e.g. an unexpected string shape) is INDETERMINATE.
     payload = {"jobAd": "unexpected-string"}
     ref = DetailRef(
         id="1",
@@ -121,12 +120,12 @@ def test_smartrecruiters_fetch_detail_non_dict_job_ad_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_smartrecruiters_fetch_detail_non_dict_job_description_is_none() -> None:
-    # ``jobDescription`` truthy but not a dict must not raise.
+def test_smartrecruiters_fetch_detail_non_dict_job_description_raises() -> None:
+    # ``jobDescription`` truthy but not a dict is INDETERMINATE.
     payload = {"jobAd": {"sections": {"jobDescription": "unexpected-string"}}}
     ref = DetailRef(
         id="1",
@@ -136,8 +135,8 @@ def test_smartrecruiters_fetch_detail_non_dict_job_description_is_none() -> None
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SmartRecruitersProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
 def test_smartrecruiters_fetch_detail_derives_token_from_apply_url_when_ref_token_missing() -> None:

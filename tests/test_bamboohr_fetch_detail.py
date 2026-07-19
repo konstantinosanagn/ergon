@@ -9,6 +9,7 @@ Non-raising: any unparseable ref, fetch failure, non-dict payload, or empty desc
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef, _detail_parts
 from ergon_tracker.models import DetailFetch, SalaryInterval
@@ -63,15 +64,16 @@ def test_fetch_detail_no_compensation_returns_bare_str() -> None:
     assert res == "<p>No pay stated.</p>"
 
 
-def test_fetch_detail_empty_description_returns_none() -> None:
+def test_fetch_detail_empty_description_raises() -> None:
     payload = {"result": {"jobOpening": {"compensation": "$85K per year", "description": "  "}}}
-    assert anyio.run(lambda: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(payload))) is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
 
 
-def test_fetch_detail_non_dict_payload_returns_none() -> None:
+def test_fetch_detail_non_dict_payload_raises() -> None:
     for bad in (None, [], "nope", {"result": None}, {"result": {"jobOpening": "x"}}):
-        res = anyio.run(lambda b=bad: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(b)))
-        assert res is None
+        with pytest.raises(RuntimeError):
+            anyio.run(lambda b=bad: BambooHRProvider().fetch_detail(_ref(), _FakeFetcher(b)))
 
 
 def test_parse_detail_ref_from_url_and_token_fallback() -> None:

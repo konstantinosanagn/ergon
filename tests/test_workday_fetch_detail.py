@@ -8,6 +8,7 @@ non-raising discipline for a truthy non-dict payload shape."""
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -90,7 +91,7 @@ def test_workday_fetch_detail_falls_back_to_listing_url() -> None:
     ]
 
 
-def test_workday_fetch_detail_missing_job_posting_info_is_none() -> None:
+def test_workday_fetch_detail_missing_job_posting_info_raises() -> None:
     payload: dict = {"someOtherKey": {}}
     ref = DetailRef(
         id="4",
@@ -100,11 +101,11 @@ def test_workday_fetch_detail_missing_job_posting_info_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_missing_job_description_is_none() -> None:
+def test_workday_fetch_detail_missing_job_description_raises() -> None:
     payload = {"jobPostingInfo": {"title": "Driver"}}
     ref = DetailRef(
         id="5",
@@ -114,11 +115,11 @@ def test_workday_fetch_detail_missing_job_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_empty_job_description_is_none() -> None:
+def test_workday_fetch_detail_empty_job_description_raises() -> None:
     payload = _wd_payload("   ")
     ref = DetailRef(
         id="6",
@@ -128,12 +129,12 @@ def test_workday_fetch_detail_empty_job_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_non_dict_job_posting_info_is_none() -> None:
-    # ``jobPostingInfo`` truthy but not a dict must not raise (the SmartRecruiters regression).
+def test_workday_fetch_detail_non_dict_job_posting_info_raises() -> None:
+    # ``jobPostingInfo`` truthy but not a dict is INDETERMINATE (the SmartRecruiters regression).
     payload = {"jobPostingInfo": "oops"}
     ref = DetailRef(
         id="7",
@@ -143,12 +144,12 @@ def test_workday_fetch_detail_non_dict_job_posting_info_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_non_dict_job_description_is_none() -> None:
-    # ``jobDescription`` truthy but not a string-shaped dict must not raise.
+def test_workday_fetch_detail_non_dict_job_description_raises() -> None:
+    # ``jobDescription`` truthy but not a string-shaped dict is INDETERMINATE.
     payload = {"jobPostingInfo": {"jobDescription": {"nested": "not-a-string"}}}
     ref = DetailRef(
         id="8",
@@ -158,11 +159,11 @@ def test_workday_fetch_detail_non_dict_job_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_non_workday_apply_url_is_none() -> None:
+def test_workday_fetch_detail_non_workday_apply_url_raises() -> None:
     payload = _wd_payload()
     ref = DetailRef(
         id="9",
@@ -172,11 +173,11 @@ def test_workday_fetch_detail_non_workday_apply_url_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_no_job_segment_is_none() -> None:
+def test_workday_fetch_detail_no_job_segment_raises() -> None:
     payload = _wd_payload()
     ref = DetailRef(
         id="10",
@@ -186,11 +187,11 @@ def test_workday_fetch_detail_no_job_segment_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_workday_fetch_detail_no_urls_is_none() -> None:
+def test_workday_fetch_detail_no_urls_raises() -> None:
     payload = _wd_payload()
     ref = DetailRef(
         id="11",
@@ -200,8 +201,8 @@ def test_workday_fetch_detail_no_urls_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
 def test_base_fetch_detail_is_none() -> None:

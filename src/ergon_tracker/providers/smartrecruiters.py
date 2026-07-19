@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import anyio
+import httpx
 
 from ..extract.level import level_from_ats_vocab
 from ..models import (
@@ -158,24 +159,34 @@ class SmartRecruitersProvider(BaseProvider):
         ``ref.id`` is our internal id (a hash), NOT the SmartRecruiters posting id — the real
         posting id (and, if ``ref.token`` is unset, the board token) is parsed out of
         ``ref.apply_url``/``ref.listing_url``. Concatenates ``jobDescription.text`` +
-        ``qualifications.text`` (the latter tends to carry degree/YOE language). Non-raising:
-        any missing field, shape mismatch, unparseable URL, or fetch failure returns ``None``.
+        ``qualifications.text`` (the latter tends to carry degree/YOE language).
+
+        Contract (see ``fetch_detail_contract.md``): returns ``None`` ONLY on a confirmed-gone
+        signal -- a real HTTP 404/410 from the per-posting resource (the standard REST convention
+        for a single-resource GET; SmartRecruiters has no verified soft-404 BODY for a removed
+        posting). An unbuildable detail URL (token/posting id not parseable from the ref) is NOT
+        evidence of death, and every other indeterminate/transient condition -- other HTTP
+        statuses, timeouts, rate limits, a non-dict payload, a missing/malformed
+        ``jobAd.sections``, or a 200 with no JD-relevant section text -- RAISES instead, so the
+        freshness sweep never expires a still-live posting on an ambiguous signal.
         """
         parsed = self._parse_posting_ref(ref)
         if parsed is None:
-            return None
+            raise RuntimeError(f"smartrecruiters detail: no derivable detail URL for {ref!s}")
         token, posting_id = parsed
         url = _DETAIL_API.format(token=token, posting_id=posting_id)
         try:
             data = await fetcher.get_json(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(data, dict):
-            return None
+            raise RuntimeError(f"smartrecruiters detail: non-dict payload for {ref!s}")
         job_ad = data.get("jobAd")
         sections = job_ad.get("sections") if isinstance(job_ad, dict) else None
         if not isinstance(sections, dict):
-            return None
+            raise RuntimeError(f"smartrecruiters detail: missing jobAd.sections for {ref!s}")
         # Collect EVERY JD-relevant section that carries text -- do NOT hard-require jobDescription.
         # Measured (sampling real drained-and-failed rows): ~40% of failed SR postings have an EMPTY
         # jobDescription.text but real content in qualifications/additionalInformation; the old
@@ -191,7 +202,7 @@ class SmartRecruitersProvider(BaseProvider):
             if isinstance(text, str) and text.strip():
                 parts.append(text)
         if not parts:
-            return None
+            raise RuntimeError(f"smartrecruiters detail: no JD text in sections for {ref!s}")
         return "\n".join(parts)
 
     def normalize(self, raw: RawJob) -> JobPosting:

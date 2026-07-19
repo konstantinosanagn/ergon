@@ -9,6 +9,7 @@ to the class-only ``.jobdescription``)."""
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -67,7 +68,7 @@ def test_falls_back_to_class_only_jobdescription() -> None:
     assert fetcher.calls == [_APPLY_URL]
 
 
-def test_no_jobdescription_node_is_none() -> None:
+def test_no_jobdescription_node_raises() -> None:
     html = _page('<div class="other">Nothing relevant here</div>')
     fetcher = _FakeFetcher(html)
     ref = DetailRef(
@@ -78,11 +79,11 @@ def test_no_jobdescription_node_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
 
 
-def test_empty_jobdescription_node_is_none() -> None:
+def test_empty_jobdescription_node_raises() -> None:
     html = _page('<div id="jobdescription"></div>')
     fetcher = _FakeFetcher(html)
     ref = DetailRef(
@@ -93,11 +94,11 @@ def test_empty_jobdescription_node_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
 
 
-def test_no_urls_is_none_and_no_fetch_attempted() -> None:
+def test_no_urls_raises_and_no_fetch_attempted() -> None:
     fetcher = _FakeFetcher(_page('<div id="jobdescription"><p>unused</p></div>'))
     ref = DetailRef(
         id="5",
@@ -107,12 +108,12 @@ def test_no_urls_is_none_and_no_fetch_attempted() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []
 
 
-def test_fetch_raising_is_none() -> None:
+def test_fetch_raising_propagates() -> None:
     fetcher = _FakeFetcher(RuntimeError("boom"))
     ref = DetailRef(
         id="6",
@@ -122,8 +123,8 @@ def test_fetch_raising_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError, match="boom"):
+        anyio.run(lambda: SuccessFactorsProvider().fetch_detail(ref, fetcher))
 
 
 def test_falls_back_to_listing_url_when_apply_url_missing() -> None:

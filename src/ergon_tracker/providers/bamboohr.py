@@ -19,6 +19,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from ..extract.comp import parse_salary
 from ..models import (
     DetailFetch,
@@ -121,25 +123,32 @@ class BambooHRProvider(BaseProvider):
         (HTML) AND a free-text ``compensation`` string (e.g. ``"$85K - 135K Base per year DOE"``).
         Return a ``DetailFetch`` carrying the description body (so yoe/degree also extract) plus the
         parsed ``compensation`` as a structured salary, preferred over re-parsing it from the body.
-        Non-raising: any unparseable ref, fetch failure, non-dict payload, or missing/empty
-        ``description`` returns ``None``.
+        Contract (see ``fetch_detail_contract.md``): returns ``None`` ONLY on a definitive
+        404/410. Live-verified (2026-07-19, ``aca.bamboohr.com``): a nonexistent job id 404s with
+        ``{"type":"not_found","title":"Resource not found.",...}``, while a real id 200s with
+        ``result.jobOpening``; there is no observed 200 "soft-404" shape for this endpoint. An
+        unparseable ref, any other HTTP status, a fetch failure/timeout, a non-dict payload, or a
+        200 missing ``result.jobOpening``/``description`` is INDETERMINATE and raises, so it's
+        never mistaken for "posting gone".
         """
         parsed = self._parse_detail_ref(ref)
         if parsed is None:
-            return None
+            raise RuntimeError(f"bamboohr detail: no derivable (token, id) for {ref!s}")
         token, job_id = parsed
         try:
             data = await fetcher.get_json(_DETAIL_API.format(token=token, job_id=job_id))
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(data, dict):
-            return None
+            raise RuntimeError(f"bamboohr detail: non-dict payload for {ref!s}")
         opening = (data.get("result") or {}).get("jobOpening")
         if not isinstance(opening, dict):
-            return None
+            raise RuntimeError(f"bamboohr detail: no jobOpening for {ref!s}")
         description = opening.get("description")
         if not isinstance(description, str) or not description.strip():
-            return None
+            raise RuntimeError(f"bamboohr detail: no description for {ref!s}")
         comp = opening.get("compensation")
         salary = parse_salary(comp) if isinstance(comp, str) else None
         locations = self._detail_location(opening)

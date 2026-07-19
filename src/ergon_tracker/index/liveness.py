@@ -184,8 +184,9 @@ def _resolve_token(row: dict[str, Any], registry: SeedRegistry) -> str | None:
 
 def _detail_confirms_alive(result: str | DetailFetch | None) -> bool:
     """Stage-2 confirm verdict from a ``fetch_detail`` result: alive iff it carries non-empty
-    text. Mirrors ``fetch_detail``'s documented non-raising contract (``providers/base.py``):
-    ``None``/empty is a dead posting, not an exception."""
+    text. Under ``fetch_detail``'s return/raise contract (``providers/base.py``) a returned
+    ``None``/empty is a DEFINITIVE not-found (404/gone); a raised exception is indeterminate and is
+    handled by the caller (KEEP the row), never passed here as ``None``."""
     if isinstance(result, DetailFetch):
         return bool(result.text)
     return bool(result)
@@ -312,6 +313,7 @@ async def reconcile_liveness_tier(
                 "checked": 0,
                 "flipped_dead": 0,
                 "confirmed_alive": 0,
+                "confirm_errored": 0,
                 "boards_fetched": 0,
                 "boards_failed": 0,
                 "unresolved": unresolved,
@@ -335,10 +337,24 @@ async def reconcile_liveness_tier(
                 prev_streak = int(existing.get(rid, {}).get("dead_streak") or 0)
                 if tier3:
                     ref = DetailRef.from_row(r)
+                    # A RAISED fetch_detail is INDETERMINATE (transient/unbuildable), never
+                    # evidence of death -- under the hardened contract (providers/base.py) only a
+                    # returned None means a definitive 404/gone. Distinguish the two: on a raise,
+                    # KEEP the row and leave its streak untouched (retry next run), exactly like
+                    # freshness.py's confirm_departed. Collapsing a raise to None here (the old
+                    # behavior) would expire a still-live posting on a single transient blip, since
+                    # _STREAK_THRESHOLD_CONFIRMED == 1.
+                    confirm_errored = False
                     try:
                         result = await fetch_detail(ref)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - indeterminate confirm, never a death signal
+                        confirm_errored = True
                         result = None
+                    if confirm_errored:
+                        async with write_lock:
+                            counts["confirm_errored"] += 1
+                            counts["checked"] += 1
+                        return
                     confirmed_alive = _detail_confirms_alive(result)
                     async with write_lock:
                         if confirmed_alive:

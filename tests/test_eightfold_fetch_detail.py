@@ -8,6 +8,7 @@ token-fallback vs. unresolvable white-label domain)."""
 from __future__ import annotations
 
 import anyio
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -116,7 +117,7 @@ def test_eightfold_fetch_detail_recovers_from_listing_url_host() -> None:
     assert fetcher.calls == ["https://acme.eightfold.ai/api/apply/v2/jobs/13579"]
 
 
-def test_eightfold_fetch_detail_missing_job_description_is_none() -> None:
+def test_eightfold_fetch_detail_missing_job_description_raises() -> None:
     payload: dict = {"someOtherKey": "x"}
     ref = DetailRef(
         id="5",
@@ -126,11 +127,11 @@ def test_eightfold_fetch_detail_missing_job_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_eightfold_fetch_detail_empty_job_description_is_none() -> None:
+def test_eightfold_fetch_detail_empty_job_description_raises() -> None:
     payload = _ef_payload("   ")
     ref = DetailRef(
         id="6",
@@ -140,11 +141,11 @@ def test_eightfold_fetch_detail_empty_job_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_eightfold_fetch_detail_non_string_job_description_is_none() -> None:
+def test_eightfold_fetch_detail_non_string_job_description_raises() -> None:
     payload = {"job_description": {"nested": "not-a-string"}}
     ref = DetailRef(
         id="7",
@@ -154,12 +155,12 @@ def test_eightfold_fetch_detail_non_string_job_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_eightfold_fetch_detail_truthy_non_dict_payload_is_none() -> None:
-    # A truthy non-dict payload (e.g. a bare string/list) must not raise.
+def test_eightfold_fetch_detail_truthy_non_dict_payload_raises() -> None:
+    # A truthy non-dict payload (e.g. a bare string/list) is INDETERMINATE and now raises.
     fetcher = _FakeFetcher("oops-not-json-object")
     ref = DetailRef(
         id="8",
@@ -169,11 +170,11 @@ def test_eightfold_fetch_detail_truthy_non_dict_payload_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: EightfoldProvider().fetch_detail(ref, fetcher))
 
 
-def test_eightfold_fetch_detail_no_urls_is_none() -> None:
+def test_eightfold_fetch_detail_no_urls_raises() -> None:
     payload = _ef_payload()
     ref = DetailRef(
         id="9",
@@ -183,11 +184,11 @@ def test_eightfold_fetch_detail_no_urls_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_eightfold_fetch_detail_fetch_failure_is_none() -> None:
+def test_eightfold_fetch_detail_fetch_failure_raises() -> None:
     class _RaisingFetcher:
         async def get_json(self, url: str, **kw: object) -> object:
             raise RuntimeError("boom")
@@ -200,8 +201,8 @@ def test_eightfold_fetch_detail_fetch_failure_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _RaisingFetcher()))
-    assert desc is None
+    with pytest.raises(RuntimeError, match="boom"):
+        anyio.run(lambda: EightfoldProvider().fetch_detail(ref, _RaisingFetcher()))
 
 
 def test_base_fetch_detail_is_none() -> None:
