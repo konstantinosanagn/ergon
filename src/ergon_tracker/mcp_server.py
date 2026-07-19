@@ -278,7 +278,11 @@ async def search_jobs(
         query = query.model_copy(update={"sources": list(AGGREGATOR_PROVIDERS)})  # index down
 
     async with AsyncErgonTracker() as js:
-        result = await js.search(query)
+        # include_stale=True: max_last_seen_age_days was already resolved above (defaults to 21 via
+        # the tool's own parameter default) — don't let the client re-default it, or a caller who
+        # explicitly passed max_last_seen_age_days=None (wants stale postings) would be silently
+        # overridden back to 21.
+        result = await js.search(query, include_stale=True)
     return {
         "count": len(result.jobs),
         "max_age_days_applied": max_age_days,
@@ -337,6 +341,9 @@ def whats_new(
         employment_type=EmploymentType(employment_type) if employment_type else None,
         visa_sponsor=True if visa_sponsor else None,
         sponsorship_offered=sponsorship_offered,
+        # staleness backstop (default 21, same as search_jobs); this tool has no escape hatch, so
+        # it's a fixed default rather than a caller-controlled param.
+        max_last_seen_age_days=21,
         limit=limit,
     )
 
@@ -425,6 +432,9 @@ def match_resume(
         visa_sponsor=True if visa_sponsor else None,
         sponsorship_offered=sponsorship_offered,
         max_age_days=365,  # don't match a résumé against years-stale postings
+        # staleness backstop (default 21, same as search_jobs); this tool has no escape hatch, so
+        # it's a fixed default rather than a caller-controlled param.
+        max_last_seen_age_days=21,
         limit=limit,
     )
     from .resume import rank_by_resume
@@ -577,6 +587,9 @@ def h1b_jobs(
         visa_sponsor=True,
         sponsorship_offered=sponsorship_offered,
         max_age_days=365,  # H-1B seekers need *current* openings, not filled-but-open reqs
+        # staleness backstop (default 21, same as search_jobs); this tool has no escape hatch, so
+        # it's a fixed default rather than a caller-controlled param.
+        max_last_seen_age_days=21,
         limit=limit,
     )
     from .index.router import try_index

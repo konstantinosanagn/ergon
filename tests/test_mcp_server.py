@@ -112,8 +112,9 @@ async def test_search_jobs_broad_falls_back_to_aggregators_when_index_down(monke
         async def __aexit__(self, *a):
             return False
 
-        async def search(self, query):
+        async def search(self, query, **kwargs):
             captured["sources"] = query.sources
+            captured["kwargs"] = kwargs
             from ergon_tracker.models import SearchResult
 
             return SearchResult(jobs=[], health=[])
@@ -121,6 +122,34 @@ async def test_search_jobs_broad_falls_back_to_aggregators_when_index_down(monke
     monkeypatch.setattr(srv, "AsyncErgonTracker", lambda *a, **k: _FakeJS())
     await srv.search_jobs(keywords="nurse", limit=5)
     assert set(captured["sources"]) == set(srv.AGGREGATOR_PROVIDERS)  # aggregators, not 46k boards
+
+
+async def test_search_jobs_live_fallback_passes_include_stale(monkeypatch) -> None:
+    # index-freshness fix: the live-fallback call must pass include_stale=True so the client
+    # doesn't re-default max_last_seen_age_days (already resolved by search_jobs's own param
+    # default) — otherwise an explicit max_last_seen_age_days=None (user wants stale postings)
+    # would be silently clobbered back to 21.
+    import ergon_tracker.index.router as router
+
+    monkeypatch.setattr(router, "try_index", lambda q: None)
+    captured = {}
+
+    class _FakeJS:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def search(self, query, **kwargs):
+            captured["kwargs"] = kwargs
+            from ergon_tracker.models import SearchResult
+
+            return SearchResult(jobs=[], health=[])
+
+    monkeypatch.setattr(srv, "AsyncErgonTracker", lambda *a, **k: _FakeJS())
+    await srv.search_jobs(keywords="nurse", limit=5, max_last_seen_age_days=None)
+    assert captured["kwargs"] == {"include_stale": True}
 
 
 async def test_search_jobs_forwards_new_filters_to_index(monkeypatch) -> None:
@@ -176,6 +205,34 @@ async def test_search_jobs_forwards_degree_filter_to_index(monkeypatch) -> None:
     q = captured["q"]
     assert q.max_degree == "bachelor" and q.include_unknown_degree is False
     assert q.max_years == 2
+
+
+async def test_search_jobs_default_max_last_seen_age_days_21(monkeypatch) -> None:
+    from ergon_tracker.index import router
+
+    captured = {}
+
+    def fake_try_index(q):
+        captured["q"] = q
+        return []
+
+    monkeypatch.setattr(router, "try_index", fake_try_index)
+    await srv.search_jobs(keywords="engineer")
+    assert captured["q"].max_last_seen_age_days == 21
+
+
+async def test_search_jobs_explicit_none_disables_staleness_guard(monkeypatch) -> None:
+    from ergon_tracker.index import router
+
+    captured = {}
+
+    def fake_try_index(q):
+        captured["q"] = q
+        return []
+
+    monkeypatch.setattr(router, "try_index", fake_try_index)
+    await srv.search_jobs(keywords="engineer", max_last_seen_age_days=None)
+    assert captured["q"].max_last_seen_age_days is None
 
 
 async def test_job_dict_includes_degree_fields() -> None:

@@ -22,7 +22,11 @@ __all__ = ["search", "ErgonTracker"]
 
 async def _run_search(query: SearchQuery, options: dict[str, Any]) -> SearchResult:
     async with AsyncErgonTracker(**options) as js:
-        return await js.search(query)
+        # query.max_last_seen_age_days is already fully resolved by the callers below (search() /
+        # ErgonTracker.search() both apply the include_stale default before building the query), so
+        # tell the client not to re-default it — otherwise an explicit include_stale=True (which
+        # resolves to max_last_seen_age_days=None) would get silently clobbered back to 21.
+        return await js.search(query, include_stale=True)
 
 
 def search(
@@ -35,9 +39,16 @@ def search(
     sources: list[str] | None = None,
     concurrency: int = 16,
     cache: bool = False,
+    include_stale: bool = False,
     **query_fields: Any,
 ) -> SearchResult:
-    """One-call synchronous search across all configured sources."""
+    """One-call synchronous search across all configured sources.
+
+    include_stale: by default, postings whose board hasn't been re-confirmed in the last 21 days
+        (the abandoned/erroring-board tail) are hidden — set True to also see them. Has no effect
+        if the caller already passed an explicit ``max_last_seen_age_days=`` in ``query_fields``.
+    """
+    query_fields.setdefault("max_last_seen_age_days", None if include_stale else 21)
     query = SearchQuery(
         keywords=keywords,
         location=location,
@@ -57,7 +68,11 @@ class ErgonTracker:
     def __init__(self, *, concurrency: int = 16, cache: bool = False) -> None:
         self._options = {"concurrency": concurrency, "cache": cache}
 
-    def search(self, keywords: str | None = None, **query_fields: Any) -> SearchResult:
+    def search(
+        self, keywords: str | None = None, *, include_stale: bool = False, **query_fields: Any
+    ) -> SearchResult:
+        """See ``search()`` module function for ``include_stale`` semantics."""
+        query_fields.setdefault("max_last_seen_age_days", None if include_stale else 21)
         query = SearchQuery(keywords=keywords, **query_fields)
         return anyio.run(_run_search, query, self._options)
 

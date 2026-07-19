@@ -87,3 +87,18 @@ def test_index_unavailable_is_graceful(monkeypatch):
     monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: None)
     res = mcp_server.h1b_jobs()
     assert res["count"] == 0 and "index unavailable" in res["note"]
+
+
+def test_defaults_max_last_seen_age_days_21(monkeypatch):
+    # index-freshness fix: h1b_jobs builds its own SearchQuery and never exposed a
+    # max_last_seen_age_days param -> it should default the staleness guard to 21, same as
+    # search_jobs, for consistency.
+    captured = {}
+
+    def fake_try_index(q):
+        captured["q"] = q
+        return []
+
+    monkeypatch.setattr("ergon_tracker.index.router.try_index", fake_try_index)
+    mcp_server.h1b_jobs()
+    assert captured["q"].max_last_seen_age_days == 21

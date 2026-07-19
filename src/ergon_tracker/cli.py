@@ -146,6 +146,12 @@ def search(
         "--semantic",
         help="rank by meaning via embeddings (needs: pip install 'ergon-tracker[semantic]')",
     ),
+    include_stale: bool = typer.Option(
+        False,
+        "--include-stale",
+        help="also show postings whose board hasn't been re-confirmed recently "
+        "(default hides stale/ghost postings)",
+    ),
     limit: int | None = typer.Option(None, "--limit", "-n"),
     as_json: bool = typer.Option(False, "--json", help="emit JSON instead of a table"),
 ) -> None:
@@ -184,6 +190,7 @@ def search(
             sponsorship_offered=True if sponsorship else None,
             infer_level_from_experience=infer_level,
             semantic=semantic,
+            include_stale=include_stale,
             limit=limit,
         )
     except ValueError as exc:
@@ -254,6 +261,12 @@ def match_resume(
     employment_type: str | None = typer.Option(
         None, "--employment-type", help="full_time/part_time/contract/internship/temporary"
     ),
+    include_stale: bool = typer.Option(
+        False,
+        "--include-stale",
+        help="also show postings whose board hasn't been re-confirmed recently "
+        "(default hides stale/ghost postings)",
+    ),
     limit: int = typer.Option(20, "--limit", "-n"),
     as_json: bool = typer.Option(False, "--json", help="emit JSON instead of a table"),
 ) -> None:
@@ -283,6 +296,7 @@ def match_resume(
             visa_sponsor=True if visa_sponsor else None,
             employment_type=EmploymentType(employment_type) if employment_type else None,
             max_age_days=365,  # don't match a résumé against years-stale postings
+            max_last_seen_age_days=None if include_stale else 21,
             limit=limit,
         )
     except ValueError as exc:
