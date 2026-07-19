@@ -29,6 +29,68 @@ class IndexBuildError(RuntimeError):
     pass
 
 
+# --- board_token backfill (freshness-sweep coverage accelerator) -----------------------------
+#
+# The freshness sweep enumerates boards via jobs.board_token, which the crawl only sets for boards
+# it re-visits (build_index.py: ``job.board_token = entry["token"]``); carried-forward rows keep a
+# NULL board_token until re-crawled, so sweep coverage ramps over the ~5-day window-gate cycle.
+# This backfill derives the token from the seed registry WITHOUT waiting for the crawl. The registry
+# token is literally the value the crawl passes to ``provider.fetch(token)``, so it is EXACT by
+# construction -- a registry-derived board_token fetches the same board the sweep will diff against.
+# (apply-URL derivation was measured to disagree with the true token ~1.2% of the time -- jazzhr
+# host quirks, ashby slug/alias != API token -- and a wrong board_token would false-expire a live
+# posting, so it is deliberately NOT used. Those rows fill via the crawl, which sets the exact token.)
+
+
+def backfill_board_tokens(
+    con: Any,
+    *,
+    by_key: dict[tuple[str, str], str] | None = None,
+    by_dom: dict[tuple[str, str], str] | None = None,
+) -> int:
+    """Fill ``jobs.board_token`` for active rows where it is NULL/empty, from the seed registry
+    (by ``company_key`` then registrable ``company_domain``). Returns the number of rows updated.
+
+    Correctness: the registry token IS the crawl's fetch token, so a registry-derived board_token
+    matches what the freshness sweep's ``board_live_ids`` will fetch. Never overwrites an existing
+    board_token. Chunked UPDATEs; caller commits. ``by_key``/``by_dom`` default to the bundled seed
+    registry; they are injectable for testing.
+    """
+    from ..registry.store import _normalize_domain
+
+    if by_key is None or by_dom is None:
+        from ..registry.store import SeedRegistry
+
+        reg = SeedRegistry().all()
+        by_key = {
+            (k, e["ats"]): e["token"] for k, e in reg.items() if e.get("ats") and e.get("token")
+        }
+        by_dom = {
+            (_normalize_domain(e["domain"]), e["ats"]): e["token"]
+            for e in reg.values()
+            if e.get("ats") and e.get("token") and e.get("domain")
+        }
+
+    rows = con.execute(
+        "SELECT id, company_key, company_domain, source FROM jobs "
+        "WHERE status='active' AND (board_token IS NULL OR board_token='')"
+    ).fetchall()
+
+    updates: list[tuple[str, str]] = []
+    for jid, ck, dom, source in rows:
+        token = by_key.get((ck, source))
+        if token is None and dom:
+            token = by_dom.get((_normalize_domain(dom), source))
+        if token:
+            updates.append((token, jid))
+
+    for start in range(0, len(updates), 500):
+        con.executemany(
+            "UPDATE jobs SET board_token = ? WHERE id = ?", updates[start : start + 500]
+        )
+    return len(updates)
+
+
 def read_index_jobs(path: Path | str) -> list[JobPosting]:
     """Load all postings from an existing index (for carry-forward in an incremental build)."""
     con = connect(path, read_only=True)
