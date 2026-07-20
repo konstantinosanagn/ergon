@@ -19,13 +19,39 @@ _DELTA_DDL = (
     "added_ids TEXT NOT NULL, idset_hash TEXT NOT NULL, computed_at TEXT NOT NULL, "
     "PRIMARY KEY (source, board_token))"
 )
+_STATS_DDL = (
+    "CREATE TABLE source_stats(source TEXT NOT NULL, checked INTEGER NOT NULL, "
+    "candidates INTEGER NOT NULL, departed INTEGER NOT NULL, expired INTEGER NOT NULL, "
+    "confirmed_alive INTEGER NOT NULL, unconfirmed INTEGER NOT NULL, errored INTEGER NOT NULL)"
+)
+_STATS_COLS = (
+    "source",
+    "checked",
+    "candidates",
+    "departed",
+    "expired",
+    "confirmed_alive",
+    "unconfirmed",
+    "errored",
+)
 
 
-def _mk_shard(tmp_path, name, rows, deltas=None, *, with_delta_table=True):
+def _mk_shard(
+    tmp_path,
+    name,
+    rows,
+    deltas=None,
+    source_stats=None,
+    *,
+    with_delta_table=True,
+    with_stats_table=True,
+):
     """rows: list of (id, expired_at, reason) tuples. deltas: list of
-    (source, board_token, added_ids_json, idset_hash, computed_at) tuples. ``with_delta_table``
-    False builds a legacy shard that predates the board_deltas table entirely (to exercise the
-    merge's per-table resilience)."""
+    (source, board_token, added_ids_json, idset_hash, computed_at) tuples. source_stats: list of
+    dicts with a subset of ``_STATS_COLS`` keys (missing keys default 0), mirroring
+    ``freshness_sweep.py``'s ``_stats_rows`` -- one row per source THIS SHARD saw.
+    ``with_delta_table``/``with_stats_table`` False builds a legacy shard that predates that table
+    entirely (to exercise the merge's per-table resilience)."""
     p = tmp_path / name
     con = sqlite3.connect(str(p))
     con.execute(_DDL)
@@ -36,6 +62,16 @@ def _mk_shard(tmp_path, name, rows, deltas=None, *, with_delta_table=True):
             "INSERT INTO board_deltas (source, board_token, added_ids, idset_hash, computed_at) "
             "VALUES (?, ?, ?, ?, ?)",
             deltas or [],
+        )
+    if with_stats_table:
+        con.execute(_STATS_DDL)
+        con.executemany(
+            f"INSERT INTO source_stats ({', '.join(_STATS_COLS)}) "
+            f"VALUES ({', '.join('?' for _ in _STATS_COLS)})",
+            [
+                tuple(row[c] if c == "source" else row.get(c, 0) for c in _STATS_COLS)
+                for row in (source_stats or [])
+            ],
         )
     con.commit()
     con.close()
@@ -91,6 +127,7 @@ def test_merge_unions_disjoint_and_overlapping_ids(tmp_path):
         "index-freshness-shard-2.sqlite": 1,
         "_total": 4,
         "_total_deltas": 0,  # these shards carried an empty board_deltas table
+        "_expiry_alarms": [],  # these legacy-style shards carried no source_stats table
     }
 
     con = sqlite3.connect(str(out))
@@ -276,3 +313,181 @@ def test_empty_shard_writes_zero_rows(tmp_path, capsys):
     n = con.execute("SELECT COUNT(*) FROM expired_ids").fetchone()[0]
     con.close()
     assert n == 0
+
+
+# --- source_stats: the expiry-rate monitor's cross-shard aggregation ---------------------------
+
+
+def test_merge_sums_source_stats_across_shards(tmp_path):
+    """Two shards each covering a DISJOINT slice of the same source's boards contribute PARTIAL
+    counts; the merged ``source_stats`` table must hold the SUMMED grand total, not either shard's
+    slice alone (unlike expired_ids/board_deltas, this is arithmetic, not OR-IGNORE dedup)."""
+    s0 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [],
+        source_stats=[
+            {"source": "taleo", "checked": 5, "candidates": 5, "expired": 3, "confirmed_alive": 2}
+        ],
+    )
+    s1 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-1.sqlite",
+        [],
+        source_stats=[
+            {"source": "taleo", "checked": 5, "candidates": 5, "expired": 1, "confirmed_alive": 4}
+        ],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    mfs.merge_shards([s0, s1], out)
+
+    con = sqlite3.connect(str(out))
+    try:
+        row = con.execute(
+            "SELECT checked, candidates, expired, confirmed_alive FROM source_stats "
+            "WHERE source='taleo'"
+        ).fetchone()
+    finally:
+        con.close()
+    assert row == (10, 10, 4, 6)  # summed, not either shard's own 5/5/3/2 or 5/5/1/4
+
+
+def test_merge_source_stats_covers_multiple_sources_independently(tmp_path):
+    s0 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [],
+        source_stats=[
+            {"source": "taleo", "checked": 5, "candidates": 5, "expired": 3},
+            {"source": "adp", "checked": 2, "candidates": 2, "expired": 0},
+        ],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    mfs.merge_shards([s0], out)
+    con = sqlite3.connect(str(out))
+    try:
+        sources = {r[0] for r in con.execute("SELECT source FROM source_stats")}
+    finally:
+        con.close()
+    assert sources == {"taleo", "adp"}
+
+
+def test_merge_source_stats_is_idempotent_on_rerun(tmp_path):
+    """A merge re-run over the SAME shard set must not double the summed counts (recompute-from-
+    scratch, not an incremental add -- see merge_shards' docstring)."""
+    s0 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [],
+        source_stats=[{"source": "taleo", "checked": 5, "candidates": 5, "expired": 3}],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    mfs.merge_shards([s0], out)
+    mfs.merge_shards([s0], out)  # re-run
+    con = sqlite3.connect(str(out))
+    try:
+        row = con.execute(
+            "SELECT expired FROM source_stats WHERE source='taleo'"
+        ).fetchone()
+        n = con.execute("SELECT COUNT(*) FROM source_stats").fetchone()[0]
+    finally:
+        con.close()
+    assert row == (3,)  # not doubled to 6
+    assert n == 1  # not duplicated to 2 rows
+
+
+def test_merge_legacy_shard_without_source_stats_table_still_contributes_other_tables(tmp_path):
+    """A legacy shard predating source_stats merges its expired_ids/board_deltas fine; its missing
+    source_stats table is skipped with a warning, never aborting the merge (mirrors the existing
+    board_deltas legacy-shard resilience test above)."""
+    legacy = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [("a", "2026-07-18T00:00:00Z", "departed_board")],
+        with_stats_table=False,
+    )
+    modern = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-1.sqlite",
+        [("b", "2026-07-18T00:05:00Z", "departed_board")],
+        source_stats=[{"source": "taleo", "checked": 5, "candidates": 5, "expired": 1}],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    stats = mfs.merge_shards([legacy, modern], out)
+    assert stats["_total"] == 2
+
+    con = sqlite3.connect(str(out))
+    try:
+        sources = {r[0] for r in con.execute("SELECT source FROM source_stats")}
+    finally:
+        con.close()
+    assert sources == {"taleo"}
+
+
+# --- expiry-rate alarm evaluated on the MERGED cross-shard totals ------------------------------
+
+
+def test_merge_fires_expiry_alarm_only_visible_after_summing_shards(tmp_path, caplog):
+    """Neither shard's OWN slice crosses the count floor (3 each, floor is 5) or looks alarming in
+    isolation, but their SUM (6 expired / 6 candidates = rate 1.0) does. Proves the alarm is
+    evaluated on the merged totals, not per-shard (see check_expiry_alarms' own docstring on why a
+    per-shard rate is untrustworthy)."""
+    s0 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [],
+        source_stats=[{"source": "taleo", "checked": 3, "candidates": 3, "expired": 3}],
+    )
+    s1 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-1.sqlite",
+        [],
+        source_stats=[{"source": "taleo", "checked": 3, "candidates": 3, "expired": 3}],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    with caplog.at_level("WARNING"):
+        stats = mfs.merge_shards([s0, s1], out)
+    assert stats["_expiry_alarms"] == ["taleo"]
+    assert any("taleo" in r.message and "EXPIRY RATE ALARM" in r.message for r in caplog.records)
+
+
+def test_merge_no_alarm_when_merged_rate_stays_under_threshold(tmp_path, caplog):
+    s0 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [],
+        source_stats=[{"source": "oracle", "checked": 50, "candidates": 50, "expired": 5}],
+    )
+    s1 = _mk_shard(
+        tmp_path,
+        "index-freshness-shard-1.sqlite",
+        [],
+        source_stats=[{"source": "oracle", "checked": 50, "candidates": 50, "expired": 5}],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    with caplog.at_level("WARNING"):
+        stats = mfs.merge_shards([s0, s1], out)
+    assert stats["_expiry_alarms"] == []
+    assert not any("EXPIRY RATE ALARM" in r.message for r in caplog.records)
+
+
+def test_main_prints_expiry_alarm_summary_line(tmp_path, capsys):
+    _mk_shard(
+        tmp_path,
+        "index-freshness-shard-0.sqlite",
+        [],
+        source_stats=[{"source": "taleo", "checked": 10, "candidates": 10, "expired": 9}],
+    )
+    out = tmp_path / "index-freshness.sqlite"
+    rc = mfs.main(["--shards-dir", str(tmp_path), "--out", str(out)])
+    assert rc == 0
+    out_text = capsys.readouterr().out
+    assert "EXPIRY RATE ALARM: 1 source(s) spiked -- taleo" in out_text
+
+
+def test_main_prints_no_alarm_line_when_nothing_fires(tmp_path, capsys):
+    _mk_shard(tmp_path, "index-freshness-shard-0.sqlite", [])
+    out = tmp_path / "index-freshness.sqlite"
+    rc = mfs.main(["--shards-dir", str(tmp_path), "--out", str(out)])
+    assert rc == 0
+    assert "EXPIRY RATE ALARM" not in capsys.readouterr().out

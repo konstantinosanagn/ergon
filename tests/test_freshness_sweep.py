@@ -19,9 +19,11 @@ from ergon_tracker.index.freshness import (
     BoardDelta,
     added_ids,
     board_live_ids,
+    check_expiry_alarms,
     confirm_departed,
     departed_ids,
     idset_hash,
+    source_expiry_rate,
     sweep_all_boards,
     sweep_boards,
     sweep_search_index_boards,
@@ -1361,3 +1363,118 @@ def test_sweep_all_boards_records_delta_for_deterministic_not_search_index(tmp_p
     d = deltas[("greenhouse", "acme")]
     assert d.added_ids == frozenset({"999"})
     assert d.idset_hash == idset_hash({"999"})
+
+
+# --- source_expiry_rate: the drift tripwire's rate calc -----------------------------------------
+
+
+def test_source_expiry_rate_search_index_shape_uses_candidates():
+    # search-index counts carry "candidates" -- expired / candidates.
+    counts = {
+        "checked": 10,
+        "candidates": 8,
+        "expired": 4,
+        "confirmed_alive": 3,
+        "unconfirmed": 1,
+        "errored": 0,
+    }
+    assert source_expiry_rate(counts) == 0.5
+
+
+def test_source_expiry_rate_deterministic_shape_uses_departed():
+    # deterministic counts have no "candidates" key -- falls back to "departed". On the current
+    # single-miss implementation expired == departed always, so this is trivially 1.0 (see
+    # source_expiry_rate's own docstring for why this is still computed, and why the floor/count
+    # -- not this rate -- is what actually matters for a deterministic-source spike).
+    counts = {"checked": 5, "departed": 3, "expired": 3, "errored": 0}
+    assert source_expiry_rate(counts) == 1.0
+
+
+def test_source_expiry_rate_zero_denominator_never_divides_by_zero():
+    # No candidates AND no departed (an all-zero / never-evaluated source): must yield 0.0, not
+    # raise ZeroDivisionError.
+    assert source_expiry_rate({"checked": 0, "candidates": 0, "expired": 0}) == 0.0
+    assert source_expiry_rate({"checked": 0, "departed": 0, "expired": 0}) == 0.0
+    assert source_expiry_rate({}) == 0.0  # a maximally sparse/malformed counts dict
+
+
+def test_source_expiry_rate_missing_expired_key_defaults_zero():
+    assert source_expiry_rate({"candidates": 10}) == 0.0
+
+
+def test_source_expiry_rate_can_exceed_bounds_on_a_pathological_dict():
+    # Not clamped -- a caller that hands it a nonsensical dict (expired > candidates) gets a
+    # rate > 1 rather than a silently-wrong clamp; check_expiry_alarms' threshold still catches it.
+    assert source_expiry_rate({"candidates": 2, "expired": 5}) == 2.5
+
+
+# --- check_expiry_alarms: the drift tripwire's threshold + floor gate --------------------------
+
+
+def test_check_expiry_alarms_fires_above_threshold_and_floor(caplog):
+    stats = {
+        "taleo": {"checked": 10, "candidates": 10, "expired": 8, "confirmed_alive": 2, "unconfirmed": 0, "errored": 0},
+    }
+    with caplog.at_level("WARNING"):
+        fired = check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5)
+    assert fired == ["taleo"]
+    assert any("taleo" in r.message and "EXPIRY RATE ALARM" in r.message for r in caplog.records)
+
+
+def test_check_expiry_alarms_silent_when_rate_at_or_below_threshold():
+    # Exactly at the threshold does not fire -- the check is strictly ">".
+    stats = {"adp": {"candidates": 10, "expired": 5}}  # rate == 0.5 == threshold
+    assert check_expiry_alarms(stats, rate_threshold=0.5, count_floor=1) == []
+
+
+def test_check_expiry_alarms_silent_below_count_floor_even_at_100pct_rate():
+    # A tiny board (1 candidate, 1 expiry -> rate 1.0) must NOT false-alarm: the floor exists
+    # exactly to suppress this kind of noise.
+    stats = {"pinpoint": {"candidates": 1, "expired": 1}}
+    assert check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5) == []
+
+
+def test_check_expiry_alarms_only_flags_the_spiking_source(caplog):
+    stats = {
+        "taleo": {"candidates": 10, "expired": 9},  # spikes
+        "oracle": {"candidates": 100, "expired": 5},  # normal
+    }
+    with caplog.at_level("WARNING"):
+        fired = check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5)
+    assert fired == ["taleo"]
+    assert not any("oracle" in r.message for r in caplog.records)
+
+
+def test_check_expiry_alarms_returns_sorted_multi_source_list():
+    stats = {
+        "taleobe": {"candidates": 10, "expired": 9},
+        "adp": {"candidates": 10, "expired": 9},
+    }
+    assert check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5) == ["adp", "taleobe"]
+
+
+def test_check_expiry_alarms_deterministic_source_needs_the_count_floor_too():
+    # A deterministic source's rate is trivially 1.0 whenever it has any departures (see
+    # source_expiry_rate's docstring) -- the floor is what stops every routine deterministic
+    # expiry from alarming.
+    stats = {"greenhouse": {"checked": 3, "departed": 2, "expired": 2, "errored": 0}}
+    assert check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5) == []
+    assert check_expiry_alarms(stats, rate_threshold=0.5, count_floor=2) == ["greenhouse"]
+
+
+def test_check_expiry_alarms_never_mutates_input_stats():
+    stats = {"taleo": {"candidates": 10, "expired": 9}}
+    before = {k: dict(v) for k, v in stats.items()}
+    check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5)
+    assert stats == before
+
+
+def test_check_expiry_alarms_empty_stats_returns_empty():
+    assert check_expiry_alarms({}) == []
+
+
+def test_check_expiry_alarms_honors_env_default_threshold_and_floor(monkeypatch):
+    # No explicit rate_threshold/count_floor -- falls back to the module's env-driven defaults
+    # (ERGON_FRESHNESS_EXPIRY_ALARM=0.5, ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR=5 unless overridden).
+    stats = {"taleo": {"candidates": 10, "expired": 9}}
+    assert check_expiry_alarms(stats) == ["taleo"]
