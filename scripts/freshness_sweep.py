@@ -79,6 +79,24 @@ _BOARD_DELTAS_SCHEMA = (
     "PRIMARY KEY (source, board_token))"
 )
 
+# Expiry-rate-monitor addition -- ALONGSIDE ``expired_ids``/``board_deltas`` (whose contracts are
+# unchanged). This shard's OWN per-source counts (the dict ``sweep_all_boards`` returns), so the
+# merge step can SUM them across every shard before evaluating the drift tripwire
+# (``ergon_tracker.index.freshness.check_expiry_alarms``) on the true, cross-shard totals -- a
+# single shard only ever sees a slice of a source's boards, so its own rate is not a trustworthy
+# per-source signal in isolation (see that function's docstring). Columns cover the UNION of both
+# counts shapes this module produces (deterministic: checked/departed/expired/errored;
+# search-index: checked/candidates/expired/confirmed_alive/unconfirmed/errored) -- a shape missing
+# a given key contributes 0 for it (see ``_stats_rows``). One row per source PER SHARD (not a
+# cross-source PRIMARY KEY): a shard's own board partition means a given source's counts here are
+# already that shard's total for it, but the merge still needs to SUM across shards, not dedup.
+_SOURCE_STATS_SCHEMA = (
+    "CREATE TABLE source_stats("
+    "source TEXT NOT NULL, checked INTEGER NOT NULL, candidates INTEGER NOT NULL, "
+    "departed INTEGER NOT NULL, expired INTEGER NOT NULL, confirmed_alive INTEGER NOT NULL, "
+    "unconfirmed INTEGER NOT NULL, errored INTEGER NOT NULL)"
+)
+
 
 def _active_boards(con: sqlite3.Connection) -> list[tuple[str, str]]:
     """Every distinct ``(source, board_token)`` with at least one ``status='active'`` row, read
@@ -160,29 +178,69 @@ def _delta_rows(deltas: dict[tuple[str, str], BoardDelta]) -> list[tuple[str, st
     ]
 
 
+_STATS_KEYS: tuple[str, ...] = (
+    "checked",
+    "candidates",
+    "departed",
+    "expired",
+    "confirmed_alive",
+    "unconfirmed",
+    "errored",
+)
+
+
+_StatsRow = tuple[str, int, int, int, int, int, int, int]
+
+
+def _stats_rows(stats: dict[str, dict[str, int]]) -> list[_StatsRow]:
+    """Serialize ``sweep_all_boards``'s per-source counts into ``source_stats`` rows, in
+    ``_STATS_KEYS`` column order -- a key absent from a given source's counts shape (deterministic
+    lacks ``candidates``/``confirmed_alive``/``unconfirmed``; search-index lacks ``departed``)
+    contributes 0 rather than erroring, per :func:`ergon_tracker.index.freshness.source_expiry_rate`'s
+    own ``.get(..., 0)`` convention."""
+    rows: list[_StatsRow] = []
+    for source, counts in sorted(stats.items()):
+        checked, candidates, departed, expired, confirmed_alive, unconfirmed, errored = (
+            counts.get(k, 0) for k in _STATS_KEYS
+        )
+        rows.append(
+            (source, checked, candidates, departed, expired, confirmed_alive, unconfirmed, errored)
+        )
+    return rows
+
+
 def _write_sidecar(
     out_path: Path,
     rows: list[tuple[str, str, str | None]],
     delta_rows: list[tuple[str, str, str, str, str]] | None = None,
+    stats_rows: list[tuple[str, int, int, int, int, int, int, int]] | None = None,
 ) -> None:
     """Write the PINNED freshness sidecar contract exactly (see
     ``ergon_tracker.index.build.apply_freshness_expiries``'s docstring, which the daily build's
     carry-forward reads against byte-for-byte): one table ``expired_ids(id TEXT PRIMARY KEY,
     expired_at TEXT NOT NULL, reason TEXT)`` -- UNCHANGED -- PLUS the Phase-2 ``board_deltas`` table
-    (see ``_BOARD_DELTAS_SCHEMA``) carrying the per-board added-side change signal. Always creates
-    BOTH tables even with zero rows, so a downstream merge/build step always sees a well-formed
-    sidecar rather than special-casing an empty shard."""
+    (see ``_BOARD_DELTAS_SCHEMA``) carrying the per-board added-side change signal, PLUS the
+    expiry-rate-monitor's ``source_stats`` table (see ``_SOURCE_STATS_SCHEMA``) carrying this
+    shard's own per-source counts for the merge step to sum. Always creates all three tables even
+    with zero rows, so a downstream merge/build step always sees a well-formed sidecar rather than
+    special-casing an empty shard."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.unlink(missing_ok=True)
     con = sqlite3.connect(str(out_path))
     try:
         con.execute(_SIDECAR_SCHEMA)
         con.execute(_BOARD_DELTAS_SCHEMA)
+        con.execute(_SOURCE_STATS_SCHEMA)
         con.executemany("INSERT INTO expired_ids(id, expired_at, reason) VALUES (?,?,?)", rows)
         con.executemany(
             "INSERT INTO board_deltas(source, board_token, added_ids, idset_hash, computed_at) "
             "VALUES (?,?,?,?,?)",
             delta_rows or [],
+        )
+        con.executemany(
+            "INSERT INTO source_stats(source, checked, candidates, departed, expired, "
+            "confirmed_alive, unconfirmed, errored) VALUES (?,?,?,?,?,?,?,?)",
+            stats_rows or [],
         )
         con.commit()
     finally:
@@ -315,10 +373,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     _log_stats(stats)
     delta_rows = _delta_rows(deltas)
-    _write_sidecar(args.out, departed, delta_rows)
+    stats_rows = _stats_rows(stats)
+    _write_sidecar(args.out, departed, delta_rows, stats_rows)
     print(
-        f"[freshness] wrote {len(departed)} departed ids, {len(delta_rows)} board deltas "
-        f"-> {args.out}"
+        f"[freshness] wrote {len(departed)} departed ids, {len(delta_rows)} board deltas, "
+        f"{len(stats_rows)} source-stats rows -> {args.out}"
     )
     return 0
 

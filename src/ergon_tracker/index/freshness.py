@@ -59,6 +59,7 @@ already do.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import sqlite3
 from collections.abc import Callable, Iterable
@@ -80,13 +81,17 @@ __all__ = [
     "BoardDelta",
     "added_ids",
     "board_live_ids",
+    "check_expiry_alarms",
     "confirm_departed",
     "departed_ids",
     "idset_hash",
+    "source_expiry_rate",
     "sweep_all_boards",
     "sweep_boards",
     "sweep_search_index_boards",
 ]
+
+_log = logging.getLogger("ergon_tracker.index")
 
 # Sources whose provider ``fetch()`` returns the board's FULL, un-paginated, deterministic dump --
 # a missing stored id is a genuine departure, safe to expire on a SINGLE miss (no streak, no
@@ -202,6 +207,23 @@ _SEARCH_INDEX_BOARD_LIMIT = int(os.environ.get("ERGON_FRESHNESS_SEARCH_INDEX_BOA
 # ceiling for a board with an unusually large departed set (mirrors detail.py's
 # ``_requeue_for_location_backfill`` chunking).
 _UPDATE_CHUNK = 500
+
+# --- Drift tripwire: per-source expiry-RATE monitoring (observability-only) -------------------
+#
+# WHY: the body-marker soft-404 sources (``adp``, ``taleo``, ``taleobe`` -- all
+# ``_BULK_RELIST_CONFIRM_SOURCES``) decide "confirmed dead" from a matched BODY marker/shape in
+# ``fetch_detail`` (e.g. taleo's "no longer available" text, adp's missing ``itemID``), not a real
+# HTTP 404/410. If the provider ever changes that page's markup, the marker match could start
+# firing on genuinely LIVE postings -- silently mass-expiring a board with zero query-layer signal
+# (the expiry UPDATE looks identical to a real departure). This section is a TRIPWIRE for exactly
+# that: it never changes an expiry decision, it only WARNS when a source's expiry rate spikes far
+# above its normal range, so a parser drift gets noticed fast instead of silently draining a board.
+ERGON_FRESHNESS_EXPIRY_ALARM = float(os.environ.get("ERGON_FRESHNESS_EXPIRY_ALARM", "0.5"))
+# Trivial-count floor: a tiny board (e.g. 1 candidate, 1 expiry -> rate 1.0) would otherwise alarm
+# on ordinary noise. Only sources whose ``expired`` count reaches this floor are eligible to alarm.
+ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR = int(
+    os.environ.get("ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR", "5")
+)
 
 
 async def board_live_ids(source: str, token: str, fetcher: AsyncFetcher) -> set[str] | None:
@@ -731,3 +753,85 @@ async def sweep_all_boards(
         now=now,
     )
     return {**det_stats, **search_stats}
+
+
+def source_expiry_rate(counts: dict[str, int]) -> float:
+    """The per-source EXPIRY RATE for one source's counts dict (either shape this module
+    produces -- ``sweep_boards``'s ``{checked, departed, expired, errored}`` or
+    ``sweep_search_index_boards``'s ``{checked, candidates, expired, confirmed_alive, unconfirmed,
+    errored}``), as ``expired / max(denominator, 1)``.
+
+    DENOMINATOR CHOICE, per shape:
+
+    - search-index sources (``"candidates"`` present): ``expired / candidates``. This is the
+      metric that actually signals a body-marker/parser DRIFT: ``candidates`` is every board-list
+      miss that went through a per-posting ``confirm_departed`` before being trusted, so a spike in
+      what FRACTION of those confirms come back "definitively dead" is precisely what a marker
+      match starting to fire on live postings would look like. This is the primary tripwire target
+      (see the module-level ``adp``/``taleo``/``taleobe`` note above).
+    - deterministic sources (``"candidates"`` absent, ``"departed"`` used instead):
+      ``expired / departed``. Documented caveat: on the CURRENT ``sweep_boards`` implementation
+      every departed id is expired immediately (no confirm gate -- see its docstring), so
+      ``expired == departed`` always and this rate is trivially ``1.0`` whenever a deterministic
+      source has any departures at all. It is computed anyway for STRUCTURAL symmetry with the
+      search-index formula (same "confirmed-dead over evaluated-candidates" shape) and to
+      future-proof the metric if a confirm step is ever added to a deterministic source. Today, the
+      actionable signal for a deterministic-source spike is the raw ``expired`` COUNT crossing
+      :data:`ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR` (``check_expiry_alarms`` still fires on that), not
+      the rate itself -- deterministic sources are not vulnerable to the marker-drift failure mode
+      this tripwire targets (they trust a raw list-miss, not a body-marker match).
+
+    A zero denominator (nothing evaluated) never divides by zero: ``max(denominator, 1)`` makes an
+    all-zero counts dict rate to ``0.0``, not an error.
+    """
+    denominator = counts.get("candidates", counts.get("departed", 0))
+    return counts.get("expired", 0) / max(denominator, 1)
+
+
+def check_expiry_alarms(
+    stats: dict[str, dict[str, int]],
+    *,
+    rate_threshold: float = ERGON_FRESHNESS_EXPIRY_ALARM,
+    count_floor: int = ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR,
+    logger: logging.Logger | None = None,
+) -> list[str]:
+    """The drift TRIPWIRE: evaluate every source's :func:`source_expiry_rate` against
+    ``rate_threshold`` and log a WARNING for each source that spikes, returning the list of source
+    names that fired (sorted, for a deterministic/testable result).
+
+    A source only fires when BOTH hold: ``expired >= count_floor`` (so a tiny board's one-off
+    expiry -- e.g. 1 candidate, 1 expiry, rate 1.0 -- can never false-alarm) AND
+    ``source_expiry_rate(counts) > rate_threshold``.
+
+    MUST be called on MERGED, cross-shard totals (see ``scripts/merge_freshness_shards.py``), never
+    on one shard's slice in isolation -- a shard only ever sees a fraction of a source's boards, so
+    a per-shard rate is not a trustworthy signal of the source's true rate (it can both mask a real
+    spike averaged out across shards, and manufacture a false one off a small, unlucky slice).
+
+    NON-FATAL AND SIDE-EFFECT-FREE ON EXPIRY, BY CONSTRUCTION: this function only reads ``stats``
+    (already-computed counts from completed sweeps) and calls ``logger.warning`` -- it never touches
+    a database connection, never mutates ``stats``, and is called strictly AFTER every expiry
+    decision has already been made and committed. A spiking rate can only ever be observed here,
+    never blocked or reversed.
+    """
+    log = logger if logger is not None else _log
+    fired: list[str] = []
+    for source in sorted(stats):
+        counts = stats[source]
+        expired = counts.get("expired", 0)
+        if expired < count_floor:
+            continue
+        rate = source_expiry_rate(counts)
+        if rate > rate_threshold:
+            fired.append(source)
+            log.warning(
+                "[freshness] EXPIRY RATE ALARM: source=%s rate=%.3f exceeds threshold=%.3f "
+                "(expired=%d, counts=%s) -- possible parser/marker drift, review before it "
+                "compounds",
+                source,
+                rate,
+                rate_threshold,
+                expired,
+                counts,
+            )
+    return fired
