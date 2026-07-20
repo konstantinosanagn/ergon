@@ -7,7 +7,8 @@ from importlib.resources import files
 from pathlib import Path
 
 # v2: degree_min/degree_required columns (+ idx_jobs_degree) for the education filter.
-SCHEMA_VERSION = 2
+# v3: enrich_hash column (body-inclusive fingerprint; makes enrich-reuse safe — see mapping.py).
+SCHEMA_VERSION = 3
 
 
 def _schema_sql() -> str:

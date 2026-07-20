@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -54,6 +55,41 @@ def content_hash(job: JobPosting) -> str:
     return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
 
 
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
+
+
+def _normalize_description(job: JobPosting) -> str:
+    """Normalize the JD body to the text enrichment actually reads.
+
+    Prefers ``description_text``; falls back to a tag-stripped ``description_html`` when only
+    that's populated (mirrors how enrichment itself falls back — see ``enrich.py``: "Uses
+    inp.description_text, which falls back to stripped description_html for aggregators").
+    Collapses whitespace/casing so re-wrapped or re-indented markup that carries the *same*
+    words hashes the same — only wording changes should flip ``enrich_hash``.
+    """
+    text = job.description_text
+    if not text and job.description_html:
+        text = _TAG_RE.sub(" ", job.description_html)
+    return _WS_RE.sub(" ", (text or "")).strip().lower()
+
+
+def enrich_hash(job: JobPosting) -> str:
+    """Body-inclusive fingerprint that makes enrich-reuse SAFE (delta-driven crawl redesign, Phase 3).
+
+    ``content_hash`` deliberately excludes the JD body (company/title/level/location/salary
+    only), but ``enrich_in_place`` extracts salary/years/degree/sector/sponsorship FROM the JD
+    body. A cache keyed only on ``content_hash`` would silently reuse a stale enriched row for a
+    posting whose title/salary/location are unchanged but whose JD text was rewritten. Folding
+    ``content_hash`` plus the normalized body into one hash fixes that: it changes whenever the
+    JD body changes (even with everything else identical), and stays stable across insignificant
+    whitespace/markup-only edits (normalization above), so genuinely unchanged postings still
+    hit the reuse path.
+    """
+    basis = f"{content_hash(job)}|{_normalize_description(job)}"
+    return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
+
+
 def to_row(job: JobPosting, *, build_id: str, now: str | None = None) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc).date().isoformat()
     loc = job.locations[0] if job.locations else None
@@ -62,6 +98,7 @@ def to_row(job: JobPosting, *, build_id: str, now: str | None = None) -> dict[st
     return {
         "id": job.id,
         "content_hash": content_hash(job),
+        "enrich_hash": enrich_hash(job),
         "company_key": normalize_company(job.company),
         "source": job.source,
         "company": job.company,

@@ -16,8 +16,8 @@ from .db import SCHEMA_VERSION, connect, fresh_db
 from .mapping import from_row, to_row
 
 _JOB_COLS = (  # noqa: SIM905 - space-delimited string is far more readable than a 40-item list
-    "id content_hash company_key source company company_domain title department role_family "
-    "location city country remote level employment_type sector salary_min salary_max "
+    "id content_hash enrich_hash company_key source company company_domain title department "
+    "role_family location city country remote level employment_type sector salary_min salary_max "
     "salary_currency salary_interval salary_annual years_min years_max degree_min "
     "degree_required visa_sponsor "
     "visa_last_filed sponsorship_offered apply_url listing_url board_token posted_at updated_at "
@@ -634,7 +634,7 @@ def build_index_from_fresh_db(
 # remote, salary*, degree_min/degree_required (tiny + filterable, so max_degree serves from slim),
 # visa*, sponsorship, apply_url, posted_at, source, status, dates (schema NOT NULL cols must stay).
 # The FTS over title+company+department+snippet auto-shrinks since department + snippet become
-# NULL. content_hash stays (NOT NULL + cheap, 16 hex).
+# NULL. content_hash/enrich_hash stay (cheap, 16 hex each).
 _SLIM_NULL_COLS = frozenset(
     {
         "snippet",

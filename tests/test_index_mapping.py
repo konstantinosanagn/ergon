@@ -105,3 +105,62 @@ def test_content_hash_stable_and_change_sensitive():
     assert content_hash(base) != content_hash(relevel)  # level is part of the identity
     withsal = base.model_copy(update={"salary": Salary(min_amount=100, max_amount=200)})
     assert content_hash(base) != content_hash(withsal)  # salary changed
+
+
+def test_to_row_sets_enrich_hash():
+    row = to_row(_job(), build_id="b1")
+    assert row["enrich_hash"] and isinstance(row["enrich_hash"], str)
+
+
+def test_enrich_hash_changes_when_jd_body_changes_even_if_content_hash_does_not():
+    # The correctness-critical case: enrich_in_place extracts salary/yoe/degree/sector/
+    # sponsorship FROM the JD body, so a rewritten body must invalidate the enrich cache even
+    # when title/level/location/salary (content_hash's fields) are untouched.
+    from ergon_tracker.index.mapping import content_hash, enrich_hash
+
+    base = _job()
+    rewritten = base.model_copy(
+        update={"description_text": "Completely different responsibilities. Requires PhD."}
+    )
+    assert content_hash(base) == content_hash(rewritten)  # content_hash is blind to the body
+    assert enrich_hash(base) != enrich_hash(rewritten)  # enrich_hash must NOT be blind to it
+
+
+def test_enrich_hash_stable_under_whitespace_and_markup_only_changes():
+    from ergon_tracker.index.mapping import enrich_hash
+
+    base = _job()
+    rewrapped = base.model_copy(
+        update={"description_text": "  Build   payments.\n\nRust  and\tGo.  "}
+    )
+    assert enrich_hash(base) == enrich_hash(rewrapped)
+
+    # description_html fallback (no description_text): tags-only difference, same visible words.
+    html_a = base.model_copy(
+        update={"description_text": None, "description_html": "<p>Build payments. Rust and Go.</p>"}
+    )
+    html_b = base.model_copy(
+        update={
+            "description_text": None,
+            "description_html": "<div><p>Build payments.</p> <p>Rust and Go.</p></div>",
+        }
+    )
+    assert enrich_hash(html_a) == enrich_hash(html_b)
+
+
+def test_enrich_hash_equal_for_identical_postings_different_source_id():
+    from ergon_tracker.index.mapping import enrich_hash
+
+    base = _job()
+    same = base.model_copy(update={"source": "lever", "source_job_id": "zzz"})
+    assert enrich_hash(base) == enrich_hash(same)
+
+
+def test_enrich_hash_falls_back_to_description_html_when_text_missing():
+    from ergon_tracker.index.mapping import enrich_hash
+
+    text_only = _job().model_copy(update={"description_html": None})
+    html_only = _job().model_copy(
+        update={"description_text": None, "description_html": "<p>Build payments. Rust and Go.</p>"}
+    )
+    assert enrich_hash(text_only) == enrich_hash(html_only)
