@@ -1014,6 +1014,7 @@ async def _crawl_due(
     from ergon_tracker.index.build import append_jobs
     from ergon_tracker.index.db import connect, fresh_db
     from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES, idset_hash
+    from ergon_tracker.index.mapping import enrich_hash
     from ergon_tracker.index.scheduler import BoardState, due_boards
     from ergon_tracker.models import SearchQuery
     from ergon_tracker.providers.base import get_provider, load_builtins
@@ -1147,6 +1148,16 @@ async def _crawl_due(
             # (the only ones the sweep fingerprints). Cheap; only when the flag is on.
             if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
                 state.idset_hash = idset_hash({str(r.source_job_id) for r in raws})
+            # Sub-phase C (enrich-reuse): for a crawled DELTA board, load THIS board's prior
+            # enriched rows keyed by id so an unchanged posting (matching enrich_hash) can copy its
+            # already-enriched fields instead of re-running enrich_in_place. Lazy + per-board =>
+            # O(board) memory. enrich_hash is BODY-INCLUSIVE, so a JD rewrite that content_hash
+            # misses still flips the hash and forces a re-enrich (never serves stale enrichment).
+            reuse_by_id = (
+                _load_board_reuse_rows(prev_db, e["ats"], e["token"])
+                if delta_crawl and prev_db is not None
+                else {}
+            )
             board_jobs: list = []
             for raw in raws:
                 try:
@@ -1156,7 +1167,14 @@ async def _crawl_due(
                 if e.get("domain") and not job.company_domain:
                     job.company_domain = e["domain"]
                 job.board_token = e["token"]  # registry token this board was crawled with
-                enrich_in_place(job, company_key=regkey, infer_level_from_experience=True)
+                prior_row = reuse_by_id.get(job.id) if reuse_by_id else None
+                if prior_row is not None and prior_row["enrich_hash"] == enrich_hash(job):
+                    # Unchanged posting: copy the prior fully-enriched fields (no re-enrich). The
+                    # resulting row is byte-identical to a full enrich (enrich_hash matched =>
+                    # content+body identical); parity-tested. NEVER reused on a hash miss.
+                    _apply_enriched_from_row(job, prior_row)
+                else:
+                    enrich_in_place(job, company_key=regkey, infer_level_from_experience=True)
                 board_jobs.append(job)
                 outcome[bkey]["companies"].add(normalize_company(job.company))
             if board_jobs:
@@ -1264,6 +1282,58 @@ def _load_board_delta_hashes(sidecar_path: Path) -> dict[tuple[str, str], str]:
     finally:
         con.close()
     return out
+
+
+def _load_board_reuse_rows(prev_db, source: str, token: str) -> dict:
+    """Prior-index enriched rows for ONE board, keyed by ``id`` -- the enrich-reuse lookup (sub-
+    phase C). Scoped to ``(source, board_token)`` so memory is O(one board), read from a throwaway
+    read-only connection (safe under crawl concurrency; SQLite allows many concurrent readers). A
+    prior row with a NULL ``board_token`` (never re-crawled/backfilled) simply isn't matched here,
+    so that posting is enriched fresh -- a yield miss, never a correctness risk. Any read error ->
+    ``{}`` (fall back to full enrich for the whole board)."""
+    from ergon_tracker.index.db import connect
+
+    out: dict = {}
+    if prev_db is None or not Path(prev_db).exists():
+        return out
+    try:
+        con = connect(prev_db, read_only=True)
+    except Exception:  # noqa: BLE001 - a missing/corrupt prev index just disables reuse
+        return out
+    try:
+        for row in con.execute(
+            "SELECT * FROM jobs WHERE source=? AND board_token=?", (source, token)
+        ):
+            out[str(row["id"])] = row
+    except Exception:  # noqa: BLE001
+        return {}
+    finally:
+        con.close()
+    return out
+
+
+def _apply_enriched_from_row(job, row) -> None:
+    """Copy every enrichment-PRODUCED field from a prior index ``row`` onto a freshly-normalized
+    ``job`` (enrich-reuse, sub-phase C), so ``to_row(job)`` reproduces the prior row byte-for-byte
+    WITHOUT re-running ``enrich_in_place``. Only the fields ``enrich_in_place`` writes are copied --
+    level, salary, years, degree, sector, visa, sponsorship, and the geo-normalized locations
+    (``normalize_geo`` runs inside enrich and refines city/country); every other stored column comes
+    from ``normalize`` and is already identical for an unchanged posting. The full JD body on
+    ``job`` is left intact so ``enrich_hash`` recomputes to the SAME value that matched."""
+    from ergon_tracker.index.mapping import from_row
+
+    prior = from_row(row)
+    job.level = prior.level
+    job.salary = prior.salary
+    job.years_experience_min = prior.years_experience_min
+    job.years_experience_max = prior.years_experience_max
+    job.degree_min = prior.degree_min
+    job.degree_required = prior.degree_required
+    job.sector = prior.sector
+    job.visa_sponsor = prior.visa_sponsor
+    job.visa_last_filed = prior.visa_last_filed
+    job.sponsorship_offered = prior.sponsorship_offered
+    job.locations = prior.locations
 
 
 def _load_cursor(path: Path) -> int:
