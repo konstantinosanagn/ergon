@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import anyio
+import httpx
 
 from ..extract.comp import coerce_amount
 from ..models import (
@@ -230,6 +231,30 @@ class JoinProvider(BaseProvider):
             for job in pages[page]:
                 raws.append(self._to_raw(job, token, company))
         return raws
+
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap change-CANDIDATE signal: page-1 ``pagination.total`` (see
+        ``BaseProvider.board_count``).
+
+        join has no JSON count endpoint, but the page's ``__NEXT_DATA__`` blob -- fetched by the
+        SAME plain GET ``fetch`` already issues for page 1 -- embeds
+        ``initialState.jobs.pagination.total`` (job count) alongside ``pageCount`` (page count).
+        ONE GET, no extra pages. Returns ``None`` ONLY on a confirmed-gone signal (404/410 for the
+        careers page); everything else indeterminate/transient RAISES (mirrors ``fetch_detail``'s
+        404-vs-transient contract)."""
+        url = _CAREERS.format(token=token)
+        try:
+            html = await fetcher.get_text(url)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        state = _parse_initial_state(html)
+        pagination = (state.get("jobs") or {}).get("pagination") or {}
+        total = pagination.get("total")
+        if not isinstance(total, int):
+            raise RuntimeError(f"join board_count: missing/non-int pagination.total for {token!r}")
+        return total
 
     async def _fetch_page(
         self, fetcher: AsyncFetcher, url: str, page: int, sink: dict[int, list[dict[str, Any]]]

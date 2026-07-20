@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -12,6 +13,7 @@ from ergon_tracker.exceptions import TransientHTTPError
 from ergon_tracker.http import AsyncFetcher
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.models import SearchQuery, make_job_id
+from ergon_tracker.providers.base import BaseProvider
 from ergon_tracker.providers.ukg import UKGProvider
 
 pytestmark = pytest.mark.anyio
@@ -205,3 +207,108 @@ async def test_fetch_detail_no_description_json_raises() -> None:
     fetcher = _FakeFetcher(text="<html><body>Not Found or some other page</body></html>")
     with pytest.raises(RuntimeError):
         await UKGProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+# --- board_count: cheap Top:1 totalCount change-CANDIDATE signal ---------------------------------
+
+
+async def test_board_count_reads_total_count() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        d = json.loads(request.content)
+        assert d["opportunitySearch"]["Top"] == 1
+        assert d["opportunitySearch"]["Skip"] == 0
+        return httpx.Response(200, json={"opportunities": [_rec(0)], "totalCount": 61})
+
+    with respx.mock as m:
+        m.post(URL).mock(side_effect=handler)
+        async with AsyncFetcher(per_host_rate=100) as f:
+            count = await UKGProvider().board_count(TOKEN, f)
+    assert count == 61
+
+
+async def test_board_count_unparseable_token_returns_none() -> None:
+    async with AsyncFetcher(per_host_rate=100) as f:
+        count = await UKGProvider().board_count("", f)
+    assert count is None
+
+
+async def test_board_count_404_returns_none() -> None:
+    with respx.mock as m:
+        m.post(URL).mock(return_value=httpx.Response(404))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            count = await UKGProvider().board_count(TOKEN, f)
+    assert count is None
+
+
+async def test_board_count_transient_error_raises() -> None:
+    with respx.mock as m:
+        m.post(URL).mock(return_value=httpx.Response(503))
+        async with AsyncFetcher(per_host_rate=100, retries=1) as f:
+            with pytest.raises(TransientHTTPError):
+                await UKGProvider().board_count(TOKEN, f)
+
+
+async def test_board_count_missing_total_count_raises() -> None:
+    with respx.mock as m:
+        m.post(URL).mock(return_value=httpx.Response(200, json={"opportunities": []}))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            with pytest.raises(RuntimeError):
+                await UKGProvider().board_count(TOKEN, f)
+
+
+async def test_base_provider_board_count_is_none() -> None:
+    assert await BaseProvider().board_count(TOKEN, None) is None  # type: ignore[arg-type]
+
+
+# --- board_count: live gate (ERGON_LIVE_TESTS=1) --------------------------------------------------
+
+_PROBE_FILE = Path(
+    "/private/tmp/claude-501/-Users-kanagn-Desktop-job-researcher/"
+    "d20c6e7c-0b7f-4b04-a828-a75251378b9c/scratchpad/probe_targets.json"
+)
+_SEED_FILE = Path(__file__).resolve().parents[1] / "src/ergon_tracker/registry/data/seed.json"
+
+
+def _live_tokens(ats: str, n: int = 3) -> list[str]:
+    """Token sample for the ``board_count`` live gate: prefer the investigator's
+    ``probe_targets.json`` (pre-verified live boards, if present), else fall back to the registry
+    seed filtered by ``ats`` -- mirrors ``tests/live``'s own ``_tokens`` helper."""
+    if _PROBE_FILE.exists():
+        try:
+            data = json.loads(_PROBE_FILE.read_text())
+            toks = [e["token"] for e in data.get(ats, []) if e.get("token")]
+            if toks:
+                return toks[:n]
+        except Exception:
+            pass
+    with open(_SEED_FILE) as f:
+        seed = json.load(f)["companies"]
+    return [
+        e["token"]
+        for e in seed.values()
+        if isinstance(e, dict) and e.get("ats") == ats and e.get("token")
+    ][:n]
+
+
+@pytest.mark.live
+async def test_board_count_live_positive_and_consistent_with_sampled_fetch() -> None:
+    tokens = _live_tokens("ukg", 5)
+    assert tokens, "no ukg tokens available (neither probe_targets.json nor seed.json)"
+    checked = positive = 0
+    async with AsyncFetcher(per_host_rate=5, retries=2) as f:
+        for token in tokens:
+            try:
+                count = await UKGProvider().board_count(token, f)
+            except Exception:
+                continue
+            if count is None:
+                continue
+            assert count >= 0, f"{token}: board_count returned negative {count}"
+            sampled = await UKGProvider().fetch(token, SearchQuery(limit=20), f)
+            assert count >= len(sampled), (
+                f"{token}: board_count {count} < sampled fetch {len(sampled)}"
+            )
+            checked += 1
+            positive += count > 0
+    assert checked >= 1, "no live ukg board yielded a usable board_count"
+    assert positive >= 1, "no live ukg board yielded a POSITIVE board_count"
