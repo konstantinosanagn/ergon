@@ -402,6 +402,33 @@ def test_failed_board_fetch_leaves_its_rows_untouched(tmp_path):
     assert _sidecar_row(liv, "gh-1") is None  # never recorded -- stays eligible next run
 
 
+# --- source-list sync: CONFIRM_VIA_DETAIL_SOURCES == build_index._TIER3_DETAIL_SOURCES ---------
+
+
+def test_confirm_and_tier3_source_lists_are_in_sync():
+    # The two lists are manually kept in sync by design (see liveness.py's comment near the
+    # CONFIRM_VIA_DETAIL_SOURCES definition): both enumerate "sources with a working fetch_detail",
+    # the same underlying fact from two call sites. They must stay identical as sets so a source
+    # can never be drained by one pass but not confirmed by the other.
+    from scripts.build_index import _TIER3_DETAIL_SOURCES
+
+    assert set(CONFIRM_VIA_DETAIL_SOURCES) == set(_TIER3_DETAIL_SOURCES)
+
+
+def test_newly_wired_detail_providers_present_in_both_lists():
+    # R3: the four already-built detail providers whose fetch_detail is verified (by their own
+    # passing "alive returns text" tests: test_themuse/test_adp/test_avature/test_taleobe) are now
+    # wired into BOTH the Tier-3 drain source list and the liveness confirm source set. taleo is
+    # deliberately absent (JS-blocked, no working fetch_detail).
+    from scripts.build_index import _TIER3_DETAIL_SOURCES
+
+    newly_wired = {"themuse", "adp", "avature", "taleobe"}
+    assert newly_wired <= set(CONFIRM_VIA_DETAIL_SOURCES)
+    assert newly_wired <= set(_TIER3_DETAIL_SOURCES)
+    assert "taleo" not in set(CONFIRM_VIA_DETAIL_SOURCES)
+    assert "taleo" not in set(_TIER3_DETAIL_SOURCES)
+
+
 def test_unresolvable_token_rows_are_skipped_not_flipped(tmp_path):
     # A row with no board_token AND no resolvable company_key must be left alone (never
     # misclassified as dead purely because we can't figure out which board to check).

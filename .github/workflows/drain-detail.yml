@@ -50,11 +50,15 @@ on:
       location_backfill:
         description: "Set to 1 to ALSO re-fetch already-drained rows on the location-capable sources (workday/oracle/successfactors/eightfold/radancy/rippling/bamboohr/jobvite) that still lack a city/country -- rows drained before their location wiring existed. Preserves recovered salary (fetched_at re-queue, never DELETE). Leave empty for a normal drain."
         default: ""
-  # NOTE: MANUAL-ONLY (workflow_dispatch) until the sharded high-concurrency throughput hypothesis is
-  # validated by a bounded live run (a small detail_max across all 20 shards, measuring per-shard req/s
-  # + 429 rate). Re-add a `schedule:` cron for ongoing maintenance ONLY after that measures clean --
-  # e.g.  schedule: [ { cron: "30 9 * * *" } ]  (09:30 UTC, off build-index.yml's 04:17 slot; the shared
-  # concurrency group below already serializes the two so they never race).
+  # Daily sharded drain. 09:30 UTC is deliberately OFF build-index.yml's 04:17 slot; the shared
+  # `concurrency: group: build-index` below already serializes the two so they never run at once
+  # (see the decoupling note above). The design is safe by construction -- one politeness bucket per
+  # shard, each drain-only rate probed to its 429 knee, Workable's ~4 req/s single-host tail (~3.2h)
+  # the long pole, comfortably under the 350-min timeout.
+  # WATCH the FIRST scheduled run for 429s / gateway 5xx (esp. the Workable + SmartRecruiters
+  # megahost shards): if a shard's failure rate climbs, dial its ERGON_*_DETAIL_RATE default down.
+  schedule:
+    - cron: "30 9 * * *"
 
 permissions:
   contents: write   # to publish the combined detail sidecar as a release asset (merge job)
@@ -127,6 +131,22 @@ jobs:
           # writes the rows it selects for this shard, so another shard's rows just ride along
           # unused in this copy.
           [ -f dist/index-detail.sqlite ] && cp dist/index-detail.sqlite "dist/index-detail-shard-${{ matrix.shard }}.sqlite" || true
+
+      - name: Rescue RETRY_CAP-stuck empty-snippet rows (reset attempts=0)
+        # R1: rows that burned their whole retry budget under the OLD (buggy) SmartRecruiters/Oracle
+        # detail parser sit stuck at attempts>=RETRY_CAP with an EMPTY snippet, so `_eligible` never
+        # re-selects them even though the FIXED parser would now recover them. Zero `attempts` on
+        # exactly those (empty-snippet-only) rows so this drain re-tries them. Runs AFTER the shard
+        # sidecar is seeded above and BEFORE the drain below. Idempotent + snippet-guarded (a
+        # recovered row is never re-queued). Best-effort: never block the drain on the rescue.
+        continue-on-error: true
+        run: |
+          f="dist/index-detail-shard-${{ matrix.shard }}.sqlite"
+          if [ -f "$f" ]; then
+            uv run python scripts/reset_detail_attempts.py --detail-db "$f"
+          else
+            echo "no seeded shard sidecar yet -- nothing to rescue (first-ever run)"
+          fi
 
       - name: Drain shard ${{ matrix.shard }} of ${{ env.NUM_SHARDS }}
         env:

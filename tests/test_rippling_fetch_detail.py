@@ -1,13 +1,18 @@
 """Tier-3 detail fetcher: RipplingProvider.fetch_detail.
 
 Offline only — a FakeFetcher stands in for AsyncFetcher; no live network calls. Mirrors
-``tests/test_workday_fetch_detail.py``'s non-raising discipline: any unparseable ref, fetch
-failure, non-JSON payload, or shape mismatch (including a truthy non-dict payload) returns
-``None``, never an exception."""
+``providers/smartrecruiters.py``'s hardened 404-vs-transient contract (``providers/base.py``):
+returns ``None`` ONLY on a real HTTP 404/410 (confirmed-gone); every indeterminate/transient
+condition -- an unbuildable ref, a fetch exception, a non-404 HTTP status, a non-dict payload, or
+an empty/missing/malformed ``description`` -- RAISES instead, so the liveness sweep (rippling is in
+``CONFIRM_VIA_DETAIL_SOURCES`` with a confirmed-streak threshold of 1) never expires a still-live
+posting on an ambiguous signal."""
 
 from __future__ import annotations
 
 import anyio
+import httpx
+import pytest
 
 from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.providers.base import BaseProvider
@@ -22,6 +27,30 @@ class _FakeFetcher:
     async def get_json(self, url: str, **kw: object) -> object:
         self.calls.append(url)
         return self._p
+
+
+def _http_status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request(
+        "GET", "https://api.rippling.com/platform/api/ats/v1/board/acme-co/jobs/uuid"
+    )
+    response = httpx.Response(status, request=request)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return e
+    raise AssertionError("expected raise_for_status to raise")  # pragma: no cover
+
+
+class _RaisingStatusFetcher:
+    """Raises a fixed httpx.HTTPStatusError (a real HTTP status) on every get_json."""
+
+    def __init__(self, status: int) -> None:
+        self._exc = _http_status_error(status)
+        self.calls: list[str] = []
+
+    async def get_json(self, url: str, **kw: object) -> object:
+        self.calls.append(url)
+        raise self._exc
 
 
 def test_rippling_fetch_detail_concatenates_description_dict_shape_1() -> None:
@@ -92,7 +121,8 @@ def test_rippling_fetch_detail_plain_string_description_returned_directly() -> N
     assert desc == "<p>Plain string JD</p>"
 
 
-def test_rippling_fetch_detail_missing_description_is_none() -> None:
+def test_rippling_fetch_detail_missing_description_raises() -> None:
+    # A 200 with no ``description`` is an unclassifiable shape, NOT a confirmed-gone signal -> raise.
     payload: dict = {"someOtherKey": {}}
     ref = DetailRef(
         id="5",
@@ -102,11 +132,11 @@ def test_rippling_fetch_detail_missing_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_empty_description_dict_is_none() -> None:
+def test_rippling_fetch_detail_empty_description_dict_raises() -> None:
     payload = {"description": {}}
     ref = DetailRef(
         id="6",
@@ -116,11 +146,11 @@ def test_rippling_fetch_detail_empty_description_dict_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_empty_string_description_is_none() -> None:
+def test_rippling_fetch_detail_empty_string_description_raises() -> None:
     payload = {"description": "   "}
     ref = DetailRef(
         id="7",
@@ -130,11 +160,11 @@ def test_rippling_fetch_detail_empty_string_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_non_dict_non_str_description_is_none() -> None:
+def test_rippling_fetch_detail_non_dict_non_str_description_raises() -> None:
     payload = {"description": ["not", "a", "dict-or-str"]}
     ref = DetailRef(
         id="8",
@@ -144,12 +174,12 @@ def test_rippling_fetch_detail_non_dict_non_str_description_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_truthy_non_dict_payload_is_none() -> None:
-    # ``data`` itself truthy but not a dict must not raise.
+def test_rippling_fetch_detail_truthy_non_dict_payload_raises() -> None:
+    # ``data`` itself truthy but not a dict is an unclassifiable shape -> raise (never a death signal).
     payload = "oops-a-string"
     ref = DetailRef(
         id="9",
@@ -159,11 +189,12 @@ def test_rippling_fetch_detail_truthy_non_dict_payload_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_unparseable_urls_is_none() -> None:
+def test_rippling_fetch_detail_unparseable_urls_raises() -> None:
+    # An unbuildable detail URL is NOT evidence of death -> raise (mirrors smartrecruiters).
     payload = {"description": {"role": "<p>Should never be fetched</p>"}}
     ref = DetailRef(
         id="10",
@@ -173,11 +204,11 @@ def test_rippling_fetch_detail_unparseable_urls_is_none() -> None:
         listing_url="https://example.com/also-not-rippling",
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_no_urls_no_token_is_none() -> None:
+def test_rippling_fetch_detail_no_urls_no_token_raises() -> None:
     payload = {"description": {"role": "<p>Should never be fetched</p>"}}
     ref = DetailRef(
         id="11",
@@ -187,14 +218,15 @@ def test_rippling_fetch_detail_no_urls_no_token_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _FakeFetcher(payload)))
 
 
-def test_rippling_fetch_detail_fetcher_raises_is_none() -> None:
+def test_rippling_fetch_detail_transient_fetch_error_propagates() -> None:
+    # A bare (non-HTTPStatusError) fetch exception is indeterminate -> propagates, never None.
     class _RaisingFetcher:
         async def get_json(self, url: str, **kw: object) -> object:
-            raise RuntimeError("boom (e.g. stale 404)")
+            raise RuntimeError("boom (e.g. timeout / connection reset)")
 
     ref = DetailRef(
         id="12",
@@ -204,8 +236,63 @@ def test_rippling_fetch_detail_fetcher_raises_is_none() -> None:
         listing_url=None,
         content_sig="s",
     )
-    desc = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _RaisingFetcher()))
-    assert desc is None
+    with pytest.raises(RuntimeError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _RaisingFetcher()))
+
+
+def test_rippling_fetch_detail_5xx_status_raises_not_none() -> None:
+    # (R4 a) A transient HTTP 503 MUST raise, never collapse to None -- else the liveness sweep
+    # (threshold 1) would expire a live posting on a single blip.
+    ref = DetailRef(
+        id="13",
+        source="rippling",
+        token=None,
+        apply_url="https://ats.rippling.com/acme-co/jobs/uuid-13",
+        listing_url=None,
+        content_sig="s",
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _RaisingStatusFetcher(503)))
+
+
+def test_rippling_fetch_detail_429_status_raises_not_none() -> None:
+    ref = DetailRef(
+        id="14",
+        source="rippling",
+        token=None,
+        apply_url="https://ats.rippling.com/acme-co/jobs/uuid-14",
+        listing_url=None,
+        content_sig="s",
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        anyio.run(lambda: RipplingProvider().fetch_detail(ref, _RaisingStatusFetcher(429)))
+
+
+def test_rippling_fetch_detail_404_returns_none() -> None:
+    # (R4 b) A real HTTP 404 is the ONLY confirmed-gone signal -> returns None (expire the row).
+    ref = DetailRef(
+        id="15",
+        source="rippling",
+        token=None,
+        apply_url="https://ats.rippling.com/acme-co/jobs/uuid-15",
+        listing_url=None,
+        content_sig="s",
+    )
+    res = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _RaisingStatusFetcher(404)))
+    assert res is None
+
+
+def test_rippling_fetch_detail_410_returns_none() -> None:
+    ref = DetailRef(
+        id="16",
+        source="rippling",
+        token=None,
+        apply_url="https://ats.rippling.com/acme-co/jobs/uuid-16",
+        listing_url=None,
+        content_sig="s",
+    )
+    res = anyio.run(lambda: RipplingProvider().fetch_detail(ref, _RaisingStatusFetcher(410)))
+    assert res is None
 
 
 def test_base_fetch_detail_is_none() -> None:
@@ -298,3 +385,57 @@ def test_fetch_detail_recovers_worklocations_strings() -> None:
     res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
     assert isinstance(res, DetailFetch)
     assert [loc.raw for loc in res.locations] == ["London, United Kingdom"]  # empties skipped
+
+
+# --- (R4 c) liveness classify_row treats a RAISED rippling confirm as KEEP, never flipped_dead --
+
+
+def test_liveness_keeps_row_when_rippling_confirm_raises_transient(tmp_path) -> None:
+    """Integration guard: route the REAL RipplingProvider.fetch_detail (against a 503-raising
+    fetcher) through reconcile_liveness_tier for a rippling row that has left its board's fresh
+    list. Because rippling is in CONFIRM_VIA_DETAIL_SOURCES (confirmed-streak threshold 1), the OLD
+    None-on-transient behavior would have expired this live posting on a single blip. The hardened
+    provider RAISES instead, and the liveness pass classifies a raise as confirm_errored -> KEEP."""
+    import sqlite3
+
+    from ergon_tracker.index.db import fresh_db
+    from ergon_tracker.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
+
+    assert "rippling" in CONFIRM_VIA_DETAIL_SOURCES
+
+    idx = tmp_path / "index.sqlite"
+    fresh_db(idx)
+    con = sqlite3.connect(idx)
+    ts = "2026-07-01T00:00:00+00:00"
+    con.execute(
+        "INSERT INTO jobs (id, content_hash, source, company, title, remote, level, "
+        "employment_type, status, first_seen, last_seen, fetched_at, build_id, board_token, "
+        "apply_url) VALUES (?, ?, 'rippling', 'Acme', 'Engineer', 'unknown', 'mid', 'full_time', "
+        "'active', ?, ?, ?, 'b0', 'acme-co', ?)",
+        ("rp-1", "ch-1", ts, ts, ts, "https://ats.rippling.com/acme-co/jobs/uuid-rp-1"),
+    )
+    con.commit()
+    con.close()
+
+    liv = str(tmp_path / "liveness.sqlite")
+
+    async def fetch_board(source: str, token: str) -> set[str]:
+        return set()  # list-miss: the posting left the fresh board list
+
+    async def fetch_detail(ref):  # dispatch to the REAL hardened provider, transient 503
+        return await RipplingProvider().fetch_detail(ref, _RaisingStatusFetcher(503))
+
+    stats = anyio.run(
+        lambda: reconcile_liveness_tier(
+            liv, str(idx), fetch_board=fetch_board, fetch_detail=fetch_detail, now=lambda: ts
+        )
+    )
+    assert stats["flipped_dead"] == 0  # NEVER expired on a transient confirm error
+    assert stats["confirm_errored"] == 1
+
+    con = sqlite3.connect(idx)
+    status, reason = con.execute(
+        "SELECT status, expiry_reason FROM jobs WHERE id = 'rp-1'"
+    ).fetchone()
+    con.close()
+    assert status == "active" and reason is None

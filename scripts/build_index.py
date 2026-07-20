@@ -387,6 +387,10 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "bamboohr",  # /careers/{id}/detail -> description + structured `compensation` string
     "ukg",  # OpportunityDetail page -> full JD body (structured pay is gated, but ~40% state it in prose)
     "jobvite",  # per-job JSON-LD JobPosting.description -> full JD body (no salary, but yoe/degree/skills)
+    "themuse",  # per-posting landing page -> full JD body (fetch_detail verified: test_themuse)
+    "adp",  # requisitionDescription HTML from the ADP posting record (verified: test_adp)
+    "avature",  # detail page <main>/body JD text (verified: test_avature)
+    "taleobe",  # Taleo Business Edition per-job JSON-LD JobPosting.description (verified: test_taleobe)
 ]
 
 

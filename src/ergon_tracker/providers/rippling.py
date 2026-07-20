@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from ..extract.comp import coerce_amount
 from ..models import (
     DetailFetch,
@@ -123,20 +125,31 @@ class RipplingProvider(BaseProvider):
         The response's ``description`` is a DICT of HTML sections keyed by heading (e.g.
         ``{"company": "<p>...</p>", "role": "..."}``) — all string values are concatenated (in
         insertion order) joined by ``"\\n"``. A plain-string ``description`` is used directly.
-        Non-raising: any unparseable ref, fetch failure, non-JSON payload, or shape mismatch
-        (including a truthy non-dict payload/description) returns ``None``, never an exception.
+
+        Contract (see ``providers/base.py`` / ``fetch_detail_contract.md``): returns ``None`` ONLY
+        on a confirmed-gone signal -- a real HTTP 404/410 from the per-posting resource (the REST
+        convention for a single-resource GET; Rippling has no verified soft-404 BODY for a removed
+        posting). This matters because rippling is in ``liveness.CONFIRM_VIA_DETAIL_SOURCES`` with a
+        confirmed-streak threshold of 1, so a ``None`` here immediately expires a still-live posting.
+        An unbuildable detail URL (token/uuid not parseable from the ref) is NOT evidence of death,
+        and every other indeterminate/transient condition -- other HTTP statuses, timeouts, rate
+        limits, a non-dict payload, an empty/missing/malformed ``description``, or a shape mismatch
+        (a truthy non-dict/non-str description, an empty section dict) -- RAISES instead, so the
+        freshness/liveness sweep never expires a still-live posting on an ambiguous signal.
         """
         parsed = self._parse_detail_ref(ref)
         if parsed is None:
-            return None
+            raise RuntimeError(f"rippling detail: no derivable detail URL for {ref!s}")
         token, uuid = parsed
         url = _DETAIL_API.format(token=token, uuid=uuid)
         try:
             data = await fetcher.get_json(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(data, dict):
-            return None
+            raise RuntimeError(f"rippling detail: non-dict payload for {ref!s}")
         description = data.get("description")
         if isinstance(description, str):
             text = description if description.strip() else None
@@ -146,7 +159,7 @@ class RipplingProvider(BaseProvider):
         else:
             text = None
         if text is None:
-            return None
+            raise RuntimeError(f"rippling detail: no JD text in description for {ref!s}")
         # The SAME detail response carries a STRUCTURED pay array (payRangeDetails) and a location
         # STRING list (workLocations, e.g. ["London, United Kingdom"] -- note the DETAIL uses the
         # plural, unlike the list view's workLocation.label). Return both so the reconcile prefers

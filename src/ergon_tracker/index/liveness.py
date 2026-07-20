@@ -123,6 +123,10 @@ CONFIRM_VIA_DETAIL_SOURCES: tuple[str, ...] = (
     "bamboohr",
     "ukg",
     "jobvite",
+    "themuse",
+    "adp",
+    "avature",
+    "taleobe",
 )
 
 # A source WITHOUT fetch_detail needs this many consecutive weekly misses before a candidate
