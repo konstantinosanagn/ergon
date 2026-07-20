@@ -193,6 +193,13 @@ class JoinProvider(BaseProvider):
     PER_PAGE = 5  # join.com renders 5 jobs per SSR page
     MAX_PAGES = 20  # per-board page cap (=100 jobs) to bound pagination cost
 
+    def list_host(self, token: str) -> str | None:
+        # join.com has no conditional_url (base default would return None), but its 5-jobs/page SSR
+        # pagination makes it the slowest slice of a crawl -- the exact host the deadline-box exists
+        # to bound. Return its shared host so ``AsyncFetcher.is_over_budget`` can stop dispatching
+        # new join boards once the host has blown its per-run wall-clock budget.
+        return "join.com"
+
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
         for pattern in _HOST_PATTERNS:

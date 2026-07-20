@@ -1006,6 +1006,7 @@ async def _crawl_due(
     """
     import anyio
 
+    from ergon_tracker.crawl_pool import run_pool
     from ergon_tracker.dedup import deduplicate, normalize_company
     from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.exceptions import RateLimitError
@@ -1072,6 +1073,20 @@ async def _crawl_due(
         regkey, e = boards[bkey]
         provider = get_provider(e["ats"])
         state = states[bkey]
+        # Deadline-box: if this board's host has already blown its per-run wall-clock budget (e.g.
+        # join.com, whose 5-jobs/page pagination is the crawl's slow tail), skip DISPATCHING it this
+        # run. Popping it from ``outcome`` leaves it exactly as if it were never in this window --
+        # its BoardState is untouched (never marked crawled), so it stays ``due`` and rolls to the
+        # next run, and its prior rows carry forward (empty ``companies`` => carry_forward keeps
+        # them). Behaviour-preserving whenever no host exceeds its budget (the common case). A
+        # non-positive budget disables the box entirely.
+        # ``list_host`` is defensive via getattr: every first-party provider has it (BaseProvider),
+        # but a minimal/partial provider double without it simply isn't deadline-boxed (host=None).
+        list_host = getattr(provider, "list_host", None)
+        host = list_host(e["token"]) if (list_host is not None and host_budget > 0) else None
+        if host and fetcher.is_over_budget(host, host_budget):
+            outcome.pop(bkey, None)
+            return
         # Cross-build conditional request: if this provider exposes a whole-board validator URL,
         # present the stored ETag/Last-Modified. A 304 means unchanged -> carry forward without
         # re-downloading (the big throttle/bandwidth win). A 200 refreshes the validator and we
@@ -1170,13 +1185,23 @@ async def _crawl_due(
     crawl_concurrency = int(
         os.environ.get("ERGON_CRAWL_CONCURRENCY") or ("64" if os.environ.get("CI") else "12")
     )
+    # Per-host deadline-box budget (wall-clock seconds a single host may stay in play before the
+    # crawl stops dispatching new boards to it). 1200s bounds join-class hosts whose per-board cost
+    # is the run's tail; <=0 disables the box. Read once here and closed over by ``grab`` above.
+    host_budget = float(os.environ.get("ERGON_CRAWL_HOST_BUDGET_S") or "1200")
     try:
-        async with (
-            AsyncFetcher(timeout=12.0, retries=2, concurrency=crawl_concurrency) as fetcher,
-            anyio.create_task_group() as tg,
-        ):
-            for bkey in due:
-                tg.start_soon(grab, bkey, fetcher)
+        async with AsyncFetcher(
+            timeout=12.0, retries=2, concurrency=crawl_concurrency
+        ) as fetcher:
+            # Bounded worker pool over the interleaved board queue: O(workers) memory + coroutines
+            # regardless of window size (the old start_soon-per-board fan-out was O(window)), same
+            # downstream limiters, one board raising never sinks a sibling (grab already isolates
+            # per board; the pool adds a second net). Deadline-boxed boards are popped from
+            # ``outcome`` inside ``grab`` and left ``due`` for the next run.
+            async def _handle(bkey: str) -> None:
+                await grab(bkey, fetcher)
+
+            await run_pool(due, _handle, concurrency=crawl_concurrency)
         con.commit()
     finally:
         con.close()
