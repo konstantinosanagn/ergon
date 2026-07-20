@@ -126,6 +126,12 @@ class Provider(Protocol):
         to the same representation. Used by the crawler for cross-build conditional requests."""
         ...
 
+    def list_host(self, token: str) -> str | None:
+        """The host this board's list fetch hits, for the crawl deadline-box (per-host wall-clock
+        budget). ``None`` when it can't be determined cheaply -- the crawl then never deadline-boxes
+        the board (safe, behaviour-preserving). See ``BaseProvider.list_host``."""
+        ...
+
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch the full JD detail resource for one posting (Tier-3 recovery / freshness-sweep
         per-posting confirm). Every registered provider satisfies this via ``BaseProvider``'s
@@ -155,6 +161,22 @@ class BaseProvider:
     def conditional_url(self, token: str) -> str | None:
         """Default: not cheaply validatable. Providers with a single full-board response and
         ETag/Last-Modified support override this (see conditional-requests plan)."""
+        return None
+
+    def list_host(self, token: str) -> str | None:
+        """Registrable host this board's list fetch hits, for the crawl deadline-box (per-host
+        wall-clock budget -- see ``AsyncFetcher.is_over_budget``).
+
+        Default: derive it from ``conditional_url`` when the provider exposes one; ``None`` when
+        the host can't be determined cheaply. A ``None`` simply means the crawl never deadline-boxes
+        this board (behaviour-preserving) -- providers with NO ``conditional_url`` but a known slow,
+        shared host (e.g. join.com's 5-jobs/page pagination) override this to return that host so the
+        deadline-box can bound their tail."""
+        from urllib.parse import urlsplit
+
+        curl = self.conditional_url(token)
+        if curl:
+            return urlsplit(curl).netloc or None
         return None
 
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:

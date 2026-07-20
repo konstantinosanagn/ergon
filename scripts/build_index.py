@@ -1006,12 +1006,15 @@ async def _crawl_due(
     """
     import anyio
 
+    from ergon_tracker.crawl_pool import run_pool
     from ergon_tracker.dedup import deduplicate, normalize_company
     from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.exceptions import RateLimitError
     from ergon_tracker.http import AsyncFetcher
     from ergon_tracker.index.build import append_jobs
     from ergon_tracker.index.db import connect, fresh_db
+    from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES, idset_hash
+    from ergon_tracker.index.mapping import enrich_hash
     from ergon_tracker.index.scheduler import BoardState, due_boards
     from ergon_tracker.models import SearchQuery
     from ergon_tracker.providers.base import get_provider, load_builtins
@@ -1057,6 +1060,17 @@ async def _crawl_due(
             print(f"  + {len(new)} never-seen board(s) pulled in ahead of the cursor")
     due = set(due_boards(list(states.values()), _today())) & set(boards)
 
+    # Delta-driven crawl (ships DARK behind ERGON_DELTA_CRAWL=1; default OFF => byte-identical to
+    # today). When on, load the per-board membership fingerprints the most-recent freshness sweep
+    # published to the freshness sidecar (same file the build downloads for _apply_freshness), used
+    # by sub-phase B to skip boards whose id-set has not moved since we last crawled them.
+    delta_crawl = os.environ.get("ERGON_DELTA_CRAWL") == "1"
+    sidecar_hashes: dict[tuple[str, str], str] = {}
+    if delta_crawl:
+        sidecar_path = Path(fresh_db_path).parent / "index-freshness.sqlite"
+        if sidecar_path.exists():
+            sidecar_hashes = _load_board_delta_hashes(sidecar_path)
+
     outcome: dict[str, dict] = {
         b: {"error": False, "http_429": 0, "companies": set(), "not_modified": False} for b in due
     }
@@ -1072,6 +1086,33 @@ async def _crawl_due(
         regkey, e = boards[bkey]
         provider = get_provider(e["ats"])
         state = states[bkey]
+        # Deadline-box: if this board's host has already blown its per-run wall-clock budget (e.g.
+        # join.com, whose 5-jobs/page pagination is the crawl's slow tail), skip DISPATCHING it this
+        # run. Popping it from ``outcome`` leaves it exactly as if it were never in this window --
+        # its BoardState is untouched (never marked crawled), so it stays ``due`` and rolls to the
+        # next run, and its prior rows carry forward (empty ``companies`` => carry_forward keeps
+        # them). Behaviour-preserving whenever no host exceeds its budget (the common case). A
+        # non-positive budget disables the box entirely.
+        # ``list_host`` is defensive via getattr: every first-party provider has it (BaseProvider),
+        # but a minimal/partial provider double without it simply isn't deadline-boxed (host=None).
+        list_host = getattr(provider, "list_host", None)
+        host = list_host(e["token"]) if (list_host is not None and host_budget > 0) else None
+        if host and fetcher.is_over_budget(host, host_budget):
+            outcome.pop(bkey, None)
+            return
+        # Sub-phase B (delta-driven crawl): skip an UNCHANGED deterministic board entirely. If the
+        # most-recent sweep published an idset_hash for this board AND it equals the fingerprint we
+        # stamped the last time we crawled it, the board's membership has not moved -> carry its
+        # prior rows forward exactly like a 304, with no fetch/normalize/enrich. SAFE by
+        # construction: skip ONLY on a present-AND-matching hash; a missing/None hash on either side
+        # never skips, so a wrong skip is impossible (worst case a real change is delayed one cycle,
+        # which the next sweep+build catch). Deterministic sources only -- the sweep emits no hash
+        # for search-index sources (their list reshuffles), so they are never in sidecar_hashes.
+        if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
+            sweep_hash = sidecar_hashes.get((e["ats"], e["token"]))
+            if sweep_hash and state.idset_hash and sweep_hash == state.idset_hash:
+                outcome[bkey]["not_modified"] = True
+                return
         # Cross-build conditional request: if this provider exposes a whole-board validator URL,
         # present the stored ETag/Last-Modified. A 304 means unchanged -> carry forward without
         # re-downloading (the big throttle/bandwidth win). A 200 refreshes the validator and we
@@ -1101,6 +1142,22 @@ async def _crawl_due(
         # Crash isolation: normalize/enrich/dedup/insert for ONE board must never propagate to
         # the task group (that would cancel every other in-flight board and lose the whole crawl).
         try:
+            # Sub-phase B: stamp this board's fresh membership fingerprint (over the RAW live
+            # source_job_ids, matching the sweep's board_live_ids/idset_hash exactly) so the NEXT
+            # build can skip it when the sweep reports the same hash. Deterministic sources only
+            # (the only ones the sweep fingerprints). Cheap; only when the flag is on.
+            if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
+                state.idset_hash = idset_hash({str(r.source_job_id) for r in raws})
+            # Sub-phase C (enrich-reuse): for a crawled DELTA board, load THIS board's prior
+            # enriched rows keyed by id so an unchanged posting (matching enrich_hash) can copy its
+            # already-enriched fields instead of re-running enrich_in_place. Lazy + per-board =>
+            # O(board) memory. enrich_hash is BODY-INCLUSIVE, so a JD rewrite that content_hash
+            # misses still flips the hash and forces a re-enrich (never serves stale enrichment).
+            reuse_by_id = (
+                _load_board_reuse_rows(prev_db, e["ats"], e["token"])
+                if delta_crawl and prev_db is not None
+                else {}
+            )
             board_jobs: list = []
             for raw in raws:
                 try:
@@ -1110,7 +1167,20 @@ async def _crawl_due(
                 if e.get("domain") and not job.company_domain:
                     job.company_domain = e["domain"]
                 job.board_token = e["token"]  # registry token this board was crawled with
-                enrich_in_place(job, company_key=regkey, infer_level_from_experience=True)
+                prior_row = reuse_by_id.get(job.id) if reuse_by_id else None
+                # `"enrich_hash" in prior_row.keys()` guards the first flag-on build against a
+                # pre-v3 prev index that lacks the column (else sqlite3.Row raises IndexError).
+                if (
+                    prior_row is not None
+                    and "enrich_hash" in prior_row.keys()
+                    and prior_row["enrich_hash"] == enrich_hash(job)
+                ):
+                    # Unchanged posting: copy the prior fully-enriched fields (no re-enrich). The
+                    # resulting row is byte-identical to a full enrich (enrich_hash matched =>
+                    # content+body identical); parity-tested. NEVER reused on a hash miss.
+                    _apply_enriched_from_row(job, prior_row)
+                else:
+                    enrich_in_place(job, company_key=regkey, infer_level_from_experience=True)
                 board_jobs.append(job)
                 outcome[bkey]["companies"].add(normalize_company(job.company))
             if board_jobs:
@@ -1157,8 +1227,6 @@ async def _crawl_due(
             outcome[bkey]["error"] = True
             outcome[bkey]["companies"].clear()  # not "crawled" -> prev jobs carry forward
 
-    import os
-
     # Crawl-tuned fetcher: fail fast on dead/slow boards (a big fraction of a 46k-board cold
     # crawl). Defaults (25s timeout, 3 retries + backoff) can burn ~88s per dead board; 12s +
     # 1 retry caps that at ~24s. Per-host rate limiting + circuit breaker still apply, and
@@ -1170,17 +1238,110 @@ async def _crawl_due(
     crawl_concurrency = int(
         os.environ.get("ERGON_CRAWL_CONCURRENCY") or ("64" if os.environ.get("CI") else "12")
     )
+    # Per-host deadline-box budget (wall-clock seconds a single host may stay in play before the
+    # crawl stops dispatching new boards to it). DEFAULT 0 = DISABLED: the normal daily 12k window
+    # fits well under the 330-min CI ceiling (join's slice ~41-118 min), so boxing it would only
+    # silently drop join coverage. The box exists for PATHOLOGICAL / full-registry crawls -- set
+    # ERGON_CRAWL_HOST_BUDGET_S (e.g. 7200) explicitly for those. <=0 disables; closed over by grab.
+    host_budget = float(os.environ.get("ERGON_CRAWL_HOST_BUDGET_S") or "0")
     try:
-        async with (
-            AsyncFetcher(timeout=12.0, retries=2, concurrency=crawl_concurrency) as fetcher,
-            anyio.create_task_group() as tg,
-        ):
-            for bkey in due:
-                tg.start_soon(grab, bkey, fetcher)
+        async with AsyncFetcher(
+            timeout=12.0, retries=2, concurrency=crawl_concurrency
+        ) as fetcher:
+            # Bounded worker pool over the interleaved board queue: O(workers) memory + coroutines
+            # regardless of window size (the old start_soon-per-board fan-out was O(window)), same
+            # downstream limiters, one board raising never sinks a sibling (grab already isolates
+            # per board; the pool adds a second net). Deadline-boxed boards are popped from
+            # ``outcome`` inside ``grab`` and left ``due`` for the next run.
+            async def _handle(bkey: str) -> None:
+                await grab(bkey, fetcher)
+
+            await run_pool(due, _handle, concurrency=crawl_concurrency)
         con.commit()
     finally:
         con.close()
     return outcome, next_cursor
+
+
+def _load_board_delta_hashes(sidecar_path: Path) -> dict[tuple[str, str], str]:
+    """Read ``(source, board_token) -> idset_hash`` from the freshness sidecar's ``board_deltas``
+    table -- the per-board membership fingerprints the MOST-RECENT daily sweep published (delta-
+    driven crawl, sub-phase B). One ~1-cycle staleness by construction (the build consumes the
+    prior sweep run's sidecar); safe because a matching hash means the membership is unchanged, so
+    a stale-but-matching hash can only ever DELAY a genuinely-new posting by one cycle, never drop
+    or corrupt one -- and the sweep's added-side guard already suppresses a hash for any
+    truncated/undetermined board. A missing file/table -> ``{}`` (non-fatal: the skip simply never
+    fires and every board is crawled exactly as today)."""
+    import sqlite3
+
+    out: dict[tuple[str, str], str] = {}
+    try:
+        con = sqlite3.connect(f"file:{sidecar_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return out
+    try:
+        for source, token, h in con.execute(
+            "SELECT source, board_token, idset_hash FROM board_deltas"
+        ):
+            if h:
+                out[(str(source), str(token))] = str(h)
+    except sqlite3.Error:
+        return {}
+    finally:
+        con.close()
+    return out
+
+
+def _load_board_reuse_rows(prev_db, source: str, token: str) -> dict:
+    """Prior-index enriched rows for ONE board, keyed by ``id`` -- the enrich-reuse lookup (sub-
+    phase C). Scoped to ``(source, board_token)`` so memory is O(one board), read from a throwaway
+    read-only connection (safe under crawl concurrency; SQLite allows many concurrent readers). A
+    prior row with a NULL ``board_token`` (never re-crawled/backfilled) simply isn't matched here,
+    so that posting is enriched fresh -- a yield miss, never a correctness risk. Any read error ->
+    ``{}`` (fall back to full enrich for the whole board)."""
+    from ergon_tracker.index.db import connect
+
+    out: dict = {}
+    if prev_db is None or not Path(prev_db).exists():
+        return out
+    try:
+        con = connect(prev_db, read_only=True)
+    except Exception:  # noqa: BLE001 - a missing/corrupt prev index just disables reuse
+        return out
+    try:
+        for row in con.execute(
+            "SELECT * FROM jobs WHERE source=? AND board_token=?", (source, token)
+        ):
+            out[str(row["id"])] = row
+    except Exception:  # noqa: BLE001
+        return {}
+    finally:
+        con.close()
+    return out
+
+
+def _apply_enriched_from_row(job, row) -> None:
+    """Copy every enrichment-PRODUCED field from a prior index ``row`` onto a freshly-normalized
+    ``job`` (enrich-reuse, sub-phase C), so ``to_row(job)`` reproduces the prior row byte-for-byte
+    WITHOUT re-running ``enrich_in_place``. Only the fields ``enrich_in_place`` writes are copied --
+    level, salary, years, degree, sector, visa, sponsorship, and the geo-normalized locations
+    (``normalize_geo`` runs inside enrich and refines city/country); every other stored column comes
+    from ``normalize`` and is already identical for an unchanged posting. The full JD body on
+    ``job`` is left intact so ``enrich_hash`` recomputes to the SAME value that matched."""
+    from ergon_tracker.index.mapping import from_row
+
+    prior = from_row(row)
+    job.level = prior.level
+    job.salary = prior.salary
+    job.years_experience_min = prior.years_experience_min
+    job.years_experience_max = prior.years_experience_max
+    job.degree_min = prior.degree_min
+    job.degree_required = prior.degree_required
+    job.sector = prior.sector
+    job.visa_sponsor = prior.visa_sponsor
+    job.visa_last_filed = prior.visa_last_filed
+    job.sponsorship_offered = prior.sponsorship_offered
+    job.locations = prior.locations
 
 
 def _load_cursor(path: Path) -> int:

@@ -28,6 +28,9 @@ on:
       rich_backfill:
         description: "Rich COVERAGE ACCELERATOR (ERGON_RICH_BACKFILL_FROM_INDEX). '1' embeds the un-vectored backlog straight from the main index (snippet-quality, self-upgrades on next crawl) to reach ~100% coverage in 1-2 catch-up runs instead of ~7. Leave off for normal full-quality cron."
         default: ""
+      delta_crawl:
+        description: "Delta-driven crawl (ERGON_DELTA_CRAWL). '1' skips re-crawling unchanged deterministic boards (idset_hash match from the freshness sidecar) and reuses prior enrichment for unchanged postings. Ships DARK: leave '' until the delta-vs-full parity run passes, then set '1' to flip on (or hardcode it in the crawl step env below for the daily cron)."
+        default: ""
 
 permissions:
   contents: write          # to publish the release asset
@@ -151,6 +154,11 @@ jobs:
           ERGON_SHARDED_EMBED: "1"
           ERGON_RICH_MAX_EMBED: "250000"             # rich ramp: embed budget per run (see below)
           ERGON_RICH_BACKFILL_FROM_INDEX: "${{ github.event.inputs.rich_backfill || '' }}"  # '1' on a catch-up dispatch: embed the un-vectored backlog directly (see rich._backfill_from_index)
+          # Delta-driven crawl (sub-phases B/C). Ships DARK: '' => byte-for-byte today's crawl. After
+          # the delta-vs-full parity run passes, flip to "1" here (hardcode) for the daily cron, or set
+          # it per-run via the delta_crawl dispatch input. Sub-phase A (worker pool + deadline-box) is
+          # always on and behaviour-preserving; ERGON_CRAWL_HOST_BUDGET_S (default 1200) tunes the box.
+          ERGON_DELTA_CRAWL: "${{ github.event.inputs.delta_crawl || '' }}"
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
           ERGON_DETAIL_CONCURRENCY: "24"             # Tier-3 detail: in-flight fetch concurrency (per-host politeness enforced separately by AsyncFetcher's token-bucket)
           ERGON_LIVENESS_MAX_BOARDS: "${{ github.event.inputs.liveness_max_boards || '2000' }}"  # liveness: per-run cap on DUE boards re-fetched (rotating cursor, dispatch-overridable)

@@ -43,6 +43,11 @@ class BoardState:
     last_changed: str | None = None
     etag: str | None = None
     last_modified: str | None = None
+    # Membership fingerprint (freshness.idset_hash of the board's live source_job_id set) stamped
+    # the last time we CRAWLED this board. The delta-driven build (ERGON_DELTA_CRAWL) compares it to
+    # the most-recent freshness sweep's published idset_hash to skip a board whose membership hasn't
+    # moved. None until first crawled under the flag; a None never triggers a skip (safe).
+    idset_hash: str | None = None
     consecutive_unchanged: int = 0
     consecutive_errors: int = 0
     throttle_score: float = 0.0
