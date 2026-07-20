@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 __all__ = [
     "RemoteType",
@@ -245,6 +245,15 @@ class JobPosting(BaseModel):
     # NOTE: "strongly preferred" is still False — but max_degree filtering excludes on degree_min
     # regardless of scope, because a "strongly preferred M.D./Ph.D." effectively gates new grads.
     degree_required: bool | None = None
+
+    # Transient, build-time only (NOT serialized, NOT returned to users): the enrich-reuse input
+    # fingerprint, stamped by the crawler on the freshly-normalized job BEFORE enrich_in_place runs.
+    # enrich_in_place mutates level/salary, which feed content_hash -> enrich_hash; computing the
+    # fingerprint pre-enrich (and persisting THIS value into jobs.enrich_hash via to_row) lets the
+    # next build's reuse compare pre-enrich-vs-pre-enrich, so a posting whose level/salary is
+    # inferred still hits reuse. Unstamped (None) -> to_row falls back to the post-enrich hash, which
+    # merely misses reuse next build (re-enriched, never stale) -> fully fail-safe.
+    _enrich_input_hash: str | None = PrivateAttr(default=None)
 
     @classmethod
     def create(

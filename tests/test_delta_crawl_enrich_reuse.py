@@ -166,3 +166,79 @@ def test_enrich_reuse_matches_full_and_reenriches_changed_body(monkeypatch, tmp_
     # The unchanged posting kept its (identical) enrichment in both builds.
     assert _years(full_db, "1") == 2
     assert _years(delta_db, "1") == 2
+
+
+class _InferLevelProvider:
+    """A board whose postings arrive with level=UNKNOWN and get their level INFERRED by enrich
+    (from the body's years-of-experience). This is the case the sibling test above had to dodge
+    (it hard-set level=SENIOR) -- enrich mutates level, which feeds content_hash, so a PRE-fix
+    build stored a POST-enrich enrich_hash and this posting could never hit reuse. Post-fix the
+    stored fingerprint is pre-enrich, so an unchanged inferred-level posting reuses correctly."""
+
+    name = "greenhouse"
+    mode = "today"  # body identical prior & today -> genuinely unchanged
+
+    def conditional_url(self, token):
+        return None
+
+    def list_host(self, token):
+        return None
+
+    async def fetch(self, token, query, fetcher):
+        return [
+            RawJob(
+                source="greenhouse", source_job_id="7", company="Acme Corp", token=token,
+                payload={"body": "Requires 9+ years of experience.", "title": "Engineer"},
+            )
+        ]
+
+    def normalize(self, raw):
+        # NOTE: level deliberately left UNKNOWN -> enrich_in_place infers it (level_from_years),
+        # mutating content_hash. The stored enrich_hash MUST be the pre-enrich value for reuse to fire.
+        return JobPosting.create(
+            source="greenhouse", source_job_id=raw.source_job_id, company="Acme Corp",
+            title=raw.payload["title"], description_text=raw.payload["body"],
+        )
+
+
+def test_enrich_reuse_fires_for_inferred_level_posting(monkeypatch, tmp_path):
+    import ergon_tracker.providers.base as base_mod
+    import ergon_tracker.registry.store as store_mod
+
+    prov = _InferLevelProvider()
+    monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
+    monkeypatch.setattr(base_mod, "get_provider", lambda n: prov)
+    monkeypatch.setattr(base_mod, "load_builtins", lambda: None)
+
+    # PRIOR (flag off): enrich infers the level from "9+ years"; the stored enrich_hash is pre-enrich.
+    monkeypatch.delenv("ERGON_DELTA_CRAWL", raising=False)
+    s_prior = {"greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN)}
+    prior_db, _ = _crawl_and_build(s_prior, tmp_path / "p", prov, "prior", None, monkeypatch)
+
+    # The posting's level really was inferred (not UNKNOWN) -> pre-fix this row's stored enrich_hash
+    # would be post-enrich and reuse could never match it.
+    con = connect(prior_db, read_only=True)
+    try:
+        lvl = con.execute(
+            "SELECT level FROM jobs WHERE id=?", (make_job_id("greenhouse", "7"),)
+        ).fetchone()[0]
+    finally:
+        con.close()
+    assert lvl not in (None, "", "unknown")
+
+    # FULL today (flag off): re-enriches. DELTA today (flag on): body unchanged -> reuse MUST fire.
+    s_full = {"greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN)}
+    full_db, full_calls = _crawl_and_build(s_full, tmp_path / "f", prov, "t", prior_db, monkeypatch)
+
+    monkeypatch.setenv("ERGON_DELTA_CRAWL", "1")
+    s_delta = {"greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN)}
+    delta_db, delta_calls = _crawl_and_build(
+        s_delta, tmp_path / "d", prov, "t", prior_db, monkeypatch
+    )
+
+    cols_f, rows_f = _stable_rows(full_db)
+    cols_d, rows_d = _stable_rows(delta_db)
+    assert cols_f == cols_d
+    assert rows_f == rows_d  # byte-identical -> reuse produced the same row a full enrich would
+    assert full_calls == 1  # full path enriches the posting
+    assert delta_calls == 0  # THE FIX: inferred-level posting is reused, not re-enriched
