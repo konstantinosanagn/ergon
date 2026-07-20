@@ -85,6 +85,48 @@ def test_minimum_of_multiple_degrees(text: str, level: str) -> None:
     assert _degree(text)[0] == level
 
 
+# --- new gazetteer forms: bare/plural masters, or-list associate/diploma, field/grad ----------
+
+
+@pytest.mark.parametrize(
+    "text,level",
+    [
+        # bare plural "Masters" (no apostrophe) + degree-context follower
+        ("A Masters degree is expected.", "master"),
+        ("Masters or PhD in a related field.", "master"),
+        ("A Masters with 6+ years of relevant experience.", "master"),
+        # singular/plural Master(s) as an or/slash list-arm beside another degree
+        ("Master or Ph.D. in Physics.", "master"),
+        ("Ph.D. / Masters in Engineering.", "master"),
+        # or-list where a lower alt shares the trailing "degree" -> the associate floor is kept
+        ("Diploma, Associate's, or Bachelor's degree in Architecture.", "associate"),
+        ("Diploma or Bachelor's Degree in Computer Science.", "associate"),
+        ("Associate's or Bachelor's Degree in IT.", "associate"),
+        # field / academic degree, college graduate
+        ("Engineering degree in a relevant discipline.", "bachelor"),
+        ("An academic degree in a numerate subject.", "bachelor"),
+        ("A recent college graduate is welcome to apply.", "bachelor"),
+        ("University graduate with strong communication skills.", "bachelor"),
+    ],
+)
+def test_new_gazetteer_forms(text: str, level: str) -> None:
+    assert _degree(text)[0] == level
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # FP guards: the new bare/list forms must NOT fire outside a degree context
+        "Certified Scrum Masters lead each squad.",  # plural title, no degree follower
+        "We support master data management pipelines.",  # "master data", not a degree
+        "Associate Engineer on the platform team.",  # job-title seniority, not "associate's degree"
+        "The Associate or Principal will own delivery.",  # seniority levels in an or-list
+    ],
+)
+def test_new_gazetteer_forms_fp_guards(text: str) -> None:
+    assert _degree(text) == (None, None)
+
+
 # --- scope: required / preferred / or-equivalent / unstated ------------------
 
 
@@ -106,11 +148,33 @@ def test_minimum_of_multiple_degrees(text: str, level: str) -> None:
         ("4-year degree or equivalent practical experience.", ("bachelor", False)),
         # both cues in one sentence: the cue nearest each mention wins; min level's scope reported
         ("BS required, MS preferred.", ("bachelor", True)),
-        # no cue, no governing section header -> scope unknown
-        ("You will apply your Master's degree daily.", ("master", None)),
+        # no cue, no governing section header -> defaults to required (a degree stated with no
+        # qualifier reads as a requirement; degree_required is advisory)
+        ("You will apply your Master's degree daily.", ("master", True)),
     ],
 )
 def test_scope_detection(text: str, expected: tuple[str, bool | None]) -> None:
+    assert _degree(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        # OR_EQUIV additions -> preferred-only (a degree-less candidate is not excluded)
+        ("Bachelor's degree or an equivalent qualification.", ("bachelor", False)),  # article gap
+        ("Bachelor's degree or equivalent practical experience.", ("bachelor", False)),  # adjective
+        ("Bachelor's degree or professional experience in lieu of a degree.", ("bachelor", False)),
+        ("Bachelor's degree or a combination of education and experience.", ("bachelor", False)),
+        ("Bachelor's degree or 10 years of related experience.", ("bachelor", False)),
+        # EQUIV_REQUIRED article mirror stays a real requirement
+        ("High school diploma or an equivalent required.", ("highschool", True)),
+        # PREFERRED additions -> preferred-only
+        ("Master's degree preferred but not mandatory.", ("master", False)),
+        ("A Bachelor's degree would be an advantage.", ("bachelor", False)),
+        ("A Master's degree is beneficial for this role.", ("master", False)),
+    ],
+)
+def test_new_scope_cues(text: str, expected: tuple[str, bool | None]) -> None:
     assert _degree(text) == expected
 
 
