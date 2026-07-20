@@ -12,6 +12,10 @@ CREATE TABLE jobs (
   rowid INTEGER PRIMARY KEY,
   id TEXT NOT NULL UNIQUE,
   content_hash TEXT NOT NULL,
+  -- Nullable (unlike content_hash): a prior-schema prev index carried forward via carry_forward()
+  -- (build.py, _shared_cols) predates this column and has nothing to copy for it -- those rows
+  -- stay NULL until next re-crawl. Every freshly-crawled row gets it unconditionally (mapping.to_row).
+  enrich_hash TEXT,
   company_key TEXT REFERENCES companies(company_key),
   source TEXT NOT NULL, company TEXT NOT NULL, company_domain TEXT,
   title TEXT NOT NULL, department TEXT, role_family TEXT,
