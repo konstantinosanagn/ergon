@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -34,12 +34,71 @@ class IndexBuildError(RuntimeError):
 # The freshness sweep enumerates boards via jobs.board_token, which the crawl only sets for boards
 # it re-visits (build_index.py: ``job.board_token = entry["token"]``); carried-forward rows keep a
 # NULL board_token until re-crawled, so sweep coverage ramps over the ~5-day window-gate cycle.
-# This backfill derives the token from the seed registry WITHOUT waiting for the crawl. The registry
-# token is literally the value the crawl passes to ``provider.fetch(token)``, so it is EXACT by
-# construction -- a registry-derived board_token fetches the same board the sweep will diff against.
-# (apply-URL derivation was measured to disagree with the true token ~1.2% of the time -- jazzhr
-# host quirks, ashby slug/alias != API token -- and a wrong board_token would false-expire a live
-# posting, so it is deliberately NOT used. Those rows fill via the crawl, which sets the exact token.)
+# This backfill derives the token WITHOUT waiting for the crawl, in two stages:
+#
+# 1. REGISTRY (exact, all sources). The seed-registry token is literally the value the crawl passes
+#    to ``provider.fetch(token)``, so it is EXACT by construction -- a registry-derived board_token
+#    fetches the same board the sweep will diff against. Tried first for every source.
+#
+# 2. APPLY-URL DERIVATION (fallback, SEARCH-INDEX SOURCES ONLY). Where the registry misses AND the
+#    source is a freshness SEARCH-INDEX source (workday/oracle/smartrecruiters/icims), the token is
+#    reconstructed from the posting's own ``apply_url`` via the provider's canonical
+#    ``matches(url)`` -- the SAME function that maps a careers URL to the fetch token, so a derived
+#    token matches the fetch-token format by construction.
+#
+#    WHY search-index only is safe (and deterministic is NOT): the freshness sweep confirms a
+#    departed candidate on a search-index board via the posting's OWN ``fetch_detail(apply_url)``
+#    (``freshness.confirm_departed``) -- independent of board_token -- and only expires on a real
+#    404. So a wrong/imperfect derived token there merely changes which candidates the relist
+#    surfaces; each is re-confirmed per-posting, and the result stays correct (at worst more confirm
+#    volume). For a DETERMINISTIC source the board id-diff expires directly with NO per-posting
+#    confirm, so a wrong token could false-expire live rows (URL derivation measured ~1.2% wrong for
+#    jazzhr/ashby) -- deterministic sources are therefore NEVER URL-derived. Cross-checked against
+#    the real index where both a registry and a URL token exist: oracle/smartrecruiters 100%,
+#    workday 85% (the residual is multi-site tenants, where registry-first wins anyway), so URL
+#    derivation only ever *adds* coverage the registry lacked, never overrides an exact registry
+#    token. Registry stays first + exact; the residual still fills via the crawl.
+
+# Search-index sources with an apply_url->token parser (their provider ``matches``). Kept in sync
+# with (and asserted a subset of) ``freshness.SEARCH_INDEX_SOURCES`` at call time -- URL derivation
+# fires only for a source in BOTH sets, so a deterministic source can never be URL-derived even if a
+# parser were added here.
+_URL_TOKEN_SOURCES: frozenset[str] = frozenset(
+    {"workday", "oracle", "smartrecruiters", "icims"}
+)
+
+
+def _default_url_parsers() -> dict[str, Callable[[str], str | None]]:
+    """Map each ``_URL_TOKEN_SOURCES`` source to its provider's ``matches`` (the canonical
+    careers-URL -> fetch-token function). Providers are loaded on demand; a source whose provider
+    isn't registered is simply omitted (its rows stay NULL, to be filled by the crawl)."""
+    from ..providers.base import get_provider, load_builtins
+
+    load_builtins()
+    parsers: dict[str, Callable[[str], str | None]] = {}
+    for source in _URL_TOKEN_SOURCES:
+        prov = get_provider(source)
+        if prov is not None:
+            parsers[source] = prov.matches
+    return parsers
+
+
+def _derive_token_from_url(
+    apply_url: str | None, listing_url: str | None, parser: Callable[[str], str | None]
+) -> str | None:
+    """Reconstruct a board token from a posting's apply/listing URL via ``parser`` (a provider's
+    ``matches``). Tries ``apply_url`` then ``listing_url``; a parser exception or a non-match on
+    both yields ``None`` (never raises) -- a URL we can't parse simply isn't derived."""
+    for url in (apply_url, listing_url):
+        if not url:
+            continue
+        try:
+            token = parser(url)
+        except Exception:  # noqa: BLE001 - a malformed URL must not fail the whole backfill
+            token = None
+        if token:
+            return token
+    return None
 
 
 def backfill_board_tokens(
@@ -47,14 +106,25 @@ def backfill_board_tokens(
     *,
     by_key: dict[tuple[str, str], str] | None = None,
     by_dom: dict[tuple[str, str], str] | None = None,
+    url_parsers: dict[str, Callable[[str], str | None]] | None = None,
+    search_index_sources: frozenset[str] | set[str] | None = None,
 ) -> int:
-    """Fill ``jobs.board_token`` for active rows where it is NULL/empty, from the seed registry
-    (by ``company_key`` then registrable ``company_domain``). Returns the number of rows updated.
+    """Fill ``jobs.board_token`` for active rows where it is NULL/empty. Returns rows updated.
 
-    Correctness: the registry token IS the crawl's fetch token, so a registry-derived board_token
-    matches what the freshness sweep's ``board_live_ids`` will fetch. Never overwrites an existing
-    board_token. Chunked UPDATEs; caller commits. ``by_key``/``by_dom`` default to the bundled seed
-    registry; they are injectable for testing.
+    Two stages, registry-first (see the module comment above):
+
+    1. REGISTRY (all sources): by ``company_key`` then registrable ``company_domain``. The registry
+       token IS the crawl's fetch token, so this is EXACT.
+    2. APPLY-URL DERIVATION (search-index sources ONLY): where the registry misses AND the source is
+       in BOTH ``url_parsers`` and ``search_index_sources``, reconstruct the token from the
+       posting's ``apply_url``/``listing_url`` via the provider's ``matches``. Safe because a
+       search-index board's departures are confirmed per-posting via the posting's own detail URL
+       (``freshness.confirm_departed``), so an imperfect derived token never false-expires a row.
+
+    Never overwrites an existing board_token. Chunked UPDATEs; caller commits. ``by_key``/``by_dom``
+    default to the bundled seed registry; ``url_parsers`` defaults to the search-index providers'
+    ``matches``; ``search_index_sources`` defaults to ``freshness.SEARCH_INDEX_SOURCES``. All are
+    injectable for deterministic offline testing.
     """
     from ..registry.store import _normalize_domain
 
@@ -71,16 +141,31 @@ def backfill_board_tokens(
             if e.get("ats") and e.get("token") and e.get("domain")
         }
 
+    if url_parsers is None:
+        url_parsers = _default_url_parsers()
+    if search_index_sources is None:
+        from .freshness import SEARCH_INDEX_SOURCES
+
+        search_index_sources = SEARCH_INDEX_SOURCES
+    # URL derivation fires only for a source in BOTH the parser map AND the freshness search-index
+    # set -- so a deterministic source is never URL-derived (the safety invariant), even if a parser
+    # were mistakenly registered for it.
+    url_derive = {s: p for s, p in url_parsers.items() if s in search_index_sources}
+
     rows = con.execute(
-        "SELECT id, company_key, company_domain, source FROM jobs "
+        "SELECT id, company_key, company_domain, source, apply_url, listing_url FROM jobs "
         "WHERE status='active' AND (board_token IS NULL OR board_token='')"
     ).fetchall()
 
     updates: list[tuple[str, str]] = []
-    for jid, ck, dom, source in rows:
+    for jid, ck, dom, source, apply_url, listing_url in rows:
         token = by_key.get((ck, source))
         if token is None and dom:
             token = by_dom.get((_normalize_domain(dom), source))
+        if token is None:
+            parser = url_derive.get(source)
+            if parser is not None:
+                token = _derive_token_from_url(apply_url, listing_url, parser)
         if token:
             updates.append((token, jid))
 
