@@ -6,9 +6,11 @@ Parses what a posting says about education and reduces it to two fields:
   ``highschool < associate < bachelor < master < phd_md`` (``None`` = not stated).
   When several degrees appear ("BS required, MS preferred"; "PhD, or BS with 5+ years")
   the minimum level that satisfies wins — that is the barrier a candidate actually faces.
-* ``degree_required`` — tri-state scope, mirroring ``sponsorship.py``:
-  ``True`` = stated as required, ``False`` = preferred-only / "or equivalent experience",
-  ``None`` = degree mentioned but scope unstated. NOTE: "strongly preferred" is still
+* ``degree_required`` — scope, mirroring ``sponsorship.py``:
+  ``True`` = stated as (or defaulted to) required, ``False`` = preferred-only / "or equivalent
+  experience". A degree stated with no scope cue and no governing section header defaults to
+  ``True`` (a bare degree requirement reads as required) — an advisory call, measured to recover
+  far more required-golds than it costs. NOTE: "strongly preferred" is still
   ``False`` — the William Blair case ("M.D. or Ph.D. ... strongly preferred") reports
   ``("phd_md", False)`` so consumers see the nuance, while the ``max_degree`` filter
   (see ``SearchQuery``) still excludes it for a bachelor-capped search.
@@ -21,10 +23,11 @@ Precision-first, like every extractor here (published systems hit ~94.5% on leve
 * Dot-less abbreviations (BS/BA/MS/MA) match only in a degree context ("BS in Physics",
   "BS/MS", "MS degree"), never inside "MS SQL Server 2019" or "MS Office".
 * Mentions in tuition-reimbursement / benefits sentences are ignored entirely.
-* Scope comes from the mention's own sentence/bullet first (preferred beats required when
-  both cues appear, and "or equivalent" always downgrades to ``False`` — a degree-less
-  candidate is not excluded); only then from the nearest section header
-  ("Qualifications"/"Requirements" -> required, "Preferred"/"Nice to have" -> preferred).
+* Scope comes from the mention's own sentence/bullet first (the cue NEAREST the mention wins,
+  capped at 100 chars so a far softener can't bleed, and "or equivalent" downgrades to ``False``
+  — a degree-less candidate is not excluded); then the nearest section header
+  ("Qualifications"/"Requirements" -> required, "Preferred"/"Nice to have" -> preferred); with
+  no cue and no header anywhere at the minimum level, scope defaults to required.
 """
 
 from __future__ import annotations
@@ -93,6 +96,29 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(rf"\b(?:MS|MEng){_CTX_MS}"), "master"),
     (re.compile(r"(?<=/)(?:MS|MEng)\b"), "master"),
     (re.compile(r"\b(?:advanced|graduate|post[-\s]?graduate)\s+degree\b", re.I), "master"),
+    # bare plural "Masters" (no apostrophe) — the arm-1/arm-2 patterns above need a "'s", "of" or a
+    # trailing "degree", so "A Masters with 6 years" / "Masters or PhD" slip through and a higher
+    # degree wins the floor. FP-guard: require a degree-context follower ("degree/of/in/or/level/…"
+    # or punctuation close) so "scrum masters", "masters of their craft" can't fire.
+    (
+        re.compile(
+            r"\bmasters\b(?!(?:'|’))(?=\s*(?:degree|of\b|in\b|or\b|,|/|level\b|preferred|required"
+            r"|qualification|with\b|;|:|\.|\)|-|–|$))",
+            re.I,
+        ),
+        "master",
+    ),
+    # singular/plural "Master(s)" as an or/slash list-arm beside another degree token
+    # ("Master or Ph.D.", "Bachelor / Masters") — anchors on the adjacent degree so the bare word
+    # can't fire outside a degree list ("scrum master or lead", "master data").
+    (
+        re.compile(
+            r"\bmasters?\b\s*(?:,\s*)?(?:or|/)\s*(?:ph\.?d|phd|doctora|m\.?s\b|bachelor|b\.?[sa]\b)"
+            r"|\b(?:ph\.?d|phd|bachelor|b\.?[sa]\b)\s*(?:,\s*)?(?:or|/)\s*masters?\b",
+            re.I,
+        ),
+        "master",
+    ),
     # bachelor's
     (re.compile(r"\bbachelor(?:'|’)?s?\b", re.I), "bachelor"),
     (re.compile(r"\bbaccalaureate\b", re.I), "bachelor"),
@@ -101,6 +127,14 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(rf"\b(?:BS|BA|BEng){_CTX_BS}"), "bachelor"),
     (re.compile(r"(?<=/)(?:BS|BA|BEng)\b"), "bachelor"),
     (re.compile(r"\b(?:undergraduate|university|college)\s+degree\b", re.I), "bachelor"),
+    # "<field>/academic degree" (bachelor-default). Kept narrow: "engineering degree" and
+    # "academic/tertiary degree" only — the broad field list ("computer science degree", …) breaks
+    # the "we don't require a computer science degree" negative and drags "engineering degree,
+    # master's in X" down a rung, so it is deliberately NOT generalised.
+    (re.compile(r"\bengineering\s+degree\b", re.I), "bachelor"),
+    (re.compile(r"\b(?:academic|tertiary)\s+degree\b", re.I), "bachelor"),
+    # "(recent) college/university graduate" — a first-degree holder ("recent college graduate").
+    (re.compile(r"\b(?:recent\s+)?(?:college|university)\s+graduate\b", re.I), "bachelor"),
     (
         re.compile(r"\bdegree[-\s]+(?:educated|qualified)\b", re.I),
         "bachelor",
@@ -113,6 +147,23 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # associate
     (re.compile(r"\bassociate(?:'|’)?s?\s+degree\b", re.I), "associate"),
     (re.compile(r"\ba\.\s?(?:a|s)\.?\s+degree\b", re.I), "associate"),
+    # or-list arms where a lower alternative shares a TRAILING "degree" with the bachelor
+    # ("Diploma, Associate's, or Bachelor's degree"): the shared "degree" attaches only to
+    # "Bachelor's", so "Associate's"/"Diploma" never match their own "\s+degree" arm and the
+    # associate floor is lost. Anchor on the following "or/…-bachelor" so the job-TITLE "Associate
+    # Engineer" (no degree-list context) can't fire.
+    (
+        re.compile(
+            r"\bassociate(?:'|’)?s?\b(?=\s*(?:,\s*)?(?:or|/)\s*(?:bachelor|b\.?[sa]\b))", re.I
+        ),
+        "associate",
+    ),
+    (
+        re.compile(
+            r"\bdiploma\b(?=\s*(?:,\s*)?(?:or|/)\s*(?:associate|bachelor|a\.?a\b|b\.?[sa]\b))", re.I
+        ),
+        "associate",
+    ),
     # high school
     (re.compile(r"\bhigh\s?school\s+(?:diploma|degree|education)\b", re.I), "highschool"),
     (re.compile(r"\bged\b", re.I), "highschool"),
@@ -393,18 +444,25 @@ def degree_from_ats_vocab(value: str | None) -> str | None:
 # a candidate WITHOUT the degree is not excluded. Checked before the required cue on purpose
 # ("Bachelor's or equivalent experience required" -> False).
 _OR_EQUIV = re.compile(
-    r"\bor\s+equivalent\b|\bor\s+comparable\b|\bequivalent\s+(?:work\s+)?experience\b", re.I
+    r"\bor\s+(?:an?\s+)?equivalent\b|\bor\s+(?:an?\s+)?comparable\b"
+    r"|\bequivalent\s+(?:\w+\s+)?experience\b"  # "equivalent practical/professional experience"
+    r"|\bin\s+lieu\s+of\b|\bcombination\s+of\s+education\b"
+    r"|\bor\s+\d+\+?\s+years?\b[^.\n;]{0,30}\bexperience\b",  # "or 10 years of related experience"
+    re.I,
 )
 # The tight "<degree> or equivalent required" phrase — a real requirement (equivalent credential is
 # accepted, but something is required). The negative lookahead excludes "or equivalent EXPERIENCE
-# required" (experience substitutes for the degree -> preferred-only, stays False).
+# required" (experience substitutes for the degree -> preferred-only, stays False); the optional
+# adjective in the lookahead mirrors the "equivalent practical experience" arm of _OR_EQUIV.
 _EQUIV_REQUIRED = re.compile(
-    r"\bor\s+(?:equivalent|comparable)\b(?!\s+(?:work\s+)?experience)[^.\n;]{0,12}\brequired\b",
+    r"\bor\s+(?:an?\s+)?(?:equivalent|comparable)\b(?!\s+(?:\w+\s+)?experience)"
+    r"[^.\n;]{0,12}\brequired\b",
     re.I,
 )
 _PREFERRED = re.compile(
     r"\bpreferred\b|\ba\s+plus\b|\bnice\s+to\s+have\b|\bideally\b|\bdesir(?:ed|able)\b"
-    r"|\badvantageous\b|\bbonus\b|\bnot\s+required\b",
+    r"|\badvantageous\b|\bbonus\b|\bnot\s+required\b"
+    r"|\bnot\s+mandatory\b|\ban\s+advantage\b|\bbeneficial\b",
     re.I,
 )
 _REQUIRED = re.compile(
@@ -416,7 +474,11 @@ _REQUIRED = re.compile(
 # Benefits / tuition context: a degree mentioned here is about perks, not qualifications —
 # ignore the mention entirely ("tuition reimbursement toward your degree").
 _BENEFITS = re.compile(
-    r"\btuition\b|\breimburse\w*|\btoward\s+(?:your|a|an)\s+degree\b|\bdegree\s+program\b"
+    r"\btuition\b|\breimburse\w*|\btoward\s+(?:your|a|an)\s+degree\b"
+    # "degree program" only when benefit-framed (free/paid/sponsored/our/access-to …); a bare
+    # "degree program" is usually a REQUIREMENT ("enrolled in a bachelor's degree program"), so
+    # suppressing it wholesale dropped legitimate mentions.
+    r"|(?:free|paid|sponsored|subsidi\w+|our|access\s+to)\s+(?:\w+\s+){0,2}degree\s+program\b"
     r"|\bcontinuing\s+education\b|\beducation\s+assistance\b",
     re.I,
 )
@@ -438,6 +500,7 @@ _SEC_BENEFITS = re.compile(r"\bbenefits\b|\bperks\b|what\s+we\s+offer", re.I)
 
 _SECTION_WINDOW = 600  # chars scanned backwards for a governing section header
 _SEGMENT_CAP = 300  # max chars of sentence/bullet examined on each side of a mention
+_SCOPE_DIST_CAP = 100  # a scope cue farther than this from the mention is ignored (can't bleed)
 
 # Sentence/bullet boundary: a newline or bullet always ends a segment; a period only when
 # followed by whitespace + an uppercase start (so "M.D. or Ph.D." doesn't split mid-mention).
@@ -535,8 +598,16 @@ class DegreeExtractor:
             return (None, None)
         min_rank = min(rank for rank, _ in mentions)
         scopes = [s for rank, s in mentions if rank == min_rank]
-        # Any explicit "required" at the minimum level wins; else any explicit "preferred".
-        scope = True if True in scopes else (False if False in scopes else None)
+        # Any explicit "required" at the minimum level wins; else any explicit "preferred". When
+        # NO mention at that level carries any cue or governing header, default to required — a
+        # degree stated with no qualifier reads as a requirement (measured to recover far more
+        # required-golds than it costs; degree_required is an advisory field).
+        if True in scopes:
+            scope: bool = True
+        elif False in scopes:
+            scope = False
+        else:
+            scope = True  # default-required: no in-segment cue and no governing header anywhere
         return (DEGREE_LEVELS[min_rank], scope)
 
     def _add(
@@ -601,10 +672,14 @@ class DegreeExtractor:
         hits: list[tuple[int, bool]] = []
         for pat, verdict in checks:
             for m in pat.finditer(segment):
-                hits.append((min(abs(m.start() - pos), abs(m.end() - pos)), verdict))
+                dist = min(abs(m.start() - pos), abs(m.end() - pos))
+                if dist <= _SCOPE_DIST_CAP:  # ignore a far cue softening ANOTHER item in the segment
+                    hits.append((dist, verdict))
         if hits:
             return min(hits)[1]  # nearest cue wins; tie -> False (conservative)
-        # No cue in the sentence: fall back to the governing section header.
+        # No in-segment cue: fall back to the governing section header (None if none). The
+        # no-cue-no-header default-to-required is applied at the aggregation level in ``extract`` —
+        # so an explicit "preferred" on ONE mention still beats a bare (defaulted) sibling mention.
         return _section_scope(text, abs_start)
 
 
