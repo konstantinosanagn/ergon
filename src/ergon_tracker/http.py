@@ -234,6 +234,15 @@ class AsyncFetcher:
         self._limiter = anyio.CapacityLimiter(concurrency)
         self._host_limiters: dict[str, AsyncLimiter] = {}
         self._host_concurrency_limiters: dict[str, anyio.CapacityLimiter] = {}
+        # Per-host (per-``_rate_key``) wall-clock accounting for the crawl deadline-box. These are
+        # bookkeeping only -- they NEVER pace or block a request (that stays the job of the token
+        # bucket + circuit breaker). They let the crawl controller ask ``is_over_budget(host, ...)``
+        # and stop DISPATCHING new boards to a host that has blown its time budget (e.g. join.com,
+        # whose 5-jobs/page pagination makes it the slowest slice of the run); already-issued
+        # requests are unaffected and untouched boards simply stay un-crawled this run.
+        self._host_first_seen: dict[str, float] = {}
+        self._host_request_count: dict[str, int] = defaultdict(int)
+        self._host_busy_seconds: dict[str, float] = defaultdict(float)
         self._per_host_rate = per_host_rate
         self._per_host_period = per_host_period
         self._per_host_concurrency = per_host_concurrency
@@ -302,13 +311,64 @@ class AsyncFetcher:
         key = _rate_key(host)  # registrable domain (shared backends throttle together)
         breaker = self._breakers[key]
         breaker.check(key)
+        # Deadline-box accounting: stamp the first time we touched this host (so the wall-clock
+        # budget covers the ENTIRE span the host was in play, including queue/rate waits) and count
+        # the attempt. ``started`` also feeds cumulative busy-seconds below.
+        started = time.monotonic()
+        self._host_first_seen.setdefault(key, started)
+        self._host_request_count[key] += 1
         # Global limiter (outer) -> per-host in-flight cap -> per-host rate wait + send. The
         # concurrency cap sits INSIDE the global limiter so it only ever bounds pileup onto a
         # single host, never overall throughput; it sits AROUND the rate wait so a host whose
         # token bucket is already the binding constraint (e.g. workable.com at 3/s) is unaffected
         # -- the bucket, not this semaphore, remains what paces actual sends.
-        async with self._limiter, self._host_concurrency_limiter(key), self._host_limiter(key):
-            return await self._request_with_retries(method, url, host, breaker, **kwargs)
+        try:
+            async with self._limiter, self._host_concurrency_limiter(key), self._host_limiter(key):
+                return await self._request_with_retries(method, url, host, breaker, **kwargs)
+        finally:
+            self._host_busy_seconds[key] += time.monotonic() - started
+
+    def is_over_budget(self, host: str, budget_seconds: float) -> bool:
+        """True once ``host`` has been in play for at least ``budget_seconds`` of wall-clock.
+
+        The deadline-box the crawl checks BEFORE dispatching another board to a host: measured
+        from the first request issued to that host (``_rate_key``-collapsed, so all shared-backend
+        subdomains share one budget). A host never yet requested is never over budget. Cheap and
+        pure -- it only reads a timestamp, it does not throttle or cancel anything in flight.
+        """
+        first = self._host_first_seen.get(_rate_key(urlsplit(host).netloc or host))
+        if first is None:
+            return False
+        return (time.monotonic() - first) >= budget_seconds
+
+    def host_wall_elapsed(self, host: str) -> float:
+        """Wall-clock seconds since the first request to ``host`` (0.0 if never requested)."""
+        first = self._host_first_seen.get(_rate_key(urlsplit(host).netloc or host))
+        return 0.0 if first is None else time.monotonic() - first
+
+    def host_request_count(self, host: str) -> int:
+        """Number of requests issued to ``host`` this run (``_rate_key``-collapsed)."""
+        return self._host_request_count.get(_rate_key(urlsplit(host).netloc or host), 0)
+
+    def host_busy_seconds(self, host: str) -> float:
+        """Cumulative in-request seconds spent on ``host`` (sums overlapping requests)."""
+        return self._host_busy_seconds.get(_rate_key(urlsplit(host).netloc or host), 0.0)
+
+    def reset_host_accounting(self) -> None:
+        """Clear all per-host wall-clock/count accounting (start a fresh deadline-box run)."""
+        self._host_first_seen.clear()
+        self._host_request_count.clear()
+        self._host_busy_seconds.clear()
+
+    @property
+    def global_concurrency(self) -> float:
+        """The global in-flight cap (``CapacityLimiter`` total tokens).
+
+        Configurable via the constructor's ``concurrency`` arg -- the crawl raises it to 150-200
+        to keep fast hosts busy while slow ones drain. Raising it never raises the per-host
+        in-flight cap (:data:`_DEFAULT_PER_HOST_CONCURRENCY`), which is layered underneath.
+        """
+        return self._limiter.total_tokens
 
     async def _request_with_retries(
         self,
