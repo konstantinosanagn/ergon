@@ -1172,7 +1172,7 @@ async def _crawl_due(
                 # pre-v3 prev index that lacks the column (else sqlite3.Row raises IndexError).
                 if (
                     prior_row is not None
-                    and "enrich_hash" in prior_row.keys()
+                    and "enrich_hash" in prior_row.keys()  # noqa: SIM118 - sqlite3.Row: `in` scans values, need .keys()
                     and prior_row["enrich_hash"] == enrich_hash(job)
                 ):
                     # Unchanged posting: copy the prior fully-enriched fields (no re-enrich). The
