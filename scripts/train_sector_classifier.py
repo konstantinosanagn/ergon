@@ -179,7 +179,7 @@ def main(argv: list[str]) -> None:
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
-    from ergon_tracker.extract.sector_clf import save_sector_model
+    from ergon_tracker.extract.sector_clf import platt_normalize, save_sector_model
     from ergon_tracker.extract.sector_features import assemble, cl2n
 
     corpus, out, sample, folds, target = None, ROOT / "dist" / "sector_clf.npz", None, 5, 0.85
@@ -222,7 +222,12 @@ def main(argv: list[str]) -> None:
     idx = {lab: k for k, lab in enumerate(model["labels"])}
     y_idx = np.asarray([idx[v] for v in y])
 
-    # out-of-fold calibrated probs for an honest threshold sweep
+    # Out-of-fold scores for an honest threshold sweep. CRITICAL (bug b): we must sweep on the SAME
+    # probability transform inference serves. Inference computes per-class Platt sigmoids on the
+    # decision-function logits and renormalizes (``platt_normalize``); so we take OOF
+    # ``decision_function`` scores and push them through that identical transform — NOT the plain
+    # ``predict_proba`` softmax, which is a different distribution and made the swept coverage
+    # diverge wildly from the live firing rate.
     skf = StratifiedKFold(
         n_splits=max(2, min(folds, int(np.bincount(y_idx).min()))), shuffle=True, random_state=42
     )
@@ -232,10 +237,13 @@ def main(argv: list[str]) -> None:
         y_idx,
         cv=skf,
         n_jobs=_jobs(),
-        method="predict_proba",
+        method="decision_function",
     )
+    # binary decision_function returns 1-D; expand to the (n, n_classes) layout W/platt expect.
+    dec = dec if dec.ndim == 2 else np.vstack([-dec, dec]).T
+    probs = platt_normalize(dec, model["platt_a"], model["platt_b"])
     tp, tm, ts, rep = sweep_thresholds(
-        dec, feats, model["centroids"], y_idx, target_precision=target
+        probs, feats, model["centroids"], y_idx, target_precision=target
     )
     print(
         f"[sweep] tau=({tp:.2f},{tm:.2f},{ts:.2f}) precision={rep['precision']:.1%} coverage={rep['coverage']:.1%}"
@@ -255,6 +263,10 @@ def main(argv: list[str]) -> None:
         tau_margin=tm,
         tau_sim=ts,
         embed_dim=emb.shape[1],
+        # persist the swept coverage/precision so the live firing rate can be regression-checked
+        # against them (they must match, since sweep and inference share ``platt_normalize``).
+        sweep_coverage=rep["coverage"],
+        sweep_precision=rep["precision"],
     )
     (out.with_suffix(".metrics.json")).write_text(
         json.dumps(
