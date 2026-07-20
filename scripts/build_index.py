@@ -1013,6 +1013,7 @@ async def _crawl_due(
     import anyio
 
     from ergon_tracker.crawl_pool import run_pool
+    from ergon_tracker.crawl_progress import ProgressHeartbeat
     from ergon_tracker.dedup import deduplicate, normalize_company
     from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.exceptions import RateLimitError
@@ -1087,6 +1088,7 @@ async def _crawl_due(
     )  # companies aggregated later (build_index_from_fresh_db)
     write_lock = anyio.Lock()
     pending = {"rows": 0}  # uncommitted row count; mutated only while holding write_lock
+    rows_total = {"n": 0}  # cumulative rows written this run (heartbeat); bumped under write_lock
 
     async def grab(bkey: str, fetcher: AsyncFetcher) -> None:
         regkey, e = boards[bkey]
@@ -1212,6 +1214,7 @@ async def _crawl_due(
 
                         write_fresh_rich(con, board_jobs)
                     pending["rows"] += len(board_jobs)
+                    rows_total["n"] += len(board_jobs)
                     if pending["rows"] >= 20000:
                         con.commit()
                         pending["rows"] = 0
@@ -1269,7 +1272,29 @@ async def _crawl_due(
             async def _handle(bkey: str) -> None:
                 await grab(bkey, fetcher)
 
-            await run_pool(due, _handle, concurrency=crawl_concurrency)
+            # PROGRESS HEARTBEAT (observability only): throttled snapshot of how far the crawl has
+            # got, drained from run_pool's on_result completion tick. A single Actions step doesn't
+            # stream logs until it ends, so this dist/crawl-progress.json (re-uploaded to the release
+            # by the workflow) is the ONLY way to poll a multi-hour crawl mid-run. tick() is O(1) and
+            # synchronous (no await) => atomic under the pool's cooperative scheduling with no lock,
+            # and every write is best-effort, so the heartbeat never alters or slows the crawl.
+            hb_interval = float(os.environ.get("ERGON_CRAWL_HEARTBEAT_S") or "90")
+            heartbeat = ProgressHeartbeat(
+                Path(fresh_db_path).parent / "crawl-progress.json",
+                total=len(due),
+                interval_s=hb_interval,
+                extra=lambda: {
+                    "rows_so_far": rows_total["n"],
+                    "slowest_hosts": fetcher.slowest_hosts(3),
+                },
+            )
+            heartbeat.emit()  # seed 0/N immediately so a watcher sees the crawl start
+
+            async def _tick(_outcome: object) -> None:
+                heartbeat.tick()
+
+            await run_pool(due, _handle, concurrency=crawl_concurrency, on_result=_tick)
+            heartbeat.emit()  # final snapshot: 100% + the run's last slow-host tail
         con.commit()
     finally:
         con.close()

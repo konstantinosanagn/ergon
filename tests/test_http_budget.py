@@ -57,6 +57,26 @@ async def test_budget_collapses_shared_backend_subdomains() -> None:
         assert f.host_request_count("gamma.recruitee.com") == 1
 
 
+async def test_slowest_hosts_ranks_the_tail_and_bounds_n() -> None:
+    """slowest_hosts returns the longest-in-play hosts first, each with wall/busy/requests."""
+    async with _fetcher(_ok_transport()) as f:
+        assert f.slowest_hosts() == []  # nothing touched yet
+        await f.get_json("https://slow-acme.test/jobs")
+        await anyio.sleep(0.02)  # slow host stays in play longer -> larger wall_s
+        await f.get_json("https://fast-acme.test/jobs")
+        await f.get_json("https://fast-acme.test/jobs")
+
+        top = f.slowest_hosts(1)
+        assert len(top) == 1  # bounded by n
+        assert top[0]["host"] == "slow-acme.test"  # longest in play leads the tail
+
+        rows = f.slowest_hosts(5)
+        assert [r["host"] for r in rows] == ["slow-acme.test", "fast-acme.test"]
+        fast = next(r for r in rows if r["host"] == "fast-acme.test")
+        assert fast["requests"] == 2
+        assert fast["busy_s"] >= 0.0 and fast["wall_s"] >= 0.0
+
+
 async def test_reset_host_accounting_clears_everything() -> None:
     async with _fetcher(_ok_transport()) as f:
         await f.get_json("https://api.acme.test/jobs")

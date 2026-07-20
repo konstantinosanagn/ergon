@@ -141,6 +141,7 @@ jobs:
 
       - name: Build incremental index (exits non-zero if data-quality gates fail)
         env:
+          GH_TOKEN: ${{ github.token }}  # for the in-step crawl-progress heartbeat uploader (below)
           SQLITE_TMPDIR: /mnt        # large temp disk for FTS/sort spills (/ has only ~14GB)
           TMPDIR: /mnt
           ERGON_TOKEN_STORE: dist/tier2_tokens.json  # token_ref specs read the freshly-minted tokens
@@ -169,6 +170,25 @@ jobs:
           ERGON_LIVENESS_CONCURRENCY: "24"           # liveness: in-flight board/detail-confirm fetch concurrency (mirrors ERGON_DETAIL_CONCURRENCY; per-host politeness enforced separately)
           ERGON_LIVENESS_RECHECK_DAYS: "7"           # liveness: don't re-check a row until this many days since its last check (see liveness.py::RECHECK_DAYS)
         run: |
+          # CRAWL PROGRESS HEARTBEAT (observability only): Actions does NOT stream a step's logs
+          # until the step ends, so a 1-2h crawl is otherwise a black box. The crawl writes a tiny,
+          # throttled dist/crawl-progress.json (boards done/total, rows, elapsed, slowest-host tail);
+          # this background loop re-uploads it to the index-latest release every ~120s so a watcher
+          # can poll it live WITHOUT waiting for the step to finish:
+          #   gh release download index-latest --pattern crawl-progress.json
+          # Best-effort throughout (a failed upload never touches the build) and killed via the EXIT
+          # trap the instant the step's shell exits -- success OR failure -- so it can't leak past
+          # this step or upload stale progress into a later phase.
+          (
+            while true; do
+              sleep 120
+              if [ -f dist/crawl-progress.json ] && gh release view index-latest >/dev/null 2>&1; then
+                gh release upload index-latest dist/crawl-progress.json --clobber || true
+              fi
+            done
+          ) &
+          HEARTBEAT_PID=$!
+          trap 'kill "$HEARTBEAT_PID" 2>/dev/null || true' EXIT
           # --rich re-enabled after the OOM in run 28070765535 (killed at ~182min): the reconcile
           # now streams fresh_rich in chunks (no whole-table fetchall), embeds single-process (no
           # per-worker model copies), and bounds the cold start via ERGON_RICH_MAX_EMBED — deferred
@@ -215,6 +235,10 @@ jobs:
             ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }} \
             ${{ (github.event.inputs.detail == 'true' || github.event_name == 'schedule') && '--detail' || '' }} \
             ${{ (github.event.inputs.liveness == 'true' || github.event_name == 'schedule') && '--liveness' || '' }}
+          # Land the final 100% snapshot promptly (the trap kills the loop on the next line's exit).
+          if [ -f dist/crawl-progress.json ] && gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest dist/crawl-progress.json --clobber || true
+          fi
 
       # Stream B self-healing: replay every apicapture spec, record health (streak persisted across
       # builds via dist/spec_health.json), and emit rediscover_queue.json for specs that rotted.
@@ -333,6 +357,7 @@ jobs:
             dist/fresh.sqlite
             dist/crawl_cursor.json
             dist/board_state.json
+            dist/crawl-progress.json
           if-no-files-found: ignore
 
       # Resumability: the crawl saves the advanced cursor + board_state to dist/ IMMEDIATELY after the
