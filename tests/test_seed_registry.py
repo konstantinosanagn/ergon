@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from ergon_tracker.registry.store import SeedRegistry
@@ -76,6 +78,36 @@ def test_every_entry_has_valid_shape(registry: SeedRegistry) -> None:
         elif not entry.get("token"):
             bad.append(f"{key}: empty token")
     assert not bad, bad
+
+
+_DOMAIN_RE = re.compile(r"^[a-z0-9.-]+\.[a-z]{2,}$")
+
+# Pre-existing EDGAR-extraction artifacts of the shape ``INC.,acme.com`` (a legal-form prefix
+# leaked into the domain). They predate the domain backfill and are frozen here as a known
+# baseline: the backfill's shape gate can never ADD one, so this count must not grow.
+_LEGACY_DIRTY_DOMAINS = 28
+
+
+def test_all_domains_are_clean_shaped(registry: SeedRegistry) -> None:
+    """Every stored domain must pass the resolver's shape gate — the *only* tolerated exception is
+    the frozen set of legacy ``<legal-form>,domain`` EDGAR artifacts. Any OTHER malformation
+    (a space, a missing TLD, an ATS host with junk) is a poisoned registry and fails here. This is
+    the invariant the domain backfill must never violate: its pre-write gate rejects anything that
+    doesn't match ``_DOMAIN_RE``, so a clean run can only ever keep this set clean or shrink it."""
+    from ergon_tracker.registry.store import _normalize_domain
+
+    non_clean: list[str] = []
+    for key, entry in registry.all().items():
+        domain = entry.get("domain")
+        if domain is None:
+            continue
+        if not isinstance(domain, str) or not _DOMAIN_RE.match(_normalize_domain(domain)):
+            non_clean.append(f"{key}: {domain!r}")
+    # No new *kinds* of dirt: every non-clean value is the known legacy comma artifact.
+    unexpected = [x for x in non_clean if "," not in x.split(": ", 1)[1]]
+    assert not unexpected, f"unexpected dirty domains (not legacy comma artifacts): {unexpected}"
+    # And the legacy baseline never grows (the backfill adds only clean domains).
+    assert len(non_clean) <= _LEGACY_DIRTY_DOMAINS, non_clean
 
 
 def test_workday_tokens_are_three_part_composite(registry: SeedRegistry) -> None:
