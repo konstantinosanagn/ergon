@@ -354,6 +354,28 @@ class AsyncFetcher:
         """Cumulative in-request seconds spent on ``host`` (sums overlapping requests)."""
         return self._host_busy_seconds.get(_rate_key(urlsplit(host).netloc or host), 0.0)
 
+    def slowest_hosts(self, n: int = 3) -> list[dict[str, Any]]:
+        """The ``n`` hosts that have been in play LONGEST this run -- the crawl's slow tail.
+
+        Pure read over the same per-host accounting the deadline-box uses (``_host_first_seen`` /
+        busy-seconds / request count); it never throttles or blocks anything. Ranked by wall-clock
+        time in play (``wall_s``), which is what actually holds the crawl's tail open. Each entry is
+        ``{host, wall_s, busy_s, requests}`` -- exactly the shape the progress heartbeat serialises
+        so a watcher can see WHICH host is the long pole. Empty until the first request is issued.
+        """
+        now = time.monotonic()
+        rows = [
+            {
+                "host": host,
+                "wall_s": round(now - first, 1),
+                "busy_s": round(self._host_busy_seconds.get(host, 0.0), 1),
+                "requests": self._host_request_count.get(host, 0),
+            }
+            for host, first in self._host_first_seen.items()
+        ]
+        rows.sort(key=lambda r: cast(float, r["wall_s"]), reverse=True)
+        return rows[: max(0, n)]
+
     def reset_host_accounting(self) -> None:
         """Clear all per-host wall-clock/count accounting (start a fresh deadline-box run)."""
         self._host_first_seen.clear()
