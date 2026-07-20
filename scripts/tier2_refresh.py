@@ -81,7 +81,10 @@ def main() -> None:
 
     targets = _load_targets()
     store = TokenStore(args.store)
-    res = anyio.run(refresh, store, targets, args.targets or None, margin_frac=args.margin)
+    # Same bug as spec_health_cron.py: anyio.run(func, *args, **kw) does NOT forward kwargs to
+    # `func` -- it raises TypeError for anything it doesn't own itself. Wrap in a lambda so
+    # `margin_frac` actually reaches refresh().
+    res = anyio.run(lambda: refresh(store, targets, args.targets or None, margin_frac=args.margin))
     print(
         f"refreshed={len(res['refreshed'])} {res['refreshed']} | skipped={len(res['skipped'])} | "
         f"failed={len(res['failed'])}"
