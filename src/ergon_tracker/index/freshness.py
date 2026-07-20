@@ -58,9 +58,11 @@ already do.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import anyio
@@ -75,9 +77,12 @@ if TYPE_CHECKING:
 __all__ = [
     "DETERMINISTIC_SOURCES",
     "SEARCH_INDEX_SOURCES",
+    "BoardDelta",
+    "added_ids",
     "board_live_ids",
     "confirm_departed",
     "departed_ids",
+    "idset_hash",
     "sweep_all_boards",
     "sweep_boards",
     "sweep_search_index_boards",
@@ -232,6 +237,63 @@ def departed_ids(stored_active_ids: set[str], live_ids: set[str] | None) -> set[
     return stored_active_ids - live_ids
 
 
+def added_ids(stored_active_ids: set[str], live_ids: set[str] | None) -> set[str]:
+    """Pure diff, symmetric to ``departed_ids``: the ids the board CURRENTLY lists that our index
+    does NOT already hold as ``status='active'`` for this board -- i.e. postings the daily build
+    should crawl+insert. In the sweep's raw ``source_job_id`` space.
+
+    ``live_ids is None`` (an errored/undetermined fetch) ALWAYS returns an empty set -- exactly as
+    for ``departed_ids``, a transient/failed live fetch must never be mistaken for "the board grew".
+    The sweep's added-side guard (see ``sweep_boards``) additionally suppresses this on the
+    empty-while-stored and >``_MAX_BOARD_EXPIRE_FRACTION`` undetermined cases so a truncated fetch
+    can never emit a phantom added set.
+    """
+    if live_ids is None:
+        return set()
+    return live_ids - stored_active_ids
+
+
+def idset_hash(live_ids: Iterable[str]) -> str:
+    """A stable SHA-1 fingerprint of a board's live id-SET: the sorted, NUL-delimited raw ids.
+
+    Order-INSENSITIVE by construction (the ids are sorted first), so a board whose provider list
+    reshuffles between runs -- but whose membership is unchanged -- fingerprints identically; it
+    CHANGES iff the set's membership changes (an id added or removed). The NUL delimiter makes the
+    encoding injective across element boundaries (``{"a", "bc"}`` != ``{"ab", "c"}``). Callers must
+    only fingerprint a TRUSTWORTHY, complete live id-set (never a truncated/undetermined one) -- see
+    ``sweep_boards``'s added-side guard, which only records a delta when the fetch is determinable.
+    """
+    h = hashlib.sha1()
+    for sid in sorted(live_ids):
+        h.update(sid.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()
+
+
+@dataclass(frozen=True)
+class BoardDelta:
+    """The per-board CHANGE SIGNAL the daily build consumes to decide, cheaply, whether a board's
+    membership moved since it was last crawled -- produced ONLY for a determinable
+    (non-truncated/non-errored) live fetch on a ``DETERMINISTIC_SOURCES`` board, whose list is a
+    full, un-paginated dump (the same trust that lets ``sweep_boards`` expire on a single miss).
+
+    - ``added_ids``: raw ``source_job_id``s the board now lists that our index does not already hold
+      active for this board (``live - stored``) -- the postings the build should crawl+insert.
+    - ``idset_hash``: ``idset_hash(live_ids)`` -- the stable membership fingerprint (see that fn).
+    - ``computed_at``: the sweep's injected ``now`` for this run.
+
+    A truncated/failed/undetermined live fetch emits NO ``BoardDelta`` at all (the board is simply
+    absent from the sweep's delta map that run), never a partial fingerprint or phantom added set --
+    so the build can never wrongly skip (stale hash) or wrongly insert (phantom adds) off one.
+    """
+
+    source: str
+    board_token: str
+    added_ids: frozenset[str]
+    idset_hash: str
+    computed_at: str
+
+
 def _stored_active_by_board(
     con: sqlite3.Connection, sources: Iterable[str]
 ) -> dict[tuple[str, str], dict[str, str]]:
@@ -288,6 +350,7 @@ async def sweep_boards(
     *,
     deterministic_sources: frozenset[str] | set[str] = DETERMINISTIC_SOURCES,
     concurrency: int = _FRESHNESS_CONCURRENCY,
+    board_deltas: dict[tuple[str, str], BoardDelta] | None = None,
     now: Callable[[], str],
 ) -> dict[str, dict[str, int]]:
     """The Phase-0 sweep: for each ``(source, token)`` in ``boards`` whose ``source`` is in
@@ -307,6 +370,19 @@ async def sweep_boards(
 
     ``now`` is injected (no wall-clock read here) -- one timestamp is used for every expiry this
     call makes, matching ``liveness.py``'s convention.
+
+    ADDED-SIDE CHANGE SIGNAL (optional, opt-in via ``board_deltas``): when a caller passes a
+    mutable ``board_deltas`` dict, this ALSO records, per board, a :class:`BoardDelta`
+    (``added = live - stored`` and ``idset_hash`` of the live set) that the daily build consumes to
+    decide cheaply whether the board's membership moved -- SYMMETRIC to the removed side and gated
+    by the SAME undetermined valves: a ``None`` live fetch, an empty-while-stored live fetch, or a
+    fetch tripping the ``_MAX_BOARD_EXPIRE_FRACTION`` partial-fetch guard emits NO delta for that
+    board (it is simply left out of the map, to be picked up on a later run). This guarantees a
+    truncated/failed fetch can never emit a phantom ``added`` set or a bogus ``idset_hash`` that
+    would make the build wrongly insert or wrongly skip. A determinable board with zero adds and
+    zero departures STILL records a delta (the fingerprint of its unchanged membership), so the
+    build always has a current hash to compare against. ``board_deltas`` defaults to ``None`` --
+    when omitted the sweep behaves byte-identically to before (pure removed-side, zero regression).
 
     Returns per-source counts: ``{source: {"checked", "departed", "expired", "errored"}}``.
     ``checked`` counts boards attempted (including errored ones); ``departed`` counts ids found
@@ -357,8 +433,24 @@ async def sweep_boards(
         async with write_lock:
             counts[source]["checked"] += 1
             if undetermined:
+                # No delta emitted: a None/empty-while-stored/partial-fetch live set is NOT a
+                # trustworthy membership fingerprint. Leaving this board out of the map (rather than
+                # recording a partial hash / phantom added set) is what stops the build wrongly
+                # skipping or wrongly inserting off a truncated fetch. Picked up on a later run.
                 counts[source]["errored"] += 1
                 return
+            # Added-side change signal (safe: not undetermined, so live_ids is a complete,
+            # trustworthy dump on a DETERMINISTIC_SOURCES board). Recorded for EVERY determinable
+            # board -- even one with zero adds/departures -- so the build always has a current
+            # membership hash to diff. ``live_ids`` is non-None here (undetermined caught it above).
+            if board_deltas is not None and live_ids is not None:
+                board_deltas[(source, token)] = BoardDelta(
+                    source=source,
+                    board_token=token,
+                    added_ids=frozenset(added_ids(stored_ids, live_ids)),
+                    idset_hash=idset_hash(live_ids),
+                    computed_at=now_s,
+                )
             if not missing:
                 return
             counts[source]["departed"] += len(missing)
@@ -600,6 +692,7 @@ async def sweep_all_boards(
     search_index_sources: frozenset[str] | set[str] = SEARCH_INDEX_SOURCES,
     concurrency: int = _FRESHNESS_CONCURRENCY,
     board_active_id_limit: int = _SEARCH_INDEX_BOARD_LIMIT,
+    board_deltas: dict[tuple[str, str], BoardDelta] | None = None,
     now: Callable[[], str],
 ) -> dict[str, dict[str, int]]:
     """Compose a full sweep run: Phase-0 ``sweep_boards`` (deterministic, single-miss expiry) AND
@@ -610,6 +703,13 @@ async def sweep_all_boards(
 
     Materializes ``boards`` once (an ``Iterable`` may be a one-shot generator) so both passes see
     the identical board list.
+
+    ADDED-SIDE CHANGE SIGNAL: an optional ``board_deltas`` dict is forwarded to ``sweep_boards``
+    ONLY (Phase-0 deterministic sources). The Phase-1 search-index sources deliberately produce NO
+    delta: their list APIs reshuffle/paginate non-deterministically (the very reason they need a
+    per-posting confirm), so a single fetch's id-set is NOT a trustworthy membership fingerprint --
+    emitting an ``idset_hash``/``added`` set from one would violate the safety guarantee the guard
+    exists to uphold. The build gets a delta exactly where the live set is a full, un-paginated dump.
     """
     boards = list(boards)
     det_stats = await sweep_boards(
@@ -618,6 +718,7 @@ async def sweep_all_boards(
         fetcher,
         deterministic_sources=deterministic_sources,
         concurrency=concurrency,
+        board_deltas=board_deltas,
         now=now,
     )
     search_stats = await sweep_search_index_boards(

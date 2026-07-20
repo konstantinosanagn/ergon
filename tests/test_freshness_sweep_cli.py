@@ -15,12 +15,14 @@ real-schema index built via ``fresh_db``, and asserts:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 import pytest
 import scripts.freshness_sweep as sweep_cli
 
 from ergon_tracker.index.db import fresh_db
+from ergon_tracker.index.freshness import idset_hash
 from ergon_tracker.models import RawJob
 
 _NOW = "2026-07-18T00:00:00+00:00"
@@ -241,6 +243,72 @@ def test_cli_e2e_shard_with_no_matching_boards_writes_empty_sidecar(tmp_path, pa
     assert rows == []
     # Still unmutated (the CLI never even had to touch this board's data).
     assert _all_statuses(idx_path) == {"job-alive": "active"}
+
+
+def test_cli_e2e_board_deltas_sidecar_carries_added_and_idset_hash(tmp_path, patched_providers):
+    # A greenhouse board holds "job-alive" (source_job_id defaults to its own id). Its live fetch
+    # now lists {job-alive, new-req}: nothing departed, but "new-req" is a genuine add. The sidecar
+    # board_deltas table must carry that add + the fingerprint of the FULL live set. A separate
+    # board whose fetch ERRORS must contribute NO delta row (added-side guard).
+    idx_path = _build_index(
+        tmp_path,
+        [
+            _job_row("job-alive", source="greenhouse"),
+            _job_row("job-on-erroring-board", source="lever", board_token="errboard"),
+        ],
+    )
+    patched_providers(
+        {
+            "greenhouse": _FakeProvider(live_ids=["job-alive", "new-req"]),
+            "lever": _FakeProvider(raises=True),
+        }
+    )
+
+    out_path = tmp_path / "index-freshness.sqlite"
+    rc = sweep_cli.main(["--index", idx_path, "--out", str(out_path)])
+    assert rc == 0
+
+    con = sqlite3.connect(out_path)
+    try:
+        tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert {"expired_ids", "board_deltas"} <= tables
+        cols = {r[1] for r in con.execute("PRAGMA table_info(board_deltas)")}
+        assert cols == {"source", "board_token", "added_ids", "idset_hash", "computed_at"}
+        rows = con.execute(
+            "SELECT source, board_token, added_ids, idset_hash, computed_at FROM board_deltas"
+        ).fetchall()
+        # no departures on the greenhouse board
+        assert con.execute("SELECT COUNT(*) FROM expired_ids").fetchone()[0] == 0
+    finally:
+        con.close()
+
+    # Exactly one delta: the greenhouse board. The erroring lever board emitted nothing.
+    assert len(rows) == 1
+    source, board_token, added_json, hash_val, computed_at = rows[0]
+    assert (source, board_token) == ("greenhouse", "acme")
+    assert json.loads(added_json) == ["new-req"]  # live - stored, sorted
+    assert hash_val == idset_hash({"job-alive", "new-req"})  # fingerprint of the FULL live set
+    assert computed_at  # non-empty timestamp
+
+
+def test_cli_e2e_no_departures_writes_well_formed_empty_board_deltas(tmp_path, patched_providers):
+    # An unchanged board still records a delta (empty added set + current fingerprint); this asserts
+    # the board_deltas table is always well-formed even when there is nothing new.
+    idx_path = _build_index(tmp_path, [_job_row("job-alive", source="greenhouse")])
+    patched_providers({"greenhouse": _FakeProvider(live_ids=["job-alive"])})
+
+    out_path = tmp_path / "index-freshness.sqlite"
+    assert sweep_cli.main(["--index", idx_path, "--out", str(out_path)]) == 0
+
+    con = sqlite3.connect(out_path)
+    try:
+        rows = con.execute("SELECT added_ids, idset_hash FROM board_deltas").fetchall()
+    finally:
+        con.close()
+    assert len(rows) == 1
+    added_json, hash_val = rows[0]
+    assert json.loads(added_json) == []
+    assert hash_val == idset_hash({"job-alive"})
 
 
 def test_cli_missing_index_returns_nonzero(tmp_path):

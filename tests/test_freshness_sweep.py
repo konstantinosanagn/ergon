@@ -16,9 +16,12 @@ from ergon_tracker.index.detail import DetailRef
 from ergon_tracker.index.freshness import (
     DETERMINISTIC_SOURCES,
     SEARCH_INDEX_SOURCES,
+    BoardDelta,
+    added_ids,
     board_live_ids,
     confirm_departed,
     departed_ids,
+    idset_hash,
     sweep_all_boards,
     sweep_boards,
     sweep_search_index_boards,
@@ -1094,3 +1097,267 @@ def test_search_index_sweep_empty_boards_iterable_returns_empty_dict(tmp_path):
     )
     con.close()
     assert stats == {}
+
+
+# --- PHASE 2: added-side change signal (added_ids / idset_hash / BoardDelta) -------------------
+#
+# The delta signal the daily build consumes to decide, cheaply, whether a board's membership moved.
+# Emitted ONLY where the live id-set is a full, trustworthy dump (deterministic sources); the
+# added-side guard is SYMMETRIC to the removed-side valves -- a None / empty-while-stored / partial
+# (>_MAX_BOARD_EXPIRE_FRACTION) live fetch emits NO delta, never a phantom added set or bogus hash.
+
+
+# --- idset_hash: pure, stable membership fingerprint ------------------------------------------
+
+
+def test_idset_hash_is_stable_under_reorder():
+    # A provider list that reshuffles between runs but whose MEMBERSHIP is unchanged must
+    # fingerprint identically (the hash sorts first).
+    assert idset_hash(["c", "a", "b"]) == idset_hash(["a", "b", "c"])
+    assert idset_hash({"x", "y", "z"}) == idset_hash(["z", "y", "x"])
+
+
+def test_idset_hash_changes_on_membership_change():
+    base = idset_hash(["a", "b", "c"])
+    assert idset_hash(["a", "b"]) != base  # a removal changes it
+    assert idset_hash(["a", "b", "c", "d"]) != base  # an addition changes it
+
+
+def test_idset_hash_empty_set_is_stable_and_distinct():
+    assert idset_hash([]) == idset_hash(set())
+    assert idset_hash([]) != idset_hash(["a"])
+
+
+def test_idset_hash_delimiter_is_injective_across_boundaries():
+    # Without a delimiter, {"a", "bc"} and {"ab", "c"} would collide -- the NUL guard prevents it.
+    assert idset_hash(["a", "bc"]) != idset_hash(["ab", "c"])
+
+
+# --- added_ids: pure diff, symmetric to departed_ids ------------------------------------------
+
+
+def test_added_ids_finds_the_new_id():
+    assert added_ids({"a", "b"}, {"a", "b", "c"}) == {"c"}
+
+
+def test_added_ids_none_live_set_returns_empty():
+    # An errored/undetermined board fetch must NEVER be mistaken for "the board grew".
+    assert added_ids({"a"}, None) == set()
+
+
+def test_added_ids_no_new_ids_returns_empty():
+    assert added_ids({"a", "b"}, {"a", "b"}) == set()
+    assert added_ids({"a", "b", "c"}, {"a"}) == set()  # only removals, no adds
+
+
+def test_added_ids_empty_stored_returns_whole_live_set():
+    assert added_ids(set(), {"a", "b"}) == {"a", "b"}
+
+
+# --- sweep_boards: records a BoardDelta for a determinable deterministic board -----------------
+
+
+def test_sweep_records_delta_with_added_and_hash_on_genuine_change(tmp_path, monkeypatch):
+    # A deterministic board that both DROPPED a stored id (departs) and GAINED a new one (added):
+    # the delta must carry the added id and the fingerprint of the FULL live set.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("gh-a", source_job_id="1"),
+            _job_row("gh-b", source_job_id="2"),  # departs
+        ],
+    )
+    # Live board now lists {1, 3}: "2" departed, "3" is a NEW posting we don't hold yet.
+    monkeypatch.setattr(
+        freshness, "get_provider", _make_get_provider({("greenhouse", "acme"): {"1", "3"}})
+    )
+
+    deltas: dict[tuple[str, str], BoardDelta] = {}
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards(
+            [("greenhouse", "acme")], con, fetcher=object(), board_deltas=deltas, now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    # removed-side path is UNCHANGED by the delta feature
+    assert stats["greenhouse"] == {"checked": 1, "departed": 1, "expired": 1, "errored": 0}
+    assert _job_status(idx, "gh-b") == ("expired", "departed_board")
+
+    # added-side signal
+    assert set(deltas.keys()) == {("greenhouse", "acme")}
+    d = deltas[("greenhouse", "acme")]
+    assert d.source == "greenhouse"
+    assert d.board_token == "acme"
+    assert d.added_ids == frozenset({"3"})  # live - stored
+    assert d.idset_hash == idset_hash({"1", "3"})  # fingerprint of the FULL live set
+    assert d.computed_at == _NOW
+
+
+def test_sweep_records_delta_even_when_board_unchanged(tmp_path, monkeypatch):
+    # A determinable board with ZERO adds and ZERO departures still records a delta -- the build
+    # needs a current fingerprint to diff, and an empty added set is the "no new work" signal.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
+    monkeypatch.setattr(
+        freshness, "get_provider", _make_get_provider({("greenhouse", "acme"): {"1"}})
+    )
+
+    deltas: dict[tuple[str, str], BoardDelta] = {}
+    con = sqlite3.connect(idx)
+    anyio.run(
+        lambda: sweep_boards(
+            [("greenhouse", "acme")], con, fetcher=object(), board_deltas=deltas, now=lambda: _NOW
+        )
+    )
+    con.close()
+
+    d = deltas[("greenhouse", "acme")]
+    assert d.added_ids == frozenset()
+    assert d.idset_hash == idset_hash({"1"})
+
+
+def test_sweep_without_deltas_collector_is_unchanged(tmp_path, monkeypatch):
+    # Omitting board_deltas (the default) leaves the removed-side behavior byte-identical and simply
+    # produces no signal -- zero regression.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")])
+    monkeypatch.setattr(
+        freshness, "get_provider", _make_get_provider({("greenhouse", "acme"): {"1"}})
+    )
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards([("greenhouse", "acme")], con, fetcher=object(), now=lambda: _NOW)
+    )
+    con.close()
+    assert stats["greenhouse"]["expired"] == 1  # gh-b (source_job_id 2) departed
+
+
+# --- sweep_boards: the added-side GUARD (no phantom delta on a truncated/failed fetch) ---------
+
+
+def test_sweep_emits_no_delta_on_none_fetch(tmp_path, monkeypatch):
+    # An errored board fetch (None) must emit NO delta -- a bogus fingerprint here would make the
+    # build wrongly skip re-crawling the board.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
+    monkeypatch.setattr(
+        freshness, "get_provider", _make_get_provider({("greenhouse", "acme"): None})
+    )
+    deltas: dict[tuple[str, str], BoardDelta] = {}
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards(
+            [("greenhouse", "acme")], con, fetcher=object(), board_deltas=deltas, now=lambda: _NOW
+        )
+    )
+    con.close()
+    assert stats["greenhouse"]["errored"] == 1
+    assert deltas == {}  # no delta for an undetermined board
+
+
+def test_sweep_emits_no_delta_on_empty_while_stored_fetch(tmp_path, monkeypatch):
+    # An empty live set while we still hold active postings is indistinguishable from a swallowed
+    # transient failure -- the same valve that blocks a mass-expiry must ALSO block a delta.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")])
+
+    class _P:
+        async def fetch(self, token, query, fetcher):
+            return []  # silently-swallowed transient failure looks exactly like this
+
+    monkeypatch.setattr(freshness, "get_provider", lambda name: _P())
+    deltas: dict[tuple[str, str], BoardDelta] = {}
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards(
+            [("greenhouse", "acme")], con, fetcher=object(), board_deltas=deltas, now=lambda: _NOW
+        )
+    )
+    con.close()
+    assert stats["greenhouse"]["errored"] == 1
+    assert deltas == {}  # never a phantom fingerprint of an empty set
+
+
+def test_sweep_emits_no_delta_when_fraction_guard_trips(tmp_path, monkeypatch):
+    # A sizeable board whose (non-empty) live set is missing MOST of its stored ids looks like a
+    # TRUNCATED fetch -- the fraction guard makes it undetermined, and a truncated live set must NOT
+    # emit an idset_hash (it would be the fingerprint of a partial set) or a phantom added set.
+    import ergon_tracker.index.freshness as freshness
+
+    jobs = [_job_row(f"gh-{i}", source_job_id=str(i)) for i in range(40)]
+    idx = _build_index(tmp_path, jobs)
+    # Live returns only 10 of 40 stored PLUS a spurious "new" id -> 30 missing = 75% > 50% guard.
+    monkeypatch.setattr(
+        freshness,
+        "get_provider",
+        _make_get_provider({("greenhouse", "acme"): {str(i) for i in range(10)} | {"new"}}),
+    )
+    deltas: dict[tuple[str, str], BoardDelta] = {}
+    con = sqlite3.connect(idx)
+    stats = anyio.run(
+        lambda: sweep_boards(
+            [("greenhouse", "acme")], con, fetcher=object(), board_deltas=deltas, now=lambda: _NOW
+        )
+    )
+    con.close()
+    assert stats["greenhouse"]["errored"] == 1
+    assert stats["greenhouse"]["expired"] == 0
+    assert deltas == {}  # truncated fetch -> NO phantom added "new" and NO partial fingerprint
+
+
+# --- sweep_all_boards: delta forwarded to Phase-0 ONLY, never to reshuffling search-index ------
+
+
+def test_sweep_all_boards_records_delta_for_deterministic_not_search_index(tmp_path, monkeypatch):
+    # A greenhouse (deterministic) board and an oracle (search-index) board both change. Only the
+    # deterministic one gets a delta -- oracle's list reshuffles/paginates, so its single-fetch
+    # id-set is not a trustworthy fingerprint and must never be emitted.
+    import ergon_tracker.index.freshness as freshness
+
+    idx = _build_index(
+        tmp_path,
+        [
+            _job_row("gh-a", source="greenhouse", source_job_id="1"),
+            _job_row("or-a", source="oracle", source_job_id="1"),
+        ],
+    )
+
+    def get_provider(name):
+        class _P:
+            async def fetch(self, token, query, fetcher):
+                # Non-empty live board listing a new id "999": greenhouse's "1" departs (+ "999"
+                # added); oracle's "1" becomes a confirm candidate.
+                return [_raw("999", source=name)]
+
+            async def fetch_detail(self, ref, fetcher):
+                return None  # oracle candidate confirmed dead
+
+        return _P()
+
+    monkeypatch.setattr(freshness, "get_provider", get_provider)
+
+    deltas: dict[tuple[str, str], BoardDelta] = {}
+    con = sqlite3.connect(idx)
+    anyio.run(
+        lambda: sweep_all_boards(
+            [("greenhouse", "acme"), ("oracle", "acme")],
+            con,
+            fetcher=object(),
+            board_deltas=deltas,
+            now=lambda: _NOW,
+        )
+    )
+    con.close()
+
+    assert set(deltas.keys()) == {("greenhouse", "acme")}  # oracle deliberately absent
+    d = deltas[("greenhouse", "acme")]
+    assert d.added_ids == frozenset({"999"})
+    assert d.idset_hash == idset_hash({"999"})
