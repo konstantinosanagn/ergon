@@ -45,40 +45,75 @@ _SIDECAR_SCHEMA = (
     "(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)"
 )
 
+# Phase 2 (delta-driven crawl) addition -- MUST stay byte-for-byte identical (modulo IF NOT EXISTS)
+# to `scripts/freshness_sweep.py`'s `_BOARD_DELTAS_SCHEMA`. The per-board added-side change signal
+# is unioned across shards exactly like `expired_ids`: shards partition boards disjointly (every
+# board hashes to one shard), so a given (source, board_token) appears in at most one shard; the
+# PRIMARY KEY (source, board_token) makes a re-run / coincidental overlap idempotent under
+# INSERT OR IGNORE. Merged alongside `expired_ids`, in the SAME per-shard transaction.
+_BOARD_DELTAS_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS board_deltas"
+    "(source TEXT NOT NULL, board_token TEXT NOT NULL, added_ids TEXT NOT NULL, "
+    "idset_hash TEXT NOT NULL, computed_at TEXT NOT NULL, "
+    "PRIMARY KEY (source, board_token))"
+)
+
 
 def find_shard_dbs(shards_dir: Path) -> list[Path]:
     """Shard files in ``shards_dir``, sorted for a deterministic, reproducible merge order."""
     return sorted(shards_dir.glob(_SHARD_GLOB))
 
 
+def _union_table(con: sqlite3.Connection, insert_sql: str, shard_name: str) -> int:
+    """Run one ``INSERT OR IGNORE ... SELECT ... FROM shard.<table>`` in its OWN transaction (commit
+    on success) and return rows added. Committing per-union is what keeps the two tables INDEPENDENT:
+    a shard MISSING one table (an older shard predating it, or a truncated artifact) fails only that
+    union -- rolled back and skipped with a warning, 0 rows -- while the sibling table it DID carry
+    was already committed and is never undone."""
+    before = con.total_changes
+    try:
+        con.execute(insert_sql)
+        con.commit()
+    except sqlite3.Error as exc:  # missing/truncated table inside the shard -> 0 rows, don't abort
+        print(f"  WARNING: could not read a table in {shard_name}: {exc}", file=sys.stderr)
+        con.rollback()
+        return 0
+    return con.total_changes - before
+
+
 def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
-    """Union every shard's ``expired_ids`` rows into ``out_path`` (schema ensured via the pinned
-    ``_SIDECAR_SCHEMA`` DDL). Returns ``{shard_filename: rows_merged, ..., "_total": total_rows}``.
+    """Union every shard's ``expired_ids`` AND ``board_deltas`` rows into ``out_path`` (both schemas
+    ensured via the pinned ``_SIDECAR_SCHEMA`` / ``_BOARD_DELTAS_SCHEMA`` DDL). Returns
+    ``{shard_filename: expired_rows_merged, ..., "_total": total_expired,
+    "_total_deltas": total_delta_rows}`` -- per-shard values report the ``expired_ids`` count (the
+    long-standing contract); the delta total is reported separately so the ``expired_ids`` numbers
+    callers already parse are unchanged.
 
     Row union: shards partition boards disjointly by host/rate-bucket (see
     ``freshness_shard.shard_boards``), so two DIFFERENT shards should never confirm-depart the
-    SAME posting id -- but even if they did, the task's semantics are that any duplicate row is
-    IDENTICAL (an id either departed its board or it didn't; ``expired_at``/``reason`` carry no
-    per-shard-specific meaning worth reconciling). So the write is ``INSERT OR IGNORE``: the first
-    shard (in sorted path order) to claim an id wins, later duplicates are silently dropped rather
-    than erroring -- deliberately order-INSENSITIVE for correctness (which shard "wins" on a
-    coincidental duplicate is immaterial since the rows are semantically identical), and safe to
-    re-run the merge (e.g. after a retry) without erroring on a re-processed shard.
+    SAME posting id NOR emit a delta for the SAME (source, board_token) -- but even if they did,
+    any duplicate row is semantically IDENTICAL. So both writes are ``INSERT OR IGNORE``: the first
+    shard (in sorted path order) to claim a key wins, later duplicates are silently dropped rather
+    than erroring -- order-INSENSITIVE for correctness, and safe to re-run the merge (e.g. after a
+    retry) without erroring on a re-processed shard.
 
     Rows are streamed via ATTACH + ``INSERT ... SELECT`` (never ``fetchall``'d into Python), so
-    peak memory is O(1) per shard regardless of how many ids a shard confirmed departed.
+    peak memory is O(1) per shard regardless of how many ids/deltas a shard produced.
 
-    Resilience: a shard whose file can't be ATTACHed / read (a truncated or empty artifact
-    download, or one missing the ``expired_ids`` table) is skipped with a warning rather than
-    aborting the whole merge, so one bad shard doesn't lose the other 19 (mirrors
+    Resilience: a shard whose file can't be ATTACHed (a truncated or empty artifact download) is
+    skipped with a warning rather than aborting the whole merge; a shard missing just ONE of the
+    two tables still contributes the table it does have (each table's union is guarded
+    independently, see ``_union_table``). One bad shard never loses the other 19 (mirrors
     ``merge_vectors_shards.py``'s per-shard resilience).
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(out_path))
     stats: dict[str, int] = {}
     total = 0
+    total_deltas = 0
     try:
         con.execute(_SIDECAR_SCHEMA)
+        con.execute(_BOARD_DELTAS_SCHEMA)
         for shard_path in shard_paths:
             try:
                 con.execute("ATTACH DATABASE ? AS shard", (str(shard_path),))
@@ -86,27 +121,36 @@ def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
                 print(f"  WARNING: could not attach {shard_path.name}: {exc}", file=sys.stderr)
                 continue
             try:
-                before = con.total_changes
                 # Disjoint by construction (see docstring), so OR IGNORE never silently drops a
                 # real cross-shard disagreement -- it only makes a re-run / coincidental overlap
-                # idempotent instead of raising a PRIMARY KEY conflict.
-                con.execute(
+                # idempotent instead of raising a PRIMARY KEY conflict. Each table's union is
+                # independently guarded so a shard carrying only one of the two still contributes it.
+                n = _union_table(
+                    con,
                     "INSERT OR IGNORE INTO main.expired_ids (id, expired_at, reason) "
-                    "SELECT id, expired_at, reason FROM shard.expired_ids"
+                    "SELECT id, expired_at, reason FROM shard.expired_ids",
+                    shard_path.name,
                 )
-                n = con.total_changes - before
+                nd = _union_table(
+                    con,
+                    "INSERT OR IGNORE INTO main.board_deltas "
+                    "(source, board_token, added_ids, idset_hash, computed_at) "
+                    "SELECT source, board_token, added_ids, idset_hash, computed_at "
+                    "FROM shard.board_deltas",
+                    shard_path.name,
+                )
                 stats[shard_path.name] = n
                 total += n
-                con.commit()  # release the shard-touching transaction before DETACH
-            except sqlite3.Error as exc:  # truncated/missing table inside the shard -> skip it
-                print(f"  WARNING: could not read {shard_path.name}: {exc}", file=sys.stderr)
-                con.rollback()
+                total_deltas += nd
             finally:
+                # Each _union_table already committed (or rolled back) its own transaction, so
+                # there is no open transaction here -- DETACH is safe.
                 con.execute("DETACH DATABASE shard")
         con.commit()
     finally:
         con.close()
     stats["_total"] = total
+    stats["_total_deltas"] = total_deltas
     return stats
 
 
@@ -136,12 +180,16 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     stats = merge_shards(shard_paths, args.out)
     total = stats.pop("_total")
+    total_deltas = stats.pop("_total_deltas")
     for name, n in stats.items():
         print(f"  {name}: {n} rows")
     # len(stats), not len(shard_paths): a shard that failed to ATTACH/read is skipped (see
     # merge_shards' resilience) and never gets a stats entry, so this reports how many shards
     # actually contributed rather than how many artifacts were merely found on disk.
-    print(f"merged {len(stats)} shard(s), {total} rows -> {args.out}")
+    print(
+        f"merged {len(stats)} shard(s), {total} expired_ids rows, {total_deltas} board_deltas "
+        f"rows -> {args.out}"
+    )
     return 0
 
 

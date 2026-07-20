@@ -27,6 +27,7 @@ Each shard writes its OWN ``--out`` sidecar; merging shards into one published
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sqlite3
 import sys
@@ -42,6 +43,7 @@ from ergon_tracker.index.db import connect, fresh_db  # noqa: E402
 from ergon_tracker.index.freshness import (  # noqa: E402
     DETERMINISTIC_SOURCES,
     SEARCH_INDEX_SOURCES,
+    BoardDelta,
     sweep_all_boards,
 )
 from ergon_tracker.index.freshness_shard import shard_boards  # noqa: E402
@@ -58,6 +60,23 @@ _COPY_CHUNK = 500
 
 _SIDECAR_SCHEMA = (
     "CREATE TABLE expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)"
+)
+
+# Phase 2 (delta-driven crawl) addition -- ALONGSIDE ``expired_ids`` (whose contract is unchanged).
+# The per-board added-side change signal the daily build consumes to decide, cheaply, whether a
+# board's membership moved since it was last crawled. One row per board that the sweep could
+# DETERMINE a full, trustworthy live id-set for (deterministic sources only -- see
+# ``ergon_tracker.index.freshness.sweep_all_boards``); a truncated/failed/undetermined fetch emits
+# NO row for that board, never a partial fingerprint. ``added_ids`` is a JSON array of the raw
+# ``source_job_id``s the board now lists that our index does not already hold active (sorted, so the
+# serialization is stable/diffable); ``idset_hash`` is the stable SHA-1 fingerprint of the live
+# id-SET (changes iff membership changes). PRIMARY KEY (source, board_token) so a re-run / merge is
+# idempotent per board.
+_BOARD_DELTAS_SCHEMA = (
+    "CREATE TABLE board_deltas("
+    "source TEXT NOT NULL, board_token TEXT NOT NULL, added_ids TEXT NOT NULL, "
+    "idset_hash TEXT NOT NULL, computed_at TEXT NOT NULL, "
+    "PRIMARY KEY (source, board_token))"
 )
 
 
@@ -124,19 +143,47 @@ def _copy_boards_into(
     dst.commit()
 
 
-def _write_sidecar(out_path: Path, rows: list[tuple[str, str, str | None]]) -> None:
+def _delta_rows(deltas: dict[tuple[str, str], BoardDelta]) -> list[tuple[str, str, str, str, str]]:
+    """Serialize the engine's per-board ``BoardDelta`` map into sidecar rows: ``added_ids`` becomes
+    a JSON array of the raw ``source_job_id``s, SORTED so the serialization is stable and diffable
+    (mirrors ``idset_hash``'s own sort-then-hash) and two runs with the same membership produce a
+    byte-identical row."""
+    return [
+        (
+            d.source,
+            d.board_token,
+            json.dumps(sorted(d.added_ids)),
+            d.idset_hash,
+            d.computed_at,
+        )
+        for d in deltas.values()
+    ]
+
+
+def _write_sidecar(
+    out_path: Path,
+    rows: list[tuple[str, str, str | None]],
+    delta_rows: list[tuple[str, str, str, str, str]] | None = None,
+) -> None:
     """Write the PINNED freshness sidecar contract exactly (see
     ``ergon_tracker.index.build.apply_freshness_expiries``'s docstring, which the daily build's
     carry-forward reads against byte-for-byte): one table ``expired_ids(id TEXT PRIMARY KEY,
-    expired_at TEXT NOT NULL, reason TEXT)``. Always creates the table even with zero rows, so a
-    downstream merge/build step always sees a well-formed sidecar rather than special-casing an
-    empty shard."""
+    expired_at TEXT NOT NULL, reason TEXT)`` -- UNCHANGED -- PLUS the Phase-2 ``board_deltas`` table
+    (see ``_BOARD_DELTAS_SCHEMA``) carrying the per-board added-side change signal. Always creates
+    BOTH tables even with zero rows, so a downstream merge/build step always sees a well-formed
+    sidecar rather than special-casing an empty shard."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.unlink(missing_ok=True)
     con = sqlite3.connect(str(out_path))
     try:
         con.execute(_SIDECAR_SCHEMA)
+        con.execute(_BOARD_DELTAS_SCHEMA)
         con.executemany("INSERT INTO expired_ids(id, expired_at, reason) VALUES (?,?,?)", rows)
+        con.executemany(
+            "INSERT INTO board_deltas(source, board_token, added_ids, idset_hash, computed_at) "
+            "VALUES (?,?,?,?,?)",
+            delta_rows or [],
+        )
         con.commit()
     finally:
         con.close()
@@ -144,14 +191,23 @@ def _write_sidecar(out_path: Path, rows: list[tuple[str, str, str | None]]) -> N
 
 async def _detect_departed(
     index_path: Path, boards: list[tuple[str, str]], *, concurrency: int
-) -> tuple[dict[str, dict[str, int]], list[tuple[str, str, str | None]]]:
-    """DETECT confirmed-departed ids WITHOUT ever mutating the real index at ``index_path``.
+) -> tuple[
+    dict[str, dict[str, int]],
+    list[tuple[str, str, str | None]],
+    dict[tuple[str, str], BoardDelta],
+]:
+    """DETECT confirmed-departed ids AND the per-board added-side change signal WITHOUT ever
+    mutating the real index at ``index_path``.
 
     Opens ``index_path`` read-only, copies ``boards``' active rows into an isolated, throwaway
     temp copy of the index schema (``fresh_db``), runs the real engine (``sweep_all_boards``)
     against THAT copy (its ``status='expired'`` UPDATEs land only in the temp copy), then reads
     back whichever rows it flipped -- the confirmed-departed set -- as ``(id, expired_at, reason)``
     rows ready for the sidecar. The temp copy is always discarded, regardless of outcome.
+
+    The engine ALSO fills the ``board_deltas`` collector we hand it (only for boards it could
+    determine a full, trustworthy live id-set for -- deterministic sources; a truncated/failed
+    fetch is simply absent), returned as-is for the sidecar's ``board_deltas`` table.
 
     Per-board failures are already non-fatal inside the engine itself (``board_live_ids``/
     ``confirm_departed`` never raise -- an errored board just contributes 0 departures and an
@@ -166,12 +222,14 @@ async def _detect_departed(
         dst = connect(tmp_path)
         try:
             _copy_boards_into(dst, src, boards)
+            deltas: dict[tuple[str, str], BoardDelta] = {}
             async with AsyncFetcher(concurrency=concurrency) as fetcher:
                 stats = await sweep_all_boards(
                     boards,
                     dst,
                     fetcher,
                     concurrency=concurrency,
+                    board_deltas=deltas,
                     now=lambda: datetime.now(timezone.utc).isoformat(),
                 )
             expired_rows = dst.execute(
@@ -180,7 +238,7 @@ async def _detect_departed(
             departed = [
                 (str(r["id"]), str(r["expired_at"]), r["expiry_reason"]) for r in expired_rows
             ]
-            return stats, departed
+            return stats, departed, deltas
         finally:
             dst.close()
     finally:
@@ -252,12 +310,16 @@ def main(argv: list[str] | None = None) -> int:
 
     import anyio
 
-    stats, departed = anyio.run(
+    stats, departed, deltas = anyio.run(
         lambda: _detect_departed(args.index, this_shard, concurrency=args.concurrency)
     )
     _log_stats(stats)
-    _write_sidecar(args.out, departed)
-    print(f"[freshness] wrote {len(departed)} departed ids -> {args.out}")
+    delta_rows = _delta_rows(deltas)
+    _write_sidecar(args.out, departed, delta_rows)
+    print(
+        f"[freshness] wrote {len(departed)} departed ids, {len(delta_rows)} board deltas "
+        f"-> {args.out}"
+    )
     return 0
 
 
