@@ -42,15 +42,19 @@ async def main() -> None:
     i = 0
     while i < len(args):
         if args[i] == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif args[i] == "--gap-file":
-            gap_file = Path(args[i + 1]); i += 2
+            gap_file = Path(args[i + 1])
+            i += 2
         else:
-            print(f"unknown flag: {args[i]}"); return
+            print(f"unknown flag: {args[i]}")
+            return
 
     key = load_key()
     if not key:
-        print("TAVILY_API_KEY not set."); return
+        print("TAVILY_API_KEY not set.")
+        return
     if gap_file:
         # mid-tier mode: all sponsors in the gap list (search+adjudicate filters by ATS).
         sponsors = json.loads(gap_file.read_text())["uncovered_top"]

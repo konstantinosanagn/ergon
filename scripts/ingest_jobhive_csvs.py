@@ -191,15 +191,19 @@ async def main() -> None:
     while i < len(args):
         a = args[i]
         if a == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif a == "--limit":
-            limit = int(args[i + 1]); i += 2
+            limit = int(args[i + 1])
+            i += 2
         elif a == "--ats":
             i += 1
             while i < len(args) and not args[i].startswith("--"):
-                atses.append(args[i]); i += 1
+                atses.append(args[i])
+                i += 1
         else:
-            print(f"unknown flag: {a}"); return
+            print(f"unknown flag: {a}")
+            return
 
     if not atses:
         atses = list(SUPPORTED_ATSES)

@@ -249,7 +249,11 @@ async def harvest(
             # Discover each tenant's real career-site segment concurrently.
             resolved: dict[int, tuple[dict[str, str], str | None]] = {}
 
-            async def _resolve(i: int, t: dict[str, str]) -> None:
+            async def _resolve(
+                i: int,
+                t: dict[str, str],
+                resolved: dict[int, tuple[dict[str, str], str | None]] = resolved,
+            ) -> None:
                 site = await _discover_workday_site(t["tenant"], t["wd"], fetcher)
                 resolved[i] = (t, site)
 

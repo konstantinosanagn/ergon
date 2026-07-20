@@ -5,8 +5,11 @@ cron). Reads runs/sp500.json (constituents; refresh from the datahub CSV). Fuzzy
 to reconcile brand-vs-legal names (Alphabet->google, RTX->raytheon, AMD, UPS, etc.).
 Usage: .venv/bin/python scripts/sp500_coverage.py
 """
-import json, re, sys, unicodedata
+import json
+import re
+import unicodedata
 from pathlib import Path
+
 from rapidfuzz import fuzz, process
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,18 +34,30 @@ ALIAS = {"alphabet": "google", "metaplatforms": "meta", "jpmorganchase": "jpmorg
 
 matched, missing = 0, []
 for c in sp:
-    nm = c["name"]; full = strip(nm); n = norm(nm); hit = None
+    nm = c["name"]
+    full = strip(nm)
+    n = norm(nm)
+    hit = None
     for cand in (full, n):
-        if cand in ALIAS: hit = ALIAS[cand]; break
-        if cand in nkeys: hit = nkeys[cand]; break
+        if cand in ALIAS:
+            hit = ALIAS[cand]
+            break
+        if cand in nkeys:
+            hit = nkeys[cand]
+            break
     if not hit:
         for nk, ok in nkeys.items():
-            if len(nk) >= 4 and (nk in full or (n and nk in n)): hit = ok; break
+            if len(nk) >= 4 and (nk in full or (n and nk in n)):
+                hit = ok
+                break
     if not hit:
         m = process.extractOne(n or full, list(nkeys), scorer=fuzz.ratio)
-        if m and m[1] >= 88: hit = nkeys[m[0]]
-    if hit or full in ALIAS: matched += 1
-    else: missing.append((nm, c.get("sector")))
+        if m and m[1] >= 88:
+            hit = nkeys[m[0]]
+    if hit or full in ALIAS:
+        matched += 1
+    else:
+        missing.append((nm, c.get("sector")))
 
 print(f"S&P 500 coverage: {matched}/{len(sp)} = {round(100*matched/len(sp))}%  | gap: {len(missing)}")
 for nm, sec in sorted(missing, key=lambda x: (x[1] or "", x[0])):

@@ -169,17 +169,23 @@ def main() -> None:
     while i < len(args):
         a = args[i]
         if a == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif a == "--max-queries":
-            max_queries = int(args[i + 1]); i += 2
+            max_queries = int(args[i + 1])
+            i += 2
         elif a == "--recent":
-            recent = True; i += 1
+            recent = True
+            i += 1
         elif a == "--variants":
-            variants = True; i += 1
+            variants = True
+            i += 1
         elif a.startswith("--"):
-            print(f"unknown flag: {a}"); return
+            print(f"unknown flag: {a}")
+            return
         else:
-            atses.append(a); i += 1
+            atses.append(a)
+            i += 1
 
     key = load_key()
     if not key:

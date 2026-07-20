@@ -35,8 +35,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
 from harvest_tavily import load_key  # noqa: E402
+
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
 
 GAP = ROOT / "runs" / "h1b_coverage_gap.json"
 DEFAULT_OUT = ROOT / "runs" / "gap_ats_census.json"
@@ -163,17 +164,22 @@ async def main() -> None:
     i = 0
     while i < len(args):
         if args[i] == "--top":
-            top = int(args[i + 1]); i += 2
+            top = int(args[i + 1])
+            i += 2
         elif args[i] == "--browser-cap":
-            browser_cap = int(args[i + 1]); i += 2
+            browser_cap = int(args[i + 1])
+            i += 2
         elif args[i] == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         else:
-            print(f"unknown flag: {args[i]}"); return
+            print(f"unknown flag: {args[i]}")
+            return
 
     key = load_key()
     if not key:
-        print("TAVILY_API_KEY not set."); return
+        print("TAVILY_API_KEY not set.")
+        return
     sponsors = json.loads(GAP.read_text())["uncovered_top"][:top]
     print(f"L1+L2 (concurrent) over {len(sponsors)} sponsors ...", flush=True)
 

@@ -1,17 +1,25 @@
-import json, sys, re
-sys.path.insert(0, "src"); sys.path.insert(0, "scripts")
-from harvest_tokens import _core
+import json
+import sys
+
+sys.path.insert(0, "src")
+sys.path.insert(0, "scripts")
 from harvest_commoncrawl import load_seed_keys
+from harvest_tokens import _core
 
 sk = set(load_seed_keys())
-seed = json.load(open("src/ergon_tracker/registry/data/seed.json"))["companies"]
-giants = json.load(open("runs/giants.json"))["uncovered_top"]
+with open("src/ergon_tracker/registry/data/seed.json") as fh:
+    seed = json.load(fh)["companies"]
+with open("runs/giants.json") as fh:
+    giants = json.load(fh)["uncovered_top"]
 residual = [g for g in giants if _core(g["name"]) not in sk]
 captured = [g for g in giants if _core(g["name"]) in sk]
 adz = [g for g in captured if seed[_core(g["name"])].get("ats") == "adzuna"]
 real = [g for g in captured if seed[_core(g["name"])].get("ats") != "adzuna"]
 
-f = lambda lst: sum(g["filings"] for g in lst)
+def f(lst):
+    return sum(g["filings"] for g in lst)
+
+
 print(f"TOTAL giants tracked: {len(giants)}")
 print(f"  CAPTURED on a REAL ATS: {len(real)}  (filings {f(real)})")
 print(f"  CAPTURED only on weak ADZUNA fallback: {len(adz)}  (filings {f(adz)})")

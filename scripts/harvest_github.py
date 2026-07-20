@@ -34,8 +34,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
 from harvest_commoncrawl import CONFIGS, load_seed_keys  # noqa: E402  (reuse extractors + seed)
+
+from ergon_tracker.http import AsyncFetcher  # noqa: E402
 
 DEFAULT_OUT = ROOT / "scripts" / "candidates_github.json"
 
@@ -137,15 +138,20 @@ async def main() -> None:
     while i < len(args):
         a = args[i]
         if a == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif a == "--pages":
-            pages = int(args[i + 1]); i += 2
+            pages = int(args[i + 1])
+            i += 2
         elif a == "--limit":
-            limit = int(args[i + 1]); i += 2
+            limit = int(args[i + 1])
+            i += 2
         elif a.startswith("--"):
-            print(f"unknown flag: {a}"); return
+            print(f"unknown flag: {a}")
+            return
         else:
-            atses.append(a); i += 1
+            atses.append(a)
+            i += 1
 
     token = _token()
     if not token:
