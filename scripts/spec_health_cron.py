@@ -70,7 +70,11 @@ def main() -> None:
         async with AsyncFetcher(timeout=25) as f:
             return await ApiCaptureProvider().fetch(token, SearchQuery(limit=5), f)
 
-    stale = anyio.run(check_specs, tokens, fetch, health, threshold=args.threshold)
+    # anyio.run(func, *args, **kw) does NOT forward kwargs to `func` -- it consumes them itself
+    # (backend=/backend_options=) and raises TypeError for anything else (e.g. TypeError: run() got
+    # an unexpected keyword argument 'threshold'). Wrap in a lambda so `threshold` actually reaches
+    # check_specs.
+    stale = anyio.run(lambda: check_specs(tokens, fetch, health, threshold=args.threshold))
     REDISCOVER_QUEUE.parent.mkdir(parents=True, exist_ok=True)
     REDISCOVER_QUEUE.write_text(json.dumps(stale, indent=1))
     healthy = len(tokens) - len(stale)
