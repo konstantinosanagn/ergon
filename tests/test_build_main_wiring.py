@@ -72,3 +72,24 @@ def test_main_incremental_streaming_wiring(tmp_path, monkeypatch):
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     # sharded by sector via the DB path; at least one gzipped shard published
     assert list(out.glob("shard-*.sqlite.gz"))
+
+
+def test_main_non_incremental_routes_to_streaming(tmp_path, monkeypatch):
+    # A crawl invoked WITHOUT --incremental (e.g. a big manual `--limit-companies 58078 --sharded`)
+    # must now take the bounded, resumable streaming path -- not the deleted in-memory `_crawl`
+    # (which had no window and no cursor, so a CI-timeout kill lost the whole run). Proven by the
+    # streaming-only artifacts it emits (board_state.json + crawl_cursor.json), which the old
+    # in-memory path never wrote. If routing regressed, main() would NameError on the removed _crawl.
+    monkeypatch.setattr(bi, "_crawl_due", _fake_crawl_due)
+    out = tmp_path / "dist"
+    bi.main(["--sharded", "--limit-companies", "58078", "--out", str(out)])
+
+    for name in (
+        "index.sqlite",
+        "board_state.json",  # streaming-path only (in-memory path never wrote crawl state)
+        "crawl_cursor.json",  # resumable cursor -> proves the good path ran
+        "shards.json",
+    ):
+        assert (out / name).exists(), f"missing streaming artifact: {name}"
+    con = connect(out / "index.sqlite", read_only=True)
+    assert con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 9

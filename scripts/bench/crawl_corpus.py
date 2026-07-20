@@ -215,7 +215,7 @@ async def _crawl_one(
     descriptions, errors) -- the cap changes nothing about that accounting, it only stops early.
 
     Crash-isolated: any exception from a single dead/blocked board is caught and counted, never
-    propagated -- mirrors ``scripts/build_index.py``'s ``_crawl.grab`` so one bad board can never
+    propagated -- mirrors ``scripts/build_index.py``'s ``_crawl_due.grab`` so one bad board can never
     sink the whole run.
     """
     st = stats[ats]
