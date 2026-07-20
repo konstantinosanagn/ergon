@@ -148,7 +148,8 @@ def build_employer_naics():
 def build_seed_index():
     """normalized key -> company_key. Built from both the registry key and
     the domain's main label."""
-    seed = json.load(open(SEED))["companies"]
+    with open(SEED) as fh:
+        seed = json.load(fh)["companies"]
     idx = {}
     for ck, meta in seed.items():
         nk = norm(ck)
@@ -181,10 +182,12 @@ def main():
             continue
         out[ck] = {"sector": sector, "source": "naics", "naics": naics}
 
-    json.dump(dict(sorted(out.items())), open(OUT, "w"), indent=1)
+    with open(OUT, "w") as fh:
+        json.dump(dict(sorted(out.items())), fh, indent=1)
 
     # ---- validation ----
-    curated = json.load(open(SECTORS))["companies"]
+    with open(SECTORS) as fh:
+        curated = json.load(fh)["companies"]
     total_seed = len(seed)
     matched = len(out)
     both = [c for c in out if c in curated]

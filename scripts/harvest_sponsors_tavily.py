@@ -268,17 +268,22 @@ async def main() -> None:
     while i < len(args):
         a = args[i]
         if a == "--top":
-            top = int(args[i + 1]); i += 2
+            top = int(args[i + 1])
+            i += 2
         elif a == "--out":
-            out_path = Path(args[i + 1]); i += 2
+            out_path = Path(args[i + 1])
+            i += 2
         elif a == "--names":
-            names_file = Path(args[i + 1]); i += 2
+            names_file = Path(args[i + 1])
+            i += 2
         else:
-            print(f"unknown flag: {a}"); return
+            print(f"unknown flag: {a}")
+            return
 
     key = load_key()
     if not key:
-        print("TAVILY_API_KEY not set (env or .env)."); return
+        print("TAVILY_API_KEY not set (env or .env).")
+        return
     if names_file is not None:
         sponsors = _names_to_sponsors(names_file.read_text())[:top]
         print(f"recovering boards for {len(sponsors)} companies from {names_file.name} ...")

@@ -98,7 +98,8 @@ def main(argv: list[str]) -> None:
             # WP-REST JSON length hint
             note = ""
             if "/wp-json/" in path and text.strip().startswith("["):
-                note = f"  JSON_ARRAY len~{text.count('\"id\"')}"
+                id_marker = '"id"'
+                note = f"  JSON_ARRAY len~{text.count(id_marker)}"
             if hits or extra or note:
                 print(f"  [{path or '/'}] {code} hits={hits}{extra}{note}")
             elif code in (200,) and path in ("", "/careers", "/jobs"):

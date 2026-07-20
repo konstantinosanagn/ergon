@@ -1,9 +1,13 @@
 """Verify a provider token live. Usage: _verify_b2.py PROVIDER TOKEN"""
-import anyio, sys
+import sys
+
+import anyio
+
 sys.path.insert(0, 'src')
 from ergon_tracker.http import AsyncFetcher
 from ergon_tracker.models import SearchQuery
 from ergon_tracker.providers.base import get_provider, load_builtins
+
 load_builtins()
 
 async def main(provider, token):

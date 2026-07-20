@@ -9,7 +9,12 @@ Free, no API key. Sends a descriptive User-Agent per SEC fair-access policy and
 throttles to <=10 req/s. Output: scripts/sector_edgar.json (matched public
 companies only). Does NOT modify seed.json / sectors.json.
 """
-import json, re, time, os, sys, urllib.request, urllib.error
+import json
+import os
+import re
+import time
+import urllib.error
+import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = os.path.join(ROOT, "src/ergon_tracker/registry/data/seed.json")
@@ -108,14 +113,13 @@ def sic_to_vocab(code):
         4512: 'Travel/Hospitality', 4513: 'Logistics/SupplyChain',  # air courier
         4522: 'Travel/Hospitality', 4724: 'Travel/Hospitality',
         7011: 'Travel/Hospitality', 7510: 'Travel/Hospitality',
-        7011: 'Travel/Hospitality',
         # banking / finance
         6021: 'Banking/Finance', 6022: 'Banking/Finance', 6029: 'Banking/Finance',
         6035: 'Banking/Finance', 6036: 'Banking/Finance', 6199: 'Fintech',
         6141: 'Fintech', 6324: 'Healthcare',  # consumer credit; health-service plans
         6200: 'Banking/Finance', 6211: 'Banking/Finance', 6221: 'Banking/Finance',
         6282: 'Banking/Finance', 6311: 'Insurance', 6321: 'Insurance',
-        6311: 'Insurance', 6331: 'Insurance', 6351: 'Insurance',
+        6331: 'Insurance', 6351: 'Insurance',
         6411: 'Insurance',
         # consulting / professional services
         8711: 'Consulting/Services', 8712: 'Consulting/Services',
@@ -123,7 +127,7 @@ def sic_to_vocab(code):
         7363: 'Consulting/Services', 7389: 'Consulting/Services',
         # education
         8200: 'Education', 8211: 'Education', 8221: 'Education',
-        8231: 'Education', 8200: 'Education',
+        8231: 'Education',
         # real estate
         6500: 'RealEstate/PropTech', 6510: 'RealEstate/PropTech',
         6512: 'RealEstate/PropTech', 6531: 'RealEstate/PropTech',
@@ -232,7 +236,8 @@ def fetch_url(url, tries=4):
 
 
 def main():
-    seed = json.load(open(SEED))['companies']
+    with open(SEED) as fh:
+        seed = json.load(fh)['companies']
 
     # lookup: normalized name/domain-stem -> registry key
     lookup = {}
@@ -249,7 +254,8 @@ def main():
     tk = fetch_url('https://www.sec.gov/files/company_tickers.json')
     if not tk:
         print("BLOCKED: could not fetch company_tickers.json; writing {}")
-        json.dump({}, open(OUT, 'w'))
+        with open(OUT, 'w') as fh:
+            json.dump({}, fh)
         return
 
     # registry key -> cik (first ticker wins)
@@ -281,11 +287,13 @@ def main():
         if (i + 1) % 100 == 0:
             print(f"  fetched {i+1}/{len(keys)} (fails={fails})")
 
-    json.dump(out, open(OUT, 'w'), indent=2, sort_keys=True)
+    with open(OUT, 'w') as fh:
+        json.dump(out, fh, indent=2, sort_keys=True)
     print(f"WROTE {OUT}: {len(out)} companies (fetch fails={fails})")
 
     # ---- validate vs curated sectors.json ----
-    curated = json.load(open(SECTORS))['companies']
+    with open(SECTORS) as fh:
+        curated = json.load(fh)['companies']
     both = [k for k in out if k in curated]
     agree = sum(1 for k in both if out[k]['sector'] == curated[k]['sector'])
     print(f"\nmatched public companies: {len(out)}")

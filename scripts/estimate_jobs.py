@@ -66,7 +66,7 @@ async def main() -> None:
         for ats, comps in by_ats.items():
             sample = rng.sample(comps, min(SAMPLE_PER_ATS, len(comps)))
             async with anyio.create_task_group() as tg:
-                for key, token in sample:
+                for _key, token in sample:
 
                     async def one(ats: str = ats, token: str = token) -> None:
                         n = await company_total(ats, token, fetcher)

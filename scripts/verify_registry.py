@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_registry import seed_lock  # noqa: E402  (reuse the merge lock)
+
 from ergon_tracker.http import AsyncFetcher  # noqa: E402
 from ergon_tracker.models import SearchQuery  # noqa: E402
 from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
@@ -69,15 +70,18 @@ async def main() -> None:
     while i < len(args):
         a = args[i]
         if a == "--sample":
-            sample = int(args[i + 1]); i += 2
+            sample = int(args[i + 1])
+            i += 2
         elif a == "--ats":
             i += 1
             while i < len(args) and not args[i].startswith("--"):
-                atses.append(args[i]); i += 1
+                atses.append(args[i])
+                i += 1
         elif a == "--prune":
             i += 1
         else:
-            print(f"unknown arg: {a}"); return
+            print(f"unknown arg: {a}")
+            return
 
     load_builtins()
     seed = json.loads(SEED.read_text())

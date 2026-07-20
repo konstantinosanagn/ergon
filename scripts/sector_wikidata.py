@@ -11,7 +11,12 @@ label to exactly one of our 27-label vocabulary.
 
 Writes scripts/sector_wikidata.json. Does NOT touch seed.json / sectors.json.
 """
-import json, os, sys, time, urllib.request, urllib.parse
+import json
+import os
+import sys
+import time
+import urllib.parse
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -284,7 +289,8 @@ IND_MAP = {
 def variants(slug):
     out = set()
     s = slug.strip()
-    if not s: return out
+    if not s:
+        return out
     for v in (s, s.upper(), s.capitalize(), s.title()):
         out.add(v)
     if "-" in s or "_" in s:
@@ -306,21 +312,23 @@ def sparql(q, tries=4):
         except urllib.error.HTTPError as e:
             last = e
             if e.code in (429, 500, 502, 503, 504):
-                time.sleep(min(12, 2 * (i + 1))); continue
+                time.sleep(min(12, 2 * (i + 1)))
+                continue
             raise
         except Exception as e:
-            last = e; time.sleep(min(12, 2 * (i + 1)))
-    raise RuntimeError("sparql failed: %s" % last)
+            last = e
+            time.sleep(min(12, 2 * (i + 1)))
+    raise RuntimeError(f"sparql failed: {last}")
 
 def esc(s):
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 def label_query(cands):
-    vals = " ".join('"%s"@en' % esc(c) for c in cands)
-    return ('SELECT ?cand ?company ?sl ?indLabel WHERE { VALUES ?cand { %s } '
+    vals = " ".join(f'"{esc(c)}"@en' for c in cands)
+    return ('SELECT ?cand ?company ?sl ?indLabel WHERE { VALUES ?cand { ' + vals + ' } '
             '?company rdfs:label|skos:altLabel ?cand . '
             '?company wdt:P452 ?ind . ?company wikibase:sitelinks ?sl . '
-            '?ind rdfs:label ?indLabel . FILTER(LANG(?indLabel)="en") }' % vals)
+            '?ind rdfs:label ?indLabel . FILTER(LANG(?indLabel)="en") }')
 
 def domain_url_variants(d):
     d = d.lower().strip().rstrip("/")
@@ -334,11 +342,11 @@ def domain_url_variants(d):
 
 def domain_query(url_to_dom):
     # exact-IRI match against the official-website index (fast, no scan)
-    vals = " ".join("<%s>" % esc(u) for u in url_to_dom)
-    return ('SELECT ?url ?company ?sl ?indLabel WHERE { VALUES ?url { %s } '
+    vals = " ".join(f"<{esc(u)}>" for u in url_to_dom)
+    return ('SELECT ?url ?company ?sl ?indLabel WHERE { VALUES ?url { ' + vals + ' } '
             '?company wdt:P856 ?url . '
             '?company wdt:P452 ?ind . ?company wikibase:sitelinks ?sl . '
-            '?ind rdfs:label ?indLabel . FILTER(LANG(?indLabel)="en") }' % vals)
+            '?ind rdfs:label ?indLabel . FILTER(LANG(?indLabel)="en") }')
 
 def chunk(seq, n):
     for i in range(0, len(seq), n):
@@ -352,7 +360,8 @@ def resolve_sector(industries):
     mapped = set()
     for raw in industries:
         v = map_industry(raw)
-        if v: mapped.add(v)
+        if v:
+            mapped.add(v)
     if not mapped:
         return None
     for p in PRIORITY:
@@ -368,11 +377,14 @@ def main():
     if "--sample" in sys.argv:
         sample = int(sys.argv[sys.argv.index("--sample") + 1])
     from_cache = "--from-cache" in sys.argv
-    companies = json.load(open(SEED))["companies"]
-    curated = json.load(open(SECTORS))["companies"]
+    with open(SEED) as fh:
+        companies = json.load(fh)["companies"]
+    with open(SECTORS) as fh:
+        curated = json.load(fh)["companies"]
 
     if from_cache:
-        rawc = json.load(open(RAW_JSON))
+        with open(RAW_JSON) as fh:
+            rawc = json.load(fh)
         raw = {k: {q: {"sl": v["sl"], "ind": set(v["ind"])} for q, v in qm.items()}
                for k, qm in rawc.items()}
         return finish(raw, companies, curated, sample=None)
@@ -396,22 +408,25 @@ def main():
     # resume: reload previous checkpoint if present
     if not sample and os.path.exists(RAW_JSON):
         try:
-            prev = json.load(open(RAW_JSON))
+            with open(RAW_JSON) as fh:
+                prev = json.load(fh)
             raw = {k: {q: {"sl": v["sl"], "ind": set(v["ind"])} for q, v in qm.items()}
                    for k, qm in prev.items()}
-            print("[resume] loaded %d cached keys" % len(raw), file=sys.stderr)
+            print(f"[resume] loaded {len(raw)} cached keys", file=sys.stderr)
         except Exception:
             raw = {}
     done = set()
     if not sample and os.path.exists(DONE_JSON):
         try:
-            done = set(json.load(open(DONE_JSON)))
-            print("[resume] %d label batches already done" % len(done), file=sys.stderr)
+            with open(DONE_JSON) as fh:
+                done = set(json.load(fh))
+            print(f"[resume] {len(done)} label batches already done", file=sys.stderr)
         except Exception:
             done = set()
     def add_row(key, qid, sl, ind):
         e = raw.setdefault(key, {}).setdefault(qid, {"sl": 0, "ind": set()})
-        e["sl"] = max(e["sl"], int(sl)); e["ind"].add(ind)
+        e["sl"] = max(e["sl"], int(sl))
+        e["ind"].add(ind)
 
     # build url -> domain map for exact-IRI matching
     url_to_dom = {}
@@ -420,17 +435,24 @@ def main():
             url_to_dom[u] = dom
     urls = sorted(url_to_dom.keys())  # deterministic order
     failed = 0
-    print("[domain] %d domains, %d url variants, %d batches" % (len(dom_to_keys), len(urls), (len(urls)+99)//100), file=sys.stderr)
+    print(
+        f"[domain] {len(dom_to_keys)} domains, {len(urls)} url variants, "
+        f"{(len(urls) + 99) // 100} batches",
+        file=sys.stderr,
+    )
     for bi, batch in enumerate(chunk(urls, 100)):
         try:
             d = sparql(domain_query(batch))
         except Exception as e:
-            failed += 1; print("  [skip domain batch %d] %s" % (bi, e), file=sys.stderr); continue
+            failed += 1
+            print(f"  [skip domain batch {bi}] {e}", file=sys.stderr)
+            continue
         for b in d["results"]["bindings"]:
             dom = url_to_dom.get(b["url"]["value"])
             for key in dom_to_keys.get(dom, []):
                 add_row(key, b["company"]["value"].split("/")[-1], b["sl"]["value"], b["indLabel"]["value"])
-        if bi % 5 == 0: print("  domain batch %d" % bi, file=sys.stderr)
+        if bi % 5 == 0:
+            print(f"  domain batch {bi}", file=sys.stderr)
         time.sleep(0.2)
 
     # ---- label pass ----
@@ -440,14 +462,17 @@ def main():
             cand_to_keys.setdefault(v, []).append(k)
     cands = sorted(cand_to_keys.keys())  # deterministic order (stable batches)
     nb = (len(cands)+149)//150
-    print("[label] %d candidate strings in %d batches" % (len(cands), nb), file=sys.stderr)
+    print(f"[label] {len(cands)} candidate strings in {nb} batches", file=sys.stderr)
 
     def save_cache():
-        if sample: return
+        if sample:
+            return
         rawc = {k: {q: {"sl": v["sl"], "ind": sorted(v["ind"])} for q, v in qm.items()}
                 for k, qm in raw.items()}
-        json.dump(rawc, open(RAW_JSON, "w"))
-        json.dump(sorted(done), open(DONE_JSON, "w"))
+        with open(RAW_JSON, "w") as fh:
+            json.dump(rawc, fh)
+        with open(DONE_JSON, "w") as fh:
+            json.dump(sorted(done), fh)
 
     for bi, batch in enumerate(chunk(cands, 150)):
         if bi in done:
@@ -455,21 +480,26 @@ def main():
         try:
             d = sparql(label_query(batch))
         except Exception as e:
-            failed += 1; print("  [skip label batch %d/%d] %s" % (bi, nb, e), file=sys.stderr); continue
+            failed += 1
+            print(f"  [skip label batch {bi}/{nb}] {e}", file=sys.stderr)
+            continue
         for b in d["results"]["bindings"]:
             cand = b["cand"]["value"]
             for key in cand_to_keys.get(cand, []):
                 add_row(key, b["company"]["value"].split("/")[-1], b["sl"]["value"], b["indLabel"]["value"])
         done.add(bi)
         if bi % 10 == 0:
-            print("  label batch %d/%d (matched keys so far=%d, failed=%d)" % (bi, nb, len(raw), failed), file=sys.stderr)
+            print(
+                f"  label batch {bi}/{nb} (matched keys so far={len(raw)}, failed={failed})",
+                file=sys.stderr,
+            )
         if bi % 100 == 0:
             save_cache()  # periodic checkpoint
         time.sleep(0.15)
 
     # ---- persist raw rows for offline re-resolution ----
     save_cache()
-    print("cached raw -> %s (%d keys, %d failed batches)" % (RAW_JSON, len(raw), failed), file=sys.stderr)
+    print(f"cached raw -> {RAW_JSON} ({len(raw)} keys, {failed} failed batches)", file=sys.stderr)
 
     return finish(raw, companies, curated, sample)
 
@@ -492,28 +522,31 @@ def finish(raw, companies, curated, sample):
 
     # ---- write ----
     if not sample:
-        json.dump(result, open(OUT, "w"), indent=0, sort_keys=True)
-        print("wrote %s (%d companies)" % (OUT, len(result)), file=sys.stderr)
+        with open(OUT, "w") as fh:
+            json.dump(result, fh, indent=0, sort_keys=True)
+        print(f"wrote {OUT} ({len(result)} companies)", file=sys.stderr)
 
     # ---- validate ----
     both = [k for k in result if k in curated]
     correct = sum(1 for k in both if result[k]["sector"] == curated[k]["sector"])
     print("\n=== RESULTS ===")
-    print("companies matched : %d" % len(result))
-    print("seed total        : %d" % len(companies))
-    print("coverage          : %.1f%%" % (100.0 * len(result) / len(companies)))
-    print("overlap w/ curated: %d" % len(both))
+    print(f"companies matched : {len(result)}")
+    print(f"seed total        : {len(companies)}")
+    print(f"coverage          : {100.0 * len(result) / len(companies):.1f}%")
+    print(f"overlap w/ curated: {len(both)}")
     if both:
-        print("accuracy vs curated: %.1f%% (%d/%d)" % (100.0*correct/len(both), correct, len(both)))
+        print(f"accuracy vs curated: {100.0 * correct / len(both):.1f}% ({correct}/{len(both)})")
     if unmapped:
         top = sorted(unmapped.items(), key=lambda x: -x[1])[:30]
         print("\nTop UNMAPPED industry labels (label,count):")
-        for l, c in top: print("  %4d  %s" % (c, l))
+        for label, c in top:
+            print(f"  {c:4d}  {label}")
     # confusion sample
     if both:
         miss = [(k, result[k]["sector"], curated[k]["sector"], result[k]["wd_industry"]) for k in both if result[k]["sector"] != curated[k]["sector"]]
         print("\nSample mismatches (key, ours, curated, wd_industry):")
-        for row in miss[:25]: print("  ", row)
+        for row in miss[:25]:
+            print("  ", row)
 
 if __name__ == "__main__":
     main()
