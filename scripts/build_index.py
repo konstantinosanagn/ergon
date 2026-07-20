@@ -119,6 +119,7 @@ async def _crawl_network(cap_pages: int) -> list:
         return []
     from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.http import AsyncFetcher
+    from ergon_tracker.index.mapping import enrich_hash
     from ergon_tracker.models import SearchQuery
     from ergon_tracker.providers.base import get_provider, load_builtins
 
@@ -138,6 +139,7 @@ async def _crawl_network(cap_pages: int) -> list:
             job = provider.normalize(raw)
         except Exception:  # noqa: BLE001
             continue
+        job._enrich_input_hash = enrich_hash(job)  # pre-enrich stamp (see delta path / to_row)
         enrich_in_place(job, infer_level_from_experience=True)
         jobs.append(job)
     return jobs
@@ -1167,13 +1169,20 @@ async def _crawl_due(
                 if e.get("domain") and not job.company_domain:
                     job.company_domain = e["domain"]
                 job.board_token = e["token"]  # registry token this board was crawled with
+                # PRE-enrich fingerprint: compute over the RAW normalized job BEFORE enrich_in_place
+                # mutates level/salary. Stamp it so to_row persists THIS value into jobs.enrich_hash;
+                # the stored column is therefore pre-enrich, matching the value the NEXT build computes
+                # here for an unchanged posting. (Pre-fix the column held the post-enrich hash, so any
+                # posting whose level/salary was inferred could never hit reuse -- see Plan 2.)
+                pre_fp = enrich_hash(job)
+                job._enrich_input_hash = pre_fp
                 prior_row = reuse_by_id.get(job.id) if reuse_by_id else None
                 # `"enrich_hash" in prior_row.keys()` guards the first flag-on build against a
                 # pre-v3 prev index that lacks the column (else sqlite3.Row raises IndexError).
                 if (
                     prior_row is not None
                     and "enrich_hash" in prior_row.keys()  # noqa: SIM118 - sqlite3.Row: `in` scans values, need .keys()
-                    and prior_row["enrich_hash"] == enrich_hash(job)
+                    and prior_row["enrich_hash"] == pre_fp
                 ):
                     # Unchanged posting: copy the prior fully-enriched fields (no re-enrich). The
                     # resulting row is byte-identical to a full enrich (enrich_hash matched =>

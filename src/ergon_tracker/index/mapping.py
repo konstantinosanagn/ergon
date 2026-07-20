@@ -98,7 +98,15 @@ def to_row(job: JobPosting, *, build_id: str, now: str | None = None) -> dict[st
     return {
         "id": job.id,
         "content_hash": content_hash(job),
-        "enrich_hash": enrich_hash(job),
+        # Persist the PRE-enrich fingerprint the crawler stamped before enrich_in_place mutated
+        # level/salary (see JobPosting._enrich_input_hash). enrich_in_place feeds content_hash, so a
+        # post-enrich hash (the fallback, for any unstamped path) would never match the pre-enrich
+        # hash the reuse path computes -> a level/salary-inferred posting would miss reuse forever.
+        # Stamped => pre-enrich-vs-pre-enrich match; unstamped => post-enrich fallback (fail-safe:
+        # reuse merely misses next build and re-enriches, never serves stale enrichment).
+        "enrich_hash": job._enrich_input_hash
+        if job._enrich_input_hash is not None
+        else enrich_hash(job),
         "company_key": normalize_company(job.company),
         "source": job.source,
         "company": job.company,
