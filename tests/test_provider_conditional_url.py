@@ -44,5 +44,24 @@ def test_paginated_or_unsupported_providers_return_none():
     load_builtins()
     sr = get_provider("smartrecruiters")
     assert sr is not None and sr.conditional_url("anycompany") is None
+    assert sr.raws_from_body("anycompany", b"{}") is None
     rec = get_provider("recruitee")  # no validator headers
     assert rec is not None and rec.conditional_url("anycompany") is None
+
+
+def test_icims_returns_none_page1_etag_is_not_a_whole_board_validator():
+    # Phase-1 delta-crawl investigation (2026-07-19): both icims generations were live-probed.
+    # New "Career Sites" (Jibe) JSON API (`/api/jobs?page=1&limit=100`) DOES honor conditional
+    # GET -- a stored ETag reliably 304s -- but it paginates past 100 postings (e.g. real board
+    # careers.amd.com: totalCount=1050, page=1 ETag != page=2 ETag), so a 304 on page 1 only
+    # proves page 1 is unchanged, not the whole board. Classic gen (`/jobs/search`) sends
+    # `Cache-Control: no-cache, no-store` and carries NO ETag/Last-Modified at all -- not
+    # conditionally-cacheable at any granularity. Neither generation clears the
+    # conditional_url contract ("validates this board's WHOLE response"), so icims must NOT
+    # opt in -- see tests/live/test_conditional_get_sr_icims_live.py for the live re-verification.
+    load_builtins()
+    icims = get_provider("icims")
+    assert icims is not None
+    assert icims.conditional_url("careers.amd.com") is None
+    assert icims.conditional_url("careers-winco.icims.com|classic") is None
+    assert icims.raws_from_body("careers.amd.com", b"{}") is None
