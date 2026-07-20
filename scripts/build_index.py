@@ -1013,6 +1013,7 @@ async def _crawl_due(
     from ergon_tracker.http import AsyncFetcher
     from ergon_tracker.index.build import append_jobs
     from ergon_tracker.index.db import connect, fresh_db
+    from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES, idset_hash
     from ergon_tracker.index.scheduler import BoardState, due_boards
     from ergon_tracker.models import SearchQuery
     from ergon_tracker.providers.base import get_provider, load_builtins
@@ -1058,6 +1059,17 @@ async def _crawl_due(
             print(f"  + {len(new)} never-seen board(s) pulled in ahead of the cursor")
     due = set(due_boards(list(states.values()), _today())) & set(boards)
 
+    # Delta-driven crawl (ships DARK behind ERGON_DELTA_CRAWL=1; default OFF => byte-identical to
+    # today). When on, load the per-board membership fingerprints the most-recent freshness sweep
+    # published to the freshness sidecar (same file the build downloads for _apply_freshness), used
+    # by sub-phase B to skip boards whose id-set has not moved since we last crawled them.
+    delta_crawl = os.environ.get("ERGON_DELTA_CRAWL") == "1"
+    sidecar_hashes: dict[tuple[str, str], str] = {}
+    if delta_crawl:
+        sidecar_path = Path(fresh_db_path).parent / "index-freshness.sqlite"
+        if sidecar_path.exists():
+            sidecar_hashes = _load_board_delta_hashes(sidecar_path)
+
     outcome: dict[str, dict] = {
         b: {"error": False, "http_429": 0, "companies": set(), "not_modified": False} for b in due
     }
@@ -1087,6 +1099,19 @@ async def _crawl_due(
         if host and fetcher.is_over_budget(host, host_budget):
             outcome.pop(bkey, None)
             return
+        # Sub-phase B (delta-driven crawl): skip an UNCHANGED deterministic board entirely. If the
+        # most-recent sweep published an idset_hash for this board AND it equals the fingerprint we
+        # stamped the last time we crawled it, the board's membership has not moved -> carry its
+        # prior rows forward exactly like a 304, with no fetch/normalize/enrich. SAFE by
+        # construction: skip ONLY on a present-AND-matching hash; a missing/None hash on either side
+        # never skips, so a wrong skip is impossible (worst case a real change is delayed one cycle,
+        # which the next sweep+build catch). Deterministic sources only -- the sweep emits no hash
+        # for search-index sources (their list reshuffles), so they are never in sidecar_hashes.
+        if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
+            sweep_hash = sidecar_hashes.get((e["ats"], e["token"]))
+            if sweep_hash and state.idset_hash and sweep_hash == state.idset_hash:
+                outcome[bkey]["not_modified"] = True
+                return
         # Cross-build conditional request: if this provider exposes a whole-board validator URL,
         # present the stored ETag/Last-Modified. A 304 means unchanged -> carry forward without
         # re-downloading (the big throttle/bandwidth win). A 200 refreshes the validator and we
@@ -1116,6 +1141,12 @@ async def _crawl_due(
         # Crash isolation: normalize/enrich/dedup/insert for ONE board must never propagate to
         # the task group (that would cancel every other in-flight board and lose the whole crawl).
         try:
+            # Sub-phase B: stamp this board's fresh membership fingerprint (over the RAW live
+            # source_job_ids, matching the sweep's board_live_ids/idset_hash exactly) so the NEXT
+            # build can skip it when the sweep reports the same hash. Deterministic sources only
+            # (the only ones the sweep fingerprints). Cheap; only when the flag is on.
+            if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
+                state.idset_hash = idset_hash({str(r.source_job_id) for r in raws})
             board_jobs: list = []
             for raw in raws:
                 try:
@@ -1172,8 +1203,6 @@ async def _crawl_due(
             outcome[bkey]["error"] = True
             outcome[bkey]["companies"].clear()  # not "crawled" -> prev jobs carry forward
 
-    import os
-
     # Crawl-tuned fetcher: fail fast on dead/slow boards (a big fraction of a 46k-board cold
     # crawl). Defaults (25s timeout, 3 retries + backoff) can burn ~88s per dead board; 12s +
     # 1 retry caps that at ~24s. Per-host rate limiting + circuit breaker still apply, and
@@ -1206,6 +1235,35 @@ async def _crawl_due(
     finally:
         con.close()
     return outcome, next_cursor
+
+
+def _load_board_delta_hashes(sidecar_path: Path) -> dict[tuple[str, str], str]:
+    """Read ``(source, board_token) -> idset_hash`` from the freshness sidecar's ``board_deltas``
+    table -- the per-board membership fingerprints the MOST-RECENT daily sweep published (delta-
+    driven crawl, sub-phase B). One ~1-cycle staleness by construction (the build consumes the
+    prior sweep run's sidecar); safe because a matching hash means the membership is unchanged, so
+    a stale-but-matching hash can only ever DELAY a genuinely-new posting by one cycle, never drop
+    or corrupt one -- and the sweep's added-side guard already suppresses a hash for any
+    truncated/undetermined board. A missing file/table -> ``{}`` (non-fatal: the skip simply never
+    fires and every board is crawled exactly as today)."""
+    import sqlite3
+
+    out: dict[tuple[str, str], str] = {}
+    try:
+        con = sqlite3.connect(f"file:{sidecar_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return out
+    try:
+        for source, token, h in con.execute(
+            "SELECT source, board_token, idset_hash FROM board_deltas"
+        ):
+            if h:
+                out[(str(source), str(token))] = str(h)
+    except sqlite3.Error:
+        return {}
+    finally:
+        con.close()
+    return out
 
 
 def _load_cursor(path: Path) -> int:
