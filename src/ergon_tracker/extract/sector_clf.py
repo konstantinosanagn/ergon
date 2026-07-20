@@ -1,6 +1,28 @@
 """Numpy-only sector classifier: load an exported .npz and reproduce its calibrated, abstaining
 decision. No sklearn, no fastembed here — the caller supplies the embedding. Tolerant of a missing
 artifact (returns None), mirroring ``load_sector_index``.
+
+--------------------------------------------------------------------------------------------------
+WHY THIS CLASSIFIER IS INTENTIONALLY *NOT* WIRED INTO ``enrich_in_place``
+--------------------------------------------------------------------------------------------------
+This model is a parked PoC. It is deliberately left un-wired: ``enrich.py`` does NOT call it and the
+gazetteer-only ``SectorExtractor`` remains the sole sector source. The reason is data, not code:
+
+  * Honest 5-fold CV precision on gazetteer-MISS rows (the only rows this model would ever decide) is
+    ~29% — far below the 0.68 sector gate. Wiring it would stamp ~360k WRONG sectors onto the index.
+  * Root cause is label scarcity: ~25 labeled rows/class. It would need roughly 10–50× more labels
+    to reach an honest CV precision of ~55–60% before wiring is worth revisiting.
+  * The gazetteer ``SectorExtractor`` is precision-first: it emits "unknown" rather than guess. That
+    is the correct current behavior; a low-precision guesser is strictly worse than an honest blank.
+
+Do NOT wire this into the enrich path until an honest held-out precision clears the gate. The guards
+below (TLD-vocab drift, embed-dim, swept-vs-served calibration parity) exist so that IF someone wires
+it later they fail LOUD on a stale artifact instead of silently corrupting sectors.
+
+NOTE: any committed ``dist/sector_clf.npz`` must be regenerated in CI with the *current* trainer
+before it could ever be served — older artifacts were tuned under a mismatched calibration transform
+(see ``scripts/train_sector_classifier.py`` and ``platt_normalize`` below).
+--------------------------------------------------------------------------------------------------
 """
 # noqa: UP037
 # Quoted annotations are intentional: numpy is lazy-imported inside functions, so annotations
@@ -17,6 +39,7 @@ from .sector_features import TLD_VOCAB, tld_features
 if TYPE_CHECKING:
     import numpy as np
 
+# Keys always present in a well-formed artifact.
 _KEYS = (
     "labels",
     "mean",
@@ -31,6 +54,30 @@ _KEYS = (
     "tld_vocab",
     "embed_dim",
 )
+# Optional keys (added later; older artifacts may lack them). Default to NaN when absent.
+_OPTIONAL_KEYS = (
+    "sweep_coverage",
+    "sweep_precision",
+)
+
+
+def platt_normalize(  # noqa: UP037
+    scores: np.ndarray,
+    platt_a: np.ndarray,
+    platt_b: np.ndarray,
+) -> "np.ndarray":  # noqa: UP037
+    """Per-class Platt sigmoid on decision scores/logits, then renormalize across classes.
+
+    This is the SINGLE source of truth for the probability transform. Both the offline trainer's
+    threshold sweep and this runtime inference call it, so the coverage the sweep reports is the
+    coverage the served model actually fires at. Keeping these identical is bug-(b)'s fix: previously
+    the trainer swept plain softmax while inference served this Platt-normalized distribution, so a
+    threshold tuned for ~1% coverage fired on 50–70% of live rows.
+    """
+    import numpy as np
+
+    cal = 1.0 / (1.0 + np.exp(-(platt_a * scores + platt_b)))
+    return (cal / cal.sum(axis=1, keepdims=True)).astype(np.float32)
 
 
 class SectorClassifier:
@@ -50,6 +97,33 @@ class SectorClassifier:
         self.tau_margin = float(data["tau_margin"])
         self.tau_sim = float(data["tau_sim"])
         self.embed_dim = int(data["embed_dim"])
+        # Coverage/precision the trainer's sweep reported for this artifact (NaN if not persisted).
+        # These let a caller regression-check the live firing rate against the tuned coverage.
+        self.sweep_coverage = float(data.get("sweep_coverage", float("nan")))
+        self.sweep_precision = float(data.get("sweep_precision", float("nan")))
+
+        # ── Guard (a): TLD-vocab drift ────────────────────────────────────────────────────────
+        # ``W`` was trained on a feature layout whose TLD one-hot block order/size comes from
+        # ``TLD_VOCAB`` (a sorted view of ``SECTOR_TLD_GROUPS``). If someone edits the groups, the
+        # runtime TLD block silently reorders/resizes while ``W`` still expects the old layout —
+        # corrupt predictions, no error. Fail loud instead.
+        stored_vocab = tuple(str(x) for x in data["tld_vocab"])
+        if stored_vocab != tuple(TLD_VOCAB):
+            raise ValueError(
+                "sector_clf.npz TLD vocab drift — retrain: "
+                f"stored tld_vocab={stored_vocab} != current TLD_VOCAB={tuple(TLD_VOCAB)}"
+            )
+        # ── Guard: embedding-width / feature-width consistency ────────────────────────────────
+        # Feature width = embedding dims + the TLD one-hot block. A mismatch means the artifact's
+        # ``embed_dim`` disagrees with the weight matrix it shipped with.
+        expected_feat_dim = self.embed_dim + len(TLD_VOCAB)
+        if self.W.shape[1] != expected_feat_dim:
+            raise ValueError(
+                "sector_clf.npz feature-width mismatch — retrain: "
+                f"W.shape[1]={self.W.shape[1]} != embed_dim({self.embed_dim}) + "
+                f"len(TLD_VOCAB)({len(TLD_VOCAB)}) = {expected_feat_dim}"
+            )
+
         # centroid norms precomputed for the cosine gate
         self._cnorm = np.linalg.norm(self.centroids, axis=1)
         self._cnorm[self._cnorm == 0] = 1.0
@@ -80,8 +154,9 @@ class SectorClassifier:
 
         feats = self._features(embeddings, domains)
         logits = feats @ self.W.T + self.b  # (n, n_classes)
-        cal = 1.0 / (1.0 + np.exp(-(self.platt_a * logits + self.platt_b)))
-        probs = cal / cal.sum(axis=1, keepdims=True)
+        # SAME transform the trainer sweeps on (see ``platt_normalize``) — keeps swept coverage and
+        # live firing rate identical; this is the served side of bug-(b)'s fix.
+        probs = platt_normalize(logits, self.platt_a, self.platt_b)
         order = np.argsort(-probs, axis=1)
         top1 = order[:, 0]
         p1 = probs[np.arange(len(probs)), top1]
@@ -127,8 +202,16 @@ def save_sector_model(  # noqa: UP037
     tau_sim: float,
     embed_dim: int,
     tld_vocab: tuple[str, ...] = TLD_VOCAB,
+    sweep_coverage: float = float("nan"),
+    sweep_precision: float = float("nan"),
 ) -> None:
-    """Persist the model as a compressed .npz (auto-ships under registry/data if placed there)."""
+    """Persist the model as a compressed .npz (auto-ships under registry/data if placed there).
+
+    ``sweep_coverage``/``sweep_precision`` record what the trainer's threshold sweep reported for
+    the persisted (tau_prob, tau_margin, tau_sim). Because the sweep and inference now share
+    ``platt_normalize``, a served model's firing rate should match ``sweep_coverage`` — the
+    regression guard for bug (b).
+    """
     import numpy as np
 
     np.savez_compressed(
@@ -145,6 +228,8 @@ def save_sector_model(  # noqa: UP037
         tau_sim=np.float32(tau_sim),
         tld_vocab=np.asarray(list(tld_vocab)),
         embed_dim=np.int64(embed_dim),
+        sweep_coverage=np.float32(sweep_coverage),
+        sweep_precision=np.float32(sweep_precision),
     )
 
 
@@ -157,4 +242,8 @@ def load_sector_model(path: "str | Path") -> SectorClassifier | None:  # noqa: U
     if not p.exists():
         return None
     with np.load(p, allow_pickle=False) as data:
-        return SectorClassifier({k: data[k] for k in _KEYS})
+        payload: dict[str, Any] = {k: data[k] for k in _KEYS}
+        for k in _OPTIONAL_KEYS:  # tolerate older artifacts lacking the sweep-metric keys
+            if k in data.files:
+                payload[k] = data[k]
+        return SectorClassifier(payload)
