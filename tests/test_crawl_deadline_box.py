@@ -78,6 +78,8 @@ def test_deadline_box_skips_over_budget_host_only(monkeypatch, tmp_path):
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider())
     monkeypatch.setattr(base_mod, "load_builtins", lambda: None)
     monkeypatch.setattr(http_mod, "AsyncFetcher", _Fetcher)
+    # The deadline-box now defaults OFF (budget 0); opt it in explicitly for this test.
+    monkeypatch.setenv("ERGON_CRAWL_HOST_BUDGET_S", "1200")
 
     slow = BoardState(provider="greenhouse", token="slow", next_due="2000-01-01")
     fast = BoardState(provider="greenhouse", token="fast", next_due="2000-01-01")

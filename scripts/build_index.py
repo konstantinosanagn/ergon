@@ -1168,7 +1168,13 @@ async def _crawl_due(
                     job.company_domain = e["domain"]
                 job.board_token = e["token"]  # registry token this board was crawled with
                 prior_row = reuse_by_id.get(job.id) if reuse_by_id else None
-                if prior_row is not None and prior_row["enrich_hash"] == enrich_hash(job):
+                # `"enrich_hash" in prior_row.keys()` guards the first flag-on build against a
+                # pre-v3 prev index that lacks the column (else sqlite3.Row raises IndexError).
+                if (
+                    prior_row is not None
+                    and "enrich_hash" in prior_row.keys()
+                    and prior_row["enrich_hash"] == enrich_hash(job)
+                ):
                     # Unchanged posting: copy the prior fully-enriched fields (no re-enrich). The
                     # resulting row is byte-identical to a full enrich (enrich_hash matched =>
                     # content+body identical); parity-tested. NEVER reused on a hash miss.
@@ -1233,9 +1239,11 @@ async def _crawl_due(
         os.environ.get("ERGON_CRAWL_CONCURRENCY") or ("64" if os.environ.get("CI") else "12")
     )
     # Per-host deadline-box budget (wall-clock seconds a single host may stay in play before the
-    # crawl stops dispatching new boards to it). 1200s bounds join-class hosts whose per-board cost
-    # is the run's tail; <=0 disables the box. Read once here and closed over by ``grab`` above.
-    host_budget = float(os.environ.get("ERGON_CRAWL_HOST_BUDGET_S") or "1200")
+    # crawl stops dispatching new boards to it). DEFAULT 0 = DISABLED: the normal daily 12k window
+    # fits well under the 330-min CI ceiling (join's slice ~41-118 min), so boxing it would only
+    # silently drop join coverage. The box exists for PATHOLOGICAL / full-registry crawls -- set
+    # ERGON_CRAWL_HOST_BUDGET_S (e.g. 7200) explicitly for those. <=0 disables; closed over by grab.
+    host_budget = float(os.environ.get("ERGON_CRAWL_HOST_BUDGET_S") or "0")
     try:
         async with AsyncFetcher(
             timeout=12.0, retries=2, concurrency=crawl_concurrency
