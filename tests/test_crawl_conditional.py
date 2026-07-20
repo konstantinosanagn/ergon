@@ -193,3 +193,44 @@ def test_registry_window_skips_uncrawlable(monkeypatch):
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
     win, nxt = bi._registry_window(0, 10)
     assert {e["token"] for _, e in win} == {"t1", "t3"} and nxt == 0
+
+
+def test_registry_window_caps_giant_limit_and_resumes(monkeypatch):
+    # A giant --limit-companies must NOT crawl the whole registry as one window: the per-run window
+    # is capped and the cursor advances, so a killed run resumes from the next slice instead of
+    # re-doing one 58k-style window forever (the CI-timeout failure this fixes).
+    import ergon_tracker.registry.store as store_mod
+
+    class _Reg:
+        def all(self):  # 10 crawlable boards: t0..t9
+            return {f"c{i}": {"ats": "greenhouse", "token": f"t{i}"} for i in range(10)}
+
+    monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
+
+    win, nxt = bi._registry_window(0, 999999, max_window=4)
+    assert len(win) == 4 and nxt == 4  # bounded to the cap, cursor advanced (NOT the whole registry)
+
+    # Resume: feeding the returned cursor back continues to the next, disjoint slice.
+    win2, nxt2 = bi._registry_window(nxt, 999999, max_window=4)
+    assert len(win2) == 4 and nxt2 == 8
+    assert {e["token"] for _, e in win}.isdisjoint({e["token"] for _, e in win2})
+
+    # Over ceil(total/window) runs the whole registry is covered.
+    seen, cursor = set(), 0
+    for _ in range(3):  # ceil(10 / 4) == 3
+        w, cursor = bi._registry_window(cursor, 999999, max_window=4)
+        seen.update(e["token"] for _, e in w)
+    assert seen == {f"t{i}" for i in range(10)}
+
+
+def test_registry_window_cap_from_env(monkeypatch):
+    import ergon_tracker.registry.store as store_mod
+
+    class _Reg:
+        def all(self):
+            return {f"c{i}": {"ats": "greenhouse", "token": f"t{i}"} for i in range(10)}
+
+    monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
+    monkeypatch.setenv("ERGON_CRAWL_MAX_WINDOW", "3")  # cap sourced from env when not passed
+    win, nxt = bi._registry_window(0, 999999)
+    assert len(win) == 3 and nxt == 3

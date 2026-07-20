@@ -22,7 +22,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.build import build_index  # noqa: E402
 from ergon_tracker.index.db import SCHEMA_VERSION  # noqa: E402
 
 # Compression level 6 (not gzip's default 9): ~2x faster for ~5% larger output — the right trade for a
@@ -142,56 +141,6 @@ async def _crawl_network(cap_pages: int) -> list:
         enrich_in_place(job, infer_level_from_experience=True)
         jobs.append(job)
     return jobs
-
-
-async def _crawl(limit_companies: int, network_pages: int = 0) -> list:
-    """Bounded registry crawl: fetch N boards directly by their stored (ats, token).
-
-    Bypasses resolve() (which is for arbitrary user domains/URLs) and reuses the providers +
-    enrich + dedup, crash-isolated per board so one dead board never sinks the run. When
-    ``network_pages`` > 0, also folds in the ``workable_network`` bulk feed before the final dedup.
-    """
-    import anyio
-
-    from ergon_tracker.dedup import deduplicate
-    from ergon_tracker.enrich import enrich_in_place
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.base import get_provider, load_builtins
-    from ergon_tracker.registry.store import SeedRegistry
-
-    load_builtins()
-    items = [
-        (k, e)
-        for k, e in list(SeedRegistry().all().items())[:limit_companies]
-        if e.get("ats") and e.get("token")
-    ]
-    jobs: list = []
-
-    async def grab(key: str, entry: dict, fetcher: AsyncFetcher) -> None:
-        provider = get_provider(entry["ats"])
-        if provider is None:
-            return
-        try:
-            raws = await provider.fetch(entry["token"], SearchQuery(), fetcher)
-        except Exception:  # noqa: BLE001 - dead/blocked board, skip
-            return
-        for raw in raws:
-            try:
-                job = provider.normalize(raw)
-            except Exception:  # noqa: BLE001
-                continue
-            if entry.get("domain") and not job.company_domain:
-                job.company_domain = entry["domain"]
-            job.board_token = entry["token"]  # registry token this board was crawled with
-            enrich_in_place(job, company_key=key, infer_level_from_experience=True)
-            jobs.append(job)
-
-    async with AsyncFetcher() as fetcher, anyio.create_task_group() as tg:
-        for key, entry in items:
-            tg.start_soon(grab, key, entry, fetcher)
-    jobs.extend(await _crawl_network(network_pages))  # first-party Workable network coverage
-    return deduplicate(jobs)
 
 
 async def _fold_network_into_fresh(fresh_path, network_pages: int, build_id: str) -> set[str]:
@@ -403,24 +352,6 @@ def _write_vectors_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) 
             indent=2,
         )
     )
-
-
-def build_and_publish_rich(
-    db_path: Path, jobs: list, out: Path, *, build_id: str
-) -> tuple[dict, int]:
-    """Reconcile the vectors sidecar (pre-stored int8 embeddings) to the freshly-built main index,
-    then gzip-publish it as ``index-vectors.sqlite.gz`` + ``manifest-vectors.json``.
-
-    Uses the in-memory ``jobs`` (which still carry FULL descriptions — the main index truncates to a
-    snippet) and the main index's live ids, so the cascade prunes anything the build dropped and
-    re-embeds only new/changed postings. Needs the ``semantic`` extra (the embedding model)."""
-    from ergon_tracker.index.rich import reconcile_rich_tier
-
-    rich_db = out / "index-vectors.sqlite"
-    stats = reconcile_rich_tier(rich_db, db_path, jobs, build_id=build_id)
-    sha, nbytes = _gzip_file(rich_db, out / "index-vectors.sqlite.gz")
-    _write_vectors_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
-    return stats, nbytes
 
 
 def build_and_publish_rich_incremental(
@@ -1017,26 +948,40 @@ def _interleave_by_ats(items: list) -> list:
     return [item for _, _, item in keyed]
 
 
-def _registry_window(cursor: int, limit: int) -> tuple[list, int]:
+# Hard cap on how many boards a SINGLE crawl run may take, regardless of how large
+# --limit-companies is. Bounds each run so it finishes within the CI timeout AND makes a killed run
+# resumable: the cursor advances by (at most) one window, so successive runs continue instead of
+# re-crawling one giant 58k window forever. 12000 == the proven daily window, so the scheduled
+# `--incremental --limit-companies 12000` run is unaffected (its window is already <= this cap).
+_DEFAULT_MAX_WINDOW = 12000
+
+
+def _registry_window(cursor: int, limit: int, max_window: int | None = None) -> tuple[list, int]:
     """Return (window, next_cursor): a rotating, backend-INTERLEAVED slice of crawlable boards.
 
-    Each run takes `limit` boards starting at `cursor` (wrapping) from an ATS-interleaved ordering
-    (see ``_interleave_by_ats``), then advances the cursor. Over ceil(total/limit) runs the whole
-    registry is covered + seeded into board_state; interleaving keeps every window balanced across
-    backends so no single ATS is throttled by a clustered burst.
+    Each run takes up to `limit` boards starting at `cursor` (wrapping) from an ATS-interleaved
+    ordering (see ``_interleave_by_ats``), then advances the cursor. The per-run window is CAPPED at
+    ``max_window`` (env ``ERGON_CRAWL_MAX_WINDOW``, default 12000) so a single job never crawls one
+    giant window: even ``--limit-companies 58078`` is served as rotating ~12k slices whose cursor
+    advances, so a killed/timed-out run is resumable (the next run continues from next_cursor). Over
+    ceil(total/window) runs the whole registry is covered + seeded into board_state; interleaving
+    keeps every window balanced across backends so no single ATS is throttled by a clustered burst.
     """
     from ergon_tracker.registry.store import SeedRegistry
 
+    if max_window is None:
+        max_window = int(os.environ.get("ERGON_CRAWL_MAX_WINDOW") or _DEFAULT_MAX_WINDOW)
     items = [(k, e) for k, e in SeedRegistry().all().items() if e.get("ats") and e.get("token")]
     items = _interleave_by_ats(items)
     total = len(items)
     if total == 0:
         return [], 0
-    if limit >= total:
+    eff = min(limit, max_window) if max_window > 0 else limit  # <=0 disables the cap (tests/manual)
+    if eff >= total:
         return items, 0
     start = cursor % total
-    window = [items[(start + i) % total] for i in range(limit)]
-    return window, (start + limit) % total
+    window = [items[(start + i) % total] for i in range(eff)]
+    return window, (start + eff) % total
 
 
 async def _crawl_due(
@@ -1362,6 +1307,22 @@ def main(argv: list[str]) -> None:
         )
         return
 
+    # A full/large manual crawl (no --incremental) used to take a legacy in-memory path (`_crawl`)
+    # with NO windowing and NO cursor, so a CI-timeout kill lost the entire run (this is exactly what
+    # happened to `--limit-companies 58078 --sharded` — ~4.5h, killed at the 330-min timeout, all
+    # work lost). Route EVERY crawl through the streaming/incremental path instead: it windows the
+    # registry (see _registry_window's cap), streams jobs to fresh.sqlite as boards complete, and
+    # persists the cursor + board_state so a re-run resumes. The daily `--incremental` run is
+    # unchanged; this only redirects the previously-dangerous non-incremental invocation.
+    if not incremental:
+        print(
+            "[route] non-incremental crawl -> streaming/incremental path "
+            "(bounded window, resumable cursor). A large --limit-companies is served as rotating "
+            "windows; re-run to advance the cursor until the registry is fully covered.",
+            flush=True,
+        )
+        incremental = True
+
     if incremental:
         from ergon_tracker.index.build import (
             build_index_from_fresh_db,
@@ -1552,62 +1513,6 @@ def main(argv: list[str]) -> None:
         if not ok:
             raise SystemExit(1)
         return
-
-    jobs = anyio.run(_crawl, limit, network_pages)
-    db_tmp = out / "index.tmp.sqlite"
-    n = build_index(jobs, db_tmp, build_id=build_id)
-    bf = _backfill_board_tokens(db_tmp)
-    if bf:
-        print(f"  + backfilled board_token on {bf} rows (freshness-sweep coverage)")
-    # Carry forward a prior daily freshness-sweep's expiries onto db_tmp BEFORE the gated publish
-    # (mirrors the incremental path above) so shards/slim/delta all inherit them. Non-fatal.
-    freshness_expired = _apply_freshness(db_tmp, out)
-    if freshness_expired:
-        print(f"  + carried forward {freshness_expired} freshness-sweep expiries")
-    full_prev_rows = _count_jobs(db) if db.exists() else None
-    if not _gated_publish(
-        db_tmp,
-        db,
-        out,
-        build_id=build_id,
-        prev_row_count=full_prev_rows,
-        last_known_rows=_last_published_rows(out / "history.jsonl"),
-    ):
-        raise SystemExit(1)
-    if sharded:
-        ns = build_and_publish_shards(jobs, out, build_id=build_id)
-        print(f"  + published {ns} sector shards")
-        nslim = build_and_publish_slim(db, out, build_id=build_id)
-        print(f"  + published slim tier ({nslim} rows) -> index-slim.sqlite.gz")
-    if rich:
-        stats, nbytes = build_and_publish_rich(db, jobs, out, build_id=build_id)
-        print(
-            f"  + published rich tier (pruned={stats['pruned']} embedded={stats['embedded']} "
-            f"missing={stats['missing']}) -> index-vectors.sqlite.gz ({nbytes // 1024} KB)"
-        )
-    if detail:  # Tier-3 reconcile + merge against the already-published core index (non-fatal)
-        try:
-            dstats, dbytes = build_and_publish_detail(db, out, build_id=build_id)
-            print(
-                f"  + published detail tier (fetched={dstats['fetched']} failed={dstats['failed']} "
-                f"missing={dstats['missing']} merged={dstats['merged']}) -> "
-                f"index-detail.sqlite.gz ({dbytes // 1024} KB)"
-            )
-        except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
-            print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")
-    if liveness:  # apply-URL liveness pass against the already-published core index (non-fatal)
-        try:
-            lstats = build_and_publish_liveness(db, out, build_id=build_id)
-            print(
-                f"  + published liveness tier (checked={lstats['checked']} "
-                f"flipped_dead={lstats['flipped_dead']} "
-                f"confirmed_alive={lstats['confirmed_alive']} "
-                f"boards_fetched={lstats['boards_fetched']} "
-                f"boards_failed={lstats['boards_failed']}) -> index-liveness.sqlite.gz"
-            )
-        except Exception as exc:  # noqa: BLE001 - never let the liveness tier break the core build
-            print(f"  ! liveness tier skipped (non-fatal): {type(exc).__name__}: {exc}")
-    print(f"built index: {n} jobs -> {out}/index.sqlite.gz (+manifest.json)")
 
 
 if __name__ == "__main__":

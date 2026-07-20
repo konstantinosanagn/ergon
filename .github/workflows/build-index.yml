@@ -318,4 +318,28 @@ jobs:
           path: |
             dist/manifest.json
             dist/gates.json
+            dist/fresh.sqlite
+            dist/crawl_cursor.json
+            dist/board_state.json
           if-no-files-found: ignore
+
+      # Resumability: the crawl saves the advanced cursor + board_state to dist/ IMMEDIATELY after the
+      # crawl phase (build_index.py, before build/publish). If a LATER phase (build/embed/publish)
+      # times out or crashes, the normal "Publish snapshot" step never runs, so that advance would be
+      # lost and the next run would re-crawl the same window forever. Sync ONLY the crawl-progress
+      # metadata to the release even on failure so the next scheduled/manual run resumes from where
+      # this one got to. Pure progress metadata — the gated index is NEVER republished here.
+      - name: Sync crawl cursor + board_state to release (resume even on failure)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASSETS=""
+          for f in crawl_cursor.json board_state.json; do
+            [ -f "dist/$f" ] && ASSETS="$ASSETS dist/$f"
+          done
+          if [ -n "$ASSETS" ] && gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest $ASSETS --clobber || echo "cursor/state sync failed (non-fatal)"
+          else
+            echo "no cursor/state to sync (or no release yet)"
+          fi
