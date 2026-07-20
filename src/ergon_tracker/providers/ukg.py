@@ -141,6 +141,48 @@ class UKGProvider(BaseProvider):
                 break
         return raws
 
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap change-CANDIDATE signal: ``totalCount`` from a ``Top:1`` search (see
+        ``BaseProvider.board_count``).
+
+        Issues ONE minimal POST to the same ``LoadSearchResults`` endpoint ``fetch`` uses
+        (``Top=1, Skip=0``, no filters) and reads ``totalCount``. Returns ``None`` ONLY on a
+        confirmed-gone signal (404/410, or an unparseable token); everything else indeterminate/
+        transient RAISES (mirrors ``fetch_detail``'s 404-vs-transient contract)."""
+        host, code, guid, _company = self._parse(token)
+        if not (host and code and guid):
+            return None
+        url = _URL.format(host=host, code=code, guid=guid)
+        body = {
+            "opportunitySearch": {
+                "Top": 1,
+                "Skip": 0,
+                "QueryString": "",
+                "OrderBy": [],
+                "Filters": [],
+            },
+            "matchCriteria": {
+                "PreferredJobs": [],
+                "Educations": [],
+                "LicenseAndCertifications": [],
+                "Skills": [],
+                "hasNoLicenses": False,
+                "SkippedSkills": [],
+            },
+        }
+        try:
+            data = await fetcher.post_json(url, json=body)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        if not isinstance(data, dict):
+            raise RuntimeError(f"ukg board_count: non-dict payload for token {token!r}")
+        total = data.get("totalCount")
+        if not isinstance(total, int):
+            raise RuntimeError(f"ukg board_count: missing/non-int totalCount for token {token!r}")
+        return total
+
     def _to_raw(
         self, rec: dict[str, Any], host: str, code: str, guid: str, company: str | None, jid: str
     ) -> RawJob:

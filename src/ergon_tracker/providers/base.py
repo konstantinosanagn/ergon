@@ -141,6 +141,15 @@ class Provider(Protocol):
         the full return/raise contract (``None`` == confirmed-gone; raise == indeterminate)."""
         ...
 
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap page-1 total-count CHANGE-CANDIDATE signal (delta-driven crawl redesign, see
+        ``docs/superpowers/specs/2026-07-19-delta-driven-crawl-redesign.md`` sec 5). Every
+        registered provider satisfies this via ``BaseProvider``'s default (unsupported ->
+        ``None``) or an override; declared here so callers that resolve a provider through
+        ``get_provider`` can call it without an unchecked ``getattr``. See
+        ``BaseProvider.board_count`` for the full return/raise contract."""
+        ...
+
 
 class BaseProvider:
     """Optional convenience base with shared helpers. Subclasses must set ``name`` and
@@ -207,6 +216,37 @@ class BaseProvider:
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:
         """Parse an already-downloaded body into RawJobs (lets the crawler reuse a conditional
         200 instead of refetching). Default None = unsupported; the caller falls back to fetch."""
+        return None
+
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap page-1 total-count CHANGE-CANDIDATE signal for the delta-driven crawl redesign
+        (see ``docs/superpowers/specs/2026-07-19-delta-driven-crawl-redesign.md`` sec 5).
+
+        The daily freshness sweep already fingerprints DETERMINISTIC/bulk-JD sources with an
+        id-set hash, but SEARCH-INDEX / paginating sources expose no such cheap validator. Several
+        of them DO expose a genuine page-1 total, which is a cheap "did this board's size change?"
+        signal: a total that CHANGED since the last check means the board changed. A total that's
+        THE SAME is **not** proof of no change — an add+remove pair, or an in-place content edit,
+        leaves the total unchanged — so callers must treat this as a change-CANDIDATE gate, always
+        paired with the sweep's id-set hash for certainty, never as a standalone "unchanged" proof.
+
+        Implementations issue exactly ONE minimal request (a page-1 / ``Top:1``-style fetch) and
+        parse a REAL total already present in that response — never estimate, never paginate to
+        count.
+
+        Default: unsupported — most providers have no listing endpoint that reports a page-1 total
+        without paginating everything (or expose no total at all). Providers whose list response
+        carries a genuine total on page 1 opt in by overriding this.
+
+        RETURN/RAISE CONTRACT for overrides (mirrors ``fetch_detail``'s 404-vs-transient contract):
+          - COUNT AVAILABLE -> return the parsed ``int`` (>= 0).
+          - DEFINITIVELY NO COUNT -> return ``None`` ONLY on a confirmed-gone signal (an explicit
+            HTTP 404/410 for the board) or an empty/unbuildable token.
+          - INDETERMINATE / TRANSIENT -> RAISE (let it propagate): 5xx, 429, timeouts, connection/
+            circuit errors, any other non-404 HTTP status, a non-dict payload, or a 200 whose shape
+            doesn't carry the expected count field. An ambiguous signal is NEVER "no count" — this
+            base default returns ``None`` only because "no cheap count endpoint exists" is a
+            permanent capability gap, not a transient error."""
         return None
 
     # --- shared helpers -------------------------------------------------

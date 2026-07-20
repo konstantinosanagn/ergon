@@ -254,6 +254,31 @@ class WorkdayProvider(BaseProvider):
                 raw_jobs.append(self._to_raw(posting, tenant, wd, site, token))
         return raw_jobs
 
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap change-CANDIDATE signal: page-0 ``total`` (see ``BaseProvider.board_count``).
+
+        Issues ONE minimal POST (``offset=0, limit=1``) to the same ``jobs`` endpoint ``fetch``
+        uses, and reads the flat ``total`` field. This total is UNCAPPED — genuine even on
+        tenants whose retrievable pagination caps out at ``CAP`` (2000) — so it reflects the
+        board's real size even when a full ``fetch`` would truncate. Returns ``None`` ONLY on a
+        confirmed-gone signal (404/410 from the cxs endpoint); every other indeterminate/transient
+        condition RAISES (mirrors ``fetch_detail``'s 404-vs-transient contract)."""
+        tenant, wd, site = self._parse_token(token)
+        url = self._jobs_url(tenant, wd, site)
+        body = {"appliedFacets": {}, "limit": 1, "offset": 0, "searchText": ""}
+        try:
+            data = await fetcher.post_json(url, json=body)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        if not isinstance(data, dict):
+            raise RuntimeError(f"workday board_count: non-dict payload for token {token!r}")
+        total = data.get("total")
+        if not isinstance(total, int):
+            raise RuntimeError(f"workday board_count: missing/non-int total for token {token!r}")
+        return total
+
     async def _fetch_page(
         self,
         fetcher: AsyncFetcher,

@@ -20,6 +20,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from ..models import JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -88,6 +90,34 @@ class DEJobsProvider(BaseProvider):
             if not grew or not pg.get("has_more_pages"):
                 break
         return raws
+
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap change-CANDIDATE signal: page-1 ``pagination.total`` (see
+        ``BaseProvider.board_count``).
+
+        Issues ONE minimal GET (same endpoint/headers ``fetch`` uses, ``page=1``) and reads
+        ``pagination.total`` from the Solr response. Returns ``None`` ONLY on a confirmed-gone
+        signal (404/410, or an empty token) for the company slug; everything else indeterminate/
+        transient RAISES (mirrors ``fetch_detail``'s 404-vs-transient contract)."""
+        slug = token.strip().lower()
+        if not slug:
+            return None
+        params = {"q": "", "company": slug, "page": 1}
+        try:
+            data = await fetcher.get_json(_API, params=params, headers=_HEADERS)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        if not isinstance(data, dict):
+            raise RuntimeError(f"dejobs board_count: non-dict payload for token {slug!r}")
+        pagination = data.get("pagination") or {}
+        total = pagination.get("total")
+        if not isinstance(total, int):
+            raise RuntimeError(
+                f"dejobs board_count: missing/non-int pagination.total for token {slug!r}"
+            )
+        return total
 
     @staticmethod
     def _url(j: dict[str, Any]) -> str:

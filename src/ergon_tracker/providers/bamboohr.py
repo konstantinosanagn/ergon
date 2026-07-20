@@ -104,6 +104,29 @@ class BambooHRProvider(BaseProvider):
             )
         return raws
 
+    async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
+        """Cheap change-CANDIDATE signal: ``meta.totalCount`` (see ``BaseProvider.board_count``).
+
+        BambooHR's whole board is already one small request (see ``fetch``), so this issues that
+        SAME single GET and reads ``meta.totalCount`` instead of counting ``result``. Returns
+        ``None`` ONLY on a confirmed-gone signal (404/410 for the board); everything else
+        indeterminate/transient RAISES (mirrors ``fetch_detail``'s 404-vs-transient contract)."""
+        url = _API.format(token=token)
+        try:
+            data = await fetcher.get_json(url)
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                return None
+            raise
+        if not isinstance(data, dict):
+            raise RuntimeError(f"bamboohr board_count: non-dict payload for token {token!r}")
+        total = (data.get("meta") or {}).get("totalCount")
+        if not isinstance(total, int):
+            raise RuntimeError(
+                f"bamboohr board_count: missing/non-int meta.totalCount for token {token!r}"
+            )
+        return total
+
     @staticmethod
     def _parse_detail_ref(ref: DetailRef) -> tuple[str, str] | None:
         for url in (ref.apply_url, ref.listing_url):
