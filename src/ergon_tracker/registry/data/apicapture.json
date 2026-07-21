@@ -1939,6 +1939,19 @@
    "offset": 0
   },
   "company": "Wipro",
+  "detail": {
+   "kind": "css",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://careers.wipro.com/job/{apply_url}/{id}-en_US",
+   "follow_redirects": false,
+   "selector": ".joblayouttoken:has(.joblayouttoken-label)",
+   "select": "largest",
+   "gone": {
+    "absent": true,
+    "redirect_marker": "errorpage"
+   }
+  },
   "fields": {
    "id": "id",
    "location": "jobLocationShort",
