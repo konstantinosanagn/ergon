@@ -410,7 +410,7 @@ def test_failed_board_fetch_leaves_its_rows_untouched(tmp_path):
 # must never be allowed to expire a live row -- safe in the drain (a None just fails to recover a
 # JD, retried up to RETRY_CAP) but WRONG in the confirm path. Their liveness/freshness is handled
 # elsewhere (breezy: the deterministic bulk id-set relist, freshness.DETERMINISTIC_SOURCES).
-_DRAIN_ONLY_SOURCES = {"breezy"}
+_DRAIN_ONLY_SOURCES = {"breezy", "apicapture"}
 
 
 def test_confirm_and_tier3_source_lists_are_in_sync():
