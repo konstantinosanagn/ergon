@@ -24,7 +24,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
-from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..extract.comp import coerce_amount
+from ..models import (
+    DetailFetch,
+    EmploymentType,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+    Salary,
+    SalaryInterval,
+    SearchQuery,
+)
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -495,18 +506,28 @@ def _extract_graphql(text: str, url: str, detail: dict[str, Any]) -> Any:
     return val if isinstance(val, str) and val.strip() else None
 
 
+def _locate_relay_container(text: str, ckey: str | None) -> Any:
+    """Decode the single Relay JSON object that follows ``"{ckey}":`` in the inline blob (Meta's
+    ``xcp_requisition_job_description``), so a same-named key elsewhere on the page can't win.
+    Returns None when the key is absent or the object doesn't parse. Shared by the JD-text extractor
+    and the structured-salary extractor so the container-locating logic lives in ONE place."""
+    if not ckey:
+        return None
+    i = text.find('"' + ckey + '":')
+    if i == -1:
+        return None
+    with contextlib.suppress(ValueError):
+        container, _ = json.JSONDecoder().raw_decode(text, i + len('"' + ckey + '":'))
+        return container
+    return None
+
+
 def _extract_relay_json(text: str, url: str, detail: dict[str, Any]) -> Any:
     """Concat named JSON keys from the inline Relay blob. ``container_key`` anchors extraction to a
     single object (Meta's ``xcp_requisition_job_description``) so a same-named key elsewhere on the
     page can't win; otherwise each key is scanned for in the blob."""
     dec = json.JSONDecoder()
-    container: Any = None
-    ckey = detail.get("container_key")
-    if ckey:
-        i = text.find('"' + ckey + '":')
-        if i != -1:
-            with contextlib.suppress(ValueError):
-                container, _ = dec.raw_decode(text, i + len('"' + ckey + '":'))
+    container: Any = _locate_relay_container(text, detail.get("container_key"))
     parts: list[str] = []
     for key in detail.get("keys") or []:
         val: Any = None
@@ -579,6 +600,110 @@ _DETAIL_EXTRACTORS = {
 }
 
 
+# --- structured salary from the SAME detail response ------------------------------------------
+#
+# A handful of giants carry a STRUCTURED pay field IN the JD detail response, alongside the prose:
+# Goldman's GraphQL ``data.role.compensation{minSalary,maxSalary,currency}`` (numbers) and Meta's
+# inline ``xcp_requisition_job_description.public_compensation[0]{compensation_amount_*}`` (strings
+# like ``"$132,000/year"``). A spec opts in with a ``detail.salary`` sub-block; the specifics live
+# there as DATA, dispatched on ``salary.kind`` here. This is PURE/SYNC (no I/O, no state) and NEVER
+# raises -- any failure returns None, so ``fetch_detail`` falls back to the bare JD str and the
+# gone/transient contract is untouched.
+
+_SAL_INTERVALS: dict[str, SalaryInterval] = {
+    "year": SalaryInterval.YEAR,
+    "month": SalaryInterval.MONTH,
+    "week": SalaryInterval.WEEK,
+    "day": SalaryInterval.DAY,
+    "hour": SalaryInterval.HOUR,
+}
+# A trailing "/year", "/month", ... glued to a Meta pay string ("$132,000/year") names the interval.
+_SAL_TRAILING_INTERVAL = re.compile(r"/\s*(year|month|week|day|hour)s?\b", re.IGNORECASE)
+
+
+def _money_amount(raw: Any) -> float | None:
+    """Coerce one pay bound to a positive float. Numbers go straight to ``coerce_amount``; a string
+    ("$132,000/year") has its leading numeric run pulled out first (drops the ``$`` and the ``/year``
+    tail), then ``coerce_amount`` handles the thousands ``,``. None on anything non-numeric."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int | float):
+        return coerce_amount(raw)
+    if isinstance(raw, str):
+        m = re.search(r"\d[\d.,]*", raw)
+        if m:
+            return coerce_amount(m.group(0))
+    return None
+
+
+def _norm_currency(raw: Any) -> str | None:
+    return raw.strip().upper() if isinstance(raw, str) and raw.strip() else None
+
+
+def _salary_from_json_paths(resp_text: str, cfg: dict[str, Any]) -> Salary | None:
+    """Goldman: dig min/max/currency out of the parsed GraphQL JSON by literal path; interval is the
+    spec literal. None when BOTH amounts are absent (non-US geos null both) -> falls back to str."""
+    data = json.loads(resp_text)
+    lo = _money_amount(_dig(data, cfg.get("min_path") or []))
+    hi = _money_amount(_dig(data, cfg.get("max_path") or []))
+    if lo is None and hi is None:
+        return None
+    return Salary(
+        min_amount=lo,
+        max_amount=hi,
+        currency=_norm_currency(_dig(data, cfg.get("currency_path") or [])),
+        interval=_SAL_INTERVALS.get(str(cfg.get("interval") or "").lower()),
+    )
+
+
+def _salary_from_relay_container(resp_text: str, cfg: dict[str, Any]) -> Salary | None:
+    """Meta: locate the inline Relay container (reusing ``_locate_relay_container``), take the first
+    ``list_key`` entry, and coerce its min/max STRINGS. Interval from a trailing ``/year|/month|...``
+    (default year); currency from the spec literal. None on absence -> falls back to str."""
+    container = _locate_relay_container(resp_text, cfg.get("container_key"))
+    if not isinstance(container, dict):
+        return None
+    lst = container.get(cfg.get("list_key"))
+    if not isinstance(lst, list) or not lst or not isinstance(lst[0], dict):
+        return None
+    first = lst[0]
+    min_raw = first.get(cfg.get("min_key"))
+    max_raw = first.get(cfg.get("max_key"))
+    lo = _money_amount(min_raw)
+    hi = _money_amount(max_raw)
+    if lo is None and hi is None:
+        return None
+    interval = SalaryInterval.YEAR
+    for raw in (min_raw, max_raw):
+        m = _SAL_TRAILING_INTERVAL.search(raw) if isinstance(raw, str) else None
+        if m:
+            interval = _SAL_INTERVALS[m.group(1).lower()]
+            break
+    return Salary(
+        min_amount=lo, max_amount=hi, currency=_norm_currency(cfg.get("currency")), interval=interval
+    )
+
+
+_SALARY_EXTRACTORS = {
+    "json_paths": _salary_from_json_paths,
+    "relay_container": _salary_from_relay_container,
+}
+
+
+def _extract_structured_salary(resp_text: str, detail: dict[str, Any]) -> Salary | None:
+    """Pull a structured :class:`Salary` from the detail response per the spec's ``detail.salary``
+    sub-block. Dispatches on ``salary.kind``. NEVER raises -- any parse/shape failure returns None,
+    so ``fetch_detail`` falls back to the bare JD str and the alive/gone/raise contract is unchanged."""
+    cfg = detail.get("salary") or {}
+    fn = _SALARY_EXTRACTORS.get(cfg.get("kind") or "")
+    if fn is None:
+        return None
+    try:
+        return fn(resp_text, cfg)
+    except Exception:
+        return None
+
+
 def _resp_of(raw: Any) -> _DetailResp:
     """Normalize an httpx.Response (or the tests' fake) to a ``_DetailResp`` with lower-cased
     headers so redirect-``Location`` lookups are case-insensitive across httpx/curl_cffi/fake."""
@@ -637,7 +762,7 @@ class ApiCaptureProvider(BaseProvider):
         tok = url_or_host.strip()[m.end() :].strip()
         return tok or None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """DRAIN-ONLY Tier-3 JD recovery: the captured LIST API omits the JD, but the spec's
         ``detail`` block names one plain HTTP hop that carries it. Dispatch on ``detail["kind"]``,
         send via the shared ``fetcher`` (per-host rate-limit + retries + reused client apply), and
@@ -655,7 +780,16 @@ class ApiCaptureProvider(BaseProvider):
         if req is None:
             raise RuntimeError(f"apicapture detail: unbuildable request for {ref.id}")
         resp = await self._detail_send(fetcher, req)
-        return self._classify(resp, detail, ref)
+        jd = self._classify(resp, detail, ref)
+        # A live 200 with real JD (str) MAY also carry a structured pay field in the SAME response
+        # (Goldman/Meta). Wrap it so the reconcile prefers that range over re-parsing prose. The
+        # gone/transient decision above is untouched -- only a genuine str gets a salary probe, which
+        # never raises (any failure -> None -> bare str), so the contract is byte-identical.
+        if isinstance(jd, str) and detail.get("salary"):
+            sal = _extract_structured_salary(resp.text, detail)
+            if sal is not None:
+                return DetailFetch(text=jd, salary=sal)
+        return jd
 
     @staticmethod
     async def _detail_send(fetcher: AsyncFetcher, req: _DetailReq) -> _DetailResp:

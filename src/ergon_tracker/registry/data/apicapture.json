@@ -838,6 +838,28 @@
      "data",
      "role"
     ]
+   },
+   "salary": {
+    "kind": "json_paths",
+    "min_path": [
+     "data",
+     "role",
+     "compensation",
+     "minSalary"
+    ],
+    "max_path": [
+     "data",
+     "role",
+     "compensation",
+     "maxSalary"
+    ],
+    "currency_path": [
+     "data",
+     "role",
+     "compensation",
+     "currency"
+    ],
+    "interval": "year"
    }
   }
  },
@@ -1190,6 +1212,14 @@
      410
     ],
     "final_url_marker": "/jobs/position-not-available/"
+   },
+   "salary": {
+    "kind": "relay_container",
+    "container_key": "xcp_requisition_job_description",
+    "list_key": "public_compensation",
+    "min_key": "compensation_amount_minimum",
+    "max_key": "compensation_amount_maximum",
+    "currency": "USD"
    }
   }
  },
