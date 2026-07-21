@@ -17,6 +17,7 @@ import anyio
 import pytest
 
 from ergon_tracker.index.detail import DetailRef
+from ergon_tracker.models import DetailFetch, SalaryInterval
 from ergon_tracker.providers.apicapture import (
     ApiCaptureProvider,
     _build_detail_request,
@@ -76,7 +77,7 @@ def _ref(
     )
 
 
-def _run(ref: DetailRef, fetcher: _FakeFetcher) -> str | None:
+def _run(ref: DetailRef, fetcher: _FakeFetcher) -> str | DetailFetch | None:
     return anyio.run(lambda: ApiCaptureProvider().fetch_detail(ref, fetcher))
 
 
@@ -133,6 +134,37 @@ def test_goldman_unparseable_200_raises() -> None:
     fetcher = _FakeFetcher(_FakeResponse(200, text="<html>not json</html>"))
     with pytest.raises(RuntimeError):
         _run(_GS_REF, fetcher)
+
+
+# structured salary: compensation{minSalary,maxSalary,currency} rides the same GraphQL response.
+_GS_ALIVE_PAY = (
+    '{"data":{"role":{"descriptionHtml":"<p>Lead <strong>Market Risk</strong> in NYC.</p>",'
+    '"compensation":{"minSalary":85000,"maxSalary":140000,"currency":"USD"},"status":"OPEN"}}}'
+)
+_GS_ALIVE_NULL_PAY = (
+    '{"data":{"role":{"descriptionHtml":"<p>Lead Market Risk in HK.</p>",'
+    '"compensation":{"minSalary":null,"maxSalary":null,"currency":null},"status":"OPEN"}}}'
+)
+
+
+def test_goldman_alive_with_compensation_returns_detailfetch() -> None:
+    fetcher = _FakeFetcher(_FakeResponse(200, text=_GS_ALIVE_PAY))
+    got = _run(_GS_REF, fetcher)
+    assert isinstance(got, DetailFetch)
+    assert "Market Risk" in got.text
+    assert got.salary is not None
+    assert got.salary.min_amount == 85000
+    assert got.salary.max_amount == 140000
+    assert got.salary.currency == "USD"
+    assert got.salary.interval is SalaryInterval.YEAR
+
+
+def test_goldman_null_compensation_falls_back_to_bare_str() -> None:
+    # Non-US geos null both bounds -> no structured salary -> bare JD str (not a DetailFetch).
+    fetcher = _FakeFetcher(_FakeResponse(200, text=_GS_ALIVE_NULL_PAY))
+    got = _run(_GS_REF, fetcher)
+    assert isinstance(got, str)
+    assert "Market Risk" in got
 
 
 # --- meta: relay_json (tls) -------------------------------------------------------------------
@@ -204,6 +236,47 @@ def test_meta_200_without_keys_raises() -> None:
         _run(_META_REF, fetcher)
 
 
+# structured salary: public_compensation[0] carries min/max as "$132,000/year" strings.
+_META_ALIVE_PAY = (
+    '<html><script>{"data":{"xcp_requisition_job_description":{'
+    '"id":"1526484645064212","title":"Research Engineer",'
+    '"description":"{\\"__html\\":\\"<span>Meta is seeking Research Engineers.</span>\\"}",'
+    '"public_compensation":[{"compensation_amount_minimum":"$132,000/year",'
+    '"compensation_amount_maximum":"$189,000/year"}]'
+    "}}}</script></html>"
+)
+_META_ALIVE_NO_PAY = (
+    '<html><script>{"data":{"xcp_requisition_job_description":{'
+    '"id":"1526484645064212","title":"Research Engineer",'
+    '"description":"{\\"__html\\":\\"<span>Meta is seeking Research Engineers.</span>\\"}",'
+    '"public_compensation":[]'
+    "}}}</script></html>"
+)
+
+
+def test_meta_alive_with_compensation_returns_detailfetch() -> None:
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text=_META_ALIVE_PAY, url="https://www.metacareers.com/profile/job_details/1526484645064212/")
+    )
+    got = _run(_META_REF, fetcher)
+    assert isinstance(got, DetailFetch)
+    assert "Meta is seeking Research Engineers" in got.text
+    assert got.salary is not None
+    assert got.salary.min_amount == 132000  # "$132,000/year" -> $ and /year stripped, , coerced
+    assert got.salary.max_amount == 189000
+    assert got.salary.currency == "USD"  # spec literal
+    assert got.salary.interval is SalaryInterval.YEAR  # trailing /year
+
+
+def test_meta_empty_compensation_falls_back_to_bare_str() -> None:
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text=_META_ALIVE_NO_PAY, url="https://www.metacareers.com/profile/job_details/1526484645064212/")
+    )
+    got = _run(_META_REF, fetcher)
+    assert isinstance(got, str)
+    assert "Meta is seeking Research Engineers" in got
+
+
 # --- google: html_sections (tls) --------------------------------------------------------------
 
 _GOOGLE_REF = _ref(token="google", id="85183114006930118")
@@ -230,7 +303,7 @@ def test_google_request_built_correctly() -> None:
 def test_google_alive_extracts_sections() -> None:
     fetcher = _FakeFetcher(_FakeResponse(200, text=_GOOGLE_ALIVE, url=_GOOGLE_REF.apply_url or ""))
     desc = _run(_GOOGLE_REF, fetcher)
-    assert desc is not None
+    assert isinstance(desc, str)  # no detail.salary block -> bare str, salary branch skipped
     assert "Work cross-functionally" in desc  # About the job
     assert "Bachelor degree or equivalent" in desc  # Minimum qualifications
     assert "Experience with taxonomy" in desc  # Preferred qualifications
@@ -278,7 +351,7 @@ def test_lululemon_request_built_from_apply_url() -> None:
 def test_lululemon_alive_extracts_rich_text() -> None:
     fetcher = _FakeFetcher(_FakeResponse(200, text=_LULU_ALIVE, url=_LULU_URL))
     desc = _run(_LULU_REF, fetcher)
-    assert desc is not None
+    assert isinstance(desc, str)  # no detail.salary block -> bare str, salary branch skipped
     assert "performance apparel company" in desc
     assert "Facebook" not in desc  # only the rich-text container, not the share bar
     assert fetcher.calls[0]["url"] == _LULU_URL
@@ -338,7 +411,7 @@ def test_bain_request_built_from_apply_url() -> None:
 def test_bain_alive_extracts_largest_block() -> None:
     fetcher = _FakeFetcher(_FakeResponse(200, text=_BAIN_ALIVE, url=_BAIN_URL))
     desc = _run(_BAIN_REF, fetcher)
-    assert desc is not None
+    assert isinstance(desc, str)  # no detail.salary block -> bare str, salary branch skipped
     assert "analyze revenue end to end" in desc  # the largest .article__content (the JD)
     assert "Job Title Analyst" not in desc  # not the tiny header block
     assert desc.strip() != "Apply"
