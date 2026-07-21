@@ -409,8 +409,10 @@ def test_failed_board_fetch_leaves_its_rows_untouched(tmp_path):
 # their per-posting fetch_detail gone-signal is only SOFT (not a hard 404/410), so a returned None
 # must never be allowed to expire a live row -- safe in the drain (a None just fails to recover a
 # JD, retried up to RETRY_CAP) but WRONG in the confirm path. Their liveness/freshness is handled
-# elsewhere (breezy: the deterministic bulk id-set relist, freshness.DETERMINISTIC_SOURCES).
-_DRAIN_ONLY_SOURCES = {"breezy", "apicapture"}
+# elsewhere (breezy: the deterministic bulk id-set relist, freshness.DETERMINISTIC_SOURCES; taleo:
+# the freshness search-index bulk-relist confirm + its two-factor soft-404, freshness._BULK_RELIST_
+# CONFIRM_SOURCES -- so taleo is drain-wired for JD recovery but its liveness stays on that path).
+_DRAIN_ONLY_SOURCES = {"breezy", "apicapture", "taleo"}
 
 
 def test_confirm_and_tier3_source_lists_are_in_sync():
@@ -431,14 +433,16 @@ def test_newly_wired_detail_providers_present_in_both_lists():
     # R3: the four already-built detail providers whose fetch_detail is verified (by their own
     # passing "alive returns text" tests: test_themuse/test_adp/test_avature/test_taleobe) are now
     # wired into BOTH the Tier-3 drain source list and the liveness confirm source set. taleo is
-    # deliberately absent (JS-blocked, no working fetch_detail).
+    # DRAIN-wired (its jobdetail.ftl fetch_detail works -- the old "JS-blocked" note was stale) but
+    # stays OUT of the liveness confirm set: its two-factor soft-404 confirms via the freshness
+    # bulk-relist path, so it's drain-only here (see _DRAIN_ONLY_SOURCES above).
     from scripts.build_index import _TIER3_DETAIL_SOURCES
 
     newly_wired = {"themuse", "adp", "avature", "taleobe"}
     assert newly_wired <= set(CONFIRM_VIA_DETAIL_SOURCES)
     assert newly_wired <= set(_TIER3_DETAIL_SOURCES)
-    assert "taleo" not in set(CONFIRM_VIA_DETAIL_SOURCES)
-    assert "taleo" not in set(_TIER3_DETAIL_SOURCES)
+    assert "taleo" in set(_TIER3_DETAIL_SOURCES)  # drain-wired for JD recovery
+    assert "taleo" not in set(CONFIRM_VIA_DETAIL_SOURCES)  # liveness via freshness bulk-relist
 
 
 def test_unresolvable_token_rows_are_skipped_not_flipped(tmp_path):

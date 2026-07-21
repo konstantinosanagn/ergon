@@ -391,6 +391,10 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "adp",  # requisitionDescription HTML from the ADP posting record (verified: test_adp)
     "avature",  # detail page <main>/body JD text (verified: test_avature)
     "taleobe",  # Taleo Business Edition per-job JSON-LD JobPosting.description (verified: test_taleobe)
+    "taleo",  # jobdetail.ftl server-renders the JD as a JS `fillList('requisitionDescription...')`
+    # string literal (regex-extractable, NOT browser-blocked -- the old "JS-blocked" note was stale;
+    # live-verified). fetch_detail already exists (taleo.py) + taleo is a _BULK_RELIST_CONFIRM source;
+    # it was just never wired into the drain, so its ~11k no-JD rows were never recovered.
     # DRAIN-ONLY: the /json list carries no description; the position PAGE server-renders the JD.
     # Deliberately NOT added to liveness.CONFIRM_VIA_DETAIL_SOURCES -- breezy's gone-signal is a
     # SOFT 302-to-board-root, and its liveness/freshness is already covered by the deterministic
