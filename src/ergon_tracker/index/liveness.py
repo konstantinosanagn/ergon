@@ -127,6 +127,10 @@ CONFIRM_VIA_DETAIL_SOURCES: tuple[str, ...] = (
     "adp",
     "avature",
     "taleobe",
+    # Confirm sources with a real fetch_detail + a clean gone-signal (2026-07 live recon):
+    "brassring",  # JobDetails AJAX record; HTTP 404 (or null Jobdetails) for a removed jobid.
+    "peopleadmin",  # /postings/{id}; 302 -> /postings search root, or 404, for a removed posting.
+    "lever",  # per-posting API; textbook HTTP 404 {"ok":false,"error":"Document not found"}.
 )
 
 # A source WITHOUT fetch_detail needs this many consecutive weekly misses before a candidate
