@@ -354,6 +354,8 @@ jobs:
           path: |
             dist/manifest.json
             dist/gates.json
+            dist/metrics_regression.json
+            dist/rediscover_queue.json
             dist/fresh.sqlite
             dist/crawl_cursor.json
             dist/board_state.json
@@ -379,4 +381,51 @@ jobs:
             gh release upload index-latest $ASSETS --clobber || echo "cursor/state sync failed (non-fatal)"
           else
             echo "no cursor/state to sync (or no release yet)"
+          fi
+
+  # OPERATIONAL ALERTING (GitHub-native, best-effort). Separate job so it observes the build job's
+  # final outcome (`needs.build.result`) rather than a mid-job step's -- runs on `if: always()` so a
+  # crashed/timed-out/failed build still gets a notification, and `continue-on-error` on every step
+  # so alerting can NEVER change this workflow's conclusion. The channel is a DEDUPLICATED GitHub
+  # issue (scripts/notify_ops.py): a persistently-failing cron comments on ONE open issue per
+  # (workflow, kind) instead of spawning a new issue each day. stdlib-only script -> no venv/install.
+  notify:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write   # notify_ops.py opens/comments the alert issue
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build diagnostics (best-effort; absent if the build crashed pre-upload)
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: build-diagnostics
+          path: dist
+
+      - name: Alert on build failure OR data-quality tripwire
+        continue-on-error: true   # alerting is best-effort and must never fail the workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "${{ needs.build.result }}" = "failure" ]; then
+            # (a) the build job crashed / timed out / exited non-zero on a gate -> loud failure
+            # alert. Keyed on `failure` (not `!= success`) so a MANUAL cancellation doesn't page.
+            python3 scripts/notify_ops.py --kind failure --workflow build-index \
+              --run-url "$RUN_URL" --title-key "build-index: failing" \
+              --detail "build job result: ${{ needs.build.result }}"
+          else
+            # (b) build succeeded -> inspect the WARN-only tripwires. notify_ops suppresses the
+            # alert unless at least one actually tripped (a FAILing gate, metrics ok=false, or a
+            # non-empty rediscover queue), so this is a no-op on a clean run.
+            python3 scripts/notify_ops.py --kind warning --workflow build-index \
+              --run-url "$RUN_URL" --title-key "build-index: tripwire" \
+              --from-json dist/gates.json \
+              --from-json dist/metrics_regression.json \
+              --from-json dist/rediscover_queue.json
           fi
