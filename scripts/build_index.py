@@ -391,6 +391,12 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "adp",  # requisitionDescription HTML from the ADP posting record (verified: test_adp)
     "avature",  # detail page <main>/body JD text (verified: test_avature)
     "taleobe",  # Taleo Business Edition per-job JSON-LD JobPosting.description (verified: test_taleobe)
+    # DRAIN-ONLY: the /json list carries no description; the position PAGE server-renders the JD.
+    # Deliberately NOT added to liveness.CONFIRM_VIA_DETAIL_SOURCES -- breezy's gone-signal is a
+    # SOFT 302-to-board-root, and its liveness/freshness is already covered by the deterministic
+    # bulk id-set relist (freshness.DETERMINISTIC_SOURCES). Here a None only fails to recover a JD
+    # (retried up to RETRY_CAP); in the liveness confirm path it would wrongly expire a live row.
+    "breezy",
 ]
 
 

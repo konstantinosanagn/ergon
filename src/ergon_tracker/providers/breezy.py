@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urljoin, urlsplit
 
 from ..extract.comp import parse_salary
 from ..models import (
@@ -25,10 +26,36 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["BreezyProvider"]
 
 _API = "https://{token}.breezy.hr/json"
+
+# Per-position DETAIL page (Tier-3 JD recovery): the list ``/json`` endpoint carries NO
+# description, but the server-rendered position page does. Canonical shape is
+# ``https://{token}.breezy.hr/p/{position_id}-{slug}``; the slug is cosmetic -- a valid id with
+# any/no slug still 200s -- so reconstruction only needs (token, position_id).
+_POSITION = "https://{token}.breezy.hr/p/{position_id}"
+
+# The JD body container on a breezy position page.
+_DESCRIPTION_SELECTOR = "#description, .position-description"
+
+# Chrome to strip out of the container so only the JD body remains: breadcrumb, apply button,
+# scripts/styles. (Kept conservative -- only obvious page furniture, never JD prose.)
+_JD_NOISE_SELECTOR = (
+    "script, style, nav, header, footer, button, [class*=breadcrumb], a[class*=apply]"
+)
+
+# HTTP statuses that signal a redirect (a removed position 302s to the board root).
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+# breezy i18n placeholder tokens (e.g. ``%APPLY_NOW%``, ``%FN%``) that leak into rendered text.
+# Anchored to no-whitespace runs so a real "50% ... 30%" in JD prose is never eaten.
+_PLACEHOLDER_RE = re.compile(r"%[A-Za-z0-9_.\-]*%")
+
+# The breezy position id embedded in a ``.../p/{position_id}`` URL (id + optional ``-slug``).
+_POSITION_ID_RE = re.compile(r"breezy\.hr/p/([^/?#]+)", re.IGNORECASE)
 
 # Hosts we recognise, capturing the company token as group 1.
 _HOST_PATTERNS = (re.compile(r"([^/.\s]+)\.breezy\.hr", re.I),)
@@ -42,6 +69,17 @@ _EMPLOYMENT_BY_NAME = {
     "intern": EmploymentType.INTERNSHIP,
     "internship": EmploymentType.INTERNSHIP,
 }
+
+
+def _token_from_url(url: str) -> str | None:
+    """The board token (``{token}.breezy.hr``) from a breezy URL, or ``None``."""
+    for pattern in _HOST_PATTERNS:
+        m = pattern.search(url)
+        if m:
+            token = m.group(1).strip("/")
+            if token and token != "www":
+                return token
+    return None
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -92,6 +130,106 @@ class BreezyProvider(BaseProvider):
         import json
 
         return self._raws_from_data(json.loads(body), token)
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """DRAIN-ONLY Tier-3 JD recovery: the list ``/json`` endpoint carries no description, so
+        fetch the server-rendered position PAGE and extract the ``#description`` /
+        ``.position-description`` body.
+
+        THE URL: GET ``ref.apply_url`` (already the ``.../p/{id}-{slug}`` position page). When it's
+        absent, reconstruct ``https://{token}.breezy.hr/p/{position_id}`` from ``ref.token`` + the
+        position id -- the id is the only key (slug optional). The id lives only inside a breezy
+        ``/p/`` URL, so it's parsed from ``listing_url``; if neither yields a URL the ref is
+        UNBUILDABLE (indeterminate, never death) -> RAISE.
+
+        CONTRACT (see ``base.py``'s ``fetch_detail`` -- ``None`` == GONE, raise == indeterminate).
+        The page is fetched with redirects NOT auto-followed so the gone-signal 302 is observable:
+          - 200 with a non-empty ``#description`` body -> return the JD text (ALIVE).
+          - a 302 to the board root ``/`` -> ``None`` (a removed position redirects there); an
+            explicit 404/410 -> ``None``. If the fetcher auto-FOLLOWED the redirect, we instead land
+            on a 200 board-root page with NO ``#description`` -> also ``None`` (detected by the final
+            URL being the board root).
+          - a 200 without a ``#description`` that ISN'T the board root, a redirect ELSEWHERE, any
+            other status (5xx/429/timeout surface as a raised transient from the fetcher), or an
+            unparseable body -> RAISE (indeterminate; NEVER ``None``).
+
+        NOTE the 302->root is a SOFT gone-signal, which is why breezy is wired DRAIN-ONLY
+        (``_TIER3_DETAIL_SOURCES``) and deliberately NOT into ``liveness.CONFIRM_VIA_DETAIL_SOURCES``:
+        in the drain a ``None`` merely fails to recover a JD (retried up to ``RETRY_CAP``), whereas
+        in the liveness confirm path it would expire a live row. breezy's liveness/freshness is
+        already handled by its deterministic bulk id-set relist (``DETERMINISTIC_SOURCES``).
+        """
+        url = self._detail_url(ref)
+        if not url:
+            raise RuntimeError(f"breezy detail: no derivable detail URL for {ref!s}")
+        resp = await fetcher.request("GET", url, follow_redirects=False)
+        status = resp.status_code
+
+        if status in (404, 410):
+            return None  # explicit not-found -> GONE
+        if status in _REDIRECT_STATUSES:
+            # A removed position 302s to the board root "/": that (and only that) is the gone-signal.
+            # A redirect ELSEWHERE is unexpected -> indeterminate, never guessed as dead.
+            location = resp.headers.get("location")
+            if location and self._is_board_root(urljoin(url, location)):
+                return None
+            raise RuntimeError(f"breezy detail: unclassifiable redirect {status} for {ref!s}")
+        if status != 200:
+            raise RuntimeError(f"breezy detail: unexpected status {status} for {ref!s}")
+
+        text = self._extract_jd(resp.text)
+        if text:
+            return text  # ALIVE
+        # 200 with no usable #description. If the fetcher auto-FOLLOWED the gone-redirect we're now
+        # on the board root -> GONE. Otherwise it's an indeterminate 200 body -> RAISE.
+        final_url = str(getattr(resp, "url", "") or url)
+        if self._is_board_root(final_url):
+            return None
+        raise RuntimeError(f"breezy detail: 200 without #description for {ref!s}")
+
+    @staticmethod
+    def _detail_url(ref: DetailRef) -> str | None:
+        """The position-page URL to fetch: ``ref.apply_url`` verbatim when present, else the
+        canonical ``.../p/{position_id}`` reconstructed from ``ref.token`` + the position id parsed
+        out of ``listing_url``. Returns ``None`` when no id is derivable (unbuildable ref)."""
+        if ref.apply_url:
+            return ref.apply_url
+        if ref.listing_url:
+            m = _POSITION_ID_RE.search(ref.listing_url)
+            token = ref.token or _token_from_url(ref.listing_url)
+            if m and token:
+                return _POSITION.format(token=token, position_id=m.group(1))
+        return None
+
+    @staticmethod
+    def _is_board_root(url: str) -> bool:
+        """True when ``url`` is a breezy board ROOT (``https://{token}.breezy.hr`` with no path) --
+        where a removed position redirects. Any real position lives under ``/p/...``, never root."""
+        parts = urlsplit(url)
+        host = parts.netloc.split("@")[-1].split(":")[0].lower()
+        return host.endswith(".breezy.hr") and parts.path.strip("/") == ""
+
+    @staticmethod
+    def _extract_jd(html: str | None) -> str | None:
+        """Extract the JD body from the position page's ``#description`` /
+        ``.position-description`` container: strip breadcrumb / apply-button / script chrome and
+        ``%…%`` i18n placeholders, collapse whitespace. Returns ``None`` when the container is
+        absent or empty after cleaning (the caller then classifies alive/gone/raise)."""
+        if not html:
+            return None
+        from selectolax.parser import HTMLParser
+
+        node = HTMLParser(html).css_first(_DESCRIPTION_SELECTOR)
+        if node is None:
+            return None
+        for noise in node.css(_JD_NOISE_SELECTOR):
+            noise.decompose()
+        text = node.text(separator=" ", strip=True)
+        if not text:
+            return None
+        text = _PLACEHOLDER_RE.sub(" ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text or None
 
     def _raws_from_data(self, data: Any, token: str) -> list[RawJob]:
         positions: list[dict[str, Any]] = data if isinstance(data, list) else []
