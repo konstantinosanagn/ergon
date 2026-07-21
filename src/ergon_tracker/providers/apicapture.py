@@ -17,6 +17,7 @@ import copy
 import html as _htmlmod
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from importlib.resources import files
 from pathlib import Path
@@ -28,6 +29,7 @@ from .base import BaseProvider, register
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..index.detail import DetailRef
 
 __all__ = ["ApiCaptureProvider"]
 
@@ -333,6 +335,294 @@ class _CurlCaller:
         return text
 
 
+# --- Tier-3 per-posting JD recovery (DRAIN-ONLY) ------------------------------------------------
+#
+# The captured LIST APIs omit the JD, but each of a handful of giants exposes the full JD via ONE
+# plain unauthenticated HTTP hop (no browser). A spec opts in with a ``detail`` block describing how
+# to fetch+extract one posting; ``fetch_detail`` dispatches on ``detail["kind"]`` (graphql /
+# relay_json / css / html_sections). Per-giant specifics (url/body/selector/json_path/gone-rule)
+# live as DATA in the spec, never as code branches. See ``base.py``'s fetch_detail contract:
+# ``None`` == confirmed-gone, raise == indeterminate/transient (NEVER None on a transient).
+
+_JD_REDIRECT_STATUS = frozenset({301, 302, 303, 307, 308})
+# Bot-wall statuses that a tls_impersonate spec escalates past via curl_cffi (schemaorg's blessed
+# escalate-on-block lever). NOT death and NOT a normal transient -- a genuine "your fingerprint is
+# blocked". 5xx/429 stay TransientHTTPError from the shared fetcher (retried), 404/410 are gone.
+_JD_BLOCK_STATUS = frozenset({400, 401, 403, 406})
+
+# Sentinel: an extractor determined DEFINITIVE gone from a 200 body (graphql null role / google's
+# absent JD sections) -- distinct from ``None`` ("couldn't extract" -> classify decides raise).
+_GONE: Any = object()
+
+
+@dataclass(frozen=True)
+class _DetailReq:
+    method: str
+    url: str
+    tier: str  # "plain" | "tls"
+    follow_redirects: bool
+    headers: dict[str, str] | None
+    json_body: Any | None
+
+
+@dataclass(frozen=True)
+class _DetailResp:
+    status_code: int
+    text: str
+    url: str
+    headers: dict[str, str]  # keys lower-cased so ``.get("location")`` is case-insensitive
+
+
+def _num_prefix(value: str) -> str | None:
+    m = re.match(r"\d+", value or "")
+    return m.group(0) if m else None
+
+
+def _detail_ctx(ref: DetailRef) -> dict[str, str]:
+    """Placeholder context for url/body templates, from the DetailRef. ``num_id`` is the leading
+    ``\\d+`` of the posting id (Goldman's numeric externalSourceId prefix of ``179309_GS_...``)."""
+    ctx = {
+        "id": ref.id or "",
+        "apply_url": ref.apply_url or "",
+        "listing_url": ref.listing_url or "",
+    }
+    num = _num_prefix(ref.id or "")
+    if num:
+        ctx["num_id"] = num
+    return ctx
+
+
+# A template placeholder is a bare ``{identifier}`` -- deliberately narrow so a GraphQL query's own
+# ``{`` selection-set braces (``{\n  role(...`` -- spaces/newlines/parens inside) are never mistaken
+# for one.
+_PLACEHOLDER_RE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
+
+
+def _fill(template: str, ctx: dict[str, str]) -> str | None:
+    """Substitute ``{name}`` placeholders from ``ctx``; None if any placeholder is missing/empty."""
+    out = template
+    for ph in _PLACEHOLDER_RE.findall(template):
+        val = ctx.get(ph)
+        if not val:
+            return None
+        out = out.replace("{" + ph + "}", val)
+    return out
+
+
+def _fill_body(node: Any, ctx: dict[str, str]) -> Any:
+    """Deep-substitute placeholders in a JSON body template. Raises KeyError on an unresolved
+    placeholder so the caller can treat the whole request as unbuildable."""
+    if isinstance(node, str):
+        if not _PLACEHOLDER_RE.search(node):
+            return node
+        filled = _fill(node, ctx)
+        if filled is None:
+            raise KeyError(node)
+        return filled
+    if isinstance(node, dict):
+        return {k: _fill_body(v, ctx) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_fill_body(v, ctx) for v in node]
+    return node
+
+
+def _build_detail_request(detail: dict[str, Any], ref: DetailRef) -> _DetailReq | None:
+    """Build the one detail request from the spec's ``detail`` block + the DetailRef, or None when
+    no URL/body is derivable (an unbuildable ref -> the caller RAISES; never guessed dead)."""
+    ctx = _detail_ctx(ref)
+    if detail.get("url"):
+        url: str | None = detail["url"]
+    elif detail.get("url_template"):
+        url = _fill(detail["url_template"], ctx)
+    elif detail.get("url_from"):
+        url = ctx.get(detail["url_from"]) or ctx.get(detail.get("url_from_fallback", "")) or None
+    else:
+        url = None
+    if not url:
+        return None
+    json_body = None
+    if detail.get("body_template") is not None:
+        try:
+            json_body = _fill_body(detail["body_template"], ctx)
+        except KeyError:
+            return None
+    return _DetailReq(
+        method=detail.get("method", "GET").upper(),
+        url=url,
+        tier=detail.get("client", "plain"),
+        follow_redirects=bool(detail.get("follow_redirects", False)),
+        headers=detail.get("headers"),
+        json_body=json_body,
+    )
+
+
+def _strip_html(value: str) -> str:
+    if "<" in value and ">" in value:
+        from selectolax.parser import HTMLParser
+
+        return HTMLParser(value).text(separator=" ", strip=True)
+    return value
+
+
+def _relay_value_text(val: Any) -> str | None:
+    """Flatten one Relay JSON value to text: a ``[{"item": ...}]`` bullet list, a plain string, or
+    a ``{"__html": "<p>…"}``-wrapped HTML string (Meta wraps its description that way)."""
+    if isinstance(val, list):
+        items = [
+            _strip_html(str(it.get("item") or "")) for it in val if isinstance(it, dict)
+        ]
+        return " ".join(p for p in items if p).strip() or None
+    if isinstance(val, str):
+        s = val.strip()
+        if s.startswith("{") and "__html" in s:
+            with contextlib.suppress(ValueError):
+                inner = json.loads(s)
+                if isinstance(inner, dict) and isinstance(inner.get("__html"), str):
+                    s = inner["__html"]
+        return _strip_html(s).strip() or None
+    return None
+
+
+def _extract_graphql(text: str, url: str, detail: dict[str, Any]) -> Any:
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None  # unparseable 200 -> indeterminate -> raise
+    null_path = (detail.get("gone") or {}).get("json_null_path")
+    if null_path is not None and _dig(data, null_path) is None:
+        return _GONE  # e.g. Goldman: data.role == null (removed / invalid id)
+    val = _dig(data, detail.get("json_path") or [])
+    return val if isinstance(val, str) and val.strip() else None
+
+
+def _extract_relay_json(text: str, url: str, detail: dict[str, Any]) -> Any:
+    """Concat named JSON keys from the inline Relay blob. ``container_key`` anchors extraction to a
+    single object (Meta's ``xcp_requisition_job_description``) so a same-named key elsewhere on the
+    page can't win; otherwise each key is scanned for in the blob."""
+    dec = json.JSONDecoder()
+    container: Any = None
+    ckey = detail.get("container_key")
+    if ckey:
+        i = text.find('"' + ckey + '":')
+        if i != -1:
+            with contextlib.suppress(ValueError):
+                container, _ = dec.raw_decode(text, i + len('"' + ckey + '":'))
+    parts: list[str] = []
+    for key in detail.get("keys") or []:
+        val: Any = None
+        if isinstance(container, dict) and key in container:
+            val = container[key]
+        else:
+            for m in re.finditer(r'"' + re.escape(key) + r'":', text):
+                with contextlib.suppress(ValueError):
+                    val, _ = dec.raw_decode(text, m.end())
+                    break
+        piece = _relay_value_text(val)
+        if piece:
+            parts.append(piece)
+    return "\n\n".join(parts).strip() or None
+
+
+def _extract_css(text: str, url: str, detail: dict[str, Any]) -> Any:
+    """Text of a CSS-selected JD container. ``select: "largest"`` picks the biggest match (Bain's
+    JD is the largest ``.article__content``); default takes the first."""
+    from selectolax.parser import HTMLParser
+
+    tree = HTMLParser(text)
+    sel = detail["selector"]
+    got: str | None
+    if detail.get("select") == "largest":
+        best: str | None = None
+        best_len = 0
+        for node in tree.css(sel):
+            body = node.text(separator=" ", strip=True)
+            if len(body) > best_len:
+                best, best_len = body, len(body)
+        got = best
+    else:
+        first = tree.css_first(sel)
+        got = first.text(separator=" ", strip=True) if first else None
+    if not got:
+        return None
+    return re.sub(r"\s+", " ", got).strip() or None
+
+
+def _extract_html_sections(text: str, url: str, detail: dict[str, Any]) -> Any:
+    """Concat named visible sections, located by their HEADING text (robust to rotating obfuscated
+    class names). Absent sections -> ``_GONE`` when the spec marks the gone-signal soft (Google:
+    a bad id soft-200s, so gone == JD sections absent), else None (indeterminate)."""
+    from selectolax.parser import HTMLParser
+
+    wanted = {s.strip().rstrip(":").lower() for s in detail.get("sections") or []}
+    tree = HTMLParser(text)
+    parts: list[str] = []
+    seen: set[str] = set()  # body text, NOT node id -- two headings can share one parent container
+    for node in tree.css("h1,h2,h3,h4,h5,h6"):
+        label = node.text(strip=True).rstrip(":").strip().lower()
+        if label not in wanted:
+            continue
+        parent = node.parent or node
+        body = re.sub(r"\s+", " ", parent.text(separator=" ", strip=True)).strip()
+        if body and body not in seen:
+            seen.add(body)
+            parts.append(body)
+    if parts:
+        return "\n\n".join(parts).strip() or None
+    return _GONE if (detail.get("gone") or {}).get("absent") else None
+
+
+_DETAIL_EXTRACTORS = {
+    "graphql": _extract_graphql,
+    "relay_json": _extract_relay_json,
+    "css": _extract_css,
+    "html_sections": _extract_html_sections,
+}
+
+
+def _resp_of(raw: Any) -> _DetailResp:
+    """Normalize an httpx.Response (or the tests' fake) to a ``_DetailResp`` with lower-cased
+    headers so redirect-``Location`` lookups are case-insensitive across httpx/curl_cffi/fake."""
+    headers = {str(k).lower(): v for k, v in dict(getattr(raw, "headers", {}) or {}).items()}
+    return _DetailResp(
+        status_code=raw.status_code,
+        text=getattr(raw, "text", "") or "",
+        url=str(getattr(raw, "url", "") or ""),
+        headers=headers,
+    )
+
+
+_TLS_SESSION: Any = None
+
+
+def _tls_session() -> Any:
+    """Lazily-created, PROCESS-REUSED curl_cffi Chrome-TLS session (never per-call: creating one is
+    expensive). Constructor is sync with no await before assignment, so the single-threaded event
+    loop can't hand out two. Same impersonation the list path (``_CurlCaller``) uses; never closed
+    (process-lifetime singleton, like ``_TOKEN_STORE``). Never reached in tests (canned 200s never
+    escalate), so curl_cffi stays off the hermetic path."""
+    global _TLS_SESSION
+    if _TLS_SESSION is None:
+        from curl_cffi.requests import AsyncSession
+
+        _TLS_SESSION = AsyncSession(impersonate="chrome124", verify=False, timeout=30)
+    return _TLS_SESSION
+
+
+async def _tls_request(req: _DetailReq) -> _DetailResp:
+    """Send ``req`` through the reused curl_cffi session (tls-impersonate escalation for a bot-wall
+    block). Awaits curl_cffi's async API -- no blocking I/O."""
+    session = _tls_session()
+    if req.method == "POST":
+        r = await session.post(
+            req.url, json=req.json_body, headers=req.headers, allow_redirects=req.follow_redirects
+        )
+    else:
+        r = await session.get(
+            req.url, headers=req.headers, allow_redirects=req.follow_redirects
+        )
+    return _resp_of(r)
+
+
 @register("apicapture")
 class ApiCaptureProvider(BaseProvider):
     name = "apicapture"
@@ -346,6 +636,74 @@ class ApiCaptureProvider(BaseProvider):
             return None
         tok = url_or_host.strip()[m.end() :].strip()
         return tok or None
+
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+        """DRAIN-ONLY Tier-3 JD recovery: the captured LIST API omits the JD, but the spec's
+        ``detail`` block names one plain HTTP hop that carries it. Dispatch on ``detail["kind"]``,
+        send via the shared ``fetcher`` (per-host rate-limit + retries + reused client apply), and
+        classify per the base contract (``None`` == GONE, raise == indeterminate/transient).
+
+        ``ref.token`` is the spec key (e.g. ``"goldmansachs"``); a token whose spec has no ``detail``
+        block, or an unbuildable request, RAISES (indeterminate -- never a false gone). Since
+        apicapture is barred from every freshness/liveness confirm path, a ``None`` here can only
+        mean "JD not recovered" in the drain, never a liveness expiry."""
+        spec = _load_specs().get(ref.token or "") or {}
+        detail = spec.get("detail")
+        if not detail or detail.get("kind") not in _DETAIL_EXTRACTORS:
+            raise RuntimeError(f"apicapture detail: no usable detail block for token {ref.token!r}")
+        req = _build_detail_request(detail, ref)
+        if req is None:
+            raise RuntimeError(f"apicapture detail: unbuildable request for {ref.id}")
+        resp = await self._detail_send(fetcher, req)
+        return self._classify(resp, detail, ref)
+
+    @staticmethod
+    async def _detail_send(fetcher: AsyncFetcher, req: _DetailReq) -> _DetailResp:
+        """Send via the shared fetcher (NOT bypassed: keeps rate-limiting + retries + the reused
+        HTTP/2 client). A ``tls`` spec escalates ONCE to the reused curl_cffi session on a bot-wall
+        block (or a transport error) -- schemaorg's escalate-on-block lever; a canned 200 in tests
+        never escalates, so the hermetic suite never touches curl_cffi."""
+        kwargs: dict[str, Any] = {"follow_redirects": req.follow_redirects}
+        if req.headers:
+            kwargs["headers"] = req.headers
+        if req.json_body is not None:
+            kwargs["json"] = req.json_body
+        try:
+            raw = await fetcher.request(req.method, req.url, **kwargs)
+        except Exception:
+            if req.tier == "tls":
+                return await _tls_request(req)
+            raise
+        resp = _resp_of(raw)
+        if req.tier == "tls" and resp.status_code in _JD_BLOCK_STATUS:
+            return await _tls_request(req)
+        return resp
+
+    @staticmethod
+    def _classify(resp: _DetailResp, detail: dict[str, Any], ref: DetailRef) -> str | None:
+        """The load-bearing alive/gone/raise decision, in ONE place. Transport-level gone
+        (redirect-marker / final-url-marker / explicit gone status) is spec-declared here; body-level
+        gone (graphql null role, absent sections) comes back as ``_GONE`` from the kind extractor."""
+        gone = detail.get("gone") or {}
+        status = resp.status_code
+        if status in _JD_REDIRECT_STATUS:
+            location = resp.headers.get("location", "")
+            marker = gone.get("redirect_marker")
+            if marker and marker in location:
+                return None  # e.g. lululemon/bain 302 -> /Error
+            raise RuntimeError(f"apicapture detail: unclassifiable redirect {status} for {ref.id}")
+        if gone.get("final_url_marker") and gone["final_url_marker"] in resp.url:
+            return None  # e.g. meta followed 301 -> /jobs/position-not-available/
+        if status in set(gone.get("status") or ()):
+            return None
+        if status != 200:
+            raise RuntimeError(f"apicapture detail: status {status} for {ref.id}")
+        result = _DETAIL_EXTRACTORS[detail["kind"]](resp.text, resp.url, detail)
+        if result is _GONE:
+            return None
+        if isinstance(result, str) and result.strip():
+            return result
+        raise RuntimeError(f"apicapture detail: no JD extracted ({detail['kind']}) for {ref.id}")
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         token = _SCHEME_RE.sub("", token.strip()).strip()

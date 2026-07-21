@@ -271,7 +271,24 @@
   "records_path": [],
   "tls_impersonate": true,
   "total_path": [],
-  "url": "https://careers.bain.com/jobs/SearchJobs/"
+  "url": "https://careers.bain.com/jobs/SearchJobs/",
+  "detail": {
+   "kind": "css",
+   "client": "plain",
+   "method": "GET",
+   "url_from": "apply_url",
+   "url_from_fallback": "listing_url",
+   "follow_redirects": false,
+   "selector": ".article__content",
+   "select": "largest",
+   "gone": {
+    "redirect_marker": "/Error",
+    "status": [
+     404,
+     410
+    ]
+   }
+  }
  },
  "balyasny": {
   "aura_refresh": "https://bambusdev.my.site.com/s/",
@@ -797,7 +814,32 @@
    "roleSearch",
    "totalCount"
   ],
-  "url": "https://api-higher.gs.com/gateway/api/v1/graphql"
+  "url": "https://api-higher.gs.com/gateway/api/v1/graphql",
+  "detail": {
+   "kind": "graphql",
+   "client": "plain",
+   "method": "POST",
+   "url": "https://api-higher.gs.com/gateway/api/v1/graphql",
+   "body_template": {
+    "operationName": "GetRoleById",
+    "query": "query GetRoleById($externalSourceId: String!, $externalSourceFetch: Boolean) {\n  role(externalSourceId: $externalSourceId, externalSourceFetch: $externalSourceFetch) {\n    descriptionHtml\n    compensation { minSalary maxSalary currency }\n    status\n    externalSource { externalApplicationUrl }\n  }\n}",
+    "variables": {
+     "externalSourceId": "{num_id}",
+     "externalSourceFetch": true
+    }
+   },
+   "json_path": [
+    "data",
+    "role",
+    "descriptionHtml"
+   ],
+   "gone": {
+    "json_null_path": [
+     "data",
+     "role"
+    ]
+   }
+  }
  },
  "google": {
   "columns": {
@@ -833,7 +875,25 @@
   "page_start": 1,
   "page_step": 1,
   "tls_impersonate": true,
-  "url": "https://www.google.com/about/careers/applications/jobs/results/?page=1"
+  "url": "https://www.google.com/about/careers/applications/jobs/results/?page=1",
+  "detail": {
+   "kind": "html_sections",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://www.google.com/about/careers/applications/jobs/results/{id}",
+   "headers": {
+    "Accept-Language": "en-US,en;q=0.9"
+   },
+   "sections": [
+    "Minimum qualifications",
+    "Preferred qualifications",
+    "About the job",
+    "Responsibilities"
+   ],
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "gspanntechnologies": {
   "company": "GSPANN Technologies",
@@ -1006,7 +1066,24 @@
   "records_path": [],
   "tls_impersonate": true,
   "total_path": [],
-  "url": "https://careers.lululemon.com/careers/SearchJobs/"
+  "url": "https://careers.lululemon.com/careers/SearchJobs/",
+  "detail": {
+   "kind": "css",
+   "client": "tls",
+   "method": "GET",
+   "url_from": "apply_url",
+   "url_from_fallback": "listing_url",
+   "follow_redirects": false,
+   "selector": ".article__content--rich-text",
+   "select": "first",
+   "gone": {
+    "redirect_marker": "/careers/Error",
+    "status": [
+     404,
+     410
+    ]
+   }
+  }
  },
  "mckinsey": {
   "company": "McKinsey & Company",
@@ -1093,7 +1170,28 @@
   ],
   "tls_impersonate": true,
   "url": "https://www.metacareers.com/graphql",
-  "url_template": "https://www.metacareers.com/jobs/{id}/"
+  "url_template": "https://www.metacareers.com/jobs/{id}/",
+  "detail": {
+   "kind": "relay_json",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://www.metacareers.com/jobs/{id}/",
+   "follow_redirects": true,
+   "container_key": "xcp_requisition_job_description",
+   "keys": [
+    "description",
+    "responsibilities",
+    "minimum_qualifications",
+    "preferred_qualifications"
+   ],
+   "gone": {
+    "status": [
+     404,
+     410
+    ],
+    "final_url_marker": "/jobs/position-not-available/"
+   }
+  }
  },
  "microsoft": {
   "company": "Microsoft",

@@ -397,6 +397,12 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     # bulk id-set relist (freshness.DETERMINISTIC_SOURCES). Here a None only fails to recover a JD
     # (retried up to RETRY_CAP); in the liveness confirm path it would wrongly expire a live row.
     "breezy",
+    # DRAIN-ONLY: the captured LIST APIs omit the JD, but 5 giants each expose it one plain HTTP hop
+    # away (goldmansachs graphql, meta relay-json, google html-sections, lululemon/baincompany css --
+    # see providers/apicapture.py fetch_detail). apicapture is already barred from every
+    # freshness/liveness confirm path (freshness.py's DETERMINISTIC_SOURCES excludes it, and it's
+    # absent from CONFIRM_VIA_DETAIL_SOURCES), so a None here is inherently drain-only.
+    "apicapture",
 ]
 
 
