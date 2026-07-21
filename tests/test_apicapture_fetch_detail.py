@@ -440,6 +440,278 @@ def test_token_without_detail_block_raises() -> None:
     assert fetcher.calls == []
 
 
+# ==============================================================================================
+# Tail-source detail blocks (14 specs recovered via plain HTTP): json / json_ld / css kinds.
+# Same offline contract: (a) alive -> JD str; (b) gone-signal -> None; (c) transient -> raise.
+# ==============================================================================================
+
+# --- json kind: Microsoft apply-v2 (url_template, hard-404 gone) ------------------------------
+
+_MS_REF = _ref(token="microsoft", id="1970393556866423")
+_MS_ALIVE = '{"id":"1970393556866423","job_description":"<b>Overview</b><p>Build ISD.</p>"}'
+
+
+def test_microsoft_request_built_from_template() -> None:
+    detail = _load_specs()["microsoft"]["detail"]
+    req = _build_detail_request(detail, _MS_REF)
+    assert req is not None
+    assert req.method == "GET"
+    assert req.tier == "tls"
+    assert req.url == (
+        "https://apply.careers.microsoft.com/api/apply/v2/jobs/1970393556866423"
+        "?domain=microsoft.com&job_index=0"
+    )
+
+
+def test_microsoft_alive_extracts_job_description() -> None:
+    desc = _run(_MS_REF, _FakeFetcher(_FakeResponse(200, text=_MS_ALIVE)))
+    assert isinstance(desc, str) and "Overview" in desc and "Build ISD" in desc
+
+
+def test_microsoft_404_is_gone() -> None:
+    assert _run(_MS_REF, _FakeFetcher(_FakeResponse(404, text="not found"))) is None
+
+
+def test_microsoft_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_MS_REF, _FakeFetcher(_FakeResponse(503, text="")))
+
+
+def test_microsoft_200_without_field_raises() -> None:
+    # No gone.absent on Microsoft (its dead ids hard-404): a 200 missing the field is indeterminate.
+    with pytest.raises(RuntimeError):
+        _run(_MS_REF, _FakeFetcher(_FakeResponse(200, text='{"id":"x"}')))
+
+
+# --- json kind: TriNet (internal id regexed out of the apply-URL) -----------------------------
+
+# The list stores displayJobId as the posting id, but apply-v2 needs the INTERNAL id, which only
+# appears inside positionUrl (`/careers/job/{internal}`) -> threaded into apply_url, regexed here.
+_TRINET_REF = _ref(token="trinetusa", id="3003661", apply_url="/careers/job/42077819")
+
+
+def test_trinet_resolves_internal_id_from_apply_url() -> None:
+    detail = _load_specs()["trinetusa"]["detail"]
+    req = _build_detail_request(detail, _TRINET_REF)
+    assert req is not None
+    assert req.url == (
+        "https://jobs.trinet.com/api/apply/v2/jobs/42077819?domain=trinet.com&job_index=0"
+    )
+    assert req.tier == "plain"
+
+
+def test_trinet_alive_extracts_jd() -> None:
+    fetcher = _FakeFetcher(_FakeResponse(200, text='{"job_description":"<p>TriNet role.</p>"}'))
+    desc = _run(_TRINET_REF, fetcher)
+    assert isinstance(desc, str) and "TriNet role" in desc
+
+
+def test_trinet_no_apply_url_raises_and_fetches_nothing() -> None:
+    # An older row indexed before the positionUrl remap has no apply_url -> unbuildable -> RAISE
+    # (indeterminate, never a false gone), and no request is issued.
+    fetcher = _FakeFetcher(_FakeResponse(200, text="{}"))
+    ref = _ref(token="trinetusa", id="3003661", apply_url=None, listing_url=None)
+    with pytest.raises(RuntimeError):
+        _run(ref, fetcher)
+    assert fetcher.calls == []
+
+
+# --- json kind: ADP (Fuyao) — soft-404 gone via gone.absent -----------------------------------
+
+_ADP_REF = _ref(token="fuyaoglassamerica", id="9201259006853_1")
+
+
+def test_adp_alive_extracts_requisition_description() -> None:
+    fetcher = _FakeFetcher(_FakeResponse(200, text='{"requisitionDescription":"<p>Fuyao JD.</p>"}'))
+    desc = _run(_ADP_REF, fetcher)
+    assert isinstance(desc, str) and "Fuyao JD" in desc
+
+
+def test_adp_soft404_absent_field_is_gone() -> None:
+    # A dead itemID soft-200s with the field simply absent -> gone.absent -> None (not a raise).
+    fetcher = _FakeFetcher(_FakeResponse(200, text='{"itemID":"x","postingInstructions":[]}'))
+    assert _run(_ADP_REF, fetcher) is None
+
+
+def test_adp_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_ADP_REF, _FakeFetcher(_FakeResponse(500, text="")))
+
+
+# --- json kind: Upstart (Greenhouse) — double-escaped content unescaped -----------------------
+
+_UPSTART_REF = _ref(token="upstartnetwork", id="8056112")
+
+
+def test_upstart_unescapes_double_escaped_content() -> None:
+    # Greenhouse serves ``content`` as double-escaped HTML: &lt;p&gt;... -> one unescape -> <p>...
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text='{"content":"&lt;p&gt;About &amp; Upstart&lt;/p&gt;"}')
+    )
+    desc = _run(_UPSTART_REF, fetcher)
+    assert desc == "<p>About & Upstart</p>"
+
+
+def test_upstart_404_is_gone() -> None:
+    assert _run(_UPSTART_REF, _FakeFetcher(_FakeResponse(404, text=""))) is None
+
+
+# --- json kind: UVA (Workday cxs URL derived from applyUrl) -----------------------------------
+
+_UVA_APPLY = (
+    "https://uva.wd1.myworkdayjobs.com/UVAJobs/job/Charlottesville-VA/Assistant_R0083231/apply"
+)
+_UVA_REF = _ref(token="universityofvirginia", id="R0083231", apply_url=_UVA_APPLY)
+
+
+def test_uva_derives_cxs_url_stripping_apply_suffix() -> None:
+    detail = _load_specs()["universityofvirginia"]["detail"]
+    req = _build_detail_request(detail, _UVA_REF)
+    assert req is not None
+    # /wday/cxs/{tenant}/{site}/job/... with the widgets feed's trailing /apply dropped.
+    assert req.url == (
+        "https://uva.wd1.myworkdayjobs.com/wday/cxs/uva/UVAJobs/job/Charlottesville-VA/Assistant_R0083231"
+    )
+
+
+def test_uva_alive_extracts_job_description() -> None:
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text='{"jobPostingInfo":{"jobDescription":"<p>Greenhouse Asst.</p>"}}')
+    )
+    desc = _run(_UVA_REF, fetcher)
+    assert isinstance(desc, str) and "Greenhouse Asst" in desc
+
+
+def test_uva_404_is_gone() -> None:
+    assert _run(_UVA_REF, _FakeFetcher(_FakeResponse(404, text=""))) is None
+
+
+# --- json_ld kind: Talemetry/TTC (Parker) — tolerant description decode, redirect gone ---------
+
+_PARKER_REF = _ref(token="parkerhannifin", id="18015548")
+# The ld+json JobPosting.description carries INVALID JSON escapes (\$) and would break json.loads;
+# the tolerant decoder recovers it anyway (the HTML is then stripped to text).
+_PARKER_ALIVE = (
+    '<html><head><script type="application/ld+json">'
+    '{"@type":"JobPosting","title":"Buyer II",'
+    '"description":"<p>Position Summary<\\/p> <ul><li>Pay: \\$84915 to \\$141320<\\/li><\\/ul>"}'
+    "</script></head><body>...</body></html>"
+)
+
+
+def test_parker_request_built_and_no_follow() -> None:
+    detail = _load_specs()["parkerhannifin"]["detail"]
+    req = _build_detail_request(detail, _PARKER_REF)
+    assert req is not None
+    assert req.url == "https://parkercareers.ttcportals.com/jobs/18015548"
+    assert req.tier == "tls"
+    assert req.follow_redirects is False  # so the 301 -> job_not_found gone-signal is observable
+
+
+def test_parker_alive_extracts_jsonld_description() -> None:
+    desc = _run(_PARKER_REF, _FakeFetcher(_FakeResponse(200, text=_PARKER_ALIVE)))
+    assert isinstance(desc, str)
+    assert "Position Summary" in desc
+    assert "$84915 to $141320" in desc  # invalid \$ escapes recovered, HTML stripped
+    assert "<li>" not in desc
+
+
+def test_parker_redirect_to_job_not_found_is_gone() -> None:
+    fetcher = _FakeFetcher(
+        _FakeResponse(
+            301, headers={"location": "https://parkercareers.ttcportals.com/jobs?job_not_found=true"}
+        )
+    )
+    assert _run(_PARKER_REF, fetcher) is None
+
+
+def test_parker_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_PARKER_REF, _FakeFetcher(_FakeResponse(502, text="")))
+
+
+def test_parker_200_without_jobposting_raises() -> None:
+    # A 200 that is not the gone redirect and carries no JobPosting ld+json is indeterminate.
+    with pytest.raises(RuntimeError):
+        _run(_PARKER_REF, _FakeFetcher(_FakeResponse(200, text="<html><body>nope</body></html>")))
+
+
+# --- css kind: EOG (select=all concat) + soft-404 gone.absent ---------------------------------
+
+_EOG_REF = _ref(token="eogresources", id="11228")
+_EOG_ALIVE = (
+    "<html><body>"
+    '<section id="dvJobDescription">Record oil and gas revenue.</section>'
+    '<section id="dvJobRequirements">Bachelor degree in Accounting.</section>'
+    "</body></html>"
+)
+
+
+def test_eog_concatenates_all_sections() -> None:
+    desc = _run(_EOG_REF, _FakeFetcher(_FakeResponse(200, text=_EOG_ALIVE)))
+    assert isinstance(desc, str)
+    assert "Record oil and gas revenue" in desc  # #dvJobDescription
+    assert "Bachelor degree in Accounting" in desc  # #dvJobRequirements concatenated
+
+
+def test_eog_absent_sections_soft_gone() -> None:
+    fetcher = _FakeFetcher(_FakeResponse(200, text="<html><body><p>dead</p></body></html>"))
+    assert _run(_EOG_REF, fetcher) is None
+
+
+# --- css kind: Boston University — text_marker gone -------------------------------------------
+
+_BU_REF = _ref(token="bostonuniversity", id="316939")
+
+
+def test_boston_alive_extracts_description() -> None:
+    html = '<html><body><section class="sr-job-detail__description">Manage BU athletics ops.</section></body></html>'
+    desc = _run(_BU_REF, _FakeFetcher(_FakeResponse(200, text=html)))
+    assert isinstance(desc, str) and "Manage BU athletics ops" in desc
+
+
+def test_boston_placeholder_text_marker_is_gone() -> None:
+    # A removed posting soft-200s with the SAME container holding a "cannot find this position"
+    # placeholder -> text_marker gone-signal -> None.
+    html = (
+        '<html><body><section class="sr-job-detail__description">'
+        "We apologize, but we cannot find this position. Please view our current openings."
+        "</section></body></html>"
+    )
+    assert _run(_BU_REF, _FakeFetcher(_FakeResponse(200, text=html))) is None
+
+
+# --- css kind: Artifint — soft-404 gone.absent + Kirkland redirect gone ------------------------
+
+
+def test_artifint_absent_container_soft_gone() -> None:
+    ref = _ref(token="artifinttechnologies", id="36827")
+    fetcher = _FakeFetcher(_FakeResponse(200, text="<html><body><p>no job</p></body></html>"))
+    assert _run(ref, fetcher) is None
+
+
+def test_kirkland_alive_and_redirect_gone() -> None:
+    ref = _ref(token="kirklandandellis", id="18013281")
+    html = '<html><body><div class="job-description-text">About Kirkland role.</div></body></html>'
+    assert "About Kirkland role" in (_run(ref, _FakeFetcher(_FakeResponse(200, text=html))) or "")
+    gone = _FakeFetcher(
+        _FakeResponse(
+            301, headers={"location": "https://staffjobsus.kirkland.com/jobs?job_not_found=true"}
+        )
+    )
+    assert _run(ref, gone) is None
+
+
+# --- all new kinds are registered -------------------------------------------------------------
+
+
+def test_new_detail_kinds_registered() -> None:
+    from ergon_tracker.providers.apicapture import _DETAIL_EXTRACTORS
+
+    for kind in ("json", "json_ld", "css", "html_sections", "graphql", "relay_json"):
+        assert kind in _DETAIL_EXTRACTORS
+
+
 # --- drain-only wiring ------------------------------------------------------------------------
 
 

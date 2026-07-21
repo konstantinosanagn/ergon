@@ -26,12 +26,14 @@ NEWLY_MAPPED: dict[str, str] = {
     "sdhsystems": "content.rendered",
     "vertonsolutions": "content.rendered",
     "deshaw": "data.jobDescription.websiteDescription",
+    # Federal Soft Systems carries the whole JD in-list as a LIST of {joblist_title,
+    # joblist_description} HTML sections; the ``prefix[].subkey`` projection concatenates them
+    # (its old ``""`` mapping wrongly assumed the list held only company boilerplate).
+    "federalsoftsystems": "job_list[].joblist_description",
 }
 
 # The description mappings that existed BEFORE this harvest (captured from git HEAD). The harvest is
-# strictly add-only: every one of these must still resolve to the same dot-path. ``federalsoftsystems``
-# is intentionally an empty string (its captured list carries only a 33-char company boilerplate, no
-# real JD) and must be left untouched.
+# strictly add-only: every one of these must still resolve to the same dot-path.
 PREEXISTING: dict[str, str] = {
     "amazon": "description_short",
     "ancile": "content.rendered",
@@ -46,7 +48,6 @@ PREEXISTING: dict[str, str] = {
     "dvgtechsolutions": "content.rendered",
     "epamsystems": "description",
     "experisus": "jobAdvertisementTeaser",
-    "federalsoftsystems": "",
     "floridainternationaluniversity": "DESCRIPTION",
     "gandaramentalhealthcenter": "BriefDescription",
     "kastechsolutions": "content.rendered",
@@ -66,7 +67,12 @@ PREEXISTING: dict[str, str] = {
 
 
 def _nest(path: str, value: Any) -> dict[str, Any]:
-    """Build a record dict placing ``value`` at a dot-path (``a.b.c`` -> {a:{b:{c:value}}})."""
+    """Build a record dict placing ``value`` at a dot-path (``a.b.c`` -> {a:{b:{c:value}}}). A
+    ``prefix[].subkey`` projection builds a single-element list (``{prefix: [{subkey: value}]}``) so
+    the list-concat description mapping (Federal Soft Systems) round-trips through normalize."""
+    if "[]." in path:
+        prefix, sub = path.split("[].", 1)
+        return _nest(prefix, [_nest(sub, value)])
     keys = path.split(".")
     out: dict[str, Any] = {}
     cur = out
@@ -124,8 +130,6 @@ def test_preexisting_description_mappings_unchanged() -> None:
         spec = specs.get(token)
         assert spec is not None, f"{token} vanished from apicapture.json"
         assert spec["fields"].get("description") == path, f"{token}: pre-existing mapping changed"
-    # federalsoftsystems stays intentionally empty (no real JD in its captured list).
-    assert specs["federalsoftsystems"]["fields"]["description"] == ""
 
     have_desc = {t for t, s in specs.items() if "description" in s.get("fields", {})}
     assert have_desc == set(PREEXISTING) | set(NEWLY_MAPPED)

@@ -179,7 +179,17 @@
   "method": "GET",
   "records_path": [],
   "total_path": [],
-  "url": "https://artifint.com/w2-jobs"
+  "url": "https://artifint.com/w2-jobs",
+  "detail": {
+   "kind": "css",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://artifint.com/view_job?mode=apply&id={id}",
+   "selector": ".descriptionpp",
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "aruplaboratories": {
   "body": {
@@ -360,7 +370,17 @@
   "page_param": "page",
   "page_start": 1,
   "page_step": 1,
-  "url": "https://jobs.silkroad.com/BU/External"
+  "url": "https://jobs.silkroad.com/BU/External",
+  "detail": {
+   "kind": "css",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://jobs.silkroad.com/BU/External/jobs/{id}",
+   "selector": ".sr-job-detail__description",
+   "gone": {
+    "text_marker": "cannot find this position"
+   }
+  }
  },
  "camelotintegratedsolutions": {
   "company": "Camelot Integrated Solutions",
@@ -581,7 +601,18 @@
   },
   "method": "GET",
   "tls_impersonate": true,
-  "url": "https://careers.eogresources.com/"
+  "url": "https://careers.eogresources.com/",
+  "detail": {
+   "kind": "css",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://careers.eogresources.com/jobdetails.asp?jo_num={id}",
+   "selector": "#dvJobDescription, #dvJobRequirements",
+   "select": "all",
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "epamsystems": {
   "company": "EPAM Systems",
@@ -649,7 +680,7 @@
   "company": "Federal Soft Systems",
   "fields": {
    "department": "",
-   "description": "",
+   "description": "job_list[].joblist_description",
    "employment_type": "job_mode",
    "id": "_id",
    "location": "job_location",
@@ -699,7 +730,19 @@
    "meta",
    "totalNumber"
   ],
-  "url": "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions?cid=25319558-d6a9-48ab-93d2-99e4878a8ffc&timeZoneId=America/New_York"
+  "url": "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions?cid=25319558-d6a9-48ab-93d2-99e4878a8ffc&timeZoneId=America/New_York",
+  "detail": {
+   "kind": "json",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions/{id}?cid=25319558-d6a9-48ab-93d2-99e4878a8ffc&timeZoneId=America/New_York",
+   "json_path": [
+    "requisitionDescription"
+   ],
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "gandaramentalhealthcenter": {
   "body": {
@@ -953,7 +996,19 @@
    "meta",
    "totalNumber"
   ],
-  "url": "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions?cid=3a3b6287-34e0-4496-a0d1-5645f474744b&timeZoneId=America/New_York"
+  "url": "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions?cid=3a3b6287-34e0-4496-a0d1-5645f474744b&timeZoneId=America/New_York",
+  "detail": {
+   "kind": "json",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions/{id}?cid=3a3b6287-34e0-4496-a0d1-5645f474744b&timeZoneId=America/New_York",
+   "json_path": [
+    "requisitionDescription"
+   ],
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "infocons": {
   "company": "Infocons",
@@ -1018,7 +1073,18 @@
   "total_path": [
    "total_entries"
   ],
-  "url": "https://staffjobsus.kirkland.com/search/jobs.json"
+  "url": "https://staffjobsus.kirkland.com/search/jobs.json",
+  "detail": {
+   "kind": "css",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://staffjobsus.kirkland.com/jobs/{id}",
+   "follow_redirects": false,
+   "selector": ".job-description-text",
+   "gone": {
+    "redirect_marker": "job_not_found"
+   }
+  }
  },
  "kpit": {
   "company": "KPIT Technologies",
@@ -1250,7 +1316,22 @@
    "data",
    "count"
   ],
-  "url": "https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&location=&start=0&"
+  "url": "https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&location=&start=0&",
+  "detail": {
+   "kind": "json",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://apply.careers.microsoft.com/api/apply/v2/jobs/{id}?domain=microsoft.com&job_index=0",
+   "json_path": [
+    "job_description"
+   ],
+   "gone": {
+    "status": [
+     404,
+     410
+    ]
+   }
+  }
  },
  "mountsinaihospital": {
   "company": "Mount Sinai",
@@ -1331,7 +1412,17 @@
   "total_path": [
    "total_entries"
   ],
-  "url": "https://parkercareers.ttcportals.com/jobs/search.json"
+  "url": "https://parkercareers.ttcportals.com/jobs/search.json",
+  "detail": {
+   "kind": "json_ld",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://parkercareers.ttcportals.com/jobs/{id}",
+   "follow_redirects": false,
+   "gone": {
+    "redirect_marker": "job_not_found"
+   }
+  }
  },
  "progressive": {
   "company": "Progressive",
@@ -1357,7 +1448,17 @@
   "total_path": [
    "total_entries"
   ],
-  "url": "https://careers.progressive.com/search/jobs.json?per_page=100"
+  "url": "https://careers.progressive.com/search/jobs.json?per_page=100",
+  "detail": {
+   "kind": "json_ld",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://careers.progressive.com/jobs/{id}",
+   "follow_redirects": false,
+   "gone": {
+    "redirect_marker": "job_not_found"
+   }
+  }
  },
  "quadranttechnologies": {
   "company": "Quadrant Technologies",
@@ -1412,7 +1513,17 @@
   "total_path": [
    "total_entries"
   ],
-  "url": "https://jobs.saic.com/jobs/search.json"
+  "url": "https://jobs.saic.com/jobs/search.json",
+  "detail": {
+   "kind": "json_ld",
+   "client": "tls",
+   "method": "GET",
+   "url_template": "https://jobs.saic.com/jobs/{id}",
+   "follow_redirects": false,
+   "gone": {
+    "redirect_marker": "job_not_found"
+   }
+  }
  },
  "sdhsystems": {
   "company": "SDH Systems",
@@ -1556,7 +1667,8 @@
    "department": "department",
    "id": "displayJobId",
    "location": "locations",
-   "title": "name"
+   "title": "name",
+   "url": "positionUrl"
   },
   "method": "GET",
   "page_param": "start",
@@ -1569,7 +1681,26 @@
    "data",
    "count"
   ],
-  "url": "https://jobs.trinet.com/api/pcsx/search?domain=trinet.com&query=&location=&start=0&"
+  "url": "https://jobs.trinet.com/api/pcsx/search?domain=trinet.com&query=&location=&start=0&",
+  "detail": {
+   "kind": "json",
+   "client": "plain",
+   "method": "GET",
+   "url_from_match": {
+    "source": "apply_url",
+    "re": "job/(\\d+)",
+    "template": "https://jobs.trinet.com/api/apply/v2/jobs/{m}?domain=trinet.com&job_index=0"
+   },
+   "json_path": [
+    "job_description"
+   ],
+   "gone": {
+    "status": [
+     404,
+     410
+    ]
+   }
+  }
  },
  "uber": {
   "body": {
@@ -1655,7 +1786,8 @@
    "department": "category",
    "id": "jobId",
    "location": "location",
-   "title": "title"
+   "title": "title",
+   "url": "applyUrl"
   },
   "method": "POST",
   "records_path": [
@@ -1663,7 +1795,26 @@
    "jobs"
   ],
   "total_path": [],
-  "url": "https://jobs.virginia.edu/widgets"
+  "url": "https://jobs.virginia.edu/widgets",
+  "detail": {
+   "kind": "json",
+   "client": "plain",
+   "method": "GET",
+   "url_workday_cxs": {
+    "source": "apply_url",
+    "fallback": "listing_url"
+   },
+   "json_path": [
+    "jobPostingInfo",
+    "jobDescription"
+   ],
+   "gone": {
+    "status": [
+     404,
+     410
+    ]
+   }
+  }
  },
  "upstartnetwork": {
   "body": {
@@ -1693,7 +1844,23 @@
   "total_path": [
    "total"
   ],
-  "url": "https://jobs.gaingels.com/api-boards/search-jobs"
+  "url": "https://jobs.gaingels.com/api-boards/search-jobs",
+  "detail": {
+   "kind": "json",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://boards-api.greenhouse.io/v1/boards/upstart/jobs/{id}",
+   "json_path": [
+    "content"
+   ],
+   "unescape": true,
+   "gone": {
+    "status": [
+     404,
+     410
+    ]
+   }
+  }
  },
  "valuemomentum": {
   "body": {
