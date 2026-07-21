@@ -483,6 +483,39 @@ def test_microsoft_200_without_field_raises() -> None:
         _run(_MS_REF, _FakeFetcher(_FakeResponse(200, text='{"id":"x"}')))
 
 
+# --- json kind: KPIT / Talentojo (plain client, nested job.description, hard-404 gone) ----------
+
+_KPIT_REF = _ref(token="kpit", id="82842")
+_KPIT_ALIVE = (
+    '{"job":{"id":82842,"title":"AUTOSAR BSW Engineer",'
+    '"description":"<b>Responsibilities:</b> Configure and integrate CAN NM module."},'
+    '"organization":{},"linked_recruiters":[]}'
+)
+
+
+def test_kpit_request_built_from_template() -> None:
+    detail = _load_specs()["kpit"]["detail"]
+    req = _build_detail_request(detail, _KPIT_REF)
+    assert req is not None
+    assert req.method == "GET"
+    assert req.tier == "plain"
+    assert req.url == "https://talentojo.kpit.com/service/jobs/82842"
+
+
+def test_kpit_alive_extracts_nested_description() -> None:
+    desc = _run(_KPIT_REF, _FakeFetcher(_FakeResponse(200, text=_KPIT_ALIVE)))
+    assert isinstance(desc, str) and "Responsibilities" in desc and "CAN NM module" in desc
+
+
+def test_kpit_404_is_gone() -> None:
+    assert _run(_KPIT_REF, _FakeFetcher(_FakeResponse(404, text="not found"))) is None
+
+
+def test_kpit_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_KPIT_REF, _FakeFetcher(_FakeResponse(503, text="")))
+
+
 # --- json kind: TriNet (internal id regexed out of the apply-URL) -----------------------------
 
 # The list stores displayJobId as the posting id, but apply-v2 needs the INTERNAL id, which only

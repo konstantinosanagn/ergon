@@ -1104,7 +1104,22 @@
   "total_path": [
    "total_count"
   ],
-  "url": "https://talentojo.kpit.com/service/get_career_portal_jobs?limit=24&offset=0&organization_id=133&search=%7B%7D"
+  "url": "https://talentojo.kpit.com/service/get_career_portal_jobs?limit=24&offset=0&organization_id=133&search=%7B%7D",
+  "detail": {
+   "kind": "json",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://talentojo.kpit.com/service/jobs/{id}",
+   "json_path": [
+    "job",
+    "description"
+   ],
+   "gone": {
+    "status": [
+     404
+    ]
+   }
+  }
  },
  "lertechforce": {
   "company": "LER TechForce",
