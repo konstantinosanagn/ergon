@@ -735,6 +735,107 @@ def test_kirkland_alive_and_redirect_gone() -> None:
     assert _run(ref, gone) is None
 
 
+# --- css kind: Wipro (SuccessFactors-RMK "unify") — slug/id-locale URL, absent+redirect gone ----
+#
+# The list POST omits the JD; it IS server-rendered in a plain GET at
+# ``/job/{slug}/{id}-en_US`` (slug FIRST, then ``{id}-en_US`` — the ``{id}/{slug}`` and ``{id}``
+# orders both 302 to /errorpage). ``apply_url`` carries the ``urlTitle`` slug (the LIST spec maps
+# ``url`` -> ``urlTitle``). The RMK layout renders each field as a ``.joblayouttoken`` with a
+# ``.joblayouttoken-label`` heading; the JD is the largest LABELED token. The company boilerplate
+# (``itemprop="description"``, "Wipro Limited (NYSE...") and the Mandatory-Skills token carry NO
+# label, so ``.joblayouttoken:has(.joblayouttoken-label)`` excludes both. A dead id soft-200s with
+# zero labeled tokens (``gone.absent``); a wrong-format/moved id 302s to /errorpage
+# (``gone.redirect_marker``).
+
+_WIPRO_SLUG = "Account-Payable-Executive-with-Polish"
+_WIPRO_REF = _ref(token="wipro", id="160272", apply_url=_WIPRO_SLUG)
+# Mirrors the live RMK DOM: labeled meta tokens + the labeled JD token + two UNLABELED
+# itemprop="description" tokens (company boilerplate + mandatory-skills) that must be excluded.
+_WIPRO_ALIVE = (
+    "<html><body><div class='content'><div class='jobColumnOne'>"
+    "<div class='joblayouttoken displayDTM'><div class='inner'><div class='row'><div class='col-xs-12'>"
+    "<span class='joblayouttoken-label' role='heading'>Job Title:</span>"
+    "<span>Account Payable Executive with Polish</span></div></div></div></div>"
+    "<div class='joblayouttoken displayDTM'><div class='inner'><div class='row'><div class='col-xs-12'>"
+    "<span xml:lang='en-US' itemprop='description'>Wipro Limited (NYSE: WIT, BSE: 507685) is a "
+    "leading technology services company.</span></div></div></div></div>"
+    "<div class='joblayouttoken displayDTM'><div class='inner'><div class='row'><div class='col-xs-12'>"
+    "<span class='joblayouttoken-label' role='heading'>Job Description:</span>"
+    "<span class='rtltextaligneligible'><div><h2>Job Description</h2><p>We are excited to offer you "
+    "this new opportunity.</p><p><strong>Job requirements:</strong></p><ul><li>Invoice processing "
+    "and payments</li><li>Incoming vendor queries and discrepancy resolutions</li></ul></div>"
+    "</span></div></div></div></div>"
+    "<div class='joblayouttoken displayDTM'><div class='inner'><div class='row'><div class='col-xs-12'>"
+    "<span xml:lang='en-US' itemprop='description'>Mandatory Skills: Invoice to Pay. "
+    "Experience: 3-5 Years.</span></div></div></div></div>"
+    "</div></div></body></html>"
+)
+
+
+def test_wipro_request_built_slug_then_id_locale() -> None:
+    detail = _load_specs()["wipro"]["detail"]
+    req = _build_detail_request(detail, _WIPRO_REF)
+    assert req is not None
+    assert req.method == "GET"
+    # slug FIRST, then {id}-en_US (the reverse orders 302 to /errorpage).
+    assert req.url == (
+        "https://careers.wipro.com/job/Account-Payable-Executive-with-Polish/160272-en_US"
+    )
+    # tls tier: the LIST spec already needs tls_impersonate, so detail escalates to curl_cffi on a
+    # bot-wall block; redirects unfollowed so the /errorpage gone-signal is observable.
+    assert req.tier == "tls"
+    assert req.follow_redirects is False
+
+
+def test_wipro_alive_extracts_labeled_jd_excludes_boilerplate() -> None:
+    fetcher = _FakeFetcher(_FakeResponse(200, text=_WIPRO_ALIVE, url=_WIPRO_REF.apply_url or ""))
+    desc = _run(_WIPRO_REF, fetcher)
+    assert isinstance(desc, str)  # no detail.salary block -> bare str, salary branch skipped
+    assert "We are excited to offer you this new opportunity" in desc
+    assert "Invoice processing and payments" in desc  # responsibilities list flattened
+    assert "Wipro Limited (NYSE" not in desc  # unlabeled company-boilerplate token excluded
+    assert "Mandatory Skills" not in desc  # unlabeled skills token excluded
+
+
+def test_wipro_dead_id_soft200_absent_is_gone() -> None:
+    # A dead id in the correct URL format soft-200s with NO labeled tokens -> gone.absent -> None.
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text="<html><body><script>var x=1;</script></body></html>")
+    )
+    assert _run(_WIPRO_REF, fetcher) is None
+
+
+def test_wipro_errorpage_redirect_is_gone() -> None:
+    # A wrong-format / moved id 302s to /errorpage -> gone.redirect_marker -> None.
+    fetcher = _FakeFetcher(
+        _FakeResponse(302, headers={"location": "https://careers.wipro.com/errorpage/?errortype=404"})
+    )
+    assert _run(_WIPRO_REF, fetcher) is None
+
+
+def test_wipro_unclassifiable_redirect_raises() -> None:
+    fetcher = _FakeFetcher(
+        _FakeResponse(302, headers={"location": "https://careers.wipro.com/some/other/page"})
+    )
+    with pytest.raises(RuntimeError):
+        _run(_WIPRO_REF, fetcher)
+
+
+def test_wipro_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_WIPRO_REF, _FakeFetcher(_FakeResponse(503, text="")))
+
+
+def test_wipro_no_apply_url_raises_and_fetches_nothing() -> None:
+    # An older row with no apply_url (slug) can't build the URL -> unbuildable -> RAISE
+    # (indeterminate, never a false gone); no request is issued.
+    fetcher = _FakeFetcher(_FakeResponse(200, text=_WIPRO_ALIVE))
+    ref = _ref(token="wipro", id="160272", apply_url=None, listing_url=None)
+    with pytest.raises(RuntimeError):
+        _run(ref, fetcher)
+    assert fetcher.calls == []
+
+
 # --- all new kinds are registered -------------------------------------------------------------
 
 
