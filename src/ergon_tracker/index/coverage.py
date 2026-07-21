@@ -121,6 +121,13 @@ def compute_coverage(con: sqlite3.Connection) -> dict[str, Any]:
             "SELECT COUNT(*) FROM jobs WHERE (salary_min IS NOT NULL OR salary_max IS NOT NULL) "
             "AND status='active'"
         ),
+        # JD-text capture: the #1 data lever (salary/yoe/degree extraction is near-zero without JD
+        # text). A single cheap COUNT of active rows that actually carry a non-empty snippet, so the
+        # capture % is a first-class published number instead of a one-off script measurement.
+        "with_jd": one(
+            "SELECT COUNT(*) FROM jobs WHERE snippet IS NOT NULL AND TRIM(snippet) != '' "
+            "AND status='active'"
+        ),
         "visa_sponsors": one("SELECT COUNT(*) FROM jobs WHERE visa_sponsor=1 AND status='active'"),
         "sponsorship_offered": one(
             "SELECT COUNT(*) FROM jobs WHERE sponsorship_offered=1 AND status='active'"
@@ -140,12 +147,15 @@ def _table(rows: list[tuple[str, int]], headers: tuple[str, str]) -> str:
 
 def render_status_md(cov: dict[str, Any], *, build_id: str) -> str:
     """Render a coverage dict to a human-readable INDEX_STATUS.md body."""
-    pct = (cov["with_salary"] / cov["active_jobs"] * 100) if cov["active_jobs"] else 0.0
+    active = cov["active_jobs"]
+    pct = (cov["with_salary"] / active * 100) if active else 0.0
+    jd_pct = (cov.get("with_jd", 0) / active * 100) if active else 0.0
     parts = [
         "# Index Status\n",
         f"Build `{build_id}` — **{cov['total_jobs']:,}** jobs "
         f"({cov['active_jobs']:,} active, {cov['expired_jobs']:,} expired) "
         f"across **{cov['companies']:,}** companies.\n",
+        f"- JD text captured: {cov.get('with_jd', 0):,} ({jd_pct:.0f}% of active)",
         f"- Salary disclosed: {cov['with_salary']:,} ({pct:.0f}% of active)",
         f"- Visa-sponsor history: {cov['visa_sponsors']:,}",
         f"- Sponsorship offered: {cov['sponsorship_offered']:,}\n",

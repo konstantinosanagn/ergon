@@ -862,6 +862,65 @@ def _last_published_rows(history_path: Path) -> int | None:
     return best
 
 
+def _last_published_metrics(history_path: Path) -> dict | None:
+    """Compact ``metrics`` block of the most recent SUCCESSFULLY published build, else None.
+
+    The build-to-build regression baseline for :func:`check_metrics_regression`. Same durability
+    story as ``_last_published_rows``: history.jsonl is restored from the release every CI run, and
+    only ``published`` records with a ``metrics`` block count, so a failed build never becomes the
+    baseline. Last matching row wins (append-chronological). Malformed lines are skipped, never fatal.
+    """
+    if not history_path.exists():
+        return None
+    best: dict | None = None
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        metrics = rec.get("metrics")
+        if rec.get("published") and isinstance(metrics, dict) and metrics:
+            best = metrics
+    return best
+
+
+def _compute_metrics(db_path: Path) -> dict:
+    """Reduce a built index to the compact history.jsonl ``metrics`` baseline block (read-only)."""
+    from ergon_tracker.index.coverage import compute_coverage
+    from ergon_tracker.index.db import connect
+    from ergon_tracker.index.metrics_gate import metrics_from_coverage
+
+    con = connect(db_path, read_only=True)
+    try:
+        return metrics_from_coverage(compute_coverage(con))
+    finally:
+        con.close()
+
+
+def _emit_metrics_regression(
+    cur_metrics: dict, prev_metrics: dict | None, out: Path, *, build_id: str
+) -> None:
+    """OBSERVABILITY-ONLY metrics tripwire: diff cur vs prev metrics, write the alerting signal
+    ``metrics_regression.json``, and WARN per regression. NON-FATAL BY CONSTRUCTION — every failure
+    mode is swallowed so this can never crash the build or change the (already-made) publish
+    decision. Mirrors ``freshness.check_expiry_alarms``: it only reads + logs + writes a signal file.
+    """
+    try:
+        from ergon_tracker.index.metrics_gate import check_metrics_regression, log_regressions
+
+        report = check_metrics_regression(cur_metrics, prev_metrics, build_id=build_id)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "metrics_regression.json").write_text(json.dumps(report.to_signal(), indent=2))
+        log_regressions(report)
+        if not report.ok:
+            print(f"  ! metric regression tripwire (non-fatal): {report.summary()}")
+    except Exception as exc:  # noqa: BLE001 - the tripwire must never break the build
+        print(f"  ! metrics regression tripwire skipped (non-fatal): {type(exc).__name__}: {exc}")
+
+
 def _gated_publish(
     tmp_db: Path,
     final_db: Path,
@@ -1539,6 +1598,9 @@ def main(argv: list[str]) -> None:
         # (restored from the release) still records the last published size — so a collapse can't
         # sneak past the row_floor gate as a cold start.
         last_known_rows = _last_published_rows(out / "history.jsonl")
+        # Metrics baseline for the product-metric regression tripwire (read BEFORE this build's
+        # record is appended, so it's the genuine PREVIOUS build, never this one).
+        prev_metrics = _last_published_metrics(out / "history.jsonl")
         # Streaming crawl over a rotating window: jobs stream to fresh.sqlite as boards complete.
         fresh_path = out / "fresh.sqlite"
         with _phase("crawl"):
@@ -1604,6 +1666,18 @@ def main(argv: list[str]) -> None:
         if not ok and prev_snap is not None:
             prev_snap.replace(db)  # gates failed -> restore the previous snapshot
             prev_snap = None
+        # Product-metric observability: compute this build's compact metrics block (only on a real
+        # publish — `db` is the promoted new index then; on gate-fail it's the restored prev, whose
+        # metrics we must not re-baseline), run the NON-FATAL regression tripwire, and store the
+        # block in history.jsonl as the next build's baseline. Emitted AFTER publish_coverage; never
+        # changes the publish decision (`ok` is already final above).
+        cur_metrics: dict | None = None
+        if ok:
+            try:
+                cur_metrics = _compute_metrics(db)
+                _emit_metrics_regression(cur_metrics, prev_metrics, out, build_id=build_id)
+            except Exception as exc:  # noqa: BLE001 - metrics observability must never fail a build
+                print(f"  ! metrics observability skipped (non-fatal): {type(exc).__name__}: {exc}")
         append_history(
             out / "history.jsonl",
             {
@@ -1620,6 +1694,7 @@ def main(argv: list[str]) -> None:
                 "next_cursor": next_cursor,
                 "window": limit,
                 "published": ok,
+                "metrics": cur_metrics,
             },
         )
         if ok and rich and not _sharded_embed():  # inline embed UNLESS the sharded matrix owns it
