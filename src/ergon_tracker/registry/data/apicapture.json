@@ -26,7 +26,23 @@
    "facets",
    "count"
   ],
-  "url": "https://www.akkodis.com/api/data/jobs/summarized"
+  "url": "https://www.akkodis.com/api/data/jobs/summarized",
+  "detail": {
+   "kind": "html_sections",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://www.akkodis.com/en-us/careers/job-apply?id={id}",
+   "sections": [
+    "Your Role"
+   ],
+   "gone": {
+    "status": [
+     404,
+     410
+    ],
+    "absent": true
+   }
+  }
  },
  "amazon": {
   "company": "Amazon",
@@ -561,17 +577,17 @@
  "emonics": {
   "company": "emonics",
   "fields": {
-   "department": "",
+   "description": "content.rendered",
    "id": "id",
-   "location": "",
-   "title": "name"
+   "title": "title.rendered",
+   "url": "link"
   },
   "method": "GET",
-  "records_path": [
-   "locations"
-  ],
+  "page_param": "page",
+  "page_start": 1,
+  "records_path": [],
   "total_path": [],
-  "url": "https://careers.ontologize.com/api/jobalerts-options"
+  "url": "https://emonics.com/wp-json/wp/v2/jobpost?per_page=100"
  },
  "eogresources": {
   "columns": {
@@ -1124,6 +1140,7 @@
  "lertechforce": {
   "company": "LER TechForce",
   "fields": {
+   "description": "description.#cdata-section",
    "id": "reference",
    "location": "location",
    "title": "title"
@@ -1134,7 +1151,7 @@
    "Job"
   ],
   "total_path": [],
-  "url": "https://evoportalus.tracker-rms.com/Opportunity/Publish/?db=LERTechForce&fields=reference,title,location,state,city,worktype&sorts=creationdate%20DESC&output=json"
+  "url": "https://evoportalus.tracker-rms.com/Opportunity/Publish/?db=LERTechForce&fields=reference,title,location,state,city,worktype,description&sorts=creationdate%20DESC&output=json"
  },
  "lululemon": {
   "columns": {
@@ -1596,7 +1613,23 @@
    "data",
    "totalJobs"
   ],
-  "url": "https://ibegin.tcsapps.com/candidate/api/v1/jobs/searchJ"
+  "url": "https://ibegin.tcsapps.com/candidate/api/v1/jobs/searchJ",
+  "detail": {
+   "kind": "json",
+   "client": "tls",
+   "method": "POST",
+   "url": "https://ibegin.tcsapps.com/candidate/api/v1/job/desc",
+   "body_template": {
+    "jobId": "{num_id}"
+   },
+   "json_path": [
+    "data",
+    "description"
+   ],
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "tekinvaderz": {
   "company": "tekinvaderz",
@@ -1892,7 +1925,17 @@
   "method": "POST",
   "records_path": [],
   "total_path": [],
-  "url": "https://www.valuemomentum.com/wp-json/jobs/list"
+  "url": "https://www.valuemomentum.com/wp-json/jobs/list",
+  "detail": {
+   "kind": "css",
+   "client": "plain",
+   "method": "GET",
+   "url_template": "https://www.valuemomentum.com/careers/jobdetails/?{id}",
+   "selector": ".job-desc",
+   "gone": {
+    "absent": true
+   }
+  }
  },
  "ventois": {
   "body": {

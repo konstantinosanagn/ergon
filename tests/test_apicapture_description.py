@@ -20,6 +20,12 @@ from ergon_tracker.providers.apicapture import ApiCaptureProvider, _load_specs
 NEWLY_MAPPED: dict[str, str] = {
     "annapurnalabs": "description",
     "dataquad": "content.rendered",
+    # emonics: re-captured onto its WordPress simple-job-board REST feed (was a degenerate
+    # jobalerts-options endpoint); the JD rides in-list at content.rendered like the other WP specs.
+    "emonics": "content.rendered",
+    # LER TechForce: the tracker-rms Publish endpoint returns the JD in-list once ``description`` is
+    # added to the fields param; it arrives CDATA-wrapped, so the dot-path digs the #cdata-section.
+    "lertechforce": "description.#cdata-section",
     "decisionsix": "content.rendered",
     "infocons": "content.rendered",
     "inrika": "content.rendered",
