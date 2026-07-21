@@ -405,14 +405,26 @@ def test_failed_board_fetch_leaves_its_rows_untouched(tmp_path):
 # --- source-list sync: CONFIRM_VIA_DETAIL_SOURCES == build_index._TIER3_DETAIL_SOURCES ---------
 
 
+# Sources DELIBERATELY drained (Tier-3 JD recovery) but NOT wired into the liveness confirm path:
+# their per-posting fetch_detail gone-signal is only SOFT (not a hard 404/410), so a returned None
+# must never be allowed to expire a live row -- safe in the drain (a None just fails to recover a
+# JD, retried up to RETRY_CAP) but WRONG in the confirm path. Their liveness/freshness is handled
+# elsewhere (breezy: the deterministic bulk id-set relist, freshness.DETERMINISTIC_SOURCES).
+_DRAIN_ONLY_SOURCES = {"breezy"}
+
+
 def test_confirm_and_tier3_source_lists_are_in_sync():
     # The two lists are manually kept in sync by design (see liveness.py's comment near the
     # CONFIRM_VIA_DETAIL_SOURCES definition): both enumerate "sources with a working fetch_detail",
-    # the same underlying fact from two call sites. They must stay identical as sets so a source
-    # can never be drained by one pass but not confirmed by the other.
+    # the same underlying fact from two call sites. They must stay identical as sets -- EXCEPT for
+    # the deliberately drain-only sources (soft gone-signal, confirmed via a different path) -- so a
+    # source can never be drained by one pass but silently un-covered for liveness altogether.
     from scripts.build_index import _TIER3_DETAIL_SOURCES
 
-    assert set(CONFIRM_VIA_DETAIL_SOURCES) == set(_TIER3_DETAIL_SOURCES)
+    # Everything in the confirm set must be drainable...
+    assert set(CONFIRM_VIA_DETAIL_SOURCES) <= set(_TIER3_DETAIL_SOURCES)
+    # ...and the only Tier-3 sources absent from the confirm set are the known drain-only ones.
+    assert set(_TIER3_DETAIL_SOURCES) - set(CONFIRM_VIA_DETAIL_SOURCES) == _DRAIN_ONLY_SOURCES
 
 
 def test_newly_wired_detail_providers_present_in_both_lists():
