@@ -164,3 +164,38 @@ def test_enrich_hash_falls_back_to_description_html_when_text_missing():
         update={"description_text": None, "description_html": "<p>Build payments. Rust and Go.</p>"}
     )
     assert enrich_hash(text_only) == enrich_hash(html_only)
+
+
+def test_snippet_falls_back_to_stripped_description_html_when_text_missing():
+    """html-only providers (jazzhr + ~15 others) capture the JD in description_html but leave
+    description_text None; the snippet must fall back to stripped html so they aren't miscounted
+    as no-JD (and needlessly queued for Tier-3 detail). Mirrors enrich's existing html fallback."""
+    from ergon_tracker.index.mapping import to_row
+    from ergon_tracker.models import JobPosting
+
+    job = JobPosting.create(
+        source="jazzhr", source_job_id="job_1", company="Acme", title="Engineer",
+        description_html="<p>Build <b>great</b> things.</p>\n\n<ul><li>Python</li></ul>",
+    )
+    assert job.description_text is None
+    row = to_row(job, build_id="b1")
+    assert row["snippet"] == "Build great things. Python"  # tags stripped, whitespace collapsed
+
+
+def test_snippet_prefers_description_text_over_html():
+    from ergon_tracker.index.mapping import to_row
+    from ergon_tracker.models import JobPosting
+
+    job = JobPosting.create(
+        source="greenhouse", source_job_id="1", company="Acme", title="Engineer",
+        description_text="Plain text JD.", description_html="<p>ignored html</p>",
+    )
+    assert to_row(job, build_id="b1")["snippet"] == "Plain text JD."
+
+
+def test_snippet_none_when_no_description_at_all():
+    from ergon_tracker.index.mapping import to_row
+    from ergon_tracker.models import JobPosting
+
+    job = JobPosting.create(source="greenhouse", source_job_id="1", company="Acme", title="Engineer")
+    assert to_row(job, build_id="b1")["snippet"] is None

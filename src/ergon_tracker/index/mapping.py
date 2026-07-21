@@ -74,6 +74,21 @@ def _normalize_description(job: JobPosting) -> str:
     return _WS_RE.sub(" ", (text or "")).strip().lower()
 
 
+def _snippet_source(job: JobPosting) -> str:
+    """Display text for the stored ``snippet``: prefer ``description_text``; fall back to the
+    tag-stripped, whitespace-collapsed ``description_html`` (case preserved, unlike the hash-only
+    ``_normalize_description``). Enrichment already reads the JD via this same html fallback
+    (see ``enrich.py`` / ``_normalize_description``), but the snippet historically did not -- so an
+    html-only provider (jazzhr + ~15 others: adzuna/dayforce/dejobs/themuse/ukg/workable_network/...)
+    captured the full JD yet still counted as "no JD" and got queued for a needless Tier-3 detail
+    fetch. Falling back here makes the snippet (and thus the with_jd metric + FTS text) reflect the
+    JD that was already captured, at zero network cost."""
+    text = job.description_text
+    if not text and job.description_html:
+        text = _WS_RE.sub(" ", _TAG_RE.sub(" ", job.description_html)).strip()
+    return text or ""
+
+
 def enrich_hash(job: JobPosting) -> str:
     """Body-inclusive fingerprint that makes enrich-reuse SAFE (delta-driven crawl redesign, Phase 3).
 
@@ -94,7 +109,7 @@ def to_row(job: JobPosting, *, build_id: str, now: str | None = None) -> dict[st
     now = now or datetime.now(timezone.utc).date().isoformat()
     loc = job.locations[0] if job.locations else None
     s = job.salary
-    desc = job.description_text or ""
+    desc = _snippet_source(job)
     return {
         "id": job.id,
         "content_hash": content_hash(job),
