@@ -70,6 +70,7 @@
   "company": "Annapurna Labs (Amazon)",
   "fields": {
    "department": "business_category",
+   "description": "description",
    "id": "id",
    "location": "normalized_location",
    "title": "title",
@@ -430,6 +431,7 @@
  "dataquad": {
   "company": "Dataquad",
   "fields": {
+   "description": "content.rendered",
    "id": "id",
    "title": "title.rendered",
    "url": "link"
@@ -443,6 +445,7 @@
  "decisionsix": {
   "company": "Decision Six",
   "fields": {
+   "description": "content.rendered",
    "id": "id",
    "title": "title.rendered",
    "url": "link"
@@ -458,6 +461,7 @@
   "company": "D. E. Shaw",
   "embed_script": "__NEXT_DATA__",
   "fields": {
+   "description": "data.jobDescription.websiteDescription",
    "id": "id",
    "location": "office",
    "title": "displayName"
@@ -872,6 +876,7 @@
  "infocons": {
   "company": "Infocons",
   "fields": {
+   "description": "content.rendered",
    "id": "id",
    "title": "title.rendered",
    "url": "link"
@@ -886,6 +891,7 @@
  "inrika": {
   "company": "Inrika",
   "fields": {
+   "description": "content.rendered",
    "id": "id",
    "title": "title.rendered",
    "url": "link"
@@ -1283,6 +1289,7 @@
  "sdhsystems": {
   "company": "SDH Systems",
   "fields": {
+   "description": "content.rendered",
    "id": "id",
    "title": "title.rendered",
    "url": "link"
@@ -1601,6 +1608,7 @@
  "vertonsolutions": {
   "company": "Verton Solutions",
   "fields": {
+   "description": "content.rendered",
    "id": "id",
    "title": "title.rendered",
    "url": "link"
