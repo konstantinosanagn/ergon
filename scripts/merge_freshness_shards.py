@@ -40,6 +40,7 @@ never fails the merge or the workflow.
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -298,6 +299,15 @@ def main(argv: list[str] | None = None) -> int:
     # strictly observability-only (see this module's top-of-file WHY note).
     if fired:
         print(f"  EXPIRY RATE ALARM: {len(fired)} source(s) spiked -- {', '.join(fired)}")
+    # Emit the tripwire as a small machine-readable signal alongside the sidecar so
+    # freshness-sweep.yml's notify step can alert on it (scripts/notify_ops.py --from-json). Kept
+    # strictly additive + observability-only: writing it never changes an expiry decision, and a
+    # write hiccup here must never fail the merge -- best-effort, mirroring the tripwire itself.
+    try:
+        alarm_path = args.out.parent / "expiry_alarm.json"
+        alarm_path.write_text(json.dumps({"fired": fired, "total_expired": total}, indent=1))
+    except OSError as exc:  # best-effort observability sidecar -- never fail the merge on it
+        print(f"  WARNING: could not write expiry_alarm.json: {exc}", file=sys.stderr)
     return 0
 
 

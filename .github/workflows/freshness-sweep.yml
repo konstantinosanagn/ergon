@@ -155,6 +155,19 @@ jobs:
           mkdir -p dist
           uv run python scripts/merge_freshness_shards.py --shards-dir dist/shards --out dist/index-freshness.sqlite
 
+      - name: Upload expiry-alarm signal (best-effort; consumed by the notify job)
+        # The merge writes dist/expiry_alarm.json ({"fired":[source,...],"total_expired":N}) as a
+        # machine-readable form of the WARN-only expiry-rate tripwire check_expiry_alarms already
+        # logs. Publishing it as an artifact lets the separate notify job alert on it. Best-effort:
+        # a missing file (merge crashed before writing it) is ignored, never fails the workflow.
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: freshness-expiry-alarm
+          path: dist/expiry_alarm.json
+          if-no-files-found: ignore
+
       - name: Gzip index-freshness.sqlite
         # Reuses build_index.py's own `_gzip_file` (no duplicated gzip logic) -- `scripts` is
         # importable as a namespace package when run from the repo root (same convention the test
@@ -188,4 +201,49 @@ jobs:
           else
             gh release create index-latest dist/index-freshness.sqlite.gz --title index-latest \
               --notes "Daily ergon-tracker search-index snapshot."
+          fi
+
+  # OPERATIONAL ALERTING (GitHub-native, best-effort). Separate job that observes both prior jobs'
+  # final outcomes -- runs on `if: always()`, `continue-on-error` on every step, so it can NEVER
+  # change this workflow's conclusion. Same DEDUPLICATED-issue channel as build-index.yml
+  # (scripts/notify_ops.py): comments on ONE open issue per (workflow, kind) rather than spamming.
+  # stdlib-only script -> no venv/install needed.
+  notify:
+    needs: [sweep, merge]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write   # notify_ops.py opens/comments the alert issue
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download expiry-alarm signal (best-effort; absent if the merge didn't produce one)
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: freshness-expiry-alarm
+          path: dist
+
+      - name: Alert on sweep/merge failure OR expiry-rate tripwire
+        continue-on-error: true   # alerting is best-effort and must never fail the workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "${{ needs.sweep.result }}" = "failure" ] || [ "${{ needs.merge.result }}" = "failure" ]; then
+            # A hard failure of the sweep matrix (all shards down) or the merge job (e.g. its
+            # count-and-guard tripping on zero downloaded shards) -> loud failure alert. Keyed on
+            # `failure` (not `!= success`) so a manual cancellation doesn't page.
+            python3 scripts/notify_ops.py --kind failure --workflow freshness-sweep \
+              --run-url "$RUN_URL" --title-key "freshness-sweep: failing" \
+              --detail "sweep=${{ needs.sweep.result }} merge=${{ needs.merge.result }}"
+          else
+            # Both jobs OK -> inspect the WARN-only expiry-rate tripwire (soft-404 parser drift).
+            # notify_ops suppresses the alert unless a source actually fired, so this is a no-op on
+            # a clean sweep.
+            python3 scripts/notify_ops.py --kind warning --workflow freshness-sweep \
+              --run-url "$RUN_URL" --title-key "freshness-sweep: tripwire" \
+              --from-json dist/expiry_alarm.json
           fi
