@@ -1,0 +1,26 @@
+name: alert-selftest
+
+# TEMPORARY: verifies that GITHUB_TOKEN can open an ops-alert issue despite the repo's
+# read-only default workflow permission (the job-level `permissions: issues: write` must elevate).
+# Delete this workflow once verified.
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fire a test ops-alert via GITHUB_TOKEN
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/notify_ops.py \
+            --kind failure \
+            --workflow alert-selftest \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --title-key "alert-selftest verification" \
+            --detail "End-to-end check that GITHUB_TOKEN can open an ops-alert issue. Safe to close."
