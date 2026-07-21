@@ -61,6 +61,9 @@ def reset_stuck_attempts(detail_db: str, *, dry_run: bool = False) -> int:
     On ``dry_run`` the db is only read (no UPDATE, no commit). Idempotent: a second run matches the
     same converged empty-snippet set and changes nothing (each already at ``attempts = 0``)."""
     con = open_detail(detail_db)
+    # Wait rather than fail with "database is locked" if this ever overlaps a live drain writer
+    # (the workflow runs it before the drain, but a future overlap must degrade to a retry, not abort).
+    con.execute("PRAGMA busy_timeout = 30000")
     try:
         n = count_stuck(con)
         if not dry_run and n:

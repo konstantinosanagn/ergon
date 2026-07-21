@@ -910,21 +910,19 @@ def _emit_metrics_regression(
     cur_metrics: dict, prev_metrics: dict | None, out: Path, *, build_id: str
 ) -> None:
     """OBSERVABILITY-ONLY metrics tripwire: diff cur vs prev metrics, write the alerting signal
-    ``metrics_regression.json``, and WARN per regression. NON-FATAL BY CONSTRUCTION — every failure
-    mode is swallowed so this can never crash the build or change the (already-made) publish
-    decision. Mirrors ``freshness.check_expiry_alarms``: it only reads + logs + writes a signal file.
+    ``metrics_regression.json``, and WARN per regression. Reads + logs + writes a signal file only,
+    and ``check_metrics_regression`` is itself total. The sole caller wraps this (together with
+    ``_compute_metrics``) in the single non-fatal guard, so a failure here can never crash the build
+    or change the already-made publish decision. Mirrors ``freshness.check_expiry_alarms``.
     """
-    try:
-        from ergon_tracker.index.metrics_gate import check_metrics_regression, log_regressions
+    from ergon_tracker.index.metrics_gate import check_metrics_regression, log_regressions
 
-        report = check_metrics_regression(cur_metrics, prev_metrics, build_id=build_id)
-        out.mkdir(parents=True, exist_ok=True)
-        (out / "metrics_regression.json").write_text(json.dumps(report.to_signal(), indent=2))
-        log_regressions(report)
-        if not report.ok:
-            print(f"  ! metric regression tripwire (non-fatal): {report.summary()}")
-    except Exception as exc:  # noqa: BLE001 - the tripwire must never break the build
-        print(f"  ! metrics regression tripwire skipped (non-fatal): {type(exc).__name__}: {exc}")
+    report = check_metrics_regression(cur_metrics, prev_metrics, build_id=build_id)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "metrics_regression.json").write_text(json.dumps(report.to_signal(), indent=2))
+    log_regressions(report)
+    if not report.ok:
+        print(f"  ! metric regression tripwire (non-fatal): {report.summary()}")
 
 
 def _gated_publish(

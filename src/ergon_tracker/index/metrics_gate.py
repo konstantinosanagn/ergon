@@ -171,7 +171,7 @@ def check_metrics_regression(
       * ``jd_pct`` / ``salary_pct`` / ``sector_pct`` drop > ``pct_point_drop`` percentage points.
     """
     th = thresholds or MetricsThresholds.from_env()
-    bid = build_id or str(cur.get("build_id", "") or "")
+    bid = build_id or ""
     if not isinstance(prev, dict) or not prev:
         return MetricsRegressionReport(regressions=[], build_id=bid)
 

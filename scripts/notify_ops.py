@@ -226,7 +226,7 @@ def summarize(data: Any) -> str:
             return summarize_metrics_regression(data)
         if "fired" in data:
             return summarize_expiry_alarm(data)
-    return "(unrecognized signal shape)"
+    return ""  # unrecognized shape -> nothing to say (filtered out by the caller)
 
 
 def signal_tripped(data: Any) -> bool:
@@ -331,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         print("notify_ops: no tripwire fired; nothing to alert", file=sys.stderr)
         return 0
 
-    detail_text = "\n\n".join(d for d in details if d and not d.startswith("("))
+    detail_text = "\n\n".join(d for d in details if d)
     action = notify(
         kind=args.kind,
         workflow=args.workflow,

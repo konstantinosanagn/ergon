@@ -59,6 +59,16 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
 
+def _plain_from_html(html: str) -> str:
+    """Tag-strip + whitespace-collapse ``description_html`` into plain text (case preserved).
+
+    The single shared atom behind both the hash path (``_normalize_description``) and the display
+    path (``_snippet_source``) — they differ only in whether they lower-case the result, so the
+    fallback itself lives here once.
+    """
+    return _WS_RE.sub(" ", _TAG_RE.sub(" ", html)).strip()
+
+
 def _normalize_description(job: JobPosting) -> str:
     """Normalize the JD body to the text enrichment actually reads.
 
@@ -70,23 +80,24 @@ def _normalize_description(job: JobPosting) -> str:
     """
     text = job.description_text
     if not text and job.description_html:
-        text = _TAG_RE.sub(" ", job.description_html)
+        text = _plain_from_html(job.description_html)
     return _WS_RE.sub(" ", (text or "")).strip().lower()
 
 
 def _snippet_source(job: JobPosting) -> str:
-    """Display text for the stored ``snippet``: prefer ``description_text``; fall back to the
-    tag-stripped, whitespace-collapsed ``description_html`` (case preserved, unlike the hash-only
-    ``_normalize_description``). Enrichment already reads the JD via this same html fallback
-    (see ``enrich.py`` / ``_normalize_description``), but the snippet historically did not -- so an
-    html-only provider (jazzhr + ~15 others: adzuna/dayforce/dejobs/themuse/ukg/workable_network/...)
-    captured the full JD yet still counted as "no JD" and got queued for a needless Tier-3 detail
-    fetch. Falling back here makes the snippet (and thus the with_jd metric + FTS text) reflect the
-    JD that was already captured, at zero network cost."""
-    text = job.description_text
-    if not text and job.description_html:
-        text = _WS_RE.sub(" ", _TAG_RE.sub(" ", job.description_html)).strip()
-    return text or ""
+    """Display text for the stored ``snippet``: prefer ``description_text`` (whitespace preserved);
+    fall back to the tag-stripped ``description_html`` (case preserved, unlike ``_normalize_description``).
+
+    Enrichment already reads the JD via this same html fallback, but the snippet historically did
+    not -- so an html-only provider (jazzhr + ~15 others: adzuna/dayforce/dejobs/themuse/ukg/
+    workable_network/...) captured the full JD yet still counted as "no JD" and got queued for a
+    needless Tier-3 detail fetch. Falling back makes the snippet (and thus the with_jd metric + FTS
+    text) reflect the JD that was already captured, at zero network cost."""
+    if job.description_text:
+        return job.description_text
+    if job.description_html:
+        return _plain_from_html(job.description_html)
+    return ""
 
 
 def enrich_hash(job: JobPosting) -> str:

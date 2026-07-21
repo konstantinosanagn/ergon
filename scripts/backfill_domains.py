@@ -292,26 +292,12 @@ def resolve_collisions(
         if len(keys) == 1:
             winner = keys[0]
         else:
-            winner = max(keys, key=lambda k: (open_roles.get(normalize_company(k), 0), _neg(k)))
+            # most open_roles wins; tie-break on the lexicographically smallest key (min over the
+            # negated-roles/key pair — deterministic, no custom ordering class needed).
+            winner = min(keys, key=lambda k: (-open_roles.get(normalize_company(k), 0), k))
             skipped += len(keys) - 1
         kept[winner] = picked[winner]
     return kept, skipped
-
-
-class _neg:
-    """Reverse-ordering wrapper so ``max(..., key=(roles, _neg(key)))`` breaks ties on the
-    lexicographically SMALLEST key while still maximizing ``open_roles``."""
-
-    __slots__ = ("s",)
-
-    def __init__(self, s: str) -> None:
-        self.s = s
-
-    def __lt__(self, other: _neg) -> bool:
-        return self.s > other.s
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, _neg) and self.s == other.s
 
 
 def backfill(index_path: Path, *, dry_run: bool) -> dict[str, int]:
