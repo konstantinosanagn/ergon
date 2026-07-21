@@ -836,6 +836,136 @@ def test_wipro_no_apply_url_raises_and_fetches_nothing() -> None:
     assert fetcher.calls == []
 
 
+# ==============================================================================================
+# Straggler detail blocks (apicapture drain frontier close-out): akkodis (html_sections),
+# valuemomentum (css), tatacs (json POST). Same offline contract.
+# ==============================================================================================
+
+# --- html_sections kind: akkodis (server-rendered "Your Role" section, id -> job-apply URL) -----
+
+_AKK_REF = _ref(token="akkodis", id="US_EN_6_971574_1639156")
+_AKK_ALIVE = (
+    "<html><body>"
+    "<section><h1>Platform Engineer</h1></section>"
+    "<section><h2>Your Role</h2><div class='base'><p>Akkodis is seeking a Platform Engineer "
+    "for a Contract with a client in Austin, TX.</p><p>Job Responsibilities include building "
+    "data pipelines.</p><p>Required Qualifications: 4-6 years of experience.</p></div></section>"
+    "<section><h2>Apply to this job</h2><form><input name='firstName'/></form></section>"
+    "</body></html>"
+)
+
+
+def test_akkodis_request_built_from_template() -> None:
+    detail = _load_specs()["akkodis"]["detail"]
+    req = _build_detail_request(detail, _AKK_REF)
+    assert req is not None
+    assert req.method == "GET"
+    assert req.tier == "plain"
+    assert req.url == (
+        "https://www.akkodis.com/en-us/careers/job-apply?id=US_EN_6_971574_1639156"
+    )
+
+
+def test_akkodis_alive_extracts_your_role_excludes_apply_form() -> None:
+    desc = _run(_AKK_REF, _FakeFetcher(_FakeResponse(200, text=_AKK_ALIVE)))
+    assert isinstance(desc, str)
+    assert "Akkodis is seeking a Platform Engineer" in desc
+    assert "building data pipelines" in desc  # Responsibilities within the Your Role section
+    assert "Required Qualifications" in desc
+    assert "firstName" not in desc  # the "Apply to this job" form section is excluded
+
+
+def test_akkodis_404_is_gone() -> None:
+    assert _run(_AKK_REF, _FakeFetcher(_FakeResponse(404, text="<html>shell</html>"))) is None
+
+
+def test_akkodis_absent_section_soft_gone() -> None:
+    # A soft-200 shell with no "Your Role" section -> gone.absent -> None (not a raise).
+    fetcher = _FakeFetcher(_FakeResponse(200, text="<html><body><h2>Other</h2></body></html>"))
+    assert _run(_AKK_REF, fetcher) is None
+
+
+def test_akkodis_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_AKK_REF, _FakeFetcher(_FakeResponse(503, text="")))
+
+
+# --- css kind: valuemomentum (bare-GUID query URL, .job-desc, empty-on-dead soft gone) ----------
+
+_VM_REF = _ref(token="valuemomentum", id="5498b04d-3c1d-f111-8341-00224805d21f")
+_VM_ALIVE = (
+    "<html><body><div class='job-desc'>Key skills: ETL. About the job: We are looking for a "
+    "skilled ETL Developer to design and maintain scalable ETL pipelines.</div></body></html>"
+)
+
+
+def test_valuemomentum_request_built_bare_guid_query() -> None:
+    detail = _load_specs()["valuemomentum"]["detail"]
+    req = _build_detail_request(detail, _VM_REF)
+    assert req is not None
+    assert req.method == "GET"
+    assert req.tier == "plain"
+    assert req.url == (
+        "https://www.valuemomentum.com/careers/jobdetails/?5498b04d-3c1d-f111-8341-00224805d21f"
+    )
+
+
+def test_valuemomentum_alive_extracts_job_desc() -> None:
+    desc = _run(_VM_REF, _FakeFetcher(_FakeResponse(200, text=_VM_ALIVE)))
+    assert isinstance(desc, str)
+    assert "skilled ETL Developer" in desc and "scalable ETL pipelines" in desc
+
+
+def test_valuemomentum_dead_guid_empty_container_soft_gone() -> None:
+    # A dead GUID soft-200s with the .job-desc container present but EMPTY -> gone.absent -> None.
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text="<html><body><div class='job-desc'></div></body></html>")
+    )
+    assert _run(_VM_REF, fetcher) is None
+
+
+def test_valuemomentum_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_VM_REF, _FakeFetcher(_FakeResponse(500, text="")))
+
+
+# --- json kind: tatacs (POST job/desc, jobId is the numeric prefix of the "…J" id) --------------
+
+_TCS_REF = _ref(token="tatacs", id="423434J")
+_TCS_ALIVE = (
+    '{"result":"Y","data":{"jobId":"423434","title":"Product Owner",'
+    '"description":"<div>Must Have Skills</div><div>Responsibilities: product management.</div>"}}'
+)
+
+
+def test_tatacs_request_posts_numeric_jobid() -> None:
+    detail = _load_specs()["tatacs"]["detail"]
+    req = _build_detail_request(detail, _TCS_REF)
+    assert req is not None
+    assert req.method == "POST"
+    assert req.tier == "tls"  # the LIST needs tls_impersonate; detail escalates on a bot-wall block
+    assert req.url == "https://ibegin.tcsapps.com/candidate/api/v1/job/desc"
+    # the app strips the trailing "J" flag -> jobId is the leading numeric run (num_id).
+    assert req.json_body == {"jobId": "423434"}
+
+
+def test_tatacs_alive_extracts_description() -> None:
+    desc = _run(_TCS_REF, _FakeFetcher(_FakeResponse(200, text=_TCS_ALIVE)))
+    assert isinstance(desc, str)
+    assert "Must Have Skills" in desc and "product management" in desc
+
+
+def test_tatacs_absent_description_soft_gone() -> None:
+    # A removed job returns a 200 whose data carries no description -> gone.absent -> None.
+    fetcher = _FakeFetcher(_FakeResponse(200, text='{"result":"N","data":{"jobId":"x"}}'))
+    assert _run(_TCS_REF, fetcher) is None
+
+
+def test_tatacs_transient_5xx_raises() -> None:
+    with pytest.raises(RuntimeError):
+        _run(_TCS_REF, _FakeFetcher(_FakeResponse(500, text="")))
+
+
 # --- all new kinds are registered -------------------------------------------------------------
 
 
