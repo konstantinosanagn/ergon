@@ -348,10 +348,11 @@ class _CurlCaller:
 
 # --- Tier-3 per-posting JD recovery (DRAIN-ONLY) ------------------------------------------------
 #
-# The captured LIST APIs omit the JD, but each of a handful of giants exposes the full JD via ONE
+# The captured LIST APIs omit the JD, but many sources expose the full JD via ONE
 # plain unauthenticated HTTP hop (no browser). A spec opts in with a ``detail`` block describing how
 # to fetch+extract one posting; ``fetch_detail`` dispatches on ``detail["kind"]`` (graphql /
-# relay_json / css / html_sections). Per-giant specifics (url/body/selector/json_path/gone-rule)
+# relay_json / css / html_sections / json / json_ld). Per-source specifics (url/body/selector/
+# json_path/gone-rule)
 # live as DATA in the spec, never as code branches. See ``base.py``'s fetch_detail contract:
 # ``None`` == confirmed-gone, raise == indeterminate/transient (NEVER None on a transient).
 
@@ -437,6 +438,18 @@ def _fill_body(node: Any, ctx: dict[str, str]) -> Any:
     return node
 
 
+def _workday_cxs_url(apply_url: str) -> str | None:
+    """Derive the Workday cxs detail URL from a public ``*.myworkdayjobs.com`` apply/careers URL,
+    REUSING :meth:`WorkdayProvider._cxs_detail_url` so the tenant/site/host shape is defined in ONE
+    place (UVA's widgets feed carries the apply URL; the cxs resource is one hop away). The widgets
+    feed's URL ends ``/job/{...}/apply`` and the cxs job resource rejects that trailing ``/apply``
+    (406), so we drop it first. Lazy import avoids any provider import-order coupling."""
+    from .workday import WorkdayProvider
+
+    src = apply_url[: -len("/apply")] if apply_url.endswith("/apply") else apply_url
+    return WorkdayProvider._cxs_detail_url(src)
+
+
 def _build_detail_request(detail: dict[str, Any], ref: DetailRef) -> _DetailReq | None:
     """Build the one detail request from the spec's ``detail`` block + the DetailRef, or None when
     no URL/body is derivable (an unbuildable ref -> the caller RAISES; never guessed dead)."""
@@ -447,6 +460,18 @@ def _build_detail_request(detail: dict[str, Any], ref: DetailRef) -> _DetailReq 
         url = _fill(detail["url_template"], ctx)
     elif detail.get("url_from"):
         url = ctx.get(detail["url_from"]) or ctx.get(detail.get("url_from_fallback", "")) or None
+    elif detail.get("url_from_match"):
+        # Regex a value out of a ctx field and substitute it as ``{m}`` into a template (TriNet's
+        # apply-v2 endpoint needs the INTERNAL id, which the list only exposes inside the apply URL
+        # ``/careers/job/{internal_id}``). Unmatched -> None -> caller raises (never a guessed gone).
+        cfg = detail["url_from_match"]
+        src = ctx.get(cfg.get("source", "apply_url")) or ctx.get(cfg.get("fallback", "")) or ""
+        m = re.search(cfg["re"], src) if src else None
+        url = cfg["template"].replace("{m}", m.group(1)) if m else None
+    elif detail.get("url_workday_cxs"):
+        cfg = detail["url_workday_cxs"]
+        src = ctx.get(cfg.get("source", "apply_url")) or ctx.get(cfg.get("fallback", "")) or ""
+        url = _workday_cxs_url(src) if src else None
     else:
         url = None
     if not url:
@@ -545,14 +570,23 @@ def _extract_relay_json(text: str, url: str, detail: dict[str, Any]) -> Any:
 
 
 def _extract_css(text: str, url: str, detail: dict[str, Any]) -> Any:
-    """Text of a CSS-selected JD container. ``select: "largest"`` picks the biggest match (Bain's
-    JD is the largest ``.article__content``); default takes the first."""
+    """Text of a CSS-selected JD container. ``select`` modes: ``"largest"`` picks the biggest match
+    (Bain's JD is the largest ``.article__content``); ``"all"`` concatenates every match in document
+    order (EOG's ``#dvJobDescription`` + ``#dvJobRequirements`` sections); default takes the first.
+
+    Gone-signalling (soft-404 hosts that 200 with no/placeholder JD): ``gone.absent`` -> ``_GONE``
+    when the selector matches nothing (Artifint/EOG serve a bare 200 for a dead id); ``gone.text_marker``
+    -> ``_GONE`` when the extracted text contains that phrase (SilkRoad's "we cannot find this position"
+    placeholder). Neither set -> a missing container stays ``None`` (indeterminate -> raise), so the
+    existing giants (Bain/lululemon) are byte-for-byte unchanged."""
     from selectolax.parser import HTMLParser
 
     tree = HTMLParser(text)
     sel = detail["selector"]
+    mode = detail.get("select")
+    gone = detail.get("gone") or {}
     got: str | None
-    if detail.get("select") == "largest":
+    if mode == "largest":
         best: str | None = None
         best_len = 0
         for node in tree.css(sel):
@@ -560,12 +594,86 @@ def _extract_css(text: str, url: str, detail: dict[str, Any]) -> Any:
             if len(body) > best_len:
                 best, best_len = body, len(body)
         got = best
+    elif mode == "all":
+        chunks = [n.text(separator=" ", strip=True) for n in tree.css(sel)]
+        got = "\n\n".join(c for c in chunks if c) or None
     else:
         first = tree.css_first(sel)
         got = first.text(separator=" ", strip=True) if first else None
     if not got:
-        return None
-    return re.sub(r"\s+", " ", got).strip() or None
+        return _GONE if gone.get("absent") else None
+    cleaned = re.sub(r"\s+", " ", got).strip()
+    marker = gone.get("text_marker")
+    if marker and marker.lower() in cleaned.lower():
+        return _GONE
+    return cleaned or (_GONE if gone.get("absent") else None)
+
+
+def _extract_json(text: str, url: str, detail: dict[str, Any]) -> Any:
+    """One JD string dug out of a plain JSON detail API by ``json_path`` (Microsoft/TriNet apply-v2
+    ``job_description``, ADP ``requisitionDescription``, Greenhouse ``content``, Workday cxs
+    ``jobPostingInfo.jobDescription``). ``unescape: true`` HTML-unescapes a double-escaped payload
+    (Greenhouse ``content`` arrives as ``&lt;div&gt;``). An unparseable 200 -> ``None`` (indeterminate
+    -> raise); a 200 whose ``json_path`` is absent -> ``_GONE`` when ``gone.absent`` (ADP soft-404s
+    with the field simply missing), else ``None``."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None  # unparseable 200 -> indeterminate -> raise
+    val = _dig(data, detail.get("json_path") or [])
+    if not (isinstance(val, str) and val.strip()):
+        return _GONE if (detail.get("gone") or {}).get("absent") else None
+    if detail.get("unescape"):
+        val = _htmlmod.unescape(val)
+    return val.strip() or None
+
+
+_LDJSON_RE = re.compile(
+    r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.S | re.I
+)
+# The JSON string BODY of the ``"description":"..."`` member: any run of non-quote/non-backslash
+# chars, or an escaped pair ``\<x>`` (so an escaped ``\"`` inside the HTML never ends the match).
+_LDJSON_DESC_RE = re.compile(r'"description"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_JSON_UNI_RE = re.compile(r"\\u([0-9a-fA-F]{4})")
+_JSON_STR_ESC = {'"': '"', "\\": "\\", "/": "/", "b": " ", "f": " ", "n": "\n", "r": "\n", "t": " "}
+
+
+def _decode_json_string(raw: str) -> str:
+    """Decode a JSON string body LENIENTLY. Talemetry/TTC pages embed a JobPosting ``description``
+    whose HTML carries invalid JSON escapes (``\\$84915``) and literal control chars, so ``json.loads``
+    refuses the whole blob. We resolve ``\\uXXXX``, map the standard escapes, and pass an unknown
+    ``\\<x>`` through as ``<x>`` (drop the stray backslash). The result is HTML we then strip to text,
+    so a byte-imperfect control char is immaterial."""
+    raw = _JSON_UNI_RE.sub(lambda m: chr(int(m.group(1), 16)), raw)
+    out: list[str] = []
+    i, n = 0, len(raw)
+    while i < n:
+        c = raw[i]
+        if c == "\\" and i + 1 < n:
+            out.append(_JSON_STR_ESC.get(raw[i + 1], raw[i + 1]))
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _extract_json_ld(text: str, url: str, detail: dict[str, Any]) -> Any:
+    """JD text from the server-rendered JSON-LD ``JobPosting.description`` (Talemetry/TTC:
+    Parker/SAIC/Progressive). We locate a ``JobPosting`` ld+json block, tolerant-decode its
+    ``description`` member (:func:`_decode_json_string`), and strip the HTML to text. Absent on a 200
+    -> ``_GONE`` when ``gone.absent`` else ``None`` (these hosts instead 301 a dead id to a
+    ``job_not_found`` page, caught as a transport-level gone in ``_classify``)."""
+    for block in _LDJSON_RE.findall(text):
+        if "JobPosting" not in block:
+            continue
+        m = _LDJSON_DESC_RE.search(block)
+        if not m:
+            continue
+        cleaned = re.sub(r"\s+", " ", _strip_html(_decode_json_string(m.group(1)))).strip()
+        if cleaned:
+            return cleaned
+    return _GONE if (detail.get("gone") or {}).get("absent") else None
 
 
 def _extract_html_sections(text: str, url: str, detail: dict[str, Any]) -> Any:
@@ -597,6 +705,8 @@ _DETAIL_EXTRACTORS = {
     "relay_json": _extract_relay_json,
     "css": _extract_css,
     "html_sections": _extract_html_sections,
+    "json": _extract_json,
+    "json_ld": _extract_json_ld,
 }
 
 
@@ -1026,8 +1136,25 @@ class ApiCaptureProvider(BaseProvider):
     def _fget(p: dict[str, Any], key: str) -> Any:
         # Field keys may be a dotted path into nested records ("Locations.0.Address.City");
         # numeric segments index lists. A plain key (no dot) is a direct lookup.
+        #
+        # A ``prefix[].subkey`` key PROJECTS a subkey across a list and concatenates the string
+        # values (Federal Soft Systems carries the whole JD in-list as ``job_list[].joblist_description``
+        # -- a list of {joblist_title, joblist_description} HTML sections). Zero network: the JD is
+        # already in the captured list record.
         if not key:
             return None
+        if "[]." in key:
+            prefix, sub = key.split("[].", 1)
+            lst = ApiCaptureProvider._fget(p, prefix)
+            if not isinstance(lst, list):
+                return None
+            parts: list[str] = []
+            for it in lst:
+                if isinstance(it, dict):
+                    v = ApiCaptureProvider._fget(it, sub)
+                    if isinstance(v, str) and v.strip():
+                        parts.append(v.strip())
+            return "\n\n".join(parts) or None
         if "." not in key:
             return p.get(key)
         path: list[Any] = [int(s) if s.lstrip("-").isdigit() else s for s in key.split(".")]
