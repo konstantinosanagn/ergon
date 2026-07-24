@@ -4,12 +4,20 @@ name: build-index
 # SQLite/FTS5 snapshot to the stable `index-latest` release; the SDK downloads + queries it.
 on:
   schedule:
-    - cron: "17 4 * * *"   # 04:17 UTC daily (off-peak minute, not :00)
+    # join.com is 34% of the registry (~19.9k boards) and crawls ~10x slower than everything else
+    # (~0.58 boards/s vs greenhouse ~5.9), so a mixed window is join-bound and starves the other ~66%.
+    # ISOLATE it: the 04:17 run crawls all ~38k NON-JOIN boards in FULL every day (dejobs/jazzhr etc.
+    # recover in ONE build, not 5); the 10:17 run is the join-only shard on its own rotating cadence.
+    - cron: "17 4 * * *"    # 04:17 UTC daily -- NON-JOIN full crawl (+ rich/detail/liveness)
+    - cron: "17 10 * * *"   # 10:17 UTC daily -- JOIN-only shard (rotating window, deadline-boxed)
   workflow_dispatch:
     inputs:
+      crawl_partition:
+        description: "Source partition to crawl: 'non-join' (full daily, default) | 'join' (rotating shard). Blank => non-join."
+        default: ""
       limit_companies:
-        description: "Rotating-window size: boards considered this run (cursor advances each run; full registry covered over ceil(total/window) runs). Bounds CI time."
-        default: "12000"
+        description: "Override the per-run board budget. Blank => the partition default (non-join: whole partition in one run; join: rotating 6k window)."
+        default: ""
       rich:
         description: "Build the rich tier (--rich). OFF by default: the cold-start embedding adds ~2.4h. Set 'true' once the core index is publishing cleanly."
         default: "false"
@@ -80,6 +88,7 @@ jobs:
           gh release download index-latest --dir dist --pattern 'board_state.json' || echo "no prev state"
           gh release download index-latest --dir dist --pattern 'history.jsonl' || echo "no history"
           gh release download index-latest --dir dist --pattern 'crawl_cursor.json' || echo "no cursor"
+          gh release download index-latest --dir dist --pattern 'crawl_cursor-join.json' || echo "no join cursor"
           gh release download index-latest --dir dist --pattern 'deltas.json' || echo "no deltas window"
           gh release download index-latest --dir dist --pattern 'spec_health.json' || echo "no spec health"
           gh release download index-latest --dir dist --pattern 'index-vectors.sqlite.gz' || \
@@ -139,6 +148,37 @@ jobs:
           path: ~/.cache/fastembed
           key: fastembed-BAAI-bge-small-en-v1.5
 
+      # JOIN ISOLATION -- resolve which source partition this run crawls and export its crawl budget
+      # to $GITHUB_ENV (consumed by the build step + its rich/detail/liveness gating below).
+      #   non-join (default): crawl the WHOLE non-join registry in ONE run -> ERGON_CRAWL_MAX_WINDOW=0
+      #     (no rotating cap) + a large --limit-companies + NO host budget (no pathological host left,
+      #     so boxing would only drop coverage). The non-join full crawl fits the 330-min timeout with
+      #     large headroom (slowest single-domain serial tail ~workable/bamboohr ~25-30 min under the
+      #     concurrent pool; join, the only 5.7h-class host, is no longer in this partition).
+      #   join: the isolated shard -- a rotating 6k window (fits ~172 min at ~0.58 boards/s) with a
+      #     270-min host-budget box as a hard timeout guard; full ~19.9k coverage in ~4 daily shards.
+      #     Its cursor persists separately (crawl_cursor-join.json) so it rotates independently.
+      - name: Resolve crawl partition (isolate join onto its own shard)
+        run: |
+          PART="${{ github.event.inputs.crawl_partition }}"
+          if [ -z "$PART" ]; then
+            if [ "${{ github.event.schedule }}" = "17 10 * * *" ]; then PART=join; else PART=non-join; fi
+          fi
+          LIMIT_INPUT="${{ github.event.inputs.limit_companies }}"
+          echo "resolved crawl partition: $PART (limit override: '${LIMIT_INPUT:-<partition default>}')"
+          echo "ERGON_CRAWL_PARTITION=$PART" >> "$GITHUB_ENV"
+          if [ "$PART" = "join" ]; then
+            echo "ERGON_CRAWL_ONLY_SOURCES=join" >> "$GITHUB_ENV"
+            echo "ERGON_CRAWL_MAX_WINDOW=6000" >> "$GITHUB_ENV"
+            echo "ERGON_CRAWL_HOST_BUDGET_S=16200" >> "$GITHUB_ENV"   # 270-min box: join's tail can't blow the 330-min timeout
+            echo "ERGON_CRAWL_LIMIT=${LIMIT_INPUT:-6000}" >> "$GITHUB_ENV"
+          else
+            echo "ERGON_CRAWL_EXCLUDE_SOURCES=join" >> "$GITHUB_ENV"
+            echo "ERGON_CRAWL_MAX_WINDOW=0" >> "$GITHUB_ENV"           # 0 = no rotating cap: full non-join crawl in ONE run
+            echo "ERGON_CRAWL_HOST_BUDGET_S=0" >> "$GITHUB_ENV"        # no deadline box: non-join has no pathological host
+            echo "ERGON_CRAWL_LIMIT=${LIMIT_INPUT:-60000}" >> "$GITHUB_ENV"  # >= non-join board count so the whole partition crawls
+          fi
+
       - name: Build incremental index (exits non-zero if data-quality gates fail)
         env:
           GH_TOKEN: ${{ github.token }}  # for the in-step crawl-progress heartbeat uploader (below)
@@ -163,7 +203,10 @@ jobs:
           # deadline-box) is always on; the host budget below caps join's tail so the daily build
           # isn't join-bound. Rollback: change '|| '1'' back to '|| '''.
           ERGON_DELTA_CRAWL: "${{ github.event.inputs.delta_crawl || '1' }}"
-          ERGON_CRAWL_HOST_BUDGET_S: "1800"  # cap any single host's crawl tail at 30min (join ~34% of registry, 0.58 boards/s) so it can't define the run's wall-clock; leftover boards roll to next run
+          # NOTE: ERGON_CRAWL_HOST_BUDGET_S / ERGON_CRAWL_MAX_WINDOW / the partition source filter are
+          # set by the "Resolve crawl partition" step above (per $GITHUB_ENV), NOT hard-set here. The
+          # old blanket 1800s box on the mixed daily window is GONE: join is now its own shard and
+          # carries the box; the non-join crawl runs UNBOXED (no pathological host to bound).
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
           ERGON_DETAIL_CONCURRENCY: "24"             # Tier-3 detail: in-flight fetch concurrency (per-host politeness enforced separately by AsyncFetcher's token-bucket)
           ERGON_LIVENESS_MAX_BOARDS: "${{ github.event.inputs.liveness_max_boards || '2000' }}"  # liveness: per-run cap on DUE boards re-fetched (rotating cursor, dispatch-overridable)
@@ -230,11 +273,16 @@ jobs:
           # NOT in CONFIRM_VIA_DETAIL_SOURCES, e.g. dejobs) could never actually expire. Non-fatal
           # add-on like --rich/--detail: the core index publishes first. Also forceable on a manual
           # run via liveness=true.
+          # --limit-companies comes from the partition step ($ERGON_CRAWL_LIMIT: non-join=60000 covers
+          # the whole ~38k partition in one run; join=6000 rotating window). rich/detail/liveness run
+          # ONLY on the non-join daily crawl -- they maintain WHOLE-index sidecars once per day, so
+          # the lean join shard skips them (its non-join rows carry forward untouched, and the
+          # sidecars it doesn't rewrite simply persist on the release).
           uv run python scripts/build_index.py --incremental \
-            --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
-            ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }} \
-            ${{ (github.event.inputs.detail == 'true' || github.event_name == 'schedule') && '--detail' || '' }} \
-            ${{ (github.event.inputs.liveness == 'true' || github.event_name == 'schedule') && '--liveness' || '' }}
+            --limit-companies "$ERGON_CRAWL_LIMIT" --sharded --out dist \
+            ${{ (github.event.inputs.rich == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--rich' || '' }} \
+            ${{ (github.event.inputs.detail == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--detail' || '' }} \
+            ${{ (github.event.inputs.liveness == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--liveness' || '' }}
           # Land the final 100% snapshot promptly (the trap kills the loop on the next line's exit).
           if [ -f dist/crawl-progress.json ] && gh release view index-latest >/dev/null 2>&1; then
             gh release upload index-latest dist/crawl-progress.json --clobber || true
@@ -259,7 +307,7 @@ jobs:
                    manifest-vectors.json manifest-detail.json manifest-liveness.json \
                    index-delta.sqlite.gz manifest-delta.json deltas.json \
                    gates.json board_state.json history.jsonl spec_health.json rediscover_queue.json \
-                   shards.json coverage.json INDEX_STATUS.md crawl_cursor.json; do
+                   shards.json coverage.json INDEX_STATUS.md crawl_cursor.json crawl_cursor-join.json; do
             [ -f "dist/$f" ] && ASSETS="$ASSETS dist/$f"
           done
           # The vectors db travels ONLY with its manifest. A non-rich run (every scheduled build --
@@ -374,7 +422,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ASSETS=""
-          for f in crawl_cursor.json board_state.json; do
+          for f in crawl_cursor.json crawl_cursor-join.json board_state.json; do
             [ -f "dist/$f" ] && ASSETS="$ASSETS dist/$f"
           done
           if [ -n "$ASSETS" ] && gh release view index-latest >/dev/null 2>&1; then
