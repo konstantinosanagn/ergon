@@ -1,16 +1,27 @@
 """Workable job-board provider.
 
 Workable exposes a free, unauthenticated public widget endpoint:
-``GET https://apply.workable.com/api/v1/widget/accounts/{token}`` returning
-``{name, description, jobs: [...]}`` in a single call (no pagination). Each job carries a
-``shortcode`` (the stable id), ``title``, ``employment_type`` label, structured
+``GET https://apply.workable.com/api/v1/widget/accounts/{token}?details=true`` returning
+``{name, description, jobs: [...]}`` in a single call (no pagination). :meth:`fetch` passes
+``details=true`` so EVERY job in that one response carries its full ``description`` (HTML) inline
+— folding what used to be a separate per-posting Tier-3 JD drain into the bulk call we already
+make (live-measured same latency, no extra rate pressure; see :meth:`fetch`). Each job also
+carries a ``shortcode`` (the stable id), ``title``, ``employment_type`` label, structured
 ``locations`` plus flat ``country``/``city``/``state`` fields, a ``telecommuting`` remote
 flag, ``department`` and an apply ``url``. There is no server-side filtering, so
 :meth:`fetch` returns the whole board and the orchestrator applies
 ``SearchQuery.matches`` client-side.
 
-Tier-3 detail recovery
------------------------
+Tier-3 detail recovery (now a fallback + liveness-confirm path)
+---------------------------------------------------------------
+Because :meth:`fetch` now requests ``details=true``, a freshly-crawled Workable board already
+captures every JD in bulk, so :meth:`fetch_detail` is no longer the primary JD source — it is
+retained as (a) the liveness gone-signal confirmer (``CONFIRM_VIA_DETAIL_SOURCES``: a board-fetch
+failure during a crawl would otherwise make every posting on that board look list-missing, a false
+positive) and (b) a JD fallback for any residual no-JD row (a carry-forward from before this
+change, or a board whose bulk fetch failed). Workable is therefore dropped from the Tier-3 JD
+drain (``build_index._TIER3_DETAIL_SOURCES``) but kept in the liveness confirm set.
+
 Live-verified: ``GET https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true``
 (the SAME bulk widget endpoint :meth:`fetch` already calls, plus ``details=true``) returns
 EVERY job on that board WITH a full ``description`` (HTML) in ONE unauthenticated call
@@ -176,9 +187,16 @@ class WorkableProvider(BaseProvider):
         return None
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
-        # Single call: Workable returns the whole board (no server-side filters).
+        # Single call: Workable returns the whole board (no server-side filters). ``details=true``
+        # makes that SAME bulk call carry every job's full ``description`` (HTML) inline (see the
+        # module docstring's live probe: 1,100 jobs WITH descriptions in one response), so
+        # :meth:`normalize` populates the JD directly — no per-posting Tier-3 drain needed. It's the
+        # same endpoint at the same cost (live-measured: same latency, no extra rate pressure); the
+        # whole board's descriptions come back in the one response, so there is nothing to dedup per
+        # posting here (the shortcode memo in :meth:`fetch_detail` only matters for the per-posting
+        # recovery path, which this bulk capture makes redundant for a freshly-crawled board).
         url = _API.format(token=token)
-        data = await fetcher.get_json(url)
+        data = await fetcher.get_json(url, params={"details": "true"})
         account = data.get("name") or token if isinstance(data, dict) else token
         jobs: list[dict[str, Any]] = data.get("jobs", []) if isinstance(data, dict) else []
 
@@ -393,6 +411,13 @@ class WorkableProvider(BaseProvider):
         # the extractor still gets a chance to find a requirement in the description.
         degree_required = True if degree_min is not None else None
 
+        # The bulk ``?details=true`` widget call (see :meth:`fetch`) carries every job's full JD
+        # inline, so the description is present WITHOUT any per-posting fetch. Reuse
+        # :meth:`_extract_description` (description + requirements + benefits) so bulk capture and
+        # the Tier-3 fallback (:meth:`fetch_detail`) yield byte-identical JD text.
+        description_html = self._extract_description(p)
+        description_text = self._to_text(description_html)
+
         return JobPosting.create(
             source=self.name,
             source_job_id=raw.source_job_id,
@@ -409,10 +434,22 @@ class WorkableProvider(BaseProvider):
             degree_required=degree_required,
             salary=None,  # not exposed by the widget endpoint
             posted_at=_parse_date(p.get("published_on")),
+            description_html=description_html,
+            description_text=description_text,
             raw=raw.payload,
         )
 
     # --- helpers --------------------------------------------------------
+
+    @staticmethod
+    def _to_text(html: str | None) -> str | None:
+        """Flatten JD HTML to plain text (mirrors greenhouse/breezy ``_to_text``)."""
+        if not html:
+            return None
+        from selectolax.parser import HTMLParser
+
+        text = HTMLParser(html).text(separator=" ", strip=True)
+        return text or None
 
     @staticmethod
     def _locations(p: dict[str, Any]) -> list[Location]:

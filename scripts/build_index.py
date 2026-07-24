@@ -381,7 +381,11 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
     "eightfold",
     "rippling",
     "radancy",
-    "workable",
+    # workable is DELIBERATELY absent: its bulk ?details=true widget call (providers/workable.py
+    # fetch) now captures every JD inline in the one call we already make, so there are ~no no-JD
+    # workable rows for the drain to recover. Its fetch_detail is retained ONLY as the liveness
+    # gone-signal confirmer (CONFIRM_VIA_DETAIL_SOURCES) -- see _CONFIRM_ONLY_SOURCES in
+    # tests/test_liveness.py.
     "join",
     "phenom",  # phenom re-routes to workday/successfactors by apply_url host
     "bamboohr",  # /careers/{id}/detail -> description + structured `compensation` string
