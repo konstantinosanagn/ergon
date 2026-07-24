@@ -19,6 +19,9 @@ on:
       detail_max:
         description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 25000; override to measure or throttle a single run."
         default: "25000"
+      jd:
+        description: "Persist the full JD into the compressed index-jd.sqlite sidecar (--jd), the re-extraction replay store (Item 2). Also runs automatically on the daily schedule."
+        default: "false"
       liveness:
         description: "Force the apply-URL liveness pass (--liveness) on a manual run. Also runs automatically on the daily schedule, mirroring --detail."
         default: "false"
@@ -87,6 +90,8 @@ jobs:
           gh release download index-latest --dir dist --pattern 'manifest-vectors.json' || echo "no prev vectors manifest"
           gh release download index-latest --dir dist --pattern 'index-detail.sqlite.gz' || echo "no prev detail tier"
           gh release download index-latest --dir dist --pattern 'manifest-detail.json' || echo "no prev detail manifest"
+          gh release download index-latest --dir dist --pattern 'index-jd.sqlite.gz' || echo "no prev jd sidecar"
+          gh release download index-latest --dir dist --pattern 'manifest-jd.json' || echo "no prev jd manifest"
           gh release download index-latest --dir dist --pattern 'index-liveness.sqlite.gz' || echo "no prev liveness tier"
           gh release download index-latest --dir dist --pattern 'manifest-liveness.json' || echo "no prev liveness manifest"
           gh release download index-latest --dir dist --pattern 'index-freshness.sqlite.gz' || echo "no prev freshness sidecar"
@@ -95,6 +100,11 @@ jobs:
           # already-recovered fields + the retry/cursor state (only new/changed sigs re-fetch);
           # absent on first run (or every non-detail run, since it's manual-only) -> built cold.
           [ -f dist/index-detail.sqlite.gz ] && gunzip -kf dist/index-detail.sqlite.gz || true
+          # decompress the persisted full-JD sidecar (Item 2) so the crawl UPSERTS this run's JDs onto
+          # the carry-forward — postings on boards NOT crawled this run keep their stored JD, so the
+          # replay store covers the whole live index over the rotating crawl cycle, not just this
+          # window. Absent on first run (or any pre-`--jd` run) -> the crawl builds it cold.
+          [ -f dist/index-jd.sqlite.gz ] && gunzip -kf dist/index-jd.sqlite.gz || true
           # decompress the persisted liveness sidecar so the daily --liveness pass carries forward
           # each posting's checked_at/dead_streak/verdict (recheck cadence + the dead_streak>=2
           # transient-blip gate need this history -- without it every run would re-check every due
@@ -234,6 +244,7 @@ jobs:
             --limit-companies "${{ github.event.inputs.limit_companies || '12000' }}" --sharded --out dist \
             ${{ (github.event.inputs.rich == 'true' || github.event_name == 'schedule') && '--rich' || '' }} \
             ${{ (github.event.inputs.detail == 'true' || github.event_name == 'schedule') && '--detail' || '' }} \
+            ${{ (github.event.inputs.jd == 'true' || github.event_name == 'schedule') && '--jd' || '' }} \
             ${{ (github.event.inputs.liveness == 'true' || github.event_name == 'schedule') && '--liveness' || '' }}
           # Land the final 100% snapshot promptly (the trap kills the loop on the next line's exit).
           if [ -f dist/crawl-progress.json ] && gh release view index-latest >/dev/null 2>&1; then
@@ -275,6 +286,12 @@ jobs:
           # case above) can never ship an unpaired db under a manifest that doesn't describe it.
           [ -f dist/manifest-detail.json ] && [ -f dist/index-detail.sqlite.gz ] && \
             ASSETS="$ASSETS dist/index-detail.sqlite.gz" || true
+          # Same paired-asset guard for the full-JD sidecar (Item 2): publish index-jd.sqlite.gz ONLY
+          # when manifest-jd.json is also present, so a partial/interrupted download of the prior pair
+          # can never ship an unpaired db under a manifest that doesn't describe it (identical
+          # reasoning to the vectors/detail guards).
+          [ -f dist/manifest-jd.json ] && [ -f dist/index-jd.sqlite.gz ] && \
+            ASSETS="$ASSETS dist/index-jd.sqlite.gz" || true
           # Same paired-asset guard for the liveness sidecar: publish index-liveness.sqlite.gz
           # ONLY when manifest-liveness.json is also present, so a partial/interrupted download of
           # the prior pair can never ship an unpaired db under a manifest that doesn't describe it
