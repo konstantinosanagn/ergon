@@ -45,9 +45,11 @@ async def test_fetch_builds_rawjobs_and_hits_widget_endpoint() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await WorkableProvider().fetch("zego", SearchQuery(), f)
 
-        # Single call, no pagination.
+        # Single call, no pagination. ?details=true folds every JD into this one bulk call
+        # (see module docstring) so no per-posting Tier-3 drain is needed.
         assert route.call_count == 1
-        assert str(route.calls.last.request.url) == WIDGET_URL
+        assert str(route.calls.last.request.url) == WIDGET_URL + "?details=true"
+        assert dict(route.calls.last.request.url.params) == {"details": "true"}
 
     assert len(raws) == 3
     r0 = raws[0]
@@ -157,3 +159,69 @@ def test_normalize_no_location() -> None:
     )
     assert job.locations == []
     assert job.remote is RemoteType.UNKNOWN
+
+
+# --- description from the ?details=true bulk call (folds the Tier-3 drain into fetch) --------
+
+
+async def test_fetch_details_response_populates_description_via_normalize() -> None:
+    """Parity/evidence gate: the ONE bulk call (?details=true) now carries every job's full JD
+    inline, so normalize() populates description_html/description_text with NO extra fetch."""
+    details_body = {
+        "name": "Zego",
+        "jobs": [
+            {
+                "shortcode": "JD001",
+                "title": "Backend Engineer",
+                "country": "United Kingdom",
+                "city": "London",
+                "url": "https://apply.workable.com/j/JD001",
+                "description": "<p>Build resilient services.</p>",
+                "requirements": "<p>5 years Python.</p>",
+                "benefits": "<p>Equity.</p>",
+            }
+        ],
+    }
+    with respx.mock:
+        respx.get(WIDGET_URL).mock(return_value=httpx.Response(200, json=details_body))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await WorkableProvider().fetch("zego", SearchQuery(), f)
+
+    assert len(raws) == 1
+    job = WorkableProvider().normalize(raws[0])
+    # description_html concatenates description + requirements + benefits (matches _fetch_board).
+    assert job.description_html == (
+        "<p>Build resilient services.</p>\n<p>5 years Python.</p>\n<p>Equity.</p>"
+    )
+    # description_text is the HTML flattened to plain text.
+    assert job.description_text is not None
+    assert "Build resilient services." in job.description_text
+    assert "5 years Python." in job.description_text
+    assert "<p>" not in job.description_text
+
+
+def test_normalize_no_description_leaves_fields_none() -> None:
+    # A job record with no description (e.g. a board that momentarily returned the list-only
+    # shape) must leave both description fields None, never raise.
+    provider = WorkableProvider()
+    payload = {"shortcode": "N2", "title": "No JD", "country": "Spain"}
+    job = provider.normalize(
+        RawJob(source="workable", source_job_id="N2", company="Acme", payload=payload)
+    )
+    assert job.description_html is None
+    assert job.description_text is None
+
+
+def test_normalize_description_only_no_requirements_benefits() -> None:
+    provider = WorkableProvider()
+    payload = {
+        "shortcode": "D1",
+        "title": "Solo",
+        "country": "France",
+        "description": "<p>Just a description.</p>",
+    }
+    job = provider.normalize(
+        RawJob(source="workable", source_job_id="D1", company="Acme", payload=payload)
+    )
+    assert job.description_html == "<p>Just a description.</p>"
+    assert job.description_text == "Just a description."

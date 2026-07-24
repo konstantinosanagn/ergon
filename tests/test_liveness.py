@@ -415,16 +415,26 @@ def test_failed_board_fetch_leaves_its_rows_untouched(tmp_path):
 _DRAIN_ONLY_SOURCES = {"breezy", "apicapture", "taleo"}
 
 
+# The mirror image of _DRAIN_ONLY_SOURCES: sources in the liveness CONFIRM set but DELIBERATELY
+# absent from the Tier-3 JD drain, because their JD arrives in BULK, not from a per-posting drain.
+# workable's bulk ?details=true widget call (providers/workable.py fetch) captures every JD inline
+# in the one call we already make, so there are ~no no-JD workable rows to drain -- but its
+# fetch_detail is still the liveness gone-signal confirmer (a board-fetch failure would otherwise
+# make every posting on that board a false list-miss). So it's confirm-wired but NOT drain-wired.
+_CONFIRM_ONLY_SOURCES = {"workable"}
+
+
 def test_confirm_and_tier3_source_lists_are_in_sync():
     # The two lists are manually kept in sync by design (see liveness.py's comment near the
     # CONFIRM_VIA_DETAIL_SOURCES definition): both enumerate "sources with a working fetch_detail",
     # the same underlying fact from two call sites. They must stay identical as sets -- EXCEPT for
-    # the deliberately drain-only sources (soft gone-signal, confirmed via a different path) -- so a
-    # source can never be drained by one pass but silently un-covered for liveness altogether.
+    # the deliberately drain-only sources (soft gone-signal, confirmed via a different path) and the
+    # confirm-only sources (JD captured in bulk, so nothing to drain) -- so a source can never be
+    # drained by one pass but silently un-covered for liveness altogether, nor vice versa.
     from scripts.build_index import _TIER3_DETAIL_SOURCES
 
-    # Everything in the confirm set must be drainable...
-    assert set(CONFIRM_VIA_DETAIL_SOURCES) <= set(_TIER3_DETAIL_SOURCES)
+    # The only confirm sources absent from the Tier-3 drain are the known confirm-only (bulk-JD) ones.
+    assert set(CONFIRM_VIA_DETAIL_SOURCES) - set(_TIER3_DETAIL_SOURCES) == _CONFIRM_ONLY_SOURCES
     # ...and the only Tier-3 sources absent from the confirm set are the known drain-only ones.
     assert set(_TIER3_DETAIL_SOURCES) - set(CONFIRM_VIA_DETAIL_SOURCES) == _DRAIN_ONLY_SOURCES
 

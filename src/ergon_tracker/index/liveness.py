@@ -107,7 +107,10 @@ _LIVENESS_CONCURRENCY = int(os.environ.get("ERGON_LIVENESS_CONCURRENCY", "24"))
 # of these is only a *candidate*: it must be confirmed via a per-posting detail fetch before being
 # flipped dead. Mirrors scripts/build_index.py's _TIER3_DETAIL_SOURCES (kept in sync manually --
 # both enumerate "sources with a working fetch_detail", the same underlying fact from two call
-# sites: the Tier-3 JD-recovery pass and this liveness pass).
+# sites: the Tier-3 JD-recovery pass and this liveness pass) EXCEPT for two documented, test-guarded
+# deltas (see tests/test_liveness.py): _DRAIN_ONLY_SOURCES (drained, soft gone-signal -> liveness
+# elsewhere) and _CONFIRM_ONLY_SOURCES (JD arrives in bulk so nothing to drain, but still needs the
+# confirm gone-signal -- e.g. workable, whose ?details=true bulk call now captures JD inline).
 CONFIRM_VIA_DETAIL_SOURCES: tuple[str, ...] = (
     "smartrecruiters",
     "workday",
@@ -117,6 +120,9 @@ CONFIRM_VIA_DETAIL_SOURCES: tuple[str, ...] = (
     "eightfold",
     "rippling",
     "radancy",
+    # workable JD now comes from the bulk ?details=true call (providers/workable.py fetch), so it is
+    # NOT in the Tier-3 drain list -- but its fetch_detail is kept HERE as the liveness gone-signal
+    # confirmer (a board-fetch failure would otherwise mark every posting a false list-miss).
     "workable",
     "join",
     "phenom",
