@@ -150,6 +150,13 @@ class Provider(Protocol):
         ``BaseProvider.board_count`` for the full return/raise contract."""
         ...
 
+    def content_version(self, raw: RawJob) -> str | None:
+        """A STABLE per-posting content-version token for the delta-crawl content fingerprint
+        (A-2). Every registered provider satisfies this via ``BaseProvider``'s default (``None``
+        -> id-only, edit-blind) or an override; declared here so ``index/freshness.py``'s composite
+        helper can call it without an unchecked ``getattr``. See ``BaseProvider.content_version``."""
+        ...
+
 
 class BaseProvider:
     """Optional convenience base with shared helpers. Subclasses must set ``name`` and
@@ -227,6 +234,25 @@ class BaseProvider:
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:
         """Parse an already-downloaded body into RawJobs (lets the crawler reuse a conditional
         200 instead of refetching). Default None = unsupported; the caller falls back to fetch."""
+        return None
+
+    def content_version(self, raw: RawJob) -> str | None:
+        """A STABLE per-posting content-version token folded into the delta-crawl fingerprint
+        (A-2), or ``None`` (default) => this provider folds NO version and stays id-only, i.e.
+        edit-BLIND exactly as today (no regression). Used by ``index/freshness.py``'s
+        ``content_fingerprint_ids`` on BOTH the sweep and the crawl-stamp side, gated by the
+        ``ERGON_DELTA_CONTENT_VERSION`` sub-flag: when a posting exposes a version, its fingerprint
+        token becomes ``f"{id}\\x1f{ver}"`` so an in-place EDIT that bumps the version flips the
+        board's hash -> re-crawl -> fresh enrichment (the id-set-hash skip alone is membership-only,
+        blind to an edit that leaves the id-set unchanged).
+
+        Override ONLY on a provider whose LIST payload carries a per-posting last-modified/updated
+        token that BOTH (a) reflects a real in-place edit AND (b) is STABLE across fetches for an
+        UNCHANGED posting -- never fetch-time / a random nonce / a server clock, which would bump
+        every run and make the board NEVER skip (a savings regression). Return the RAW served token
+        (not a reparsed datetime) so the sweep and the crawl stamp hash the byte-identical string.
+        A ``None`` for a given posting (field absent) folds to the bare id, so mixed presence within
+        one board is safe. See the A-2 audit for the folded-vs-id-only decision per provider."""
         return None
 
     async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:

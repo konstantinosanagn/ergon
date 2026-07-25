@@ -1319,7 +1319,12 @@ async def _crawl_due(
     from ergon_tracker.index import jd_store
     from ergon_tracker.index.build import append_jobs
     from ergon_tracker.index.db import connect, fresh_db
-    from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES, idset_hash
+    from ergon_tracker.index.freshness import (
+        DETERMINISTIC_SOURCES,
+        content_fingerprint_ids,
+        content_version_enabled,
+        idset_hash,
+    )
     from ergon_tracker.index.mapping import enrich_hash, full_jd_text
     from ergon_tracker.index.scheduler import BoardState, due_boards
     from ergon_tracker.models import SearchQuery
@@ -1378,6 +1383,11 @@ async def _crawl_due(
     # published to the freshness sidecar (same file the build downloads for _apply_freshness), used
     # by sub-phase B to skip boards whose id-set has not moved since we last crawled them.
     delta_crawl = os.environ.get("ERGON_DELTA_CRAWL") == "1"
+    # A-2 sub-flag (ships DARK behind ERGON_DELTA_CONTENT_VERSION; default OFF => id-only
+    # fingerprint => byte-identical to today). Read ONCE here and threaded into every board's stamp
+    # via ``content_fingerprint_ids``, exactly as ``sweep_boards`` reads it once per run -- so the
+    # crawl stamp and the sweep fingerprint share the identical composite basis.
+    content_version_on = content_version_enabled()
     sidecar_hashes: dict[tuple[str, str], str] = {}
     if delta_crawl:
         sidecar_path = Path(fresh_db_path).parent / "index-freshness.sqlite"
@@ -1480,7 +1490,16 @@ async def _crawl_due(
             # build can skip it when the sweep reports the same hash. Deterministic sources only
             # (the only ones the sweep fingerprints). Cheap; only when the flag is on.
             if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
-                state.idset_hash = idset_hash({str(r.source_job_id) for r in raws})
+                # Composite fingerprint (A-2): folds each posting's stable content-version when
+                # ``content_version_on`` AND the provider overrides ``content_version`` (greenhouse/
+                # recruitee today); otherwise the bare id-set -- byte-identical to the historical
+                # ``idset_hash({source_job_id})``. Same helper + same provider (get_provider) + same
+                # flag the sweep uses, so the stamp and the sweep hash agree by construction.
+                state.idset_hash = idset_hash(
+                    content_fingerprint_ids(
+                        raws, provider, fold_version=content_version_on
+                    )
+                )
             # Sub-phase C (enrich-reuse): for a crawled DELTA board, load THIS board's prior
             # enriched rows keyed by id so an unchanged posting (matching enrich_hash) can copy its
             # already-enriched fields instead of re-running enrich_in_place. Lazy + per-board =>

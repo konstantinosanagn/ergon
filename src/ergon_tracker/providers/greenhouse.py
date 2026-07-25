@@ -124,6 +124,15 @@ class GreenhouseProvider(BaseProvider):
             )
         return raws
 
+    def content_version(self, raw: RawJob) -> str | None:
+        """A-2 content-version: Greenhouse's board API returns a per-posting ``updated_at`` (the
+        job's last-modified timestamp) in EVERY list response -- both the ``?content=true`` fetch
+        and the light ``conditional_url`` body (see its comment). It bumps on an in-place edit and
+        is stable across fetches for an unchanged posting (it is not fetch-time / a nonce), so it is
+        a SAFE fingerprint token. Raw served string, not reparsed."""
+        v = raw.payload.get("updated_at")
+        return str(v) if v else None
+
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
 
