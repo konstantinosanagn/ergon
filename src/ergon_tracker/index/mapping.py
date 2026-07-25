@@ -20,6 +20,16 @@ from ..models import (
 
 _SNIPPET = 300
 
+# Extractor/normalizer generation. Folded into ``enrich_hash`` so BUMPING it flips every row's
+# fingerprint -> the enrich-reuse skip misses for the whole index and the fix re-enriches ALL rows
+# FROM THE STORED JD (``index/jd_store.py``) WITHOUT a re-crawl (pipeline-restructuring Item 3):
+#   * crawled boards re-enrich from their live JD (the crawl's sub-phase-C reuse hash-misses);
+#   * carried-forward boards re-enrich from the JD sidecar (``build.reenrich_carried_forward``).
+# v1 == the pre-versioning formula, so shipping this at 1 is byte-identical to today's stored
+# ``enrich_hash`` column (the reuse-skip still fires build-to-build). Bump it in the SAME commit
+# that lands an extractor/normalizer change you want propagated to the carried-forward backlog.
+ENRICH_VERSION = 1
+
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
@@ -122,8 +132,14 @@ def enrich_hash(job: JobPosting) -> str:
     JD body changes (even with everything else identical), and stays stable across insignificant
     whitespace/markup-only edits (normalization above), so genuinely unchanged postings still
     hit the reuse path.
+
+    ``ENRICH_VERSION`` is folded in so an extractor/normalizer bump invalidates every fingerprint
+    (Item 3). v1 leaves ``basis`` untouched -> byte-identical to the pre-versioning hash; only a
+    bump (v>=2) prepends the marker, so a no-op release never churns the stored ``enrich_hash``.
     """
     basis = f"{content_hash(job)}|{_normalize_description(job)}"
+    if ENRICH_VERSION != 1:
+        basis = f"v{ENRICH_VERSION}|{basis}"
     return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
 
 

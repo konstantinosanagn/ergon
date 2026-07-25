@@ -13,7 +13,7 @@ from ..canonicalize import aggregate_companies
 from ..dedup import deduplicate, normalize_company
 from ..models import JobPosting
 from .db import SCHEMA_VERSION, connect, fresh_db
-from .mapping import from_row, to_row
+from .mapping import ENRICH_VERSION, enrich_hash, from_row, to_row
 
 _JOB_COLS = (  # noqa: SIM905 - space-delimited string is far more readable than a 40-item list
     "id content_hash enrich_hash company_key source company company_domain title department "
@@ -576,6 +576,13 @@ def finalize_index(con: object, *, build_id: str, vacuum: bool = False) -> int:
     n = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
     con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('build_id',?)", (build_id,))
     con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('row_count',?)", (str(n),))
+    # Stamp the enrichment generation every row in this index was enriched under, so the NEXT build
+    # can tell whether the carried-forward backlog is stale vs. the current ENRICH_VERSION and needs
+    # a re-enrich pass (reenrich_carried_forward). Not a jobs column -> the jobs-table parity gate is
+    # untouched.
+    con.execute(
+        "INSERT OR REPLACE INTO meta(key,value) VALUES('enrich_version',?)", (str(ENRICH_VERSION),)
+    )
     con.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')")
     con.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('optimize')")
     con.commit()
@@ -614,6 +621,135 @@ def _relevel_from_years(con: object) -> int:
     ]
     if updates:
         con.executemany("UPDATE jobs SET level = ? WHERE id = ?", updates)
+        con.commit()
+    return len(updates)
+
+
+# Columns a re-enrich is allowed to overwrite: exactly the enrichment-PRODUCED fields (mirrors the
+# crawl's _apply_enriched_from_row list) plus the two fingerprints that fold in level/salary/body.
+# Provenance (first_seen/last_seen/build_id/...), identity (title/company/board_token), and geography
+# (location/city/country -- derived from the location string, NOT the JD body an extractor reads) are
+# deliberately NOT here: a JD-text extractor improvement never moves them, so leaving them out keeps
+# the re-enriched row minimal-churn and geographically stable.
+_REENRICH_COLS: tuple[str, ...] = (
+    "content_hash", "enrich_hash", "level", "employment_type", "sector",
+    "salary_min", "salary_max", "salary_currency", "salary_interval",
+    "years_min", "years_max", "degree_min", "degree_required",
+    "visa_sponsor", "visa_last_filed", "sponsorship_offered",
+)
+
+# Enrichment-produced fields reset to their pre-enrich defaults before re-running enrich_in_place, so
+# the extractors actually re-extract (enrich_in_place NEVER overwrites a populated field). geo/remote
+# are intentionally preserved (see _REENRICH_COLS). level is reset to UNKNOWN so the level extractor
+# re-runs -- this is a "cold re-enrich from the JD", matching the parity baseline.
+
+
+def _read_enrich_version(prev_db_path: Path | str | None) -> int | None:
+    """The ENRICH_VERSION the prior index was built under (its ``meta.enrich_version``), or None when
+    there's no readable prior / no stamp (a pre-Item-3 index): None never triggers a re-enrich."""
+    import sqlite3
+
+    if prev_db_path is None or not Path(prev_db_path).exists():
+        return None
+    try:
+        con = connect(prev_db_path, read_only=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = con.execute("SELECT value FROM meta WHERE key='enrich_version'").fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+    except (sqlite3.Error, ValueError, TypeError):
+        return None
+    finally:
+        con.close()
+
+
+def reenrich_carried_forward(
+    con: object,
+    prev_db_path: Path | str | None,
+    jd_db_path: Path | str | None,
+    crawled_keys: set[str],
+) -> int:
+    """Re-enrich the carried-forward backlog FROM THE STORED JD when ENRICH_VERSION has moved on
+    (pipeline-restructuring Item 3). No re-crawl: the full JD comes from the ``index-jd.sqlite``
+    sidecar (Item 2), so an extractor/normalizer fix propagates to the ~90% of rows a build carries
+    forward instead of only the freshly-crawled ~10%.
+
+    STRICT no-op (returns 0, byte-identical ``jobs`` table) unless ALL of: a JD sidecar exists, the
+    prior index stamped an ``enrich_version``, and that stamp differs from the current ENRICH_VERSION.
+    So an ordinary daily build (version unchanged) never touches a carried row -- the reuse-skip still
+    fires -- and the version bump is the ONLY trigger.
+
+    Scope: carried rows only (``company_key`` NOT among ``crawled_keys``). Freshly-crawled rows are
+    already at the current version (their crawl-time reuse hash-missed and re-enriched from live JD),
+    and they may carry provider-supplied fields the JD text alone can't reproduce, so they are left
+    exactly as the crawl wrote them. A carried row with NO stored JD (``get`` -> None) is left as-is
+    too (can't re-extract what was never stored -- documented, non-fatal: it keeps prior enrichment).
+
+    Same write model as the crawl's post-processing (single connection, batched UPDATE + commit); it
+    runs after carry_forward in the sequential finalize phase, so there's no concurrency to guard.
+    """
+    import sqlite3
+
+    from ..models import EmploymentType, JobLevel
+    from .jd_store import get as jd_get
+
+    assert isinstance(con, sqlite3.Connection)
+    if jd_db_path is None or not Path(jd_db_path).exists():
+        return 0
+    prev_ver = _read_enrich_version(prev_db_path)
+    if prev_ver is None or prev_ver == ENRICH_VERSION:
+        return 0
+
+    con.execute("CREATE TEMP TABLE IF NOT EXISTS _reenrich_crawled(k TEXT PRIMARY KEY)")
+    con.execute("DELETE FROM _reenrich_crawled")
+    con.executemany(
+        "INSERT OR IGNORE INTO _reenrich_crawled(k) VALUES(?)", [(k,) for k in crawled_keys]
+    )
+    carried = con.execute(
+        "SELECT * FROM jobs WHERE company_key IS NULL "
+        "OR company_key NOT IN (SELECT k FROM _reenrich_crawled)"
+    ).fetchall()
+    con.execute("DROP TABLE _reenrich_crawled")
+
+    jcon = connect(jd_db_path, read_only=True)
+    set_clause = ",".join(f"{c}=?" for c in _REENRICH_COLS)
+    updates: list[tuple[Any, ...]] = []
+    try:
+        from ..enrich import enrich_in_place
+
+        for row in carried:
+            jid = row["id"]
+            jd = jd_get(jcon, jid)
+            if jd is None:  # no stored JD -> keep prior enrichment (fall back to reuse)
+                continue
+            job = from_row(row)
+            # Cold re-enrich: reset every enrichment-produced field to its pre-enrich default and
+            # replay the FULL JD, so the (possibly improved) extractors re-extract from scratch.
+            job.description_text = jd
+            job.level = JobLevel.UNKNOWN
+            job.employment_type = EmploymentType.UNKNOWN
+            job.salary = None
+            job.years_experience_min = None
+            job.years_experience_max = None
+            job.degree_min = None
+            job.degree_required = None
+            job.sector = None
+            job.visa_sponsor = None
+            job.visa_last_filed = None
+            job.sponsorship_offered = None
+            # Stamp the pre-enrich fingerprint (new ENRICH_VERSION) BEFORE enrich mutates level/salary
+            # so to_row persists it into enrich_hash -- matching what the next crawl of this board
+            # recomputes for an unchanged posting (keeps sub-phase-C reuse working post-bump).
+            job._enrich_input_hash = enrich_hash(job)
+            enrich_in_place(job, company_key=row["company_key"], infer_level_from_experience=True)
+            r = to_row(job, build_id=row["build_id"])
+            updates.append(tuple(r[c] for c in _REENRICH_COLS) + (jid,))
+    finally:
+        jcon.close()
+
+    if updates:
+        con.executemany(f"UPDATE jobs SET {set_clause} WHERE id=?", updates)  # noqa: S608
         con.commit()
     return len(updates)
 
@@ -657,11 +793,13 @@ def build_index_streaming(
     build_id: str,
     prev_db: Path | str | None = None,
     crawled_keys: set[str] | None = None,
+    jd_db_path: Path | str | None = None,
 ) -> int:
     """Memory-bounded build: stream job batches in, carry forward prev via SQL, finalize.
 
     ``job_batches`` is an iterable of JobPosting iterables (e.g. one per board). When ``prev_db``
     + ``crawled_keys`` are given, prior rows for un-crawled companies are carried forward in SQL.
+    ``jd_db_path`` (the Item-2 JD sidecar) enables the version-gated re-enrich pass (Item 3).
     """
     fresh_db(path)
     con = connect(path)
@@ -674,6 +812,7 @@ def build_index_streaming(
             append_jobs(con, batch, build_id=build_id)
         if prev_db is not None and crawled_keys is not None and Path(prev_db).exists():
             carry_forward(con, prev_db, crawled_keys)
+            reenrich_carried_forward(con, prev_db, jd_db_path, crawled_keys)
         _relevel_from_years(con)  # re-level carried-forward backlog from stored years (no re-crawl)
         _purge_ancient(con)  # drop the unambiguous-dead >5yr tail before finalize
         return finalize_index(con, build_id=build_id)
@@ -688,12 +827,16 @@ def build_index_from_fresh_db(
     build_id: str,
     prev_db: Path | str | None = None,
     crawled_keys: set[str] | None = None,
+    jd_db_path: Path | str | None = None,
 ) -> int:
     """Build the final index from a crawl's fresh-jobs DB + carry-forward, entirely in SQL.
 
     The streaming crawl writes each board's jobs into ``fresh_db_path``; here we copy those into
     a clean index, carry forward un-crawled companies from ``prev_db``, and finalize — never
     loading job objects into memory. Memory is O(#companies) at finalize.
+
+    ``jd_db_path`` (the Item-2 JD sidecar, typically next to ``fresh_db_path``) enables the
+    version-gated re-enrich of the carried-forward backlog (Item 3); None disables it (no-op).
     """
     fresh_db(path)
     con = connect(path)
@@ -707,6 +850,7 @@ def build_index_from_fresh_db(
         con.execute("DETACH DATABASE fr")
         if prev_db is not None and crawled_keys is not None and Path(prev_db).exists():
             carry_forward(con, prev_db, crawled_keys)
+            reenrich_carried_forward(con, prev_db, jd_db_path, crawled_keys)
         _relevel_from_years(con)  # re-level carried-forward backlog from stored years (no re-crawl)
         _purge_ancient(con)  # drop the unambiguous-dead >5yr tail before finalize
         return finalize_index(con, build_id=build_id)

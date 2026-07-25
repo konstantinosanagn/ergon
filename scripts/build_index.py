@@ -1846,8 +1846,17 @@ def main(argv: list[str]) -> None:
         fresh_jobs_count = _count_jobs(fresh_path)
         db_tmp = out / "index.tmp.sqlite"
         with _phase("build index"):
+            # The Item-2 JD sidecar (fresh crawl JDs upserted onto the carried-forward prior) is the
+            # replay source for the version-gated re-enrich of the carried backlog (Item 3). Passed
+            # only when JD capture is on; None => re-enrich pass is a no-op (byte-identical).
+            jd_db_path = (out / "index-jd.sqlite") if jd else None
             n = build_index_from_fresh_db(
-                fresh_path, db_tmp, build_id=build_id, prev_db=prev_db, crawled_keys=crawled_keys
+                fresh_path,
+                db_tmp,
+                build_id=build_id,
+                prev_db=prev_db,
+                crawled_keys=crawled_keys,
+                jd_db_path=jd_db_path,
             )
         # Backfill board_token for carried-forward rows (registry + verified URL derivation) so the
         # freshness sweep covers ~all boards immediately, not just the crawl-visited subset.
