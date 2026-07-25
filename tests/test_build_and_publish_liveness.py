@@ -36,7 +36,7 @@ def _build_index(path) -> None:
     con.close()
 
 
-def test_build_and_publish_liveness_flips_dead_row_and_republishes(tmp_path, monkeypatch):
+def test_build_and_publish_liveness_flips_dead_row_and_publishes_sidecar(tmp_path, monkeypatch):
     out = tmp_path
     db = out / "index.sqlite"
     _build_index(db)
@@ -81,7 +81,8 @@ def test_build_and_publish_liveness_flips_dead_row_and_republishes(tmp_path, mon
     assert manifest["schema_version"] == 1
     assert "sha256" in manifest and "bytes" in manifest
 
-    # Core index re-published (ORDERING: the flip must reach the gz a downloading user fetches).
-    assert (out / "index.sqlite.gz").exists()
-    core_manifest = json.loads((out / "manifest.json").read_text())
-    assert core_manifest["build_id"] == "test-build-1"
+    # Item 6: the reconcile flips `status` directly on the index db in place, but NO LONGER
+    # re-publishes the core gz itself — the caller (main) runs every reconcile first and then
+    # publishes index.sqlite.gz ONCE. So this function must NOT have written a core gz/manifest.
+    assert not (out / "index.sqlite.gz").exists()
+    assert not (out / "manifest.json").exists()

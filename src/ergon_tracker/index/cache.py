@@ -60,6 +60,42 @@ def cached_index_build_id(cache_dir: Path | None = None) -> str | None:
     return None
 
 
+def _verify_set_manifest() -> bool:
+    """Whether :class:`IndexCache` cross-checks ``manifest-set.json`` to reject a torn set.
+
+    Ships DARK (Item 6): default OFF, so the download path is byte-identical to the pre-Item-6
+    behaviour and a malformed/absent set manifest can never break an existing SDK download. Set
+    ``ERGON_VERIFY_SET_MANIFEST=1`` to enable the torn-set rejection (fall back to the cached prior).
+    """
+    return os.environ.get("ERGON_VERIFY_SET_MANIFEST", "").lower() in ("1", "true", "yes")
+
+
+def _set_manifest_consistent(fetch: Callable[[str], bytes], core_manifest: dict[str, Any]) -> bool:
+    """True if the top-level ``manifest-set.json`` vouches for the core index we're about to fetch.
+
+    The build uploads ``manifest-set.json`` LAST (after every other asset is fully up), so during an
+    in-flight upload a reader sees the OLD set manifest against a NEW ``manifest.json`` (or vice
+    versa) — a torn set. This cross-checks the set manifest's recorded ``index.sqlite.gz`` sha
+    against the individual ``manifest.json`` sha we already read: a disagreement means the published
+    set is not yet internally consistent, so the caller should fall back to its cached prior.
+
+    An ABSENT set manifest, or one that doesn't describe the core, returns True (nothing to
+    contradict — behaves as before). Only a PRESENT-and-disagreeing entry returns False. Never raises.
+    """
+    try:
+        sset = json.loads(fetch("manifest-set.json"))
+    except Exception as exc:  # noqa: BLE001 - no set manifest published -> nothing to cross-check
+        log.debug("no set manifest (%s); skipping torn-set check", exc)
+        return True
+    core = sset.get("assets", {}).get("index.sqlite.gz")
+    if not isinstance(core, dict) or not core.get("sha256"):
+        return True  # set manifest doesn't cover the core -> nothing to verify
+    if core.get("sha256") != core_manifest.get("sha256"):
+        log.warning("set manifest core sha disagrees with manifest.json (torn set); falling back")
+        return False
+    return True
+
+
 def _token() -> str | None:
     return (
         os.environ.get("ERGON_GH_TOKEN")
@@ -243,6 +279,12 @@ class IndexCache:
         local = json.loads(self.local_manifest.read_text()) if self.local_manifest.exists() else {}
         if local.get("build_id") == remote.get("build_id") and self.db_path.exists():
             return self.db_path  # already current
+        # Item 6 (ships DARK, default off): reject a TORN set — a mid-upload read whose core asset
+        # disagrees with the top-level set manifest — by falling back to the cached prior instead of
+        # downloading a core that isn't part of a fully-published set. Flag-off = the exact path below.
+        if _verify_set_manifest() and not _set_manifest_consistent(fetch, remote):
+            log.warning("index set manifest inconsistent (torn set); using cache if present")
+            return self.db_path if self.db_path.exists() else None
         # Incremental path: if we're exactly one build behind, a row-level delta is far smaller than
         # the whole file. Falls through to the full download on any miss (no delta, wrong base, etc.).
         local_build_id = local.get("build_id")
