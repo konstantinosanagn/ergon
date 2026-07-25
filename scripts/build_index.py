@@ -423,8 +423,18 @@ _TIER3_DETAIL_SOURCES = [  # sources with a fetch_detail impl
 
 
 def _detail_max() -> int:
-    """Per-run bound on Tier-3 detail fetches, ``ERGON_DETAIL_MAX`` (env), default 5000."""
-    return int(os.environ.get("ERGON_DETAIL_MAX", "5000"))
+    """Per-run bound on INLINE Tier-3 detail FETCHES, ``ERGON_DETAIL_MAX`` (env), default 0.
+
+    Default 0 = MERGE-ONLY: the daily build's ``--detail`` pass fetches nothing itself and only
+    folds the carry-forward, already-drained ``index-detail.sqlite`` sidecar into ``jobs`` (the
+    unconditional ``merge_detail_into_index`` in ``_reconcile_detail`` runs regardless of this
+    budget). The sharded drain (``.github/workflows/drain-detail.yml``, which sets a large
+    ``ERGON_DETAIL_MAX`` explicitly) OWNS the fetching -- it covers the SAME ``_TIER3_DETAIL_SOURCES``
+    set as this inline pass, so no source loses a fetch path. This collapses the old duplicate
+    fetch (inline pass AND drain both fetching) that lengthened builds and caused the
+    "recovers one build later" lag. Set ``ERGON_DETAIL_MAX`` > 0 to re-enable inline fetching for a
+    local/manual run."""
+    return int(os.environ.get("ERGON_DETAIL_MAX", "0"))
 
 
 def _location_backfill() -> bool:
