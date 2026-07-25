@@ -17,7 +17,12 @@ from collections.abc import Awaitable, Callable
 import anyio
 
 from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.detail import merge_detail_into_index, open_detail, reconcile_detail_tier
+from ergon_tracker.index.detail import (
+    _tier3_rows,
+    merge_detail_into_index,
+    open_detail,
+    reconcile_detail_tier,
+)
 
 _NOW = "2026-07-12T00:00:00Z"
 
@@ -310,3 +315,129 @@ def test_measure_detail_coverage_smoke(tmp_path):
     assert "1/2" in out  # one of two smartrecruiters rows populated for each recovered field
     assert "workday" in out
     assert "0/0" in out  # zero workday rows in this synthetic index
+
+
+# --- Item 4: collapse the duplicate detail path (inline fetch -> MERGE-ONLY, drain owns fetch) ----
+
+
+def _dump_jobs(idx_path: str) -> list[tuple]:
+    """All `jobs` rows (every column), ordered by id -- the parity fingerprint."""
+    con = sqlite3.connect(idx_path)
+    try:
+        return con.execute("SELECT * FROM jobs ORDER BY id").fetchall()
+    finally:
+        con.close()
+
+
+def test_merge_only_pass_fetches_nothing_but_merges_drained_sidecar_identically(tmp_path):
+    """Item-4 parity gate: with the INLINE fetch budget at 0 (ERGON_DETAIL_MAX=0), the daily
+    build's `--detail` pass must fetch NOTHING yet still fold an already-drained sidecar into
+    `jobs` byte-identically to a build that merged the same sidecar directly.
+
+    Models the real flow: the sharded drain populated `index-detail.sqlite` (never touching `jobs`),
+    then the next daily build carries that sidecar forward and its merge-only `--detail` pass folds
+    it in. Proves (a) no inline fetch happens at budget 0, and (b) zero coverage loss vs. the merge.
+    """
+    n = 12
+    # 1. DRAIN: a full reconcile populates the sidecar (this is the fetcher; records every call).
+    idx_drain = _build_index(tmp_path, n, name="idx_for_drain")
+    det = str(tmp_path / "drained-detail.sqlite")
+    drain_calls: list[str] = []
+    drain_fetch = _make_fetcher(failing_ids=set(), none_ids=set(), calls=drain_calls)
+    dstats = anyio.run(
+        lambda: reconcile_detail_tier(det, idx_drain, fetch_detail=drain_fetch, now=lambda: _NOW)
+    )
+    assert dstats == {"fetched": n, "failed": 0, "missing": 0}
+    assert len(drain_calls) == n  # the DRAIN did the fetching
+
+    # 2. CONTROL: a freshly-built core index, merge the drained sidecar directly (no inline pass).
+    idx_control = _build_index(tmp_path, n, name="idx_control")
+    con = sqlite3.connect(idx_control)
+    assert merge_detail_into_index(con, det) == n
+    con.close()
+
+    # 3. MERGE-ONLY BUILD: an identical fresh core index. Run the inline pass with max_details=0
+    #    (the daily default now), then merge -- exactly what `_reconcile_detail(merge=True)` does
+    #    when ERGON_DETAIL_MAX=0. The inline fetcher MUST NOT be called.
+    idx_merge_only = _build_index(tmp_path, n, name="idx_merge_only")
+    inline_calls: list[str] = []
+    inline_fetch = _make_fetcher(failing_ids=set(), none_ids=set(), calls=inline_calls)
+    istats = anyio.run(
+        lambda: reconcile_detail_tier(
+            det, idx_merge_only, fetch_detail=inline_fetch, max_details=0, now=lambda: _NOW
+        )
+    )
+    assert istats["fetched"] == 0  # budget 0 -> nothing fetched inline
+    assert inline_calls == []  # the drain owns fetching; the daily build never calls fetch_detail
+    con = sqlite3.connect(idx_merge_only)
+    assert merge_detail_into_index(con, det) == n  # the merge still folds every drained row
+    con.close()
+
+    # 4. PARITY: merge-only build == direct-merge control, row-for-row across every column.
+    assert _dump_jobs(idx_merge_only) == _dump_jobs(idx_control)
+    # And the intended recovered fields are actually present (not merely "identically empty").
+    con = sqlite3.connect(idx_merge_only)
+    for i in (0, 5, 11):
+        exp = _expected(i)
+        salary_min, snippet = con.execute(
+            "SELECT salary_min, snippet FROM jobs WHERE id = ?", (_row_id(i),)
+        ).fetchone()
+        assert salary_min == exp["salary_min"]
+        assert snippet  # snippet recovered from the drained sidecar
+    con.close()
+
+
+def test_sharded_drain_covers_every_tier3_source(tmp_path):
+    """Item-4 key-risk gate: the sharded drain must reach EVERY source in `_TIER3_DETAIL_SOURCES`,
+    so collapsing the inline fetch to merge-only drops no source's ONLY fetch path.
+
+    The inline daily pass and the drain both select candidates via `_tier3_rows(..., sources=
+    _TIER3_DETAIL_SOURCES)` -- the SAME list. Here we build one Tier-3 row per source (each on a
+    distinct host) and confirm the union of the 20 drain shards covers all of them exactly once
+    (complete AND disjoint): no source is orphaned to an inline-only path.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "scripts"))
+    from build_index import _TIER3_DETAIL_SOURCES  # noqa: E402
+
+    num_shards = 20  # matches drain-detail.yml's matrix
+    sources = list(_TIER3_DETAIL_SOURCES)
+
+    p = tmp_path / "multi_source.sqlite"
+    fresh_db(p)
+    con = sqlite3.connect(p)
+    rows = [
+        {
+            "id": f"{src}-001",
+            "content_hash": f"ch-{src}",
+            "source": src,
+            "ts": _NOW,
+            # distinct host per source so `_rate_bucket_for_ref` yields per-source buckets.
+            "apply_url": f"https://{src}.example.com/job/{src}-001",
+        }
+        for src in sources
+    ]
+    con.executemany(
+        "INSERT INTO jobs (id, content_hash, source, company, title, remote, level, "
+        "employment_type, status, first_seen, last_seen, fetched_at, build_id, board_token, "
+        "apply_url, listing_url) "
+        "VALUES (:id, :content_hash, :source, 'Acme', 'Engineer', 'unknown', 'mid', "
+        "'full_time', 'active', :ts, :ts, :ts, 'b1', 'tok', :apply_url, NULL)",
+        rows,
+    )
+    con.commit()
+
+    # Union of the per-shard Tier-3 selections across all 20 shards, keyed by id.
+    seen_by_shard: dict[str, int] = {}
+    for shard in range(num_shards):
+        for r in _tier3_rows(con, sources, shard=shard, num_shards=num_shards):
+            rid = str(r["id"])
+            assert rid not in seen_by_shard, f"{rid} in >1 shard (shards not disjoint)"
+            seen_by_shard[rid] = shard
+    con.close()
+
+    covered_sources = {rid.rsplit("-", 1)[0] for rid in seen_by_shard}
+    assert covered_sources == set(sources)  # every _TIER3 source reached by exactly one shard
+    assert len(seen_by_shard) == len(sources)  # complete AND disjoint (no dupes, no drops)

@@ -25,8 +25,8 @@ on:
         description: "Force the Tier-3 detail reconcile + merge (--detail) on a manual run. Also runs automatically on the daily schedule (proven out on run 29216124010)."
         default: "false"
       detail_max:
-        description: "Per-run Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 25000; override to measure or throttle a single run."
-        default: "25000"
+        description: "INLINE Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Daily default 0 = merge-only (the sharded drain owns fetching); set >0 to re-enable inline fetching on a manual run."
+        default: "0"
       jd:
         description: "Persist the full JD into the compressed index-jd.sqlite sidecar (--jd), the re-extraction replay store (Item 2). Also runs automatically on the daily schedule."
         default: "false"
@@ -217,7 +217,7 @@ jobs:
           # set by the "Resolve crawl partition" step above (per $GITHUB_ENV), NOT hard-set here. The
           # old blanket 1800s box on the mixed daily window is GONE: join is now its own shard and
           # carries the box; the non-join crawl runs UNBOXED (no pathological host to bound).
-          ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '25000' }}"  # Tier-3 detail: per-run fetch budget (now on the daily schedule; dispatch-overridable)
+          ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '0' }}"  # Tier-3 detail: INLINE fetch budget 0 = MERGE-ONLY. The sharded drain (drain-detail.yml) owns the fetching; the daily --detail here only folds the drained sidecar into jobs. Dispatch-overridable to re-enable inline fetch.
           ERGON_DETAIL_CONCURRENCY: "24"             # Tier-3 detail: in-flight fetch concurrency (per-host politeness enforced separately by AsyncFetcher's token-bucket)
           ERGON_LIVENESS_MAX_BOARDS: "${{ github.event.inputs.liveness_max_boards || '2000' }}"  # liveness: per-run cap on DUE boards re-fetched (rotating cursor, dispatch-overridable)
           ERGON_LIVENESS_CONCURRENCY: "24"           # liveness: in-flight board/detail-confirm fetch concurrency (mirrors ERGON_DETAIL_CONCURRENCY; per-host politeness enforced separately)
@@ -263,16 +263,15 @@ jobs:
           # the 250k cap — well under the 330-min timeout. Coverage was ramped to ~84% via manual
           # bursts; daily runs drain the remaining tail (~40-60k/run) then maintain it (only new/
           # changed sigs re-embed). Rich stays a non-fatal add-on: the core index publishes first.
-          # --detail now runs on the daily schedule (proven out on run 29216124010: 497/500 fetched,
-          # zero 429s, <1min pass, at concurrency=8). Raised ERGON_DETAIL_MAX 10000 -> 25000 and
-          # ERGON_DETAIL_CONCURRENCY 8 -> 24 (both env-tunable) to drain the much larger Workday
-          # backlog (~534k, 37% of the index) in weeks not months, spread across Workday's ~2,228
-          # independent tenant hosts -- per-host politeness is unaffected (AsyncFetcher's token-bucket
-          # is keyed per host, not by this global concurrency figure). Kept moderate, not a huge jump:
-          # core+rich+detail must stay well under the 330-min timeout, since a timed-out job loses the
-          # whole run (publish never runs). Non-fatal add-on like --rich: the core index publishes
-          # first, so a detail failure never blocks the build. Also forceable on a manual run via
-          # detail=true.
+          # --detail on the daily schedule is now MERGE-ONLY (ERGON_DETAIL_MAX=0 above): it fetches
+          # NOTHING inline and only folds the carry-forward index-detail.sqlite sidecar into `jobs`.
+          # The sharded drain (drain-detail.yml, 20-shard matrix, ERGON_DETAIL_MAX=200000) OWNS the
+          # fetching and covers the SAME _TIER3_DETAIL_SOURCES set, so there is no coverage loss --
+          # this just removes the DUPLICATE inline fetch the daily build was doing on top of the drain
+          # (which lengthened the build and caused the "recovers one build later" lag). The merge pass
+          # is cheap (<1min, no network), so core+rich+detail stays well under the 330-min timeout.
+          # Non-fatal add-on like --rich: the core index publishes first, so a detail merge failure
+          # never blocks the build. Set detail_max>0 on a manual dispatch to re-enable inline fetching.
           # --liveness now runs on the daily schedule too (mirrors --detail's activation exactly):
           # the pass re-fetches DUE boards (rotating cursor, ERGON_LIVENESS_MAX_BOARDS-bounded) and
           # flips confirmed-dead apply-links to status='expired' directly on the already-published
