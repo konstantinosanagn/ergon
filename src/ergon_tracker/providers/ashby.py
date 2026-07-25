@@ -59,6 +59,9 @@ def _parse_dt(value: str | None) -> datetime | None:
 @register("ashby")
 class AshbyProvider(BaseProvider):
     name = "ashby"
+    # conditional_url validates the job-board API response -- each job carries
+    # ``descriptionPlain``/``descriptionHtml`` (the JD normalize reads) -> its 304 is edit-safe.
+    validator_covers_body = True
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:

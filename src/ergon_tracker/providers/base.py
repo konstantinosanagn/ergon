@@ -157,6 +157,17 @@ class BaseProvider:
 
     name: str = ""
 
+    # ``conditional_url``'s validator (ETag/Last-Modified) covers the FULL posting body -- including
+    # the JD/description -- so its 304 is EDIT-SAFE: an in-place rewrite of a live posting flips the
+    # validator, forcing a 200 that re-processes the edited body. When True, the crawl PREFERS this
+    # conditional-GET over the membership-only id-set-hash skip, which is blind to an edit that leaves
+    # the id-set unchanged (add/remove only). Default False keeps the id-set skip as the fast path.
+    # Set True ONLY on providers whose single validated representation actually carries the JD
+    # (verified per provider) -- NOT on light validators (e.g. greenhouse's content-less board
+    # response, whose 304 is membership-only), and not on providers whose bulk list omits the JD
+    # (e.g. breezy, whose JD lives on a separate per-posting page via fetch_detail).
+    validator_covers_body: bool = False
+
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
         return None
