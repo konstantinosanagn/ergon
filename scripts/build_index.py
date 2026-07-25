@@ -1047,7 +1047,67 @@ def _interleave_by_ats(items: list) -> list:
 _DEFAULT_MAX_WINDOW = 12000
 
 
-def _registry_window(cursor: int, limit: int, max_window: int | None = None) -> tuple[list, int]:
+def _split_sources(raw: str | None) -> set[str] | None:
+    """Parse a comma-separated ATS-source list (env value) into a lowercased set, or None if empty.
+
+    None means "no filter" so the default (unset) path stays byte-identical to today.
+    """
+    if not raw:
+        return None
+    vals = {s.strip().lower() for s in raw.split(",") if s.strip()}
+    return vals or None
+
+
+def _crawl_partition() -> tuple[set[str] | None, set[str] | None]:
+    """Read the source-partition selection from the environment: (only_sources, exclude_sources).
+
+    ``ERGON_CRAWL_ONLY_SOURCES`` crawls ONLY those ATSes (e.g. ``join`` for the join shard);
+    ``ERGON_CRAWL_EXCLUDE_SOURCES`` crawls everything EXCEPT them (e.g. ``join`` for the full
+    non-join daily crawl). Both unset => (None, None) => no partition => byte-identical to today.
+    """
+    return (
+        _split_sources(os.environ.get("ERGON_CRAWL_ONLY_SOURCES")),
+        _split_sources(os.environ.get("ERGON_CRAWL_EXCLUDE_SOURCES")),
+    )
+
+
+def _partition_filter(
+    items: list, only_sources: set[str] | None, exclude_sources: set[str] | None
+) -> list:
+    """Restrict ``(key, entry)`` registry items to a source partition (case-insensitive on ``ats``).
+
+    ``only_sources`` keeps ONLY those ATSes; ``exclude_sources`` drops them. Both None => identity
+    (the default, byte-identical-to-today path). Applied BEFORE interleaving so the rotating window
+    and its backend-stratification are computed over the partition, not the whole registry.
+    """
+    if only_sources is not None:
+        items = [(k, e) for k, e in items if str(e.get("ats", "")).lower() in only_sources]
+    if exclude_sources is not None:
+        items = [(k, e) for k, e in items if str(e.get("ats", "")).lower() not in exclude_sources]
+    return items
+
+
+def _cursor_filename(only_sources: set[str] | None) -> str:
+    """Rotating-cursor filename for a crawl partition.
+
+    An ``only_sources`` shard (e.g. join) rotates INDEPENDENTLY of the main crawl, so it needs its
+    own persisted cursor -- ``crawl_cursor-join.json`` -- else the two partitions would clobber each
+    other's offset. The default / exclude-partition (a full crawl whose cursor is always 0) keeps the
+    legacy ``crawl_cursor.json`` name, so the unpartitioned path is byte-identical to today.
+    """
+    if only_sources:
+        return f"crawl_cursor-{'-'.join(sorted(only_sources))}.json"
+    return "crawl_cursor.json"
+
+
+def _registry_window(
+    cursor: int,
+    limit: int,
+    max_window: int | None = None,
+    *,
+    only_sources: set[str] | None = None,
+    exclude_sources: set[str] | None = None,
+) -> tuple[list, int]:
     """Return (window, next_cursor): a rotating, backend-INTERLEAVED slice of crawlable boards.
 
     Each run takes up to `limit` boards starting at `cursor` (wrapping) from an ATS-interleaved
@@ -1057,12 +1117,18 @@ def _registry_window(cursor: int, limit: int, max_window: int | None = None) -> 
     advances, so a killed/timed-out run is resumable (the next run continues from next_cursor). Over
     ceil(total/window) runs the whole registry is covered + seeded into board_state; interleaving
     keeps every window balanced across backends so no single ATS is throttled by a clustered burst.
+
+    ``only_sources`` / ``exclude_sources`` (source-partition, both default None => no filter =>
+    byte-identical to today) carve the registry by ATS BEFORE interleaving, so one run can crawl
+    "all non-join boards" (exclude={'join'}) and another "join only" (only={'join'}). Each partition
+    is windowed/rotated over its OWN size, so the cursor stays meaningful within it.
     """
     from ergon_tracker.registry.store import SeedRegistry
 
     if max_window is None:
         max_window = int(os.environ.get("ERGON_CRAWL_MAX_WINDOW") or _DEFAULT_MAX_WINDOW)
     items = [(k, e) for k, e in SeedRegistry().all().items() if e.get("ats") and e.get("token")]
+    items = _partition_filter(items, only_sources, exclude_sources)
     items = _interleave_by_ats(items)
     total = len(items)
     if total == 0:
@@ -1083,6 +1149,8 @@ async def _crawl_due(
     cursor: int = 0,
     capture_rich: bool = False,
     prev_db: Path | str | None = None,
+    only_sources: set[str] | None = None,
+    exclude_sources: set[str] | None = None,
 ) -> tuple[dict, int]:
     """Crawl the due boards in this run's rotating window, streaming jobs into ``fresh_db_path``.
 
@@ -1131,7 +1199,9 @@ async def _crawl_due(
         finally:
             pcon.close()
 
-    window, next_cursor = _registry_window(cursor, limit_companies)
+    window, next_cursor = _registry_window(
+        cursor, limit_companies, only_sources=only_sources, exclude_sources=exclude_sources
+    )
     boards = {}
     for key, e in window:
         bs = BoardState(provider=e["ats"], token=e["token"])
@@ -1143,7 +1213,12 @@ async def _crawl_due(
     if len(states) > limit_companies:  # past the initial cold-start rotation
         from ergon_tracker.registry.store import SeedRegistry
 
-        new = _new_boards(SeedRegistry().all().items(), states)
+        # Restrict the never-seen pull-in to THIS partition so the non-join crawl never drags in a
+        # freshly-added join board (and vice-versa) ahead of the cursor.
+        reg_items = _partition_filter(
+            list(SeedRegistry().all().items()), only_sources, exclude_sources
+        )
+        new = _new_boards(reg_items, states)
         for key, e in new:
             bs = BoardState(provider=e["ats"], token=e["token"])
             boards[bs.key] = (key, e)
@@ -1340,10 +1415,16 @@ async def _crawl_due(
         os.environ.get("ERGON_CRAWL_CONCURRENCY") or ("64" if os.environ.get("CI") else "12")
     )
     # Per-host deadline-box budget (wall-clock seconds a single host may stay in play before the
-    # crawl stops dispatching new boards to it). DEFAULT 0 = DISABLED: the normal daily 12k window
-    # fits well under the 330-min CI ceiling (join's slice ~41-118 min), so boxing it would only
-    # silently drop join coverage. The box exists for PATHOLOGICAL / full-registry crawls -- set
-    # ERGON_CRAWL_HOST_BUDGET_S (e.g. 7200) explicitly for those. <=0 disables; closed over by grab.
+    # crawl stops dispatching new boards to it). DEFAULT 0 = DISABLED, and that is now the RIGHT
+    # default for the daily crawl: join (34% of the registry @ ~0.58 boards/s -- the only host slow
+    # enough to need boxing) is ISOLATED onto its own shard (ERGON_CRAWL_ONLY_SOURCES=join), so the
+    # main non-join crawl has no pathological host and must NOT be boxed (a box there would silently
+    # drop coverage for no benefit). The box is set INTENTIONALLY, and only, on the join shard (the
+    # workflow's join partition sets ERGON_CRAWL_HOST_BUDGET_S so join's own long tail can't blow the
+    # 330-min CI ceiling -- leftover join boards stay 'due' and roll to the shard's next run). This
+    # reconciles the old contradiction where build-index.yml hard-set 1800 for a mixed daily window:
+    # the budget now lives WITH the partition it bounds, not on the whole crawl. <=0 disables; closed
+    # over by grab.
     host_budget = float(os.environ.get("ERGON_CRAWL_HOST_BUDGET_S") or "0")
     try:
         async with AsyncFetcher(
@@ -1614,8 +1695,14 @@ def main(argv: list[str]) -> None:
         )
         from ergon_tracker.index.scheduler import apply_outcome, load_state, save_state
 
+        # Source partition (join isolation): the daily build crawls all non-join boards
+        # (ERGON_CRAWL_EXCLUDE_SOURCES=join) in FULL; a separate join shard
+        # (ERGON_CRAWL_ONLY_SOURCES=join) rotates on its own cadence/budget. Both unset =>
+        # (None, None) => the whole registry, byte-identical to the pre-partition path. The join
+        # shard rotates independently, so it gets its OWN cursor file (_cursor_filename).
+        only_sources, exclude_sources = _crawl_partition()
         state_path = out / "board_state.json"
-        cursor_path = out / "crawl_cursor.json"
+        cursor_path = out / _cursor_filename(only_sources)
         states = load_state(state_path)
         cursor = _load_cursor(cursor_path)
         prev_db = db if db.exists() else None
@@ -1631,7 +1718,16 @@ def main(argv: list[str]) -> None:
         fresh_path = out / "fresh.sqlite"
         with _phase("crawl"):
             outcome, next_cursor = anyio.run(
-                _crawl_due, limit, states, fresh_path, build_id, cursor, rich, prev_db
+                _crawl_due,
+                limit,
+                states,
+                fresh_path,
+                build_id,
+                cursor,
+                rich,
+                prev_db,
+                only_sources,
+                exclude_sources,
             )
         # Fold the first-party Workable network feed into the same fresh.sqlite (its rows flow into
         # the index alongside the crawled boards). Done before changed_companies_sql so new network
