@@ -8,7 +8,10 @@ from pathlib import Path
 
 # v2: degree_min/degree_required columns (+ idx_jobs_degree) for the education filter.
 # v3: enrich_hash column (body-inclusive fingerprint; makes enrich-reuse safe — see mapping.py).
-SCHEMA_VERSION = 3
+# v4: dropped provably-dead columns salary_annual + closes_at (0% populated, no extractor/reader;
+#     only ever NULL). carry_forward is schema-tolerant (_shared_cols intersects), so a v3->v4
+#     carry-forward simply skips them.
+SCHEMA_VERSION = 4
 
 
 def _schema_sql() -> str:

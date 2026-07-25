@@ -13,6 +13,7 @@ from .extract.base import get_extractor, input_from_job
 # Importing the extractor modules registers them. Also re-exported for backward compatibility.
 from .extract.comp import CompExtractor  # noqa: F401
 from .extract.degree import DegreeExtractor  # noqa: F401
+from .extract.employment_type import EmploymentTypeExtractor  # noqa: F401
 from .extract.geo import has_us_signal, normalize_geo
 from .extract.lang import detect_language
 from .extract.level import (  # noqa: F401
@@ -25,7 +26,7 @@ from .extract.sector import SectorExtractor, SectorIndex, load_sector_index  # n
 from .extract.sponsorship import detect_sponsorship  # noqa: F401
 from .extract.visa import h1b_last_filed, is_h1b_sponsor, load_sponsor_index  # noqa: F401
 from .extract.yoe import YoeExtractor  # noqa: F401
-from .models import JobLevel, JobPosting
+from .models import EmploymentType, JobLevel, JobPosting
 
 __all__ = ["enrich_in_place", "infer_level", "normalize_geo", "load_sector_index", "SectorIndex"]
 
@@ -70,6 +71,12 @@ def enrich_in_place(
         job.level = level_from_description(inp.description_text)
         if job.level is JobLevel.UNKNOWN:
             job.level = level_from_years(job.years_experience_min, job.years_experience_max)
+
+    # Employment type (deterministic: explicit ATS label -> title -> framed body phrase).
+    # Only fill when a provider left it UNKNOWN; never overwrite a provider-declared value.
+    etype = get_extractor("employment_type")
+    if etype is not None and job.employment_type is EmploymentType.UNKNOWN:
+        job.employment_type = etype.extract(inp)
 
     comp = get_extractor("comp")
     if comp is not None and job.salary is None:
