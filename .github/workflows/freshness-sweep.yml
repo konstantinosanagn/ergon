@@ -88,6 +88,14 @@ jobs:
           # load-bearing on their own.
           ERGON_FRESHNESS_CONCURRENCY: "${{ github.event.inputs.concurrency || '32' }}"
           ERGON_FRESHNESS_SEARCH_INDEX_BOARD_LIMIT: "${{ github.event.inputs.search_index_board_limit || '200' }}"
+          # A-2 content-version fold. Ships DARK: '' => the sweep emits the id-only membership
+          # fingerprint (byte-for-byte today's board_deltas.idset_hash). MUST be flipped IN LOCKSTEP
+          # with build-index.yml's ERGON_DELTA_CONTENT_VERSION: the sweep emits the fingerprint the
+          # build compares its crawl stamp against, so if only one side folds the per-posting
+          # version the hashes never match and the delta-skip silently stops firing. Read inside
+          # ergon_tracker/index/freshness.py (content_version_enabled), so setting it here is all the
+          # sweep needs -- scripts/freshness_sweep.py requires no change.
+          ERGON_DELTA_CONTENT_VERSION: ""
         run: |
           if [ ! -f dist/index.sqlite ]; then
             echo "no prior index.sqlite available -- nothing to sweep yet (first-ever run before build-index.yml has published once)"

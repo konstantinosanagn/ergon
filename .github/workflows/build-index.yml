@@ -42,6 +42,9 @@ on:
       delta_crawl:
         description: "Delta-driven crawl (ERGON_DELTA_CRAWL). '1' skips re-crawling unchanged deterministic boards (idset_hash match from the freshness sidecar) and reuses prior enrichment for unchanged postings. Ships DARK: leave '' until the delta-vs-full parity run passes, then set '1' to flip on (or hardcode it in the crawl step env below for the daily cron)."
         default: ""
+      delta_content_version:
+        description: "A-2 content-version fold (ERGON_DELTA_CONTENT_VERSION). '1' folds each posting's stable per-posting content-version (greenhouse/recruitee updated_at) into the delta fingerprint so an in-place EDIT of a live posting flips the board's hash -> re-crawl -> fresh enrichment (the id-set hash alone is membership-only, blind to an edit). Ships DARK: leave ''; MUST be flipped in BOTH build-index.yml and freshness-sweep.yml together (the sweep and the crawl stamp must build the same fingerprint basis). Flipping it triggers a one-cycle full re-crawl of greenhouse/recruitee boards (self-healing)."
+        default: ""
 
 permissions:
   contents: write          # to publish the release asset
@@ -213,6 +216,13 @@ jobs:
           # deadline-box) is always on; the host budget below caps join's tail so the daily build
           # isn't join-bound. Rollback: change '|| '1'' back to '|| '''.
           ERGON_DELTA_CRAWL: "${{ github.event.inputs.delta_crawl || '1' }}"
+          # A-2 content-version fold. Ships DARK: '' => id-only fingerprint => byte-for-byte
+          # today's crawl. MUST be flipped IN LOCKSTEP with freshness-sweep.yml's own
+          # ERGON_DELTA_CONTENT_VERSION (the sweep emits the fingerprint the build compares against;
+          # if only one side folds the version, the hashes never match and the delta-skip silently
+          # stops firing). Flipping it shifts every greenhouse/recruitee board's fingerprint ONCE =>
+          # a one-cycle full re-crawl of those boards, self-healing. See docs A-2.
+          ERGON_DELTA_CONTENT_VERSION: "${{ github.event.inputs.delta_content_version || '' }}"
           # NOTE: ERGON_CRAWL_HOST_BUDGET_S / ERGON_CRAWL_MAX_WINDOW / the partition source filter are
           # set by the "Resolve crawl partition" step above (per $GITHUB_ENV), NOT hard-set here. The
           # old blanket 1800s box on the mixed daily window is GONE: join is now its own shard and

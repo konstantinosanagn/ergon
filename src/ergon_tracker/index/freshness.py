@@ -74,6 +74,8 @@ from .detail import DetailRef
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
+    from ..models import RawJob
+    from ..providers.base import Provider
 
 __all__ = [
     "DETERMINISTIC_SOURCES",
@@ -81,8 +83,11 @@ __all__ = [
     "BoardDelta",
     "added_ids",
     "board_live_ids",
+    "board_live_raws",
     "check_expiry_alarms",
     "confirm_departed",
+    "content_fingerprint_ids",
+    "content_version_enabled",
     "departed_ids",
     "idset_hash",
     "source_expiry_rate",
@@ -226,21 +231,39 @@ ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR = int(
 )
 
 
-async def board_live_ids(source: str, token: str, fetcher: AsyncFetcher) -> set[str] | None:
-    """The board's CURRENT posting id-set, id-only -- or ``None`` on any fetch error (never
-    raises). A ``None`` means "could not determine" and must NOT be treated as "board is empty":
-    the caller (``sweep_boards``) is responsible for never expiring anything off a ``None``.
+async def board_live_raws(
+    source: str, token: str, fetcher: AsyncFetcher
+) -> list[RawJob] | None:
+    """The board's CURRENT postings as RAW provider records -- or ``None`` on any fetch error
+    (never raises). The single shared fetch primitive behind BOTH ``board_live_ids`` (id-only
+    membership, for the departed/added diff) AND the content-version fingerprint
+    (``content_fingerprint_ids``), so the sweep derives both from the SAME single fetch of a
+    board. A ``None`` means "could not determine" (see ``board_live_ids``).
 
-    Reuses the provider's ordinary ``fetch()`` (the id-only-ness is just "keep only the id
-    column" -- no new per-provider endpoint for Phase 0) rather than any JD/enrich/dedup/insert
-    machinery, so this is cheap relative to a real crawl of the same board.
+    Reuses the provider's ordinary ``fetch()`` -- no new per-provider endpoint -- rather than any
+    enrich/dedup/insert machinery, so this is cheap relative to a real crawl of the same board.
     """
     prov = get_provider(source)
     if prov is None:
         return None
     try:
-        raws = await prov.fetch(token, SearchQuery(), fetcher)
+        return await prov.fetch(token, SearchQuery(), fetcher)
     except Exception:  # noqa: BLE001 - a dead/blocked/erroring board -> "could not determine"
+        return None
+
+
+async def board_live_ids(source: str, token: str, fetcher: AsyncFetcher) -> set[str] | None:
+    """The board's CURRENT posting id-set, id-only -- or ``None`` on any fetch error (never
+    raises). A ``None`` means "could not determine" and must NOT be treated as "board is empty":
+    the caller (``sweep_boards``) is responsible for never expiring anything off a ``None``.
+
+    Reuses ``board_live_raws`` (the provider's ordinary ``fetch()``) and keeps ONLY the raw id
+    column -- no new per-provider endpoint for Phase 0. This RETURN stays PURE ids: the
+    membership diff (``departed_ids``/``added_ids``) is id-only by contract; only the fingerprint
+    folds a content-version (see ``content_fingerprint_ids``).
+    """
+    raws = await board_live_raws(source, token, fetcher)
+    if raws is None:
         return None
     try:
         return {str(r.source_job_id) for r in raws}
@@ -290,6 +313,56 @@ def idset_hash(live_ids: Iterable[str]) -> str:
         h.update(sid.encode("utf-8"))
         h.update(b"\x00")
     return h.hexdigest()
+
+
+# A-2: per-posting content-version fold, shipped DARK behind ``ERGON_DELTA_CONTENT_VERSION``.
+# NUL-safe intra-token separator between an id and its version (distinct from ``idset_hash``'s own
+# inter-element ``\x00``), so ``{"a", "b"}`` versioned tokens can never collide across the id/ver
+# boundary.
+_VERSION_SEP = "\x1f"
+
+
+def content_version_enabled() -> bool:
+    """True iff the A-2 per-posting content-version fold is ON (``ERGON_DELTA_CONTENT_VERSION=1``).
+
+    Read (via this ONE function) IDENTICALLY by both the freshness sweep (``sweep_boards``, where
+    the ``BoardDelta.idset_hash`` is emitted) AND the crawl stamp (``scripts/build_index.py``, where
+    ``state.idset_hash`` is stamped), so the two sides ALWAYS build the same fingerprint basis. If
+    they disagreed, the sweep's hash and the crawl's hash would never match and the delta-skip would
+    silently stop firing. Default OFF (blank/absent) => id-only fingerprint => byte-for-byte
+    today's prod behavior; ON => the version-folded composite (see ``content_fingerprint_ids``)."""
+    return os.environ.get("ERGON_DELTA_CONTENT_VERSION") == "1"
+
+
+def content_fingerprint_ids(
+    raws: Iterable[RawJob],
+    provider: Provider | None,
+    *,
+    fold_version: bool,
+) -> set[str]:
+    """The composite id-SET that ``idset_hash`` fingerprints for the delta-crawl skip -- the SINGLE
+    shared basis used by BOTH the sweep and the crawl stamp so the two sides agree byte-for-byte
+    (a divergence would silently stop the skip firing).
+
+    ``fold_version`` OFF (default / today): the bare raw ``source_job_id`` set -- membership only,
+    byte-identical to ``{str(r.source_job_id) for r in raws}`` (so the flag-off fingerprint equals
+    the historical id-only hash exactly).
+
+    ``fold_version`` ON (``ERGON_DELTA_CONTENT_VERSION``): each posting contributes
+    ``f"{id}\\x1f{ver}"`` when the provider exposes a STABLE per-posting content-version
+    (``provider.content_version(raw)`` is truthy), else the bare id. An in-place EDIT that bumps a
+    posting's version thus flips the composite (and so the hash) -> forces a re-crawl -> fresh
+    enrichment, while a posting/provider with no version token stays exactly id-only (edit-blind, no
+    regression). Because ``BaseProvider.content_version`` defaults to ``None``, a provider that does
+    NOT override it yields an all-bare-ids set even with the flag ON -- byte-identical to id-only."""
+    if not fold_version or provider is None:
+        return {str(r.source_job_id) for r in raws}
+    out: set[str] = set()
+    for r in raws:
+        sid = str(r.source_job_id)
+        ver = provider.content_version(r)
+        out.add(f"{sid}{_VERSION_SEP}{ver}" if ver else sid)
+    return out
 
 
 @dataclass(frozen=True)
@@ -426,10 +499,20 @@ async def sweep_boards(
     write_lock = anyio.Lock()
     limiter = anyio.CapacityLimiter(max(1, concurrency))
     now_s = now()
+    # A-2 fold flag read ONCE per run (not per board) so every board this run fingerprints on the
+    # same basis, matching the crawl stamp which reads it once per build. Off => id-only == today.
+    fold = content_version_enabled()
 
     async def process(source: str, token: str) -> None:
         async with limiter:
-            live_ids = await board_live_ids(source, token, fetcher)
+            raws = await board_live_raws(source, token, fetcher)
+        # PURE ids for the membership diff (departed/added) -- id-only by contract. ``None`` on a
+        # failed fetch or a malformed raw (mirrors the old ``board_live_ids`` guard), which the
+        # undetermined valve below treats exactly like an errored fetch.
+        try:
+            live_ids = None if raws is None else {str(r.source_job_id) for r in raws}
+        except Exception:  # noqa: BLE001 - a malformed raw must not fail the whole board
+            live_ids, raws = None, None
         board_map = stored.get((source, token), {})
         stored_ids = set(board_map.keys())
         # Safety valve: an EMPTY live id-set while we still hold active postings for this board is
@@ -465,12 +548,20 @@ async def sweep_boards(
             # trustworthy dump on a DETERMINISTIC_SOURCES board). Recorded for EVERY determinable
             # board -- even one with zero adds/departures -- so the build always has a current
             # membership hash to diff. ``live_ids`` is non-None here (undetermined caught it above).
-            if board_deltas is not None and live_ids is not None:
+            if board_deltas is not None and live_ids is not None and raws is not None:
                 board_deltas[(source, token)] = BoardDelta(
                     source=source,
                     board_token=token,
+                    # Membership diff stays PURE-id (``live_ids``); only the FINGERPRINT folds the
+                    # per-posting content-version, derived from the SAME ``raws`` this fetch
+                    # returned. Flag off => ``content_fingerprint_ids`` == the bare id-set =>
+                    # ``idset_hash`` byte-identical to the historical ``idset_hash(live_ids)``.
                     added_ids=frozenset(added_ids(stored_ids, live_ids)),
-                    idset_hash=idset_hash(live_ids),
+                    idset_hash=idset_hash(
+                        content_fingerprint_ids(
+                            raws, get_provider(source), fold_version=fold
+                        )
+                    ),
                     computed_at=now_s,
                 )
             if not missing:

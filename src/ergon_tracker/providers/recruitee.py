@@ -140,6 +140,15 @@ class RecruiteeProvider(BaseProvider):
             )
         return raws
 
+    def content_version(self, raw: RawJob) -> str | None:
+        """A-2 content-version: Recruitee's offers feed carries a per-offer ``updated_at`` (the
+        offer's last-modification timestamp), distinct from ``published_at``/``created_at``. The
+        bulk list already carries the full ``description``, so an edit to the JD (or title/location/
+        status) bumps ``updated_at`` while it stays stable across fetches for an unchanged offer --
+        a SAFE fingerprint token. Raw served string, not reparsed."""
+        v = raw.payload.get("updated_at")
+        return str(v) if v else None
+
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
 
