@@ -97,6 +97,9 @@ _INTERVAL_BY_LEVER = {
 @register("lever")
 class LeverProvider(BaseProvider):
     name = "lever"
+    # conditional_url validates ?mode=json -- the full postings JSON, each carrying
+    # ``description``/``descriptionPlain`` (the JD normalize reads) -> its 304 is edit-safe.
+    validator_covers_body = True
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:

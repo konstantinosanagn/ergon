@@ -1431,7 +1431,17 @@ async def _crawl_due(
         # never skips, so a wrong skip is impossible (worst case a real change is delayed one cycle,
         # which the next sweep+build catch). Deterministic sources only -- the sweep emits no hash
         # for search-index sources (their list reshuffles), so they are never in sidecar_hashes.
-        if delta_crawl and e["ats"] in DETERMINISTIC_SOURCES:
+        #
+        # EXCEPTION -- ``validator_covers_body`` providers (lever/ashby/teamtailor/personio): their
+        # conditional_url validates the WHOLE board body INCLUDING the JD, so their ETag/304 already
+        # catches an in-place edit that the id-set hash (membership-only) is blind to. Skipping them
+        # here would suppress that stronger, edit-safe signal, so we let them fall through to the
+        # conditional-GET below (a 304 there still carries forward; a 200 re-processes the edit).
+        if (
+            delta_crawl
+            and e["ats"] in DETERMINISTIC_SOURCES
+            and not getattr(provider, "validator_covers_body", False)
+        ):
             sweep_hash = sidecar_hashes.get((e["ats"], e["token"]))
             if sweep_hash and state.idset_hash and sweep_hash == state.idset_hash:
                 outcome[bkey]["not_modified"] = True

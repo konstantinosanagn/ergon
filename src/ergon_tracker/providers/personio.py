@@ -110,6 +110,9 @@ def _years_range(v: str | None) -> tuple[int | None, int | None]:
 @register("personio")
 class PersonioProvider(BaseProvider):
     name = "personio"
+    # conditional_url validates the /xml feed -- each <position> carries <jobDescriptions> (the JD
+    # HTML normalize reads) -> its 304 is edit-safe.
+    validator_covers_body = True
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:

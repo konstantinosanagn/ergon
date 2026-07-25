@@ -96,6 +96,9 @@ def _employment(value: Any) -> EmploymentType:
 @register("teamtailor")
 class TeamtailorProvider(BaseProvider):
     name = "teamtailor"
+    # conditional_url validates the jobs.json feed -- each item carries ``content_html`` (the JD
+    # body normalize reads) -> its 304 is edit-safe.
+    validator_covers_body = True
 
     @classmethod
     def matches(cls, url_or_host: str) -> str | None:
