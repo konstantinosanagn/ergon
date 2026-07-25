@@ -107,6 +107,77 @@ def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
     )
 
 
+# manifest-name -> the gz asset it describes. The top-level set manifest (below) aggregates each
+# present pair's sha so a reader can verify the WHOLE published set is internally consistent.
+_SET_ASSET_MANIFESTS = {
+    "manifest.json": "index.sqlite.gz",
+    "manifest-slim.json": "index-slim.sqlite.gz",
+    "manifest-vectors.json": "index-vectors.sqlite.gz",
+    "manifest-detail.json": "index-detail.sqlite.gz",
+    "manifest-liveness.json": "index-liveness.sqlite.gz",
+    "manifest-jd.json": "index-jd.sqlite.gz",
+}
+
+
+def write_set_manifest(out: Path, *, build_id: str) -> dict:
+    """Write ``manifest-set.json``: a top-level index of every published asset's sha256, so a reader
+    can reject a TORN set (a mid-upload read that mixes assets from two builds) before trusting it.
+
+    GitHub Releases are NOT transactionally atomic across assets — ``gh release upload --clobber``
+    replaces assets one at a time, so a reader can briefly see a NEW ``manifest.json`` against an OLD
+    ``index.sqlite.gz`` (or vice versa). This is NOT a true atomic swap and does not pretend to be:
+    it is the atomicity PIVOT. The workflow uploads this file LAST (after every other asset is fully
+    up), so a reader that reads it FIRST and cross-checks each asset's sha against it will, during an
+    in-flight upload, find the set inconsistent and fall back to its cached prior — instead of
+    stitching together bytes from two different builds. The SDK-side check ships DARK (IndexCache,
+    gated on ``ERGON_VERIFY_SET_MANIFEST``); flag-off = the exact pre-Item-6 download path.
+
+    Built by AGGREGATING the per-asset manifests already on disk (each carries its gz's raw-content
+    sha256), so it costs no extra hashing and naturally tolerates a partition run that only rewrote
+    SOME assets: a join-shard run rewrites the core index + shards but carries the detail/jd/liveness
+    sidecars forward — those sidecars' manifests are downloaded into ``out`` and aggregated with
+    their existing (still-live) shas, so the set stays a faithful description of what's on the release.
+    """
+    assets: dict[str, dict] = {}
+    for man_name, gz_name in _SET_ASSET_MANIFESTS.items():
+        man_path, gz_path = out / man_name, out / gz_name
+        if not (man_path.exists() and gz_path.exists()):
+            continue
+        try:
+            man = json.loads(man_path.read_text())
+        except Exception:  # noqa: BLE001 - a malformed sidecar manifest must not sink the whole set
+            continue
+        sha = man.get("sha256")
+        if sha:
+            assets[gz_name] = {
+                "sha256": sha,
+                "bytes": man.get("bytes"),
+                "build_id": man.get("build_id"),
+            }
+    # Sector shards: shards.json already carries each shard's raw-content sha256 (the same scheme the
+    # core/sidecars use, and what ShardCache verifies against), so fold those in too when present.
+    shards_path = out / "shards.json"
+    if shards_path.exists():
+        try:
+            for info in json.loads(shards_path.read_text()).get("shards", {}).values():
+                gz = info["file"] + ".gz"
+                if (out / gz).exists():
+                    assets[gz] = {
+                        "sha256": info["sha256"],
+                        "bytes": info.get("bytes"),
+                        "build_id": build_id,
+                    }
+        except Exception:  # noqa: BLE001 - a malformed shard manifest must not sink the set
+            pass
+    manifest = {
+        "build_id": build_id,
+        "schema_version": SCHEMA_VERSION,
+        "assets": assets,
+    }
+    (out / "manifest-set.json").write_text(json.dumps(manifest, indent=2))
+    return manifest
+
+
 async def _crawl_network(cap_pages: int) -> list:
     """Bulk-fetch the ``workable_network`` aggregator feed and return normalized + enriched jobs
     (NOT yet deduped — the caller folds these into its own list and dedups once).
@@ -549,15 +620,18 @@ async def _reconcile_liveness(liveness_db: Path, index_db: Path) -> dict:
 
 
 def build_and_publish_liveness(db_path: Path, out: Path, *, build_id: str) -> dict:
-    """Liveness reconcile against the ALREADY-PUBLISHED core index, then re-publish
-    ``index.sqlite.gz``/``manifest.json`` so any status flips actually reach a downloading user
-    (mirrors ``build_and_publish_detail``'s ORDERING exactly -- see its docstring for the full
-    rationale). Also publishes the liveness sidecar itself (``index-liveness.sqlite.gz`` +
-    ``manifest-liveness.json``) so the NEXT build can download + carry it forward, preserving the
-    recheck cadence across days instead of re-checking every active row on every single build.
+    """Liveness reconcile against the promoted core index (``status='expired'`` flips written
+    directly onto ``jobs`` in place), plus publish the liveness sidecar itself
+    (``index-liveness.sqlite.gz`` + ``manifest-liveness.json``) so the NEXT build can download +
+    carry it forward, preserving the recheck cadence across days instead of re-checking every active
+    row on every single build.
 
-    Unlike the detail tier, there is no separate merge step: ``reconcile_liveness_tier`` writes
-    the ``status='expired'`` flip directly onto ``jobs`` as part of the reconcile pass itself.
+    Item 6: this NO LONGER re-publishes the core ``index.sqlite.gz``/``manifest.json``. The reconcile
+    mutates ``db_path`` in place; the caller (``main``) runs every reconcile FIRST and then publishes
+    the core ONCE, so the fully-reconciled index is gzipped a single time per build (see
+    ``_gated_publish(publish_core=False)`` + the single ``publish_artifacts`` in ``main``). Unlike the
+    detail tier there is no separate merge step: ``reconcile_liveness_tier`` writes the flip as part
+    of the reconcile pass itself.
     """
     import anyio
 
@@ -565,9 +639,6 @@ def build_and_publish_liveness(db_path: Path, out: Path, *, build_id: str) -> di
     stats = anyio.run(lambda: _reconcile_liveness(liveness_db, db_path))
     sha, nbytes = _gzip_file(liveness_db, out / "index-liveness.sqlite.gz")
     _write_liveness_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
-    # Re-publish the core index so any status='expired' flips just written land in the gzip/
-    # manifest a downloading user actually fetches (see ORDERING note above).
-    publish_artifacts(db_path, out, build_id=build_id)
     return stats
 
 
@@ -704,27 +775,27 @@ def build_and_publish_detail(
     shard: int | None = None,
     num_shards: int | None = None,
 ) -> tuple[dict, int]:
-    """Tier-3 reconcile + merge against the ALREADY-PUBLISHED core index, then re-publish
-    ``index.sqlite.gz``/``manifest.json`` so the recovered fields actually reach users, and
-    publish the detail sidecar itself (``index-detail.sqlite.gz`` + ``manifest-detail.json``).
+    """Tier-3 reconcile + merge into the promoted core index (recovered fields UPDATEd onto ``jobs``
+    in place), plus publish the detail sidecar itself (``index-detail.sqlite.gz`` +
+    ``manifest-detail.json``).
 
-    ORDERING (the one subtle wiring decision, see Task-5 brief): callers only invoke this AFTER
-    ``_gated_publish`` has already gzipped+promoted the core index — the reconcile pass needs the
-    final ``jobs`` table (with its real ids/content_hash) to select Tier-3 candidates against, and
-    that table only exists once ``_gated_publish`` has promoted ``db_tmp`` -> ``db``. But
-    ``merge_detail_into_index`` then mutates that SAME on-disk db in place, which means the
-    ``index.sqlite.gz``/``manifest.json`` that ``_gated_publish`` already wrote are now stale — the
-    recovered fields are on disk in ``db`` but not yet in the gzip a downloading user fetches. So
-    this function re-runs ``publish_artifacts`` at the end, re-gzipping + rewriting ``manifest.json``
-    (same ``build_id``, refreshed ``sha256``) with the merged fields included. Skipping that step
-    would silently strand every recovered field in the sidecar and never reach a user. This whole
-    call is wrapped in try/except by the caller (non-fatal: a detail failure must never undo or
-    block the already-succeeded core publish).
+    ORDERING: callers invoke this AFTER ``_gated_publish`` has PROMOTED ``db_tmp`` -> ``db`` (the
+    reconcile needs the final ``jobs`` table, with its real ids/content_hash, to select Tier-3
+    candidates against). ``merge_detail_into_index`` then mutates that SAME on-disk db in place.
+
+    Item 6: this NO LONGER re-publishes the core ``index.sqlite.gz``/``manifest.json``. Previously
+    ``_gated_publish`` gzipped the core, then this re-gzipped it with the merged fields, then
+    liveness re-gzipped it AGAIN — up to 3 gzips of a hundreds-of-MB db per build, plus a window in
+    which a reader could pull a half-reconciled core. Now ``_gated_publish(publish_core=False)``
+    defers the gzip; the caller (``main``) runs every reconcile FIRST and then calls
+    ``publish_artifacts`` ONCE, so the fully-merged index is gzipped a single time. This call is
+    still wrapped in try/except by the caller (non-fatal: a detail failure must never block the core
+    publish — the single publish below simply ships the un-merged-but-promoted core).
 
     ``shard``/``num_shards`` are plumbed through to ``_reconcile_detail`` for completeness (both
     default ``None`` -- the ordinary daily/manual ``--detail`` path here always reconciles the
     WHOLE backlog, unsharded). The drain matrix uses the separate ``--detail-shard-only`` path
-    (``build_detail_shard_only`` below) instead, which skips the merge/republish entirely.
+    (``build_detail_shard_only`` below) instead, which skips the merge entirely.
     """
     import anyio
 
@@ -735,13 +806,10 @@ def build_and_publish_detail(
     if stats.get("merged", 0) > 0:
         # Recovered snippets just landed in `jobs.snippet` via plain UPDATEs, which do NOT
         # propagate into the external-content `jobs_fts` table -- rebuild it so those postings
-        # become MATCHable before the re-publish below ships them.
+        # become MATCHable before the single core publish (in main) ships them.
         _rebuild_jobs_fts(db_path)
     sha, nbytes = _gzip_file(detail_db, out / "index-detail.sqlite.gz")
     _write_detail_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
-    # Re-publish the core index so the fields merge_detail_into_index just wrote land in the
-    # gzip/manifest a downloading user actually fetches (see ORDERING above).
-    publish_artifacts(db_path, out, build_id=build_id)
     return stats, nbytes
 
 
@@ -1012,12 +1080,23 @@ def _gated_publish(
     build_id: str,
     prev_row_count: int | None = None,
     last_known_rows: int | None = None,
+    publish_core: bool = True,
 ) -> bool:
-    """Good-or-nothing publish: gate the temp build, promote+publish only if it passes.
+    """Good-or-nothing publish: gate the temp build, promote (+ publish) only if it passes.
 
     Writes gates.json always. On failure the previous snapshot (final_db) is left untouched.
     ``ERGON_ALLOW_COLD_START`` (env) permits publishing below the historical floor for a genuine
     first build / intentional reset.
+
+    ``publish_core`` (Item 6): when True (the default — every standalone caller/test keeps the old
+    inline behaviour) this gzips ``index.sqlite.gz`` + ``manifest.json`` right here. The incremental
+    ``main`` path passes ``publish_core=False`` so the gzip is DEFERRED until AFTER the
+    ``--detail``/``--liveness`` reconciles have mutated ``final_db`` in place — the caller then calls
+    ``publish_artifacts`` ONCE, so the fully-reconciled core is gzipped a single time per build
+    instead of up to three (gate, post-detail, post-liveness). ``publish_coverage`` still runs here
+    either way: coverage counts (rows, by_source, by_sector) are INVARIANT to the reconciles (detail
+    only UPDATEs fields, liveness only flips ``status`` — neither adds/removes rows or changes
+    source/sector), so writing it at promote time is byte-identical to writing it post-reconcile.
     """
     from ergon_tracker.index.gates import evaluate_gates
 
@@ -1035,7 +1114,8 @@ def _gated_publish(
         tmp_db.unlink(missing_ok=True)
         return False
     tmp_db.replace(final_db)  # atomic promote
-    publish_artifacts(final_db, out, build_id=build_id)
+    if publish_core:
+        publish_artifacts(final_db, out, build_id=build_id)
     cov = publish_coverage(final_db, out, build_id=build_id)
     print(
         f"gates passed: {rep.summary()} | coverage: {cov['total_jobs']} jobs, "
@@ -1876,6 +1956,11 @@ def main(argv: list[str]) -> None:
         if prev_db is not None and db.exists():
             prev_snap = out / "index.prev.sqlite"
             db.replace(prev_snap)
+        # Item 6: DEFER the core gzip. _gated_publish gates + promotes db_tmp -> db (and writes
+        # gates.json/coverage.json), but does NOT gzip index.sqlite.gz yet — the --detail merge and
+        # --liveness flips below mutate `db` in place, and the SINGLE publish_artifacts after them
+        # gzips the fully-reconciled core exactly once (was: gzipped at gate, again post-detail,
+        # again post-liveness — up to 3x).
         ok = _gated_publish(
             db_tmp,
             db,
@@ -1883,6 +1968,7 @@ def main(argv: list[str]) -> None:
             build_id=build_id,
             prev_row_count=prev_row_count,
             last_known_rows=last_known_rows,
+            publish_core=False,
         )
         if not ok and prev_snap is not None:
             prev_snap.replace(db)  # gates failed -> restore the previous snapshot
@@ -1956,10 +2042,11 @@ def main(argv: list[str]) -> None:
             except Exception as exc:  # noqa: BLE001 - never let the JD sidecar break the core build
                 print(f"  ! jd sidecar skipped (non-fatal): {type(exc).__name__}: {exc}")
         fresh_path.unlink(missing_ok=True)  # free disk before the shard VACUUMs
-        if ok and detail:  # Tier-3 reconcile + merge against the already-published core index
+        if ok and detail:  # Tier-3 reconcile + merge into the promoted (not-yet-gzipped) core index
             # NON-FATAL: the detail tier is an optional enhancement, same contract as rich above.
             # The main index is already gated + promoted, so a fetch-dispatcher/merge failure must
-            # NOT crash the build or undo the core publish — log it and carry on.
+            # NOT crash the build — log it and carry on; the single core publish below then ships the
+            # promoted-but-un-merged core (no torn/partial state).
             try:
                 dstats, dbytes = build_and_publish_detail(
                     db, out, build_id=build_id, shard=shard, num_shards=num_shards
@@ -1971,10 +2058,10 @@ def main(argv: list[str]) -> None:
                 )
             except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
                 print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")
-        if ok and liveness:  # apply-URL liveness pass against the already-published core index
+        if ok and liveness:  # apply-URL liveness pass on the promoted (not-yet-gzipped) core index
             # NON-FATAL: same contract as rich/detail above. The main index is already gated +
-            # promoted, so a board-fetch/classify failure here must NOT crash the build or undo
-            # the core publish — log it and carry on (yesterday's statuses stay live).
+            # promoted, so a board-fetch/classify failure here must NOT crash the build — log it and
+            # carry on; the single core publish below ships whatever flips did land.
             try:
                 lstats = build_and_publish_liveness(db, out, build_id=build_id)
                 print(
@@ -1986,6 +2073,12 @@ def main(argv: list[str]) -> None:
                 )
             except Exception as exc:  # noqa: BLE001 - never let the liveness tier break the build
                 print(f"  ! liveness tier skipped (non-fatal): {type(exc).__name__}: {exc}")
+        # Item 6: the ONE core publish. Every reconcile that mutates `db` (detail merge, liveness
+        # flips) has now run, so gzip index.sqlite.gz + write manifest.json exactly once — capturing
+        # the fully-reconciled index. Gated on `ok`, UNGUARDED (a plain local gzip+write): it must
+        # never sit inside a sidecar's non-fatal try/except, so a torn/half set can never ship.
+        if ok:
+            publish_artifacts(db, out, build_id=build_id)
         if ok and sharded:
             ns = build_and_publish_shards_from_db(db, out, build_id=build_id)
             print(f"  + published {ns} sector shards")
@@ -2002,6 +2095,14 @@ def main(argv: list[str]) -> None:
                     )
             finally:
                 prev_snap.unlink(missing_ok=True)  # reclaim the ~500MB snapshot
+        # Item 6: the top-level set manifest, written LAST — after the core + every sidecar/shard is
+        # on disk — so it aggregates each present asset's sha into one consistency index. The workflow
+        # uploads it LAST too, making it the atomicity pivot a reader cross-checks to reject a torn
+        # (mid-upload) set. Aggregates whatever manifests exist, so a join-shard partition run (core +
+        # shards rewritten, sidecars carried forward) still yields a faithful, consistent set.
+        if ok:
+            sset = write_set_manifest(out, build_id=build_id)
+            print(f"  + set manifest -> manifest-set.json ({len(sset['assets'])} assets)")
         print(
             f"incremental build: crawled {len(outcome)} due boards, {fresh_jobs_count} fresh jobs, "
             f"{n} total{' -> published' if ok else ' (gates FAILED, kept previous)'}"

@@ -67,6 +67,7 @@ def test_main_incremental_streaming_wiring(tmp_path, monkeypatch):
         "index.sqlite",
         "index.sqlite.gz",
         "manifest.json",
+        "manifest-set.json",  # Item 6: top-level set manifest, written last
         "gates.json",
         "coverage.json",
         "INDEX_STATUS.md",

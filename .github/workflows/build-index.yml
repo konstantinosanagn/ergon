@@ -354,6 +354,14 @@ jobs:
             gh release create index-latest $ASSETS --title index-latest \
               --notes "Daily ergon-tracker search-index snapshot."
           fi
+          # ATOMICITY PIVOT (Item 6): upload the top-level set manifest LAST, in its OWN call after
+          # every other asset is fully up. GitHub Releases are NOT atomic across assets, so a reader
+          # mid-upload can see a new manifest.json against an old index.sqlite.gz. manifest-set.json
+          # names every asset's sha; a reader that reads it first (IndexCache, ERGON_VERIFY_SET_MANIFEST)
+          # cross-checks the set and falls back to its cached prior while an upload is in flight. It is
+          # NOT a true atomic swap — it's a consistency pivot a cooperating reader can honour. Uploading
+          # it separately guarantees it lands strictly after the core set (never mid-batch).
+          [ -f dist/manifest-set.json ] && gh release upload index-latest dist/manifest-set.json --clobber || true
           # Prune chain deltas that have rolled out of the deltas.json window (best-effort).
           if [ -f dist/deltas.json ]; then
             KEPT=$(python3 -c "import json,sys; print(' '.join(d['file'] for d in json.load(open('dist/deltas.json')).get('deltas',[])))" 2>/dev/null || echo "")
