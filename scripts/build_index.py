@@ -735,6 +735,53 @@ def build_and_publish_detail(
     return stats, nbytes
 
 
+def _write_jd_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
+    """Write ``manifest-jd.json`` alongside the gz — mirrors ``_write_detail_manifest``: the full-JD
+    sidecar is a release asset the NEXT build downloads + carries forward, and the paired manifest is
+    what the publish step's paired-asset guard checks before shipping the (large) gz."""
+    from ergon_tracker.index.jd_store import JD_SCHEMA_VERSION
+
+    (out / "manifest-jd.json").write_text(
+        json.dumps(
+            {
+                "build_id": build_id,
+                "schema_version": JD_SCHEMA_VERSION,
+                "sha256": sha,
+                "bytes": nbytes,
+            },
+            indent=2,
+        )
+    )
+
+
+def build_and_publish_jd(db_path: Path, jd_db: Path, out: Path, *, build_id: str) -> tuple[dict, int]:
+    """Prune the crawl-populated full-JD sidecar to the just-published core index's live ids, then
+    gzip-publish ``index-jd.sqlite.gz`` + ``manifest-jd.json`` (Item 2). Called AFTER ``_gated_publish``
+    promoted the core index, on the ``ok`` path only, so the sidecar never ships out of sync with an
+    unpublished index — mirrors ``build_and_publish_detail``'s ordering (minus the merge: the JD
+    sidecar feeds re-enrichment, it does not write back onto ``jobs``, so the core index is unchanged
+    and the ``jobs`` parity gate holds). The sidecar at ``jd_db`` already holds this run's fresh JDs
+    (written during the crawl) upserted onto the carried-forward prior; here we only orphan-prune +
+    publish. Returns ``({"stored": n, "pruned": p}, gz_bytes)``."""
+    from ergon_tracker.index import jd_store
+    from ergon_tracker.index.db import connect
+
+    idx = connect(db_path, read_only=True)
+    try:
+        live_ids = {r[0] for r in idx.execute("SELECT id FROM jobs")}
+    finally:
+        idx.close()
+    jcon = jd_store.open_jd_store(str(jd_db))
+    try:
+        pruned = jd_store.prune_to_live_ids(jcon, live_ids)
+        stored = jd_store.count(jcon)
+    finally:
+        jcon.close()
+    sha, nbytes = _gzip_file(jd_db, out / "index-jd.sqlite.gz")
+    _write_jd_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
+    return {"stored": stored, "pruned": pruned}, nbytes
+
+
 def build_detail_shard_only(index_db: Path, out: Path, *, shard: int, num_shards: int) -> dict:
     """Drain-matrix entry point (``--detail-shard-only``): run ONLY the sharded Tier-3 reconcile
     for shard ``shard`` of ``num_shards``, writing its sidecar to
@@ -1149,6 +1196,7 @@ async def _crawl_due(
     cursor: int = 0,
     capture_rich: bool = False,
     prev_db: Path | str | None = None,
+    capture_jd: bool = False,
     only_sources: set[str] | None = None,
     exclude_sources: set[str] | None = None,
 ) -> tuple[dict, int]:
@@ -1159,6 +1207,13 @@ async def _crawl_due(
     the CI timeout and durably seeds board_state; crash-isolated per board. When ``capture_rich`` is
     set, each board's FULL descriptions are also captured to the fresh DB's ``fresh_rich`` table (the
     index only keeps a snippet) so the incremental rich reconcile can index them — still O(window) on disk.
+
+    When ``capture_jd`` is set, each board's FULL JD text is ALSO persisted (gzip-compressed, keyed by
+    id) into the separate ``index-jd.sqlite`` sidecar next to the fresh DB — the discard-after-extract
+    fix (Item 2): the index keeps only a 300-char snippet, but the sidecar keeps the whole JD so a
+    future/improved extractor can re-run without re-crawling. Written under the same ``write_lock`` as
+    the core insert (one batched upsert per board), then pruned to the live index + published by the
+    caller. Independent of ``capture_rich`` (different payload: replay text vs. embed text).
 
     ``prev_db`` (optional): the prior published index, used ONLY to resolve a zero-result board's
     real prior ``company_key`` by ``(source, board_token)`` -- see the zero-results branch below.
@@ -1171,10 +1226,11 @@ async def _crawl_due(
     from ergon_tracker.enrich import enrich_in_place
     from ergon_tracker.exceptions import RateLimitError
     from ergon_tracker.http import AsyncFetcher
+    from ergon_tracker.index import jd_store
     from ergon_tracker.index.build import append_jobs
     from ergon_tracker.index.db import connect, fresh_db
     from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES, idset_hash
-    from ergon_tracker.index.mapping import enrich_hash
+    from ergon_tracker.index.mapping import enrich_hash, full_jd_text
     from ergon_tracker.index.scheduler import BoardState, due_boards
     from ergon_tracker.models import SearchQuery
     from ergon_tracker.providers.base import get_provider, load_builtins
@@ -1246,6 +1302,15 @@ async def _crawl_due(
     con.execute(
         "PRAGMA foreign_keys = OFF"
     )  # companies aggregated later (build_index_from_fresh_db)
+    # Full-JD sidecar (Item 2): a SEPARATE index-jd.sqlite next to the fresh DB. Opened on the prior
+    # carried-forward file (the workflow gunzips index-jd.sqlite.gz onto this path before the build),
+    # so this run's crawl UPSERTS fresh JDs on top of the carry-forward. None when capture is off ->
+    # byte-identical to today (nothing but a sidecar is ever added).
+    jd_con = (
+        jd_store.open_jd_store(str(Path(fresh_db_path).parent / "index-jd.sqlite"))
+        if capture_jd
+        else None
+    )
     write_lock = anyio.Lock()
     pending = {"rows": 0}  # uncommitted row count; mutated only while holding write_lock
     rows_total = {"n": 0}  # cumulative rows written this run (heartbeat); bumped under write_lock
@@ -1373,10 +1438,16 @@ async def _crawl_due(
                         from ergon_tracker.index.rich import write_fresh_rich
 
                         write_fresh_rich(con, board_jobs)
+                    if jd_con is not None:  # full JD text (Item 2): one batched upsert per board
+                        jd_store.put_many(
+                            jd_con, ((j.id, full_jd_text(j)) for j in board_jobs)
+                        )
                     pending["rows"] += len(board_jobs)
                     rows_total["n"] += len(board_jobs)
                     if pending["rows"] >= 20000:
                         con.commit()
+                        if jd_con is not None:
+                            jd_con.commit()
                         pending["rows"] = 0
             if not outcome[bkey]["companies"]:
                 # The fetch SUCCEEDED (no exception, we got this far) but yielded no usable
@@ -1462,8 +1533,12 @@ async def _crawl_due(
             await run_pool(due, _handle, concurrency=crawl_concurrency, on_result=_tick)
             heartbeat.emit()  # final snapshot: 100% + the run's last slow-host tail
         con.commit()
+        if jd_con is not None:
+            jd_con.commit()
     finally:
         con.close()
+        if jd_con is not None:
+            jd_con.close()
     return outcome, next_cursor
 
 
@@ -1573,6 +1648,7 @@ def main(argv: list[str]) -> None:
     detail = (
         False  # opt-in: also run the Tier-3 detail reconcile + merge (manual-only; see workflow)
     )
+    jd = False  # opt-in: persist the full JD into the compressed index-jd.sqlite sidecar (Item 2)
     liveness = False  # opt-in: also run the apply-URL liveness pass (dead-link detection)
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
     detail_shard_only = False  # drain-matrix mode: sharded reconcile only, no crawl/build/merge
@@ -1601,6 +1677,9 @@ def main(argv: list[str]) -> None:
             i += 1
         elif argv[i] == "--detail":
             detail = True
+            i += 1
+        elif argv[i] == "--jd":
+            jd = True
             i += 1
         elif argv[i] == "--liveness":
             liveness = True
@@ -1726,6 +1805,7 @@ def main(argv: list[str]) -> None:
                 cursor,
                 rich,
                 prev_db,
+                jd,
                 only_sources,
                 exclude_sources,
             )
@@ -1841,6 +1921,21 @@ def main(argv: list[str]) -> None:
         # build never ships a fresh DB out of sync with the (unpublished) index.
         if ok and fresh_path.exists():
             _gzip_file(fresh_path, out / "fresh-rich.sqlite.gz")
+        # Prune + publish the full-JD sidecar (Item 2): the crawl already wrote this run's JDs into
+        # out/index-jd.sqlite (upserted onto the carried-forward prior); orphan-prune to the promoted
+        # index's live ids and ship index-jd.sqlite.gz + manifest-jd.json. Gated on `ok` (never ship a
+        # sidecar out of sync with an unpublished index) and NON-FATAL (an optional replay store must
+        # never undo the already-succeeded core publish). Core index is untouched -> jobs parity holds.
+        jd_db = out / "index-jd.sqlite"
+        if ok and jd and jd_db.exists():
+            try:
+                jstats, jbytes = build_and_publish_jd(db, jd_db, out, build_id=build_id)
+                print(
+                    f"  + jd sidecar (stored={jstats['stored']} pruned={jstats['pruned']}) -> "
+                    f"index-jd.sqlite.gz ({jbytes // 1024} KB)"
+                )
+            except Exception as exc:  # noqa: BLE001 - never let the JD sidecar break the core build
+                print(f"  ! jd sidecar skipped (non-fatal): {type(exc).__name__}: {exc}")
         fresh_path.unlink(missing_ok=True)  # free disk before the shard VACUUMs
         if ok and detail:  # Tier-3 reconcile + merge against the already-published core index
             # NON-FATAL: the detail tier is an optional enhancement, same contract as rich above.

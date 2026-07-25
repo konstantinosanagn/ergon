@@ -26,6 +26,7 @@ async def _fake_crawl_due(
     cursor=0,
     capture_rich=False,
     prev_db=None,
+    capture_jd=False,
     only_sources=None,
     exclude_sources=None,
 ):

@@ -100,6 +100,17 @@ def _snippet_source(job: JobPosting) -> str:
     return ""
 
 
+def full_jd_text(job: JobPosting) -> str:
+    """The full (UNtruncated) JD text the extractors read — the exact source ``to_row`` derives the
+    stored ``snippet`` from (:func:`_snippet_source`), only WITHOUT the ``_SNIPPET`` truncation.
+
+    This is what the compressed JD sidecar (``index/jd_store.py``) persists so re-extraction is
+    replayable without a re-crawl (pipeline-restructuring Item 2; Item 3 consumes it). Reusing
+    ``_snippet_source`` keeps the stored JD byte-for-byte the text the snippet + FTS + enrichment
+    already read — a future extractor replays over the identical bytes, just un-capped."""
+    return _snippet_source(job)
+
+
 def enrich_hash(job: JobPosting) -> str:
     """Body-inclusive fingerprint that makes enrich-reuse SAFE (delta-driven crawl redesign, Phase 3).
 
