@@ -18,10 +18,10 @@ from .mapping import from_row, to_row
 _JOB_COLS = (  # noqa: SIM905 - space-delimited string is far more readable than a 40-item list
     "id content_hash enrich_hash company_key source company company_domain title department "
     "role_family location city country remote level employment_type sector salary_min salary_max "
-    "salary_currency salary_interval salary_annual years_min years_max degree_min "
+    "salary_currency salary_interval years_min years_max degree_min "
     "degree_required visa_sponsor "
     "visa_last_filed sponsorship_offered apply_url listing_url board_token posted_at updated_at "
-    "closes_at status first_seen last_seen expired_at expiry_reason fetched_at build_id snippet"
+    "status first_seen last_seen expired_at expiry_reason fetched_at build_id snippet"
 ).split()
 
 
@@ -728,12 +728,10 @@ _SLIM_NULL_COLS = frozenset(
         "company_domain",
         "listing_url",
         "board_token",
-        "salary_annual",
         "years_min",
         "years_max",
         "visa_last_filed",
         "updated_at",
-        "closes_at",
         "expired_at",
         "expiry_reason",
     }

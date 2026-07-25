@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ergon_tracker import (
+    EmploymentType,
     JobLevel,
     JobPosting,
     Location,
@@ -95,6 +96,34 @@ def test_sector_index_loads_and_resolves() -> None:
     assert idx.get(key="stripe")
     assert idx.get(domain="figma.com")
     assert idx.get(key="does-not-exist") is None
+
+
+def test_enrich_in_place_fills_employment_type_when_unknown() -> None:
+    job = JobPosting.create(
+        source="s", source_job_id="1", company="Acme", title="Data Science Intern"
+    )
+    assert job.employment_type is EmploymentType.UNKNOWN
+    enrich_in_place(job)
+    assert job.employment_type is EmploymentType.INTERNSHIP
+
+
+def test_enrich_in_place_never_overwrites_provider_employment_type() -> None:
+    # A provider-declared value must survive even if the title suggests something else.
+    job = JobPosting.create(
+        source="s",
+        source_job_id="1",
+        company="Acme",
+        title="Software Engineering Intern",
+        employment_type=EmploymentType.FULL_TIME,
+    )
+    enrich_in_place(job)
+    assert job.employment_type is EmploymentType.FULL_TIME
+
+
+def test_enrich_in_place_leaves_employment_type_unknown_without_signal() -> None:
+    job = JobPosting.create(source="s", source_job_id="1", company="Acme", title="Software Engineer")
+    enrich_in_place(job)
+    assert job.employment_type is EmploymentType.UNKNOWN
 
 
 def test_enrich_in_place_sets_level_and_geo() -> None:

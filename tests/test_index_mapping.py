@@ -78,6 +78,35 @@ def test_to_row_sets_board_token():
     assert unset["board_token"] is None
 
 
+def test_to_row_omits_dropped_dead_columns():
+    # salary_annual + closes_at were provably 0%-populated dead columns (no extractor, no reader);
+    # dropped in schema v4. to_row must no longer emit them, and the row must still match the live
+    # jobs schema exactly (build's INSERT uses the schema column list).
+    row = to_row(_job(), build_id="b1")
+    assert "salary_annual" not in row
+    assert "closes_at" not in row
+
+
+def test_dropped_columns_absent_from_schema_and_have_no_readers():
+    # Proves the drop is complete: the columns are gone from the live schema, and the canonical
+    # build column list (_JOB_COLS, used by every INSERT/carry-forward/delta path) no longer names
+    # them — so nothing can read a value that is never written.
+    import sqlite3
+    from importlib.resources import files
+
+    from ergon_tracker.index.build import _JOB_COLS, _SLIM_NULL_COLS
+
+    schema = (files("ergon_tracker.index") / "schema.sql").read_text(encoding="utf-8")
+    con = sqlite3.connect(":memory:")
+    con.executescript(schema)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(jobs)").fetchall()}
+    assert "salary_annual" not in cols and "closes_at" not in cols
+    assert "salary_annual" not in _JOB_COLS and "closes_at" not in _JOB_COLS
+    assert "salary_annual" not in _SLIM_NULL_COLS and "closes_at" not in _SLIM_NULL_COLS
+    # the build column list must be a subset of the actual schema (no INSERT into a missing column)
+    assert set(_JOB_COLS) <= cols
+
+
 def test_content_hash_stable_and_change_sensitive():
     from ergon_tracker.index.mapping import content_hash
     from ergon_tracker.models import JobLevel, JobPosting, Salary
