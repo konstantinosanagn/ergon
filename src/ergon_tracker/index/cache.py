@@ -63,11 +63,13 @@ def cached_index_build_id(cache_dir: Path | None = None) -> str | None:
 def _verify_set_manifest() -> bool:
     """Whether :class:`IndexCache` cross-checks ``manifest-set.json`` to reject a torn set.
 
-    Ships DARK (Item 6): default OFF, so the download path is byte-identical to the pre-Item-6
-    behaviour and a malformed/absent set manifest can never break an existing SDK download. Set
-    ``ERGON_VERIFY_SET_MANIFEST=1`` to enable the torn-set rejection (fall back to the cached prior).
+    GRADUATED (Item 6): now default ON, after a real build confirmed ``manifest-set.json`` lands
+    cleanly (its ``index.sqlite.gz`` sha matches ``manifest.json``). A torn set (mid-upload core
+    that disagrees with the set manifest) falls back to the cached prior. Safe for older releases:
+    an absent/incomplete set manifest is treated as consistent, so nothing is penalised. Set
+    ``ERGON_VERIFY_SET_MANIFEST=0`` to opt out (restore the pre-Item-6 unchecked download).
     """
-    return os.environ.get("ERGON_VERIFY_SET_MANIFEST", "").lower() in ("1", "true", "yes")
+    return os.environ.get("ERGON_VERIFY_SET_MANIFEST", "1").lower() in ("1", "true", "yes")
 
 
 def _set_manifest_consistent(fetch: Callable[[str], bytes], core_manifest: dict[str, Any]) -> bool:
