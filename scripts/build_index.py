@@ -2061,15 +2061,47 @@ def main(argv: list[str]) -> None:
         # sidecar out of sync with an unpublished index) and NON-FATAL (an optional replay store must
         # never undo the already-succeeded core publish). Core index is untouched -> jobs parity holds.
         jd_db = out / "index-jd.sqlite"
+        jd_published = False
         if ok and jd and jd_db.exists():
             try:
                 jstats, jbytes = build_and_publish_jd(db, jd_db, out, build_id=build_id)
+                jd_published = True
                 print(
                     f"  + jd sidecar (stored={jstats['stored']} pruned={jstats['pruned']}) -> "
                     f"index-jd.sqlite.gz ({jbytes // 1024} KB)"
                 )
             except Exception as exc:  # noqa: BLE001 - never let the JD sidecar break the core build
                 print(f"  ! jd sidecar skipped (non-fatal): {type(exc).__name__}: {exc}")
+        # Observability tripwire: the JD sidecar (Item 2 replay store) silently stayed absent from the
+        # release for ~2 days because NOTHING watched it. Emit a first-class signal the notify job
+        # dedups into a GitHub issue. Keyed on publish SUCCESS (jd_published), NOT file existence -- a
+        # stale prior index-jd.sqlite.gz gunzipped onto disk would otherwise mask a produce failure.
+        # A join shard (jd=False) has expected=False -> jd_sidecar_ok=True -> never trips (it correctly
+        # carries the sidecar forward, doesn't rewrite it). Written on every ok build (like
+        # metrics_regression.json); notify_ops.signal_tripped filters the ok ones out.
+        if ok:
+            expected = bool(jd)
+            jd_reason = (
+                ""
+                if (jd_published or not expected)
+                else (
+                    "index-jd.sqlite absent -- the crawl did not persist the sidecar"
+                    if not jd_db.exists()
+                    else "build_and_publish_jd raised (see build log)"
+                )
+            )
+            (out / "jd_sidecar.json").write_text(
+                json.dumps(
+                    {
+                        "jd_sidecar_ok": jd_published or not expected,
+                        "expected": expected,
+                        "published": jd_published,
+                        "reason": jd_reason,
+                        "build_id": build_id,
+                    },
+                    indent=2,
+                )
+            )
         fresh_path.unlink(missing_ok=True)  # free disk before the shard VACUUMs
         if ok and detail:  # Tier-3 reconcile + merge into the promoted (not-yet-gzipped) core index
             # NON-FATAL: the detail tier is an optional enhancement, same contract as rich above.
