@@ -116,3 +116,40 @@ def test_deadline_box_disabled_when_budget_non_positive(monkeypatch, tmp_path):
     # inside grab, which is isolated (recorded as error), NOT re-raised. Proof the box didn't skip it:
     outcome, _cursor = anyio.run(bi._crawl_due, 10, states, fresh, "b1")
     assert slow.key in outcome and outcome[slow.key]["error"] is True
+
+
+def test_global_crawl_deadline_stops_dispatch(monkeypatch, tmp_path):
+    """GLOBAL deadline (ERGON_CRAWL_DEADLINE_S): once the WHOLE crawl passes its wall-clock budget,
+    grab stops dispatching NEW boards so the build+publish phases always run before the CI job
+    timeout -- the 2026-07-25 JD-sidecar-loss safety net. Distinct from the per-host box (host_budget
+    stays 0 here). Deterministic via a monotonic stub that jumps far forward on EVERY call, so the
+    deadline is exceeded for every board regardless of how many monotonic() calls precede it."""
+    import ergon_tracker.http as http_mod
+    import ergon_tracker.providers.base as base_mod
+    import ergon_tracker.registry.store as store_mod
+
+    monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
+    monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider())
+    monkeypatch.setattr(base_mod, "load_builtins", lambda: None)
+    monkeypatch.setattr(http_mod, "AsyncFetcher", _Fetcher)
+    monkeypatch.setenv("ERGON_CRAWL_HOST_BUDGET_S", "0")  # per-host box OFF -> isolate the global one
+    monkeypatch.setenv("ERGON_CRAWL_DEADLINE_S", "60")
+    ticks = {"t": 0.0}
+
+    def _fast_forward():
+        ticks["t"] += 1000.0  # every call jumps far past the just-computed (earlier, smaller) deadline
+        return ticks["t"]
+
+    monkeypatch.setattr(bi.time, "monotonic", _fast_forward)
+
+    slow = BoardState(provider="greenhouse", token="slow", next_due="2000-01-01")
+    fast = BoardState(provider="greenhouse", token="fast", next_due="2000-01-01")
+    states = {slow.key: slow, fast.key: fast}
+    fresh = tmp_path / "fresh.sqlite"
+
+    outcome, _cursor = anyio.run(bi._crawl_due, 10, states, fresh, "b1")
+
+    # Deadline already passed -> EVERY board is popped (never dispatched/fetched -- slow's fetch() would
+    # raise if reached), states untouched so they stay 'due' and carry forward (retried next run).
+    assert slow.key not in outcome and fast.key not in outcome
+    assert states[slow.key].last_crawled is None and states[fast.key].last_crawled is None

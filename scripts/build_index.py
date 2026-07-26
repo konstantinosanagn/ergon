@@ -1419,6 +1419,13 @@ async def _crawl_due(
         regkey, e = boards[bkey]
         provider = get_provider(e["ats"])
         state = states[bkey]
+        # Global crawl-phase deadline: once the whole crawl has run past its wall-clock budget, stop
+        # dispatching NEW boards so the build+publish phases always run before the CI job timeout.
+        # Same carry-forward semantics as the per-host box below (pop -> BoardState untouched -> stays
+        # 'due' -> prior rows carry forward). Checked first (cheapest) and disabled when unset.
+        if crawl_deadline is not None and time.monotonic() > crawl_deadline:
+            outcome.pop(bkey, None)
+            return
         # Deadline-box: if this board's host has already blown its per-run wall-clock budget (e.g.
         # join.com, whose 5-jobs/page pagination is the crawl's slow tail), skip DISPATCHING it this
         # run. Popping it from ``outcome`` leaves it exactly as if it were never in this window --
@@ -1616,6 +1623,18 @@ async def _crawl_due(
     # the budget now lives WITH the partition it bounds, not on the whole crawl. <=0 disables; closed
     # over by grab.
     host_budget = float(os.environ.get("ERGON_CRAWL_HOST_BUDGET_S") or "0")
+    # GLOBAL crawl-phase deadline (wall-clock seconds the ENTIRE crawl may run before it stops
+    # dispatching NEW boards) -- distinct from the PER-HOST box above. DEFAULT 0 = DISABLED. This is
+    # the safety net for the NON-JOIN daily: it has no single pathological host (so host_budget=0),
+    # but on a slow/late CI day the full ~32k-board crawl can run UNBOUNDED into the 330-min job
+    # timeout and, with the single publish at the end (Item 6), ship NOTHING -- exactly how the Item-2
+    # JD sidecar was lost on 2026-07-25 (crawl killed mid-run, before the publish step). Once elapsed,
+    # grab stops dispatching -> in-flight boards drain -> the build/publish phases run and ship what
+    # WAS crawled; the rest stay 'due' and carry forward (self-healing next run). Preserves the full
+    # daily crawl on a normal day (it finishes well under the deadline) and only caps the outlier.
+    # Set on the non-join partition comfortably under the CI timeout. <=0 disables; closed over by grab.
+    crawl_deadline_s = float(os.environ.get("ERGON_CRAWL_DEADLINE_S") or "0")
+    crawl_deadline = (time.monotonic() + crawl_deadline_s) if crawl_deadline_s > 0 else None
     try:
         async with AsyncFetcher(
             timeout=12.0, retries=2, concurrency=crawl_concurrency
