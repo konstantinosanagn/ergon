@@ -335,7 +335,7 @@ jobs:
           # some), so one missing file never fails the whole publish.
           ASSETS=""
           for f in index.sqlite.gz manifest.json index-slim.sqlite.gz manifest-slim.json \
-                   manifest-vectors.json manifest-detail.json manifest-liveness.json \
+                   manifest-vectors.json manifest-detail.json manifest-liveness.json manifest-jd.json \
                    index-delta.sqlite.gz manifest-delta.json deltas.json \
                    gates.json board_state.json history.jsonl spec_health.json rediscover_queue.json \
                    shards.json coverage.json INDEX_STATUS.md crawl_cursor.json crawl_cursor-join.json; do
