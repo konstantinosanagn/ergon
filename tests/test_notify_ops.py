@@ -159,6 +159,14 @@ def test_summarize_expiry_alarm():
     assert "adp" in out and "taleo" in out
 
 
+def test_summarize_jd_sidecar_missing():
+    out = no.summarize(
+        {"jd_sidecar_ok": False, "expected": True, "published": False,
+         "reason": "index-jd.sqlite absent", "build_id": "b-99"}
+    )
+    assert "JD sidecar NOT published" in out and "b-99" in out and "index-jd.sqlite absent" in out
+
+
 # ----------------------------------------------------------------------------- trip detection
 @pytest.mark.parametrize(
     "data,expected",
@@ -171,6 +179,10 @@ def test_summarize_expiry_alarm():
         (["tok"], True),
         ({"fired": [], "total_expired": 0}, False),
         ({"fired": ["adp"], "total_expired": 9}, True),
+        # JD sidecar (Item 2): a --jd build that failed to publish trips; join-shard skip + published don't.
+        ({"jd_sidecar_ok": False, "expected": True, "published": False}, True),
+        ({"jd_sidecar_ok": True, "expected": False, "published": False}, False),  # join shard: jd=False
+        ({"jd_sidecar_ok": True, "expected": True, "published": True}, False),  # published fine
     ],
 )
 def test_signal_tripped(data, expected):

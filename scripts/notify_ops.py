@@ -215,6 +215,15 @@ def summarize_expiry_alarm(data: dict[str, Any]) -> str:
     return f"**Expiry-rate alarm ({len(fired)} source(s)):** " + ", ".join(map(str, fired)) + suffix
 
 
+def summarize_jd_sidecar(data: dict[str, Any]) -> str:
+    """One compact line when a ``--jd`` build failed to publish the full-JD sidecar (Item 2 replay
+    store) it was asked to. Silent on the ok/join-shard cases (filtered by ``signal_tripped``)."""
+    if data.get("jd_sidecar_ok", True):
+        return "jd sidecar: ok"
+    reason = data.get("reason") or "unknown"
+    return f"**JD sidecar NOT published** (build {data.get('build_id')}): {reason}"
+
+
 def summarize(data: Any) -> str:
     """Dispatch a parsed signal payload to the matching summarizer by SHAPE (auto-detect)."""
     if isinstance(data, list):
@@ -226,6 +235,8 @@ def summarize(data: Any) -> str:
             return summarize_metrics_regression(data)
         if "fired" in data:
             return summarize_expiry_alarm(data)
+        if "jd_sidecar_ok" in data:
+            return summarize_jd_sidecar(data)
     return ""  # unrecognized shape -> nothing to say (filtered out by the caller)
 
 
@@ -242,6 +253,8 @@ def signal_tripped(data: Any) -> bool:
             return not data.get("ok", True) or bool(data.get("regressions"))
         if "fired" in data:
             return bool(data.get("fired"))
+        if "jd_sidecar_ok" in data:  # --jd build that failed to publish the sidecar (Item 2)
+            return not data.get("jd_sidecar_ok", True)
     return False
 
 

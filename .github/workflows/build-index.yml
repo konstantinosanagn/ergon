@@ -439,6 +439,7 @@ jobs:
             dist/manifest.json
             dist/gates.json
             dist/metrics_regression.json
+            dist/jd_sidecar.json
             dist/rediscover_queue.json
             dist/fresh.sqlite
             dist/crawl_cursor.json
@@ -511,5 +512,6 @@ jobs:
               --run-url "$RUN_URL" --title-key "build-index: tripwire" \
               --from-json dist/gates.json \
               --from-json dist/metrics_regression.json \
+              --from-json dist/jd_sidecar.json \
               --from-json dist/rediscover_queue.json
           fi

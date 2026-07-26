@@ -103,3 +103,29 @@ def test_main_non_incremental_routes_to_streaming(tmp_path, monkeypatch):
         assert (out / name).exists(), f"missing streaming artifact: {name}"
     con = connect(out / "index.sqlite", read_only=True)
     assert con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 9
+
+
+def test_jd_requested_but_sidecar_absent_emits_tripwire(tmp_path, monkeypatch):
+    """Reproduce the 2-day silent incident: --jd was requested but no sidecar was produced (the fake
+    crawl never creates out/index-jd.sqlite, like a crawl killed before it persisted one) -> main()
+    must emit jd_sidecar.json marking it NOT ok, which the notify job turns into an alert."""
+    import json
+
+    monkeypatch.setattr(bi, "_crawl_due", _fake_crawl_due)
+    out = tmp_path / "dist"
+    bi.main(["--incremental", "--sharded", "--limit-companies", "5", "--jd", "--out", str(out)])
+    sig = json.loads((out / "jd_sidecar.json").read_text())
+    assert sig["expected"] is True and sig["published"] is False and sig["jd_sidecar_ok"] is False
+    assert sig["reason"]  # names why (sidecar absent)
+
+
+def test_no_jd_flag_never_trips_sidecar_tripwire(tmp_path, monkeypatch):
+    """A build WITHOUT --jd (e.g. the join shard, which correctly carries the sidecar forward) has
+    expected=False -> jd_sidecar_ok=True -> never alerts. Guards against a carry-forward false-alarm."""
+    import json
+
+    monkeypatch.setattr(bi, "_crawl_due", _fake_crawl_due)
+    out = tmp_path / "dist"
+    bi.main(["--incremental", "--sharded", "--limit-companies", "5", "--out", str(out)])
+    sig = json.loads((out / "jd_sidecar.json").read_text())
+    assert sig["expected"] is False and sig["jd_sidecar_ok"] is True
