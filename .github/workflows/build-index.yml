@@ -53,7 +53,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 330   # under the 6h hosted-runner ceiling
+    timeout-minutes: 350   # under the 6h (360-min) hosted ceiling; the non-join crawl is capped well
+                           # below this by ERGON_CRAWL_DEADLINE_S so build+publish always run (see the
+                           # 2026-07-25 mid-crawl-timeout incident that lost the JD sidecar)
     steps:
       - uses: actions/checkout@v4
 
@@ -185,7 +187,14 @@ jobs:
           else
             echo "ERGON_CRAWL_EXCLUDE_SOURCES=join" >> "$GITHUB_ENV"
             echo "ERGON_CRAWL_MAX_WINDOW=0" >> "$GITHUB_ENV"           # 0 = no rotating cap: full non-join crawl in ONE run
-            echo "ERGON_CRAWL_HOST_BUDGET_S=0" >> "$GITHUB_ENV"        # no deadline box: non-join has no pathological host
+            echo "ERGON_CRAWL_HOST_BUDGET_S=0" >> "$GITHUB_ENV"        # no PER-HOST box: non-join has no single pathological host
+            # GLOBAL crawl deadline (210 min): the non-join crawl is otherwise unbounded, and on a
+            # slow/late CI day it ran into the 330-min job timeout MID-CRAWL and published NOTHING
+            # (the single end-of-build publish never ran) -- that lost the Item-2 JD sidecar on
+            # 2026-07-25. This caps the crawl so build+rich+publish always fit under timeout-minutes
+            # below; a normal crawl finishes in ~90 min (well under 210 -> full daily crawl preserved),
+            # only a pathological day is capped (partial + carry-forward, self-healing next run).
+            echo "ERGON_CRAWL_DEADLINE_S=12600" >> "$GITHUB_ENV"       # 210-min global crawl cap (safety net)
             echo "ERGON_CRAWL_LIMIT=${LIMIT_INPUT:-60000}" >> "$GITHUB_ENV"  # >= non-join board count so the whole partition crawls
           fi
 
