@@ -204,16 +204,28 @@ def test_verify_on_rejects_torn_set_no_cache_returns_none(tmp_path, monkeypatch)
     assert cache.ensure_fresh() is None  # no cached prior -> live fallback
 
 
-def test_verify_off_ignores_torn_set(tmp_path, monkeypatch):
-    # Ships dark: flag-off must be byte-identical to the pre-Item-6 path -> a torn set manifest is
-    # never even fetched, so the download proceeds normally.
+def test_verify_opt_out_ignores_torn_set(tmp_path, monkeypatch):
+    # Explicit opt-out (=0) restores the pre-Item-6 unchecked path: a torn set manifest is never
+    # cross-checked, so the download proceeds normally.
+    monkeypatch.setenv("ERGON_VERIFY_SET_MANIFEST", "0")
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    raw, sha = _publish_core(remote, tmp_path, "b1")
+    _write_set_manifest(remote, "b1", "0" * 64, len(raw))  # torn, but ignored while opted out
+    cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
+    assert cache.ensure_fresh() is not None  # downloaded despite the torn set manifest
+
+
+def test_verify_default_on_rejects_torn_set(tmp_path, monkeypatch):
+    # GRADUATED: with NO env set, the verify is now ON by default -> a torn set manifest (core sha
+    # disagrees) is rejected, falling back to the cached prior (None here, since none is cached).
     monkeypatch.delenv("ERGON_VERIFY_SET_MANIFEST", raising=False)
     remote = tmp_path / "remote"
     remote.mkdir()
     raw, sha = _publish_core(remote, tmp_path, "b1")
-    _write_set_manifest(remote, "b1", "0" * 64, len(raw))  # torn, but ignored while flag off
+    _write_set_manifest(remote, "b1", "0" * 64, len(raw))  # torn: core sha != set-manifest sha
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
-    assert cache.ensure_fresh() is not None  # downloaded despite the torn set manifest
+    assert cache.ensure_fresh() is None  # torn set rejected by default -> no cached prior
 
 
 def test_verify_on_absent_set_manifest_behaves_as_before(tmp_path, monkeypatch):

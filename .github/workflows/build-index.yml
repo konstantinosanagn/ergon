@@ -213,17 +213,18 @@ jobs:
           # deadline-box) is always on; the host budget below caps join's tail so the daily build
           # isn't join-bound. Rollback: change '|| '1'' back to '|| '''.
           ERGON_DELTA_CRAWL: "${{ github.event.inputs.delta_crawl || '1' }}"
-          # A-2 content-version fold. Ships DARK: '' => id-only fingerprint => byte-for-byte
-          # today's crawl. DELIBERATELY hard-set here (NOT a workflow_dispatch input): it MUST be
-          # flipped IN LOCKSTEP with freshness-sweep.yml's own ERGON_DELTA_CONTENT_VERSION by editing
-          # BOTH files' env together -- the sweep emits the fingerprint the build compares against, so
-          # a one-sided flip makes the hashes never match and the delta-skip silently stops firing
-          # (savings collapse; safe in direction, never a stale skip). A per-run dispatch input would
-          # invite exactly that one-sided flip (the two workflows are scheduled independently and a
-          # dispatch on one cannot coordinate the other's scheduled run), so there is intentionally no
-          # input. Flipping shifts every greenhouse/recruitee board's fingerprint ONCE => a one-cycle
-          # full re-crawl of those boards, self-healing. See docs A-2.
-          ERGON_DELTA_CONTENT_VERSION: ""
+          # A-2 content-version fold: FLIPPED ON 2026-07-26 (validated by A-2's offline parity tests
+          # + 2 adversarial verifiers: cross-side hash agreement, flag-off byte-identity, pure-ids
+          # membership). '1' folds each posting's stable per-posting content-version (greenhouse/
+          # recruitee updated_at, brassring lastupdated) into the delta fingerprint so an in-place
+          # EDIT flips the board hash -> re-crawl -> fresh enrichment (the id-set hash alone is
+          # membership-only, blind to an edit). MUST stay IN LOCKSTEP with freshness-sweep.yml's own
+          # ERGON_DELTA_CONTENT_VERSION (the sweep emits the fingerprint the build compares against);
+          # DELIBERATELY hard-set here, NOT a dispatch input, so the two independently-scheduled
+          # workflows can only move together. The first build+sweep after this flip shifts every
+          # greenhouse/recruitee/brassring board's fingerprint ONCE => a one-cycle full re-crawl of
+          # those boards, self-healing. To roll back: set BOTH files back to '' in one commit.
+          ERGON_DELTA_CONTENT_VERSION: "1"
           # NOTE: ERGON_CRAWL_HOST_BUDGET_S / ERGON_CRAWL_MAX_WINDOW / the partition source filter are
           # set by the "Resolve crawl partition" step above (per $GITHUB_ENV), NOT hard-set here. The
           # old blanket 1800s box on the mixed daily window is GONE: join is now its own shard and
