@@ -98,6 +98,23 @@ def test_recruitee_content_version_is_raw_updated_at():
     assert p.content_version(_rc_raw("1", None)) is None
 
 
+def _br_raw(sid: str, lastupdated):
+    return RawJob(source="brassring", source_job_id=sid, company="Acme",
+                  payload={"lastupdated": lastupdated, "reqid": sid})
+
+
+def test_brassring_content_version_is_raw_lastupdated():
+    from ergon_tracker.providers.brassring import BrassRingProvider
+
+    p = BrassRingProvider()
+    # Raw served day-granular date; a cross-day edit yields a DIFFERENT token.
+    assert p.content_version(_br_raw("1", "20-Jul-2026")) == "20-Jul-2026"
+    assert p.content_version(_br_raw("1", "21-Jul-2026")) != p.content_version(_br_raw("1", "20-Jul-2026"))
+    # Absent field -> None (falls back to id-only, no regression).
+    assert p.content_version(_br_raw("1", None)) is None
+    assert p.content_version(RawJob(source="brassring", source_job_id="1", company="Acme")) is None
+
+
 def test_base_provider_content_version_is_none():
     # The default: a provider that does NOT override stays id-only (edit-blind, no regression).
     assert BaseProvider().content_version(_gh_raw("1", "x")) is None

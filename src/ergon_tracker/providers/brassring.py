@@ -466,6 +466,17 @@ class BrassRingProvider(BaseProvider):
             payload=payload,
         )
 
+    def content_version(self, raw: RawJob) -> str | None:
+        """A-2 content-version: BrassRing's list ``Questions[]`` expose ``lastupdated`` (``%d-%b-%Y``),
+        the requisition's last-modified date, on every row (same field ``normalize`` maps to
+        ``updated_at``). It bumps when a posting is edited and is stable across fetches for an
+        unchanged posting (not fetch-time), so it is a SAFE fingerprint token. Raw served string,
+        not reparsed. CAVEAT: DAY granularity -- a same-day re-edit is invisible (its date is
+        unchanged), so this catches cross-day edits only; still strictly better than id-only
+        (which catches no edit). Folded only under ERGON_DELTA_CONTENT_VERSION (ships dark)."""
+        v = raw.payload.get("lastupdated")
+        return str(v) if v else None
+
     def normalize(self, raw: RawJob) -> JobPosting:
         flat = raw.payload
         fields = flat.get("_fields") or {}
