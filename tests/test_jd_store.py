@@ -254,3 +254,36 @@ def test_crawl_populates_jd_store_with_full_text(_patched, tmp_path):
             assert len(got) > _SNIPPET
     finally:
         jcon.close()
+
+
+def test_build_and_publish_jd_emits_gz_and_manifest_and_prunes(_patched, tmp_path):
+    """Item-2 PUBLISH path — the step whose output (index-jd.sqlite.gz + manifest-jd.json) was
+    absent from the release. Had ZERO test coverage; no clean non-join --jd build had exercised it
+    in prod. After a crawl populates the sidecar, build_and_publish_jd must: (a) prune ids no longer
+    in the promoted index, (b) gzip index-jd.sqlite.gz, (c) write a well-formed manifest-jd.json --
+    the exact pair the workflow's paired-asset guard uploads."""
+    import json
+
+    base = tmp_path / "on"
+    s_on = {"greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN)}
+    db = _crawl_build(s_on, base, capture_jd=True)
+    jd_db = base / "index-jd.sqlite"
+
+    # Inject an ORPHAN JD (an id NOT in the promoted index) to prove pruning-to-live-ids.
+    jcon = jd_store.open_jd_store(str(jd_db))
+    jd_store.put(jcon, "greenhouse:acme:orphan-not-live", "orphaned JD body")
+    jcon.commit()
+    jcon.close()
+
+    stats, nbytes = bi.build_and_publish_jd(db, jd_db, base, build_id="same-build")
+
+    # (a) the exact asset pair the workflow guard checks before uploading
+    assert (base / "index-jd.sqlite.gz").exists(), "index-jd.sqlite.gz not produced"
+    assert (base / "manifest-jd.json").exists(), "manifest-jd.json not produced"
+    assert nbytes > 0
+    # (b) orphan pruned; only live ids remain
+    assert stats["pruned"] == 1
+    assert stats["stored"] == len(_POSTINGS)
+    # (c) manifest well-formed (sha + build_id — what the SDK/next-build carry-forward reads)
+    m = json.loads((base / "manifest-jd.json").read_text())
+    assert m.get("sha256") and m.get("build_id") == "same-build" and m.get("bytes") == nbytes
