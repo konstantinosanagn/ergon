@@ -172,3 +172,45 @@ def test_main_end_to_end(tmp_path, capsys):
     con = open_detail(str(out))
     ids = {r[0] for r in con.execute("SELECT id FROM job_detail").fetchall()}
     assert ids == {"a", "b"}
+
+
+# --- non-destructive combine (the 2026-07-26 with_jd 85%->47% regression) -------------------
+
+
+def test_partial_shard_set_without_base_drops_missing_shard_rows(tmp_path):
+    """Reproduces the destructive-combine bug: a shard that timed out never uploaded, so the
+    fresh-empty combine publishes ONLY the finished shard's rows and (via the drain's --clobber)
+    permanently deletes the missing shard's previously-drained rows -> with_jd cliff."""
+    s0 = _mk_shard(tmp_path, "index-detail-shard-0.sqlite", [{"id": "A", "sig": "sA", "snippet": "JD-A"}])
+    # shard 1 (row B) "timed out" and never uploaded -> absent from the merge input.
+    out = tmp_path / "combined.sqlite"
+    mds.merge_shards([s0], out)  # legacy fresh-empty combine, no base
+    con = open_detail(str(out))
+    ids = [r[0] for r in con.execute("SELECT id FROM job_detail ORDER BY id")]
+    con.close()
+    assert ids == ["A"]  # row B is GONE -- the destructive clobber this fix targets
+
+
+def test_partial_shard_set_with_base_preserves_missing_shard_rows(tmp_path):
+    """The fix: seeding the combine from the prior FULL sidecar preserves the un-finished shard's
+    rows AND still refreshes the finished shard's rows (prefer-freshest, fetched_at-keyed)."""
+    base = _mk_shard(
+        tmp_path,
+        "prior-full.sqlite",
+        [
+            {"id": "A", "sig": "sA", "snippet": "JD-A-old", "fetched_at": "2026-07-20T00:00:00Z"},
+            {"id": "B", "sig": "sB", "snippet": "JD-B", "fetched_at": "2026-07-20T00:00:00Z"},
+        ],
+    )
+    # This drain: only shard 0 (A, freshly re-fetched) finished; shard 1 (B) timed out.
+    s0 = _mk_shard(
+        tmp_path,
+        "index-detail-shard-0.sqlite",
+        [{"id": "A", "sig": "sA", "snippet": "JD-A-new", "fetched_at": "2026-07-26T00:00:00Z"}],
+    )
+    out = tmp_path / "combined.sqlite"
+    mds.merge_shards([s0], out, base_path=base)
+    con = open_detail(str(out))
+    got = dict(con.execute("SELECT id, snippet FROM job_detail ORDER BY id").fetchall())
+    con.close()
+    assert got == {"A": "JD-A-new", "B": "JD-B"}  # A refreshed from the shard, B PRESERVED from base
