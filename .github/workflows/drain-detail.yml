@@ -236,9 +236,25 @@ jobs:
           fi
 
       - name: Merge shard sidecars into one combined index-detail.sqlite
+        env:
+          GH_TOKEN: ${{ github.token }}   # to download the prior combined sidecar as the non-destructive seed
         run: |
           mkdir -p dist
-          uv run python scripts/merge_detail_shards.py --shards-dir dist/shards --out dist/index-detail.sqlite
+          # NON-DESTRUCTIVE COMBINE: seed from the prior FULL combined sidecar so a PARTIAL shard set
+          # (K<20 finished -- e.g. a megahost SmartRecruiters/Workday shard timing out) UNIONS onto the
+          # prior rows instead of clobbering them. Without this seed, a partial drain rebuilt from empty
+          # and the --clobber publish below permanently DELETED the missing shards' list-only JD -- the
+          # 2026-07-26 with_jd 85%->47% regression. merge_detail_shards' prefer-freshest fetched_at
+          # UPSERT means finished shards still refresh their own rows; only un-finished shards' rows are
+          # carried from the base. --base must differ from --out (the combine copies base -> out).
+          gh release download index-latest --dir dist --pattern 'index-detail.sqlite.gz' || echo "no prior sidecar (first drain -> fresh combine)"
+          BASE=""
+          if [ -f dist/index-detail.sqlite.gz ]; then
+            gunzip -f dist/index-detail.sqlite.gz          # -> dist/index-detail.sqlite
+            mv dist/index-detail.sqlite dist/prior-detail.sqlite
+            BASE="--base dist/prior-detail.sqlite"
+          fi
+          uv run python scripts/merge_detail_shards.py --shards-dir dist/shards --out dist/index-detail.sqlite $BASE
 
       - name: Gzip + write manifest-detail.json
         # Reuses build_index.py's own `_gzip_file`/`_write_detail_manifest`/`_build_id` (no

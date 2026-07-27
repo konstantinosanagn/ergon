@@ -58,9 +58,22 @@ def find_shard_dbs(shards_dir: Path) -> list[Path]:
     return sorted(shards_dir.glob(_SHARD_GLOB))
 
 
-def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
+def merge_shards(
+    shard_paths: list[Path], out_path: Path, base_path: Path | None = None
+) -> dict[str, int]:
     """Union every shard's ``job_detail`` rows into ``out_path`` (schema ensured via
     ``open_detail``). Returns ``{shard_filename: rows_merged, ..., "_total": total_rows_merged}``.
+
+    NON-DESTRUCTIVE COMBINE (``base_path``): when given, the output is SEEDED from the prior FULL
+    combined sidecar before the shards are unioned on top, so a PARTIAL drain (only K<20 shards
+    finished + uploaded) PRESERVES the un-finished shards' previously-drained rows instead of
+    clobbering them. Without this seed the combine rebuilt from an empty db and the merge job
+    published (with ``--clobber``) a sidecar holding only the finished shards' ~K/20 of the rows --
+    permanently deleting the missing shards' list-only JD (the 2026-07-26 ``with_jd`` 85%->47%
+    regression: SmartRecruiters/Workday megahost shards timing out gutted the sidecar every drain).
+    The prefer-freshest, ``fetched_at``-keyed UPSERT below makes the seed safe: a finished shard's
+    freshly-fetched row still refreshes its seeded copy; only rows whose shard did NOT finish are
+    left as the base carried them. ``None`` (or an absent path) -> the legacy fresh-empty combine.
 
     Row union: as of the ``_prune_sidecar_to_shard`` fix in ``index/detail.py``, each shard's
     OUTPUT sidecar is scoped to contain ONLY that shard's own rows, so shard candidate sets are
@@ -88,6 +101,14 @@ def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int]:
     from wherever that lands. ``schema_version`` is left as whatever ``open_detail`` already
     ensured on ``out_path`` (identical across shards by construction, via ``DETAIL_SCHEMA_VERSION``).
     """
+    # Seed the combine from the prior full sidecar so an incomplete shard set never DROPS rows (see
+    # NON-DESTRUCTIVE COMBINE above). Copied BEFORE open_detail so open_detail just re-ensures the
+    # (identical) schema on the seeded file. A missing/None base -> fresh-empty combine (legacy).
+    if base_path is not None and Path(base_path).exists():
+        import shutil
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(base_path, out_path)
     con = open_detail(str(out_path))
     stats: dict[str, int] = {}
     total = 0
@@ -153,6 +174,13 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Combined output sidecar path (e.g. dist/index-detail.sqlite)",
     )
+    parser.add_argument(
+        "--base",
+        type=Path,
+        default=None,
+        help="Prior full combined sidecar to SEED the output from (non-destructive combine): a "
+        "partial shard set unions onto this instead of clobbering it. Absent/missing -> fresh combine.",
+    )
     args = parser.parse_args(argv)
 
     shard_paths = find_shard_dbs(args.shards_dir)
@@ -161,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    stats = merge_shards(shard_paths, args.out)
+    stats = merge_shards(shard_paths, args.out, base_path=args.base)
     total = stats.pop("_total")
     for name, n in stats.items():
         print(f"  {name}: {n} rows")
