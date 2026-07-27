@@ -7,11 +7,32 @@ degraded index to users. Each gate records actual-vs-threshold for auditability 
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .db import SCHEMA_VERSION, connect
+
+# JD-coverage regression gate: max percentage-POINTS the build's JD-capture % may fall below the last
+# published build before the publish is BLOCKED. Env-tunable (``ERGON_METRICS_JD_GATE_DROP_PCT``),
+# mirroring the metrics-tripwire's ERGON_METRICS_* convention. Default 15 is deliberately wider than
+# the tripwire's ~3pt WARN band: it tolerates ordinary daily churn AND the mid-recovery jumps (the
+# drain refilling 40->76->85 always INCREASES coverage, so it never trips) while still catching a
+# collapse (the 2026-07-27 76%->40% incident, a 36pt drop).
+_DEF_JD_MAX_DROP_PCT = 15.0
+
+
+def jd_gate_drop_pct_from_env() -> float:
+    """Resolve the JD-coverage gate's max-drop threshold from ``ERGON_METRICS_JD_GATE_DROP_PCT``.
+
+    Mirrors :meth:`ergon_tracker.index.metrics_gate.MetricsThresholds.from_env`; a bad/absent value
+    falls back to the default so the gate can never be disabled by a malformed override.
+    """
+    try:
+        return float(os.environ.get("ERGON_METRICS_JD_GATE_DROP_PCT", str(_DEF_JD_MAX_DROP_PCT)))
+    except (TypeError, ValueError):
+        return _DEF_JD_MAX_DROP_PCT
 
 
 @dataclass
@@ -50,6 +71,8 @@ def evaluate_gates(
     last_known_rows: int | None = None,
     allow_cold_start: bool = False,
     min_ratio: float = 0.75,
+    prev_jd_pct: float | None = None,
+    jd_max_drop_pct: float = _DEF_JD_MAX_DROP_PCT,
 ) -> GateReport:
     """Run all publish gates against a built index. Pure read; never mutates the DB.
 
@@ -59,6 +82,14 @@ def evaluate_gates(
     masquerade as a cold start and publish over a good large snapshot (a download failure must not
     weaken the floor). Set ``allow_cold_start`` (an explicit operator decision) to permit publishing
     below the historical floor for a genuine first build or intentional reset.
+
+    ``prev_jd_pct`` is the last published build's JD-capture % (``metrics.jd_pct`` from the last
+    ``published`` history.jsonl row — the SAME baseline the metrics tripwire uses). The JD-coverage
+    gate FAILS the publish when this build's JD % has dropped more than ``jd_max_drop_pct`` POINTS
+    below that baseline, so a collapse (76%->40%) is blocked. It is RELATIVE and one-directional: a
+    build that INCREASES coverage (the drain-recovery climb 40->76->85) always PASSES — only a DROP
+    beyond the threshold fails. ``prev_jd_pct is None`` (first build / missing history) PASSES, never
+    false-failing off an absent baseline (mirrors the tripwire's missing-prev clause).
     """
     rep = GateReport()
     con = connect(db_path, read_only=True)
@@ -97,6 +128,29 @@ def evaluate_gates(
             "WHERE j.company_key IS NOT NULL AND c.company_key IS NULL"
         ).fetchone()[0]
         rep.results.append(GateResult("company_fk_intact", orphans == 0, f"{orphans} orphan rows"))
+
+        # JD-coverage regression gate: block a build whose JD-text capture % COLLAPSED vs the last
+        # published build. ``with_jd`` / ``active`` mirror coverage.compute_coverage exactly (active
+        # rows carrying a non-empty snippet), so the gate's jd_pct is the same number the tripwire
+        # baselines on. RELATIVE + one-directional (fails only on a DROP > threshold), so a recovery
+        # build always passes; no baseline PASSES. This is the HARD stop the WARN-only tripwire isn't.
+        active = con.execute("SELECT COUNT(*) FROM jobs WHERE status='active'").fetchone()[0]
+        with_jd = con.execute(
+            "SELECT COUNT(*) FROM jobs WHERE snippet IS NOT NULL AND TRIM(snippet) != '' "
+            "AND status='active'"
+        ).fetchone()[0]
+        jd_pct = round(with_jd / active * 100, 2) if active else 0.0
+        if prev_jd_pct is None:
+            rep.results.append(GateResult("jd_coverage", True, f"{jd_pct}% (no baseline)"))
+        else:
+            drop = prev_jd_pct - jd_pct
+            rep.results.append(
+                GateResult(
+                    "jd_coverage",
+                    drop <= jd_max_drop_pct,
+                    f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct})",
+                )
+            )
     finally:
         con.close()
     return rep

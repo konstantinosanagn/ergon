@@ -64,4 +64,5 @@ def test_report_to_dict_shape(tmp_path):
         "row_floor",
         "no_duplicate_ids",
         "company_fk_intact",
+        "jd_coverage",
     } == {g["name"] for g in d["gates"]}
