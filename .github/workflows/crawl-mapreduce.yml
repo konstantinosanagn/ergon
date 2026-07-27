@@ -1,0 +1,286 @@
+name: crawl-mapreduce
+
+# R3 -- map/reduce the NON-JOIN crawl across parallel runners (ships DARK: workflow_dispatch only, so
+# it runs ALONGSIDE build-index.yml's daily crawl without replacing it until validated).
+#
+# THE SHAPE (mirrors drain-detail.yml's matrix+merge): a K-shard MAP matrix crawls the non-join
+# registry in parallel -- each shard crawls ONLY its host-bucketed slice (freshness_shard.board_shard,
+# the SAME partition the drain/sweep use), streaming a partial fresh DB (+ per-shard JD sidecar) and
+# emitting its per-board outcome + BoardState deltas as a workflow ARTIFACT (never a release asset).
+# A single REDUCE job unions the K partials, folds the outcomes into one build, and is the ONLY writer
+# of the index-latest release.
+#
+# THE CORRECTNESS INVARIANT (identical to the drain): every board whose fetch contends on one
+# politeness bucket lands on exactly ONE shard, so no two shards hit the same host and the union of the
+# K slices is exactly the un-sharded window -- proven byte-for-byte offline by
+# tests/test_crawl_mapreduce_parity.py. The MAP phase needs NO global view (each board reads only its
+# own prior etag/idset_hash); apply_outcome -- the one step needing the GLOBAL changed set -- is
+# DEFERRED to the reduce.
+#
+# SHARD 0 is RESERVED for join.com by the partition (freshness_shard.ISOLATED_HOSTS); this is the
+# NON-join crawl (ERGON_CRAWL_EXCLUDE_SOURCES=join), so shard 0 is empty by construction and is simply
+# absent from the matrix -- the matrix is shards 1..NUM_SHARDS-1, and the reduce's range(NUM_SHARDS)
+# union tolerates the missing shard-0 files. join keeps crawling on its own build-index.yml cadence.
+on:
+  workflow_dispatch:
+    inputs:
+      limit_companies:
+        description: "Board budget passed to the crawl (>= the non-join board count so the whole partition crawls in one map pass). Blank => 60000."
+        default: ""
+      crawl_deadline_s:
+        description: "Per-shard global crawl deadline (ERGON_CRAWL_DEADLINE_S). Each shard is ~1/K of the window, so the default is generous headroom under the 350-min job timeout."
+        default: "12600"
+      jd:
+        description: "Persist + publish the full-JD sidecar (--jd), unioned across shards in the reduce. Default true (mirrors the daily non-join build)."
+        default: "true"
+      sharded:
+        description: "Build + publish the sector shards + slim tier (--sharded) in the reduce. Default true."
+        default: "true"
+
+permissions:
+  contents: write   # the reduce publishes the index-latest release assets
+
+env:
+  # NUM_SHARDS includes shard 0 (join's reserved bucket, empty in the non-join partition). The map
+  # matrix runs shards 1..NUM_SHARDS-1; the reduce unions range(NUM_SHARDS) and skips the absent
+  # shard-0 files. So 11 here => 10 working map shards.
+  NUM_SHARDS: 11
+
+jobs:
+  # ------------------------------------------------------------------------------------------------
+  # MAP: K parallel crawlers, each over its own host-bucketed slice. Artifacts only -- no release.
+  # ------------------------------------------------------------------------------------------------
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # under the 6h hosted ceiling; ERGON_CRAWL_DEADLINE_S caps the crawl below it
+    # OWN concurrency group (NOT build-index): the map writes only artifacts, so it may run fully
+    # parallel to the daily build. Only the reduce (below) contends for the release-writer group.
+    concurrency:
+      group: crawl-map-${{ matrix.shard }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false   # one shard's failure (dead host / runner OOM) must not cancel the others;
+                         # the reduce unions whatever partials DID upload (self-healing next run)
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up disk space (reclaim the ~40GB of preinstalled toolchains we never use)
+        # The full-crawl fresh DB + its JD sidecar + the downloaded prior index stage several multi-GB
+        # SQLite files on the ~20GB root disk at once -- the spec flags this ENOSPC risk. The hosted
+        # runner ships ~40GB of toolchains (dotnet/android/ghc) this crawl never touches; remove them.
+        continue-on-error: true
+        run: |
+          echo "before:"; df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/share/swift || true
+          sudo apt-get clean || true
+          echo "after:"; df -h /
+
+      - name: Add swap (headroom for the crawl's in-flight batches + enrich)
+        continue-on-error: true
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          sudo fallocate -l 16G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=16384
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install package
+        run: uv venv && uv pip install -e "."
+
+      - name: Download crawl inputs (prior index + state + cursor + freshness/JD sidecars)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          # prev index: enrich-reuse + zero-result company resolution (read-only in the map).
+          gh release download index-latest --dir dist --pattern 'index.sqlite.gz' || echo "no prev index"
+          gh release download index-latest --dir dist --pattern 'board_state.json' || echo "no prev state"
+          gh release download index-latest --dir dist --pattern 'crawl_cursor.json' || echo "no cursor"
+          gh release download index-latest --dir dist --pattern 'index-freshness.sqlite.gz' || echo "no freshness sidecar"
+          [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
+          [ -f dist/index-freshness.sqlite.gz ] && gunzip -kf dist/index-freshness.sqlite.gz || true
+
+      - name: Map crawl shard ${{ matrix.shard }} of ${{ env.NUM_SHARDS }} (non-join slice)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SQLITE_TMPDIR: /mnt        # large temp disk for FTS/sort spills (/ has only ~14GB)
+          TMPDIR: /mnt
+          # Non-join partition, mirroring build-index.yml's daily non-join settings.
+          ERGON_CRAWL_EXCLUDE_SOURCES: join
+          ERGON_CRAWL_MAX_WINDOW: "0"                 # no rotating cap: the whole non-join slice in one pass
+          ERGON_CRAWL_HOST_BUDGET_S: "0"              # no per-host box: the non-join set has no pathological host
+          ERGON_CRAWL_DEADLINE_S: "${{ github.event.inputs.crawl_deadline_s || '12600' }}"
+          ERGON_DELTA_CRAWL: "1"                      # delta-driven skip of unchanged boards (idset_hash)
+          ERGON_DELTA_CONTENT_VERSION: "1"            # LOCKSTEP with freshness-sweep.yml (see build-index.yml)
+        run: |
+          JD_FLAG=""
+          [ "${{ github.event.inputs.jd || 'true' }}" = "true" ] && JD_FLAG="--jd"
+          uv run python scripts/build_index.py --incremental --crawl-map \
+            --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} \
+            --limit-companies "${{ github.event.inputs.limit_companies || '60000' }}" \
+            $JD_FLAG --out dist
+
+      - name: Upload this shard's partial fresh DB + JD sidecar + outcome/state manifest
+        # !cancelled() so a shard that fails LATE still uploads whatever partial fresh DB it committed
+        # (append_jobs commits per 20k-row batch) -- the reduce's INSERT OR IGNORE union folds it in.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawl-map-${{ matrix.shard }}
+          path: |
+            dist/fresh-shard-${{ matrix.shard }}.sqlite
+            dist/index-jd-shard-${{ matrix.shard }}.sqlite
+            dist/crawl-map-shard-${{ matrix.shard }}.json
+          if-no-files-found: warn   # an empty shard slice is legal (warns, uploads nothing)
+
+  # ------------------------------------------------------------------------------------------------
+  # REDUCE: union the K partials + build/publish the index. The ONLY release writer.
+  # ------------------------------------------------------------------------------------------------
+  reduce:
+    needs: map
+    if: ${{ !cancelled() }}   # a timed-out/failed map shard must not skip the reduce -- the shards that
+                              # DID upload still need building; only a whole-run cancellation skips this
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    # SHARED release-writer group (R1's disjoint-writer rule): the reduce is the only writer of the
+    # index-latest core here, so it takes the same build-index group the daily crawl uses -- the two
+    # can never write the release at the same time (single-writer against the join shard's cadence).
+    concurrency:
+      group: build-index
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up disk space (the reduce stages the K partials + prior index + unioned fresh DB)
+        continue-on-error: true
+        run: |
+          echo "before:"; df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/share/swift || true
+          sudo apt-get clean || true
+          echo "after:"; df -h /
+
+      - name: Add swap (headroom for the build/finalize)
+        continue-on-error: true
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          sudo fallocate -l 16G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=16384
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
+        run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
+
+      - name: Install package
+        run: uv venv && uv pip install -e "."
+
+      - name: Download whatever map-shard artifacts exist
+        uses: actions/download-artifact@v4
+        with:
+          pattern: crawl-map-*
+          path: dist
+          merge-multiple: true    # land fresh-shard-N.sqlite / index-jd-shard-N.sqlite / crawl-map-shard-N.json flat in dist/
+          if-no-artifact-found: warn
+
+      - name: Count downloaded shard partials
+        run: |
+          n=$(find dist -maxdepth 1 -name 'crawl-map-shard-*.json' 2>/dev/null | wc -l | tr -d ' ')
+          echo "downloaded $n map-shard manifest(s)"
+          if [ "$n" -eq 0 ]; then
+            echo "no map-shard partials were downloaded -- every shard must have failed; nothing to reduce" >&2
+            exit 1
+          fi
+
+      - name: Download prior release assets (carry-forward base, exactly like build-index.yml)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download index-latest --dir dist --pattern 'index.sqlite.gz' || echo "no prev index"
+          gh release download index-latest --dir dist --pattern 'board_state.json' || echo "no prev state"
+          gh release download index-latest --dir dist --pattern 'history.jsonl' || echo "no history"
+          gh release download index-latest --dir dist --pattern 'crawl_cursor.json' || echo "no cursor"
+          gh release download index-latest --dir dist --pattern 'deltas.json' || echo "no deltas window"
+          gh release download index-latest --dir dist --pattern 'index-jd.sqlite.gz' || echo "no prev jd sidecar"
+          gh release download index-latest --dir dist --pattern 'manifest-jd.json' || echo "no prev jd manifest"
+          gh release download index-latest --dir dist --pattern 'index-freshness.sqlite.gz' || echo "no prev freshness sidecar"
+          [ -f dist/index.sqlite.gz ] && gunzip -kf dist/index.sqlite.gz || true
+          # the reduce UPSERTS each shard's fresh JDs onto this carried-forward prior sidecar.
+          [ -f dist/index-jd.sqlite.gz ] && gunzip -kf dist/index-jd.sqlite.gz || true
+          [ -f dist/index-freshness.sqlite.gz ] && gunzip -kf dist/index-freshness.sqlite.gz || true
+
+      - name: Reduce -- union the K partials + build/gate the index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SQLITE_TMPDIR: /mnt
+          TMPDIR: /mnt
+          # Same partition the map used, so _cursor_filename + _crawl_partition resolve identically
+          # (the cursor advance the reduce persists matches the window the shards crawled).
+          ERGON_CRAWL_EXCLUDE_SOURCES: join
+          ERGON_DELTA_CONTENT_VERSION: "1"
+          ERGON_SHARDED_EMBED: "1"                    # vectors owned by embed-vectors.yml (reduce never inline-embeds)
+          ERGON_DETAIL_MAX: "0"                       # detail is merge-only here; the sharded drain owns fetching
+        run: |
+          JD_FLAG=""; SHARDED_FLAG=""
+          [ "${{ github.event.inputs.jd || 'true' }}" = "true" ] && JD_FLAG="--jd"
+          [ "${{ github.event.inputs.sharded || 'true' }}" = "true" ] && SHARDED_FLAG="--sharded"
+          uv run python scripts/build_index.py --incremental --crawl-reduce \
+            --num-shards ${{ env.NUM_SHARDS }} \
+            --limit-companies "${{ github.event.inputs.limit_companies || '60000' }}" \
+            $SHARDED_FLAG $JD_FLAG --out dist
+
+      - name: Publish snapshot to the stable index-latest release (the SOLE release writer)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Mirrors build-index.yml's publish set. R1 (one-writer-per-asset): the detail + vectors
+          # sidecars are DELIBERATELY absent (owned by drain-detail.yml / embed-vectors.yml).
+          ASSETS=""
+          for f in index.sqlite.gz manifest.json index-slim.sqlite.gz manifest-slim.json \
+                   manifest-jd.json index-delta.sqlite.gz manifest-delta.json deltas.json \
+                   gates.json board_state.json history.jsonl \
+                   shards.json coverage.json INDEX_STATUS.md crawl_cursor.json; do
+            [ -f "dist/$f" ] && ASSETS="$ASSETS dist/$f"
+          done
+          # Paired-asset guard for the full-JD sidecar: publish index-jd.sqlite.gz ONLY with its manifest.
+          [ -f dist/manifest-jd.json ] && [ -f dist/index-jd.sqlite.gz ] && \
+            ASSETS="$ASSETS dist/index-jd.sqlite.gz" || true
+          ASSETS="$ASSETS $(ls dist/shard-*.sqlite.gz 2>/dev/null)"
+          ASSETS="$ASSETS $(ls dist/index-delta-*.sqlite.gz 2>/dev/null)"
+          if [ -z "$ASSETS" ]; then echo "no assets to publish"; exit 0; fi
+          if gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest $ASSETS --clobber
+          else
+            gh release create index-latest $ASSETS --title index-latest \
+              --notes "Daily ergon-tracker search-index snapshot."
+          fi
+          # Atomicity pivot (Item 6): the set manifest LAST, in its own call after every other asset.
+          [ -f dist/manifest-set.json ] && gh release upload index-latest dist/manifest-set.json --clobber || true
+
+      - name: Sync crawl cursor + board_state to release (resume even on a later-step failure)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASSETS=""
+          for f in crawl_cursor.json board_state.json; do
+            [ -f "dist/$f" ] && ASSETS="$ASSETS dist/$f"
+          done
+          if [ -n "$ASSETS" ] && gh release view index-latest >/dev/null 2>&1; then
+            gh release upload index-latest $ASSETS --clobber || echo "cursor/state sync failed (non-fatal)"
+          else
+            echo "no cursor/state to sync (or no release yet)"
+          fi

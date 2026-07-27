@@ -1300,6 +1300,9 @@ async def _crawl_due(
     capture_jd: bool = False,
     only_sources: set[str] | None = None,
     exclude_sources: set[str] | None = None,
+    shard: int | None = None,
+    num_shards: int | None = None,
+    jd_db_path: Path | str | None = None,
 ) -> tuple[dict, int]:
     """Crawl the due boards in this run's rotating window, streaming jobs into ``fresh_db_path``.
 
@@ -1318,6 +1321,15 @@ async def _crawl_due(
 
     ``prev_db`` (optional): the prior published index, used ONLY to resolve a zero-result board's
     real prior ``company_key`` by ``(source, board_token)`` -- see the zero-results branch below.
+
+    ``shard`` / ``num_shards`` (R3 map/reduce): when BOTH are set, this run crawls ONLY the boards
+    the host-bucketed partition (``freshness_shard.board_shard``) assigns to ``shard`` -- so K matrix
+    runners each crawl a disjoint ~1/K slice of the SAME window and no two contend on one host bucket
+    (the drain/sweep sharding invariant). Both None => no partition => byte-identical to today. Each
+    shard reads only its OWN boards' prior state, so the map phase needs no global view; the reduce
+    unions the K partial fresh DBs + folds the outcomes into a single build. ``jd_db_path`` overrides
+    the JD sidecar location (a shard writes ``index-jd-shard-N.sqlite`` instead of the shared name);
+    None keeps the legacy ``index-jd.sqlite`` next to the fresh DB (byte-identical to today).
     """
     import anyio
 
@@ -1364,6 +1376,16 @@ async def _crawl_due(
     window, next_cursor = _registry_window(
         cursor, limit_companies, only_sources=only_sources, exclude_sources=exclude_sources
     )
+    # R3 map: keep only this shard's host-bucketed slice of the window. The filter is applied AFTER
+    # _registry_window so ``next_cursor`` is shard-INDEPENDENT (every shard advances the SAME cursor
+    # over the SAME window), and the union of the K shards' slices is exactly the un-sharded window --
+    # the parity invariant. Both None => unsharded => identical to today.
+    if shard is not None and num_shards is not None:
+        from ergon_tracker.index.freshness_shard import board_shard
+
+        window = [
+            (k, e) for k, e in window if board_shard(e["ats"], e["token"], num_shards) == shard
+        ]
     boards = {}
     for key, e in window:
         bs = BoardState(provider=e["ats"], token=e["token"])
@@ -1381,6 +1403,12 @@ async def _crawl_due(
             list(SeedRegistry().all().items()), only_sources, exclude_sources
         )
         new = _new_boards(reg_items, states)
+        # R3 map: a never-seen board belongs to exactly one shard too (same host partition), so
+        # restrict the pull-in to THIS shard -- else every shard would crawl every new board.
+        if shard is not None and num_shards is not None:
+            from ergon_tracker.index.freshness_shard import board_shard
+
+            new = [(k, e) for k, e in new if board_shard(e["ats"], e["token"], num_shards) == shard]
         for key, e in new:
             bs = BoardState(provider=e["ats"], token=e["token"])
             boards[bs.key] = (key, e)
@@ -1418,7 +1446,13 @@ async def _crawl_due(
     # so this run's crawl UPSERTS fresh JDs on top of the carry-forward. None when capture is off ->
     # byte-identical to today (nothing but a sidecar is ever added).
     jd_con = (
-        jd_store.open_jd_store(str(Path(fresh_db_path).parent / "index-jd.sqlite"))
+        jd_store.open_jd_store(
+            str(
+                jd_db_path
+                if jd_db_path is not None
+                else Path(fresh_db_path).parent / "index-jd.sqlite"
+            )
+        )
         if capture_jd
         else None
     )
@@ -1784,6 +1818,216 @@ def _save_cursor(path: Path, cursor: int) -> None:
     Path(path).write_text(json.dumps({"cursor": cursor}))
 
 
+# --- R3: map/reduce the non-join crawl across parallel runners --------------------------------
+#
+# The single-process crawl walks the whole rotating window serially; the map/reduce split fans it
+# over K matrix runners. THE PARTITION INVARIANT (reused verbatim from the drain/sweep shard): every
+# board whose fetch contends on the same politeness bucket lands on exactly ONE shard
+# (``freshness_shard.board_shard``), so no two runners hit one host and the union of the K slices is
+# exactly the un-sharded window. The MAP phase needs no global view -- each board reads only its own
+# prior state (etag/idset_hash) -- so the only cross-shard step, ``apply_outcome`` (which needs the
+# GLOBAL ``changed`` company set), is DEFERRED to the reduce, where it runs over the merged outcome.
+
+
+def _union_fresh_shards(out: Path, dest: Path, num_shards: int) -> int:
+    """Union the K map shards' partial fresh DBs (``out/fresh-shard-{i}.sqlite``) into one fresh DB at
+    ``dest`` (INSERT OR IGNORE on the unique ``job.id`` -> deterministic + order-insensitive; the
+    shards are host-disjoint so an id collision never actually occurs, but OR IGNORE makes the merge
+    safe regardless). ``fresh_rich`` (captured only under ``--rich``) rides along when a shard has it,
+    so the reduce's embed tier reads the same source the single-process crawl would. Returns the
+    number of shard DBs merged."""
+    from ergon_tracker.index.build import _JOB_COLS
+    from ergon_tracker.index.db import connect, fresh_db
+
+    fresh_db(dest)
+    con = connect(dest)
+    merged = 0
+    try:
+        con.execute("PRAGMA foreign_keys = OFF")  # companies aggregated later (build_index_from_fresh_db)
+        cols = ",".join(_JOB_COLS)
+        for i in range(num_shards):
+            part = out / f"fresh-shard-{i}.sqlite"
+            if not part.exists():
+                continue
+            con.execute("ATTACH DATABASE ? AS sh", (str(part),))
+            con.execute(f"INSERT OR IGNORE INTO jobs({cols}) SELECT {cols} FROM sh.jobs")  # noqa: S608
+            con.execute("INSERT OR IGNORE INTO job_sources SELECT * FROM sh.job_sources")
+            has_rich = con.execute(
+                "SELECT 1 FROM sh.sqlite_master WHERE type='table' AND name='fresh_rich'"
+            ).fetchone()
+            if has_rich:
+                con.execute(
+                    "CREATE TABLE IF NOT EXISTS fresh_rich "
+                    "(id TEXT PRIMARY KEY, sig TEXT, embed_text TEXT)"
+                )
+                con.execute("INSERT OR IGNORE INTO fresh_rich SELECT * FROM sh.fresh_rich")
+            con.commit()
+            con.execute("DETACH DATABASE sh")
+            merged += 1
+        return merged
+    finally:
+        con.close()
+
+
+def _union_jd_shards(out: Path, num_shards: int) -> int:
+    """Union the K map shards' fresh JD sidecars (``out/index-jd-shard-{i}.sqlite``) onto the carried-
+    forward prior at ``out/index-jd.sqlite`` (the shared name the tail's ``build_and_publish_jd`` + the
+    re-enrich reader expect). The prior was gunzipped onto ``dest`` by the workflow; each shard's rows
+    are UPSERTED on top so a freshly-crawled JD WINS over the carried copy -- byte-for-byte the
+    single-process crawl's ``jd_store.put`` semantics (fresh upsert onto carry-forward). Shard-vs-shard
+    ids are disjoint, so the union is order-insensitive. Returns the number of shard sidecars merged."""
+    from ergon_tracker.index import jd_store
+
+    dest = out / "index-jd.sqlite"
+    con = jd_store.open_jd_store(str(dest))
+    merged = 0
+    try:
+        for i in range(num_shards):
+            part = out / f"index-jd-shard-{i}.sqlite"
+            if not part.exists():
+                continue
+            con.execute("ATTACH DATABASE ? AS sh", (str(part),))
+            con.execute(
+                "INSERT INTO job_jd(id, jd) SELECT id, jd FROM sh.job_jd "
+                "WHERE true ON CONFLICT(id) DO UPDATE SET jd = excluded.jd"
+            )
+            con.commit()
+            con.execute("DETACH DATABASE sh")
+            merged += 1
+        return merged
+    finally:
+        con.close()
+
+
+def _run_crawl_map(
+    out: Path,
+    db: Path,
+    build_id: str,
+    *,
+    limit: int,
+    rich: bool,
+    jd: bool,
+    shard: int,
+    num_shards: int,
+) -> None:
+    """R3 MAP: crawl ONLY this shard's host-bucketed slice of the rotating window, streaming to a
+    partial fresh DB (+ a per-shard JD sidecar), and emit this shard's per-board outcome + post-crawl
+    ``BoardState`` deltas as a JSON manifest for the reduce to consume. Publishes NOTHING.
+
+    NO GLOBAL VIEW: the crawl reads only each board's OWN prior state (etag/idset_hash from the shared
+    ``board_state.json`` every shard downloads), so K shards run fully independently. ``apply_outcome``
+    -- the ONE step that needs the global ``changed`` set -- is DEFERRED to the reduce, so the emitted
+    ``BoardState`` deltas carry the fresh etag/idset_hash the crawl stamped but NOT yet the tier/next_due
+    recompute (the reduce applies that once, over the merged outcome)."""
+    from dataclasses import asdict
+
+    import anyio
+
+    from ergon_tracker.index.scheduler import load_state
+
+    only_sources, exclude_sources = _crawl_partition()
+    state_path = out / "board_state.json"
+    cursor_path = out / _cursor_filename(only_sources)
+    states = load_state(state_path)
+    base_keys = set(states)  # boards this shard did NOT introduce (to isolate its never-seen additions)
+    cursor = _load_cursor(cursor_path)
+    prev_db = db if db.exists() else None
+    fresh_path = out / f"fresh-shard-{shard}.sqlite"
+    jd_db_path = (out / f"index-jd-shard-{shard}.sqlite") if jd else None
+    with _phase(f"crawl-map shard {shard}/{num_shards}"):
+        outcome, next_cursor = anyio.run(
+            _crawl_due,
+            limit,
+            states,
+            fresh_path,
+            build_id,
+            cursor,
+            rich,
+            prev_db,
+            jd,
+            only_sources,
+            exclude_sources,
+            shard,
+            num_shards,
+            jd_db_path,
+        )
+    # State deltas = every board this shard TOUCHED: the ones it crawled (their BoardState now carries
+    # the freshly-stamped etag/idset_hash) plus any never-seen board it registered. Overlaying these
+    # in the reduce is order-insensitive because the shards are host-disjoint (no two touch one board).
+    touched = set(outcome) | (set(states) - base_keys)
+    manifest = {
+        "shard": shard,
+        "num_shards": num_shards,
+        "next_cursor": next_cursor,
+        "outcome": {
+            b: {
+                "error": o["error"],
+                "http_429": o["http_429"],
+                "not_modified": o.get("not_modified", False),
+                "companies": sorted(o["companies"]),  # set -> deterministic JSON; reduce re-sets it
+            }
+            for b, o in outcome.items()
+        },
+        "states": {b: asdict(states[b]) for b in touched},
+    }
+    (out / f"crawl-map-shard-{shard}.json").write_text(json.dumps(manifest), encoding="utf-8")
+    print(
+        f"crawl-map shard {shard}/{num_shards}: {len(outcome)} due boards, "
+        f"{_count_jobs(fresh_path)} fresh jobs, {len(touched)} state deltas, "
+        f"next_cursor={next_cursor} -> fresh-shard-{shard}.sqlite + crawl-map-shard-{shard}.json"
+    )
+
+
+def _reduce_crawl_shards(
+    out: Path,
+    fresh_path: Path,
+    states: dict,
+    cursor: int,
+    num_shards: int,
+    *,
+    jd: bool,
+) -> tuple[dict, int]:
+    """R3 REDUCE step: reconstruct the crawl's (outcome, next_cursor) + post-crawl ``states`` from the
+    K map shards, so the caller's build/publish tail runs IDENTICALLY to the single-process path.
+
+    Unions the partial fresh DBs into ``fresh_path`` and the fresh JD sidecars onto ``out/index-jd.sqlite``,
+    merges the per-shard outcomes, and overlays each shard's ``BoardState`` deltas onto ``states`` (in
+    place -- disjoint boards, so order-insensitive). ``next_cursor`` is identical across shards (they all
+    advanced the SAME cursor over the SAME window; the shard filter is applied AFTER windowing), so any
+    present shard's value is authoritative. ``apply_outcome`` is NOT run here -- the caller runs it over
+    this merged outcome once the GLOBAL ``changed`` set is known."""
+    from ergon_tracker.index.scheduler import BoardState
+
+    with _phase("crawl-reduce union"):
+        merged = _union_fresh_shards(out, fresh_path, num_shards)
+        if jd:
+            _union_jd_shards(out, num_shards)
+    outcome: dict[str, dict] = {}
+    next_cursor = cursor
+    manifests = 0
+    for i in range(num_shards):
+        p = out / f"crawl-map-shard-{i}.json"
+        if not p.exists():
+            continue
+        manifests += 1
+        data = json.loads(p.read_text(encoding="utf-8"))
+        next_cursor = int(data.get("next_cursor", next_cursor))
+        for bkey, o in data.get("outcome", {}).items():
+            outcome[bkey] = {
+                "error": bool(o["error"]),
+                "http_429": int(o["http_429"]),
+                "not_modified": bool(o.get("not_modified", False)),
+                "companies": set(o.get("companies", [])),
+            }
+        for bkey, rec in data.get("states", {}).items():
+            states[bkey] = BoardState(**rec)
+    print(
+        f"crawl-reduce: unioned {merged} fresh shard DB(s) + {manifests} manifest(s) -> "
+        f"{len(outcome)} boards, next_cursor={next_cursor}"
+    )
+    return outcome, next_cursor
+
+
 def main(argv: list[str]) -> None:
     import anyio
 
@@ -1802,6 +2046,8 @@ def main(argv: list[str]) -> None:
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
     detail_shard_only = False  # drain-matrix mode: sharded reconcile only, no crawl/build/merge
     embed_shard_only = False  # embed-matrix mode: sharded vector embed only, no crawl/build
+    crawl_map = False  # R3 crawl-matrix MAP mode: crawl this shard's slice -> partial fresh DB + deltas
+    crawl_reduce = False  # R3 REDUCE mode: union the K partials -> today's build/publish tail verbatim
     shard: int | None = None
     num_shards: int | None = None
     i = 0
@@ -1839,6 +2085,12 @@ def main(argv: list[str]) -> None:
         elif argv[i] == "--embed-shard-only":
             embed_shard_only = True
             i += 1
+        elif argv[i] == "--crawl-map":
+            crawl_map = True
+            i += 1
+        elif argv[i] == "--crawl-reduce":
+            crawl_reduce = True
+            i += 1
         elif argv[i] == "--shard":
             shard = int(argv[i + 1])
             i += 2
@@ -1848,13 +2100,46 @@ def main(argv: list[str]) -> None:
         else:
             print(f"unknown flag: {argv[i]}")
             return
-    if shard is None and num_shards is None:
+    # R3 crawl map/reduce reuse --shard/--num-shards as the CRAWL-shard selector, kept SEPARATE from
+    # the detail/embed shard (which stays env-driven so the reduce's inline --detail merge is a normal
+    # single-process pass, exactly as the daily build). Everything else is unchanged: when NOT in a
+    # crawl mode, --shard/--num-shards keep falling back to ERGON_DETAIL_SHARD as before.
+    crawl_shard: int | None = None
+    crawl_num_shards: int | None = None
+    if crawl_map or crawl_reduce:
+        crawl_shard, crawl_num_shards = shard, num_shards
+        shard, num_shards = _detail_shard()
+    elif shard is None and num_shards is None:
         shard, num_shards = (
             _detail_shard()
         )  # fall back to ERGON_DETAIL_SHARD/ERGON_DETAIL_NUM_SHARDS
     out.mkdir(parents=True, exist_ok=True)
     db = out / "index.sqlite"
     build_id = _build_id()
+
+    if crawl_map:
+        # R3 MAP (see .github/workflows/crawl-mapreduce.yml): crawl ONLY this shard's host-bucketed
+        # slice, streaming to a partial fresh DB + per-shard JD sidecar, and emit this shard's
+        # per-board outcome + BoardState deltas as a workflow ARTIFACT. Publishes NOTHING; the reduce
+        # unions the K shards. See _run_crawl_map for the no-global-view rationale.
+        if crawl_shard is None or crawl_num_shards is None:
+            print("--crawl-map requires --shard/--num-shards")
+            raise SystemExit(2)
+        _run_crawl_map(
+            out,
+            db,
+            build_id,
+            limit=limit,
+            rich=rich,
+            jd=jd,
+            shard=crawl_shard,
+            num_shards=crawl_num_shards,
+        )
+        return
+
+    if crawl_reduce and crawl_num_shards is None:
+        print("--crawl-reduce requires --num-shards")
+        raise SystemExit(2)
 
     if detail_shard_only:
         # Drain-matrix mode (see .github/workflows/drain-detail.yml): ONLY the sharded Tier-3
@@ -1944,20 +2229,31 @@ def main(argv: list[str]) -> None:
         prev_metrics = _last_published_metrics(out / "history.jsonl")
         # Streaming crawl over a rotating window: jobs stream to fresh.sqlite as boards complete.
         fresh_path = out / "fresh.sqlite"
-        with _phase("crawl"):
-            outcome, next_cursor = anyio.run(
-                _crawl_due,
-                limit,
-                states,
-                fresh_path,
-                build_id,
-                cursor,
-                rich,
-                prev_db,
-                jd,
-                only_sources,
-                exclude_sources,
+        if crawl_reduce:
+            # R3 REDUCE: reconstruct the crawl's outputs from the K map shards instead of crawling.
+            # Union the partial fresh DBs (+ JD sidecars) into fresh_path/index-jd.sqlite, merge the
+            # per-shard outcomes, and overlay each shard's BoardState deltas onto ``states``. From here
+            # the tail below is IDENTICAL to the single-process path (apply_outcome, which needs the
+            # GLOBAL changed set, runs there -- see _reduce_crawl_shards' docstring).
+            assert crawl_num_shards is not None  # validated in main() above
+            outcome, next_cursor = _reduce_crawl_shards(
+                out, fresh_path, states, cursor, crawl_num_shards, jd=jd
             )
+        else:
+            with _phase("crawl"):
+                outcome, next_cursor = anyio.run(
+                    _crawl_due,
+                    limit,
+                    states,
+                    fresh_path,
+                    build_id,
+                    cursor,
+                    rich,
+                    prev_db,
+                    jd,
+                    only_sources,
+                    exclude_sources,
+                )
         # Fold the first-party Workable network feed into the same fresh.sqlite (its rows flow into
         # the index alongside the crawled boards). Done before changed_companies_sql so new network
         # companies register as changed.

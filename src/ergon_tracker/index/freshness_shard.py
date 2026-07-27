@@ -43,6 +43,7 @@ __all__ = [
     "ISOLATED_HOSTS",
     "board_host",
     "board_rate_bucket",
+    "board_shard",
     "shard_boards",
 ]
 
@@ -139,6 +140,15 @@ def _shard_for_bucket(bucket: str, num_shards: int) -> int:
     bucket_count = num_shards - 1
     digest = hashlib.sha1(bucket.encode("utf-8")).hexdigest()
     return 1 + (int(digest, 16) % bucket_count)
+
+
+def board_shard(source: str, token: str, num_shards: int) -> int:
+    """The shard a ``(source, token)`` board is assigned to -- the same host-bucketed partition
+    ``shard_boards`` applies, exposed per-board so a caller can filter an arbitrary iterable of
+    boards (e.g. the crawl's rotating window) without materializing the whole ``(source, token)``
+    list. ``board_shard(s, t, K) == i`` iff ``(s, t)`` is in ``shard_boards([...], i, K)``.
+    """
+    return _shard_for_bucket(board_rate_bucket(source, token), num_shards)
 
 
 def shard_boards(
