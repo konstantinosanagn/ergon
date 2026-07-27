@@ -1,5 +1,15 @@
 # R3 — Map/Reduce the Non-Join Crawl Across Parallel Runners
 
+> ⛔ **VALIDATED, SHELVED — DO NOT ACTIVATE (2026-07-27).** Implemented dark and measured on two real
+> dispatch runs. Sharding cannot beat the crawl's floor = the slowest single *unsplittable* host
+> (SmartRecruiters ~152k jobs on one API host → ~119 min); single-process already overlaps that host
+> with all others concurrently, so map/reduce (~2h23m + reduce overhead) ≈ or **worse than**
+> single-process (~90 min typical, 210 min capped), and the 210-min crawl-deadline already prevents the
+> timeout this targeted → **no wall-clock win.** The code stays dormant (flag-off = byte-identical). The
+> real payoff was a side effect: the load-rebalance fix (un-collapsing Workday in `freshness_shard`)
+> also balances the live freshness-sweep's 20-shard matrix (shipped, merge `7915170`). See
+> [[jobspine-delta-crawl-redesign]] for the full verdict + numbers.
+
 **Status:** DESIGN / SPEC ONLY. No code in `src/` or `scripts/` is changed by this document. Ships DARK behind a flag; flag-off is byte-identical to today's single-process crawl.
 **Date:** 2026-07-27
 **Author:** architecture-review follow-up (item R3)
