@@ -92,10 +92,16 @@ def _ref(
 
 def test_brassring_alive_resolves_jd_by_verityzone_and_location() -> None:
     questions = [
-        {"QuestionName": "Job Description", "VerityZone": "formtext3",
-         "AnswerValue": "<p>Generate new business opportunities.</p>"},
-        {"QuestionName": "Location City/Town/District", "VerityZone": "formtext8",
-         "AnswerValue": "Decatur"},
+        {
+            "QuestionName": "Job Description",
+            "VerityZone": "formtext3",
+            "AnswerValue": "<p>Generate new business opportunities.</p>",
+        },
+        {
+            "QuestionName": "Location City/Town/District",
+            "VerityZone": "formtext8",
+            "AnswerValue": "Decatur",
+        },
         {"QuestionName": "Location Country", "VerityZone": "formtext9", "AnswerValue": "USA"},
     ]
     fetcher = _FakeFetcher(post_response=_FakeResponse(200, payload=_service(questions)))
@@ -112,8 +118,11 @@ def test_brassring_alive_resolves_jd_by_verityzone_and_location() -> None:
     url, body = fetcher.post_calls[0]
     assert url == "https://sjobs.brassring.com/TgNewUI/Search/Ajax/JobDetails"
     assert body == {
-        "partnerId": "25416", "siteId": "5429", "jobid": "3343391",
-        "configMode": 1, "jobSiteId": "5429",
+        "partnerId": "25416",
+        "siteId": "5429",
+        "jobid": "3343391",
+        "configMode": 1,
+        "jobSiteId": "5429",
     }
 
 
@@ -193,7 +202,9 @@ def test_brassring_transient_post_error_propagates() -> None:
 
 def test_brassring_params_fallback_from_apply_url() -> None:
     # No token -> host/pid/sid/jobid parsed from the posting Link query params.
-    questions = [{"QuestionName": "Job Description", "VerityZone": "formtext3", "AnswerValue": "JD"}]
+    questions = [
+        {"QuestionName": "Job Description", "VerityZone": "formtext3", "AnswerValue": "JD"}
+    ]
     fetcher = _FakeFetcher(post_response=_FakeResponse(200, payload=_service(questions)))
     ref = _ref(
         id="",

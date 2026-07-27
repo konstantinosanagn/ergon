@@ -120,7 +120,13 @@ async def _one(
         try:
             resp = await client.get(_WIDGET.format(slug=slug))
             out.append(
-                Result(slug, resp.status_code, time.monotonic() - t0, _retry_after(resp), len(resp.content))
+                Result(
+                    slug,
+                    resp.status_code,
+                    time.monotonic() - t0,
+                    _retry_after(resp),
+                    len(resp.content),
+                )
             )
         except httpx.HTTPError:
             out.append(Result(slug, None, time.monotonic() - t0))
@@ -172,7 +178,9 @@ async def probe(
     ) as client:
         for rate in rates:
             if issued + per_step > max_requests:
-                print(f"  [stop] --max-requests {max_requests} reached; not starting {rate:.0f}/s step")
+                print(
+                    f"  [stop] --max-requests {max_requests} reached; not starting {rate:.0f}/s step"
+                )
                 break
             t0 = time.monotonic()
             results = await run_step(client, slugs, rate, per_step, max_inflight)
@@ -198,15 +206,25 @@ async def probe(
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     src = p.add_mutually_exclusive_group(required=True)
-    src.add_argument("--slugs-from-index", help="index.sqlite path; pulls distinct workable board_tokens")
+    src.add_argument(
+        "--slugs-from-index", help="index.sqlite path; pulls distinct workable board_tokens"
+    )
     src.add_argument("--slugs", help="comma-separated explicit board slugs")
-    p.add_argument("--num-slugs", type=int, default=60, help="max distinct slugs to round-robin (default 60)")
+    p.add_argument(
+        "--num-slugs", type=int, default=60, help="max distinct slugs to round-robin (default 60)"
+    )
     p.add_argument("--rates", default="16,24,32,48,64", help="comma-separated req/s ramp steps")
     p.add_argument("--per-step", type=int, default=120, help="requests per ramp step (default 120)")
-    p.add_argument("--max-inflight", type=int, default=40, help="in-flight request cap (default 40)")
-    p.add_argument("--timeout", type=float, default=30.0, help="per-request timeout seconds (default 30)")
+    p.add_argument(
+        "--max-inflight", type=int, default=40, help="in-flight request cap (default 40)"
+    )
+    p.add_argument(
+        "--timeout", type=float, default=30.0, help="per-request timeout seconds (default 30)"
+    )
     p.add_argument("--cooldown", type=float, default=5.0, help="seconds between steps (default 5)")
-    p.add_argument("--max-requests", type=int, default=1000, help="hard total-request backstop (default 1000)")
+    p.add_argument(
+        "--max-requests", type=int, default=1000, help="hard total-request backstop (default 1000)"
+    )
     return p.parse_args(argv)
 
 
@@ -227,19 +245,32 @@ def main(argv: list[str] | None = None) -> int:
         f"max_requests={args.max_requests}  (per-board load ~= target_rate/{len(slugs)})\n"
     )
     knee, summaries = anyio.run(
-        probe, slugs, rates, args.per_step, args.timeout, args.max_inflight, args.cooldown, args.max_requests
+        probe,
+        slugs,
+        rates,
+        args.per_step,
+        args.timeout,
+        args.max_inflight,
+        args.cooldown,
+        args.max_requests,
     )
     print("\n=== SUMMARY ===")
     for s in summaries:
         _print_step(s)
     if knee is None:
-        print("\nRESULT: even the first ramp step saw 429/5xx -- current cap may already be at/over the edge.")
+        print(
+            "\nRESULT: even the first ramp step saw 429/5xx -- current cap may already be at/over the edge."
+        )
     elif summaries and step_failed(summaries[-1]):
-        print(f"\nRESULT: sustained-clean knee = {knee:.0f}/s. Suggest ERGON_WORKABLE_DETAIL_RATE ~= {knee:.0f} "
-              f"(hold a margin below the {summaries[-1]['target_rate']:.0f}/s step that first 429'd).")
+        print(
+            f"\nRESULT: sustained-clean knee = {knee:.0f}/s. Suggest ERGON_WORKABLE_DETAIL_RATE ~= {knee:.0f} "
+            f"(hold a margin below the {summaries[-1]['target_rate']:.0f}/s step that first 429'd)."
+        )
     else:
-        print(f"\nRESULT: clean through the whole ramp (max {knee:.0f}/s) -- no 429s observed. "
-              f"Headroom to raise the cap; extend --rates higher to find the true knee.")
+        print(
+            f"\nRESULT: clean through the whole ramp (max {knee:.0f}/s) -- no 429s observed. "
+            f"Headroom to raise the cap; extend --rates higher to find the true knee."
+        )
     return 0
 
 

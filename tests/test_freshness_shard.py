@@ -307,10 +307,7 @@ def test_each_pinned_bucket_lands_on_its_configured_shard():
 def test_pinned_buckets_are_on_distinct_shards():
     # THE WHOLE POINT: no two heavy collapsed buckets may share a shard (else the collision the fix
     # exists to remove is back). With 10 pins over 10 non-join shards this is a bijection.
-    shards = [
-        board_shard(source, token, PROD_K)
-        for source, token in _BUCKET_SAMPLE_BOARD.values()
-    ]
+    shards = [board_shard(source, token, PROD_K) for source, token in _BUCKET_SAMPLE_BOARD.values()]
     assert len(shards) == len(set(shards)), f"pins collided: {sorted(shards)}"
 
 

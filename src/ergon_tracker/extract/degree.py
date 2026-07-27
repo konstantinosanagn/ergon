@@ -673,7 +673,9 @@ class DegreeExtractor:
         for pat, verdict in checks:
             for m in pat.finditer(segment):
                 dist = min(abs(m.start() - pos), abs(m.end() - pos))
-                if dist <= _SCOPE_DIST_CAP:  # ignore a far cue softening ANOTHER item in the segment
+                if (
+                    dist <= _SCOPE_DIST_CAP
+                ):  # ignore a far cue softening ANOTHER item in the segment
                     hits.append((dist, verdict))
         if hits:
             return min(hits)[1]  # nearest cue wins; tie -> False (conservative)

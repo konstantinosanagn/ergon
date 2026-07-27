@@ -62,13 +62,70 @@ _CRTSH = "https://crt.sh/"
 # ATS vendor's own services; drop them so they don't become bogus candidates.
 _RESERVED_LABELS = frozenset(
     {
-        "www", "api", "app", "apps", "auth", "admin", "portal", "secure", "login", "sso",
-        "status", "support", "help", "docs", "doc", "blog", "news", "mail", "email", "mailer",
-        "smtp", "mx", "ns", "ns1", "ns2", "cdn", "assets", "static", "media", "img", "images",
-        "dev", "staging", "stage", "test", "qa", "demo", "sandbox", "preview", "beta",
-        "go", "info", "about", "widget", "widgets", "embed", "track", "tracking", "click",
-        "events", "event", "webhook", "webhooks", "internal", "vpn", "git", "ci",
-        "grafana", "metrics", "monitor", "monitoring", "data", "db", "cache",
+        "www",
+        "api",
+        "app",
+        "apps",
+        "auth",
+        "admin",
+        "portal",
+        "secure",
+        "login",
+        "sso",
+        "status",
+        "support",
+        "help",
+        "docs",
+        "doc",
+        "blog",
+        "news",
+        "mail",
+        "email",
+        "mailer",
+        "smtp",
+        "mx",
+        "ns",
+        "ns1",
+        "ns2",
+        "cdn",
+        "assets",
+        "static",
+        "media",
+        "img",
+        "images",
+        "dev",
+        "staging",
+        "stage",
+        "test",
+        "qa",
+        "demo",
+        "sandbox",
+        "preview",
+        "beta",
+        "go",
+        "info",
+        "about",
+        "widget",
+        "widgets",
+        "embed",
+        "track",
+        "tracking",
+        "click",
+        "events",
+        "event",
+        "webhook",
+        "webhooks",
+        "internal",
+        "vpn",
+        "git",
+        "ci",
+        "grafana",
+        "metrics",
+        "monitor",
+        "monitoring",
+        "data",
+        "db",
+        "cache",
     }
 )
 
@@ -283,9 +340,7 @@ async def harvest(
                 token = t["tenant"]
                 if token in existing_keys or token in seen_tokens:
                     continue
-                candidates.append(
-                    {"company": token, "ats": name, "token": token, "domain": None}
-                )
+                candidates.append({"company": token, "ats": name, "token": token, "domain": None})
 
     return candidates
 

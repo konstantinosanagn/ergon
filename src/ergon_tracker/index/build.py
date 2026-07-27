@@ -63,9 +63,7 @@ class IndexBuildError(RuntimeError):
 # with (and asserted a subset of) ``freshness.SEARCH_INDEX_SOURCES`` at call time -- URL derivation
 # fires only for a source in BOTH sets, so a deterministic source can never be URL-derived even if a
 # parser were added here.
-_URL_TOKEN_SOURCES: frozenset[str] = frozenset(
-    {"workday", "oracle", "smartrecruiters", "icims"}
-)
+_URL_TOKEN_SOURCES: frozenset[str] = frozenset({"workday", "oracle", "smartrecruiters", "icims"})
 
 
 def _default_url_parsers() -> dict[str, Callable[[str], str | None]]:
@@ -632,10 +630,22 @@ def _relevel_from_years(con: object) -> int:
 # deliberately NOT here: a JD-text extractor improvement never moves them, so leaving them out keeps
 # the re-enriched row minimal-churn and geographically stable.
 _REENRICH_COLS: tuple[str, ...] = (
-    "content_hash", "enrich_hash", "level", "employment_type", "sector",
-    "salary_min", "salary_max", "salary_currency", "salary_interval",
-    "years_min", "years_max", "degree_min", "degree_required",
-    "visa_sponsor", "visa_last_filed", "sponsorship_offered",
+    "content_hash",
+    "enrich_hash",
+    "level",
+    "employment_type",
+    "sector",
+    "salary_min",
+    "salary_max",
+    "salary_currency",
+    "salary_interval",
+    "years_min",
+    "years_max",
+    "degree_min",
+    "degree_required",
+    "visa_sponsor",
+    "visa_last_filed",
+    "sponsorship_offered",
 )
 
 # Enrichment-produced fields reset to their pre-enrich defaults before re-running enrich_in_place, so

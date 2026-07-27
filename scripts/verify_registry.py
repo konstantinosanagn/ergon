@@ -103,14 +103,17 @@ async def main() -> None:
         step = max(100, total // 50)  # ~2% increments
         if d % step == 0 or d == total:
             pct = 100 * d // total if total else 100
-            print(f"  verifying {d}/{total} ({pct}%)  live={prog['live']} "
-                  f"dead={d - prog['live']}", flush=True)
+            print(
+                f"  verifying {d}/{total} ({pct}%)  live={prog['live']} dead={d - prog['live']}",
+                flush=True,
+            )
 
     async with (
         AsyncFetcher(concurrency=16, per_host_rate=8, timeout=30.0) as fetcher,
         anyio.create_task_group() as tg,
     ):
         for idx, key in enumerate(keys):
+
             async def run(idx: int = idx, key: str = key) -> None:
                 res = await verify_one(key, companies[key], fetcher, query)
                 results[idx] = res
@@ -137,8 +140,10 @@ async def main() -> None:
         print("\nreport-only (no changes). Re-run with --prune to remove dead boards.")
         return
     if sample:
-        print("\nrefusing to prune on a --sample run (would delete unverified boards). "
-              "Run a full or per-ATS sweep with --prune.")
+        print(
+            "\nrefusing to prune on a --sample run (would delete unverified boards). "
+            "Run a full or per-ATS sweep with --prune."
+        )
         return
 
     dead_keys = {k for k, _ in dead}

@@ -120,7 +120,9 @@ def test_goldman_alive_returns_description_html() -> None:
 
 def test_goldman_null_role_is_gone() -> None:
     # invalid/removed id -> BAD_REQUEST validation + data.role == null -> GONE.
-    fetcher = _FakeFetcher(_FakeResponse(200, text='{"errors":[{"message":"x"}],"data":{"role":null}}'))
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text='{"errors":[{"message":"x"}],"data":{"role":null}}')
+    )
     assert _run(_GS_REF, fetcher) is None
 
 
@@ -194,7 +196,11 @@ def test_meta_request_built_correctly() -> None:
 
 def test_meta_alive_concatenates_keys() -> None:
     fetcher = _FakeFetcher(
-        _FakeResponse(200, text=_META_ALIVE, url="https://www.metacareers.com/profile/job_details/1526484645064212/")
+        _FakeResponse(
+            200,
+            text=_META_ALIVE,
+            url="https://www.metacareers.com/profile/job_details/1526484645064212/",
+        )
     )
     desc = _run(_META_REF, fetcher)
     assert desc is not None
@@ -210,7 +216,11 @@ def test_meta_alive_concatenates_keys() -> None:
 def test_meta_followed_to_position_not_available_is_gone() -> None:
     # A removed job 301s to /jobs/position-not-available/ (final status 404) -> GONE.
     fetcher = _FakeFetcher(
-        _FakeResponse(404, text="<html>gone</html>", url="https://www.metacareers.com/jobs/position-not-available/")
+        _FakeResponse(
+            404,
+            text="<html>gone</html>",
+            url="https://www.metacareers.com/jobs/position-not-available/",
+        )
     )
     assert _run(_META_REF, fetcher) is None
 
@@ -230,7 +240,11 @@ def test_meta_transient_5xx_raises() -> None:
 def test_meta_200_without_keys_raises() -> None:
     # A 200 job page that is NOT the gone page but carries no JD keys is indeterminate -> RAISE.
     fetcher = _FakeFetcher(
-        _FakeResponse(200, text="<html><p>nothing here</p></html>", url="https://www.metacareers.com/profile/job_details/1/")
+        _FakeResponse(
+            200,
+            text="<html><p>nothing here</p></html>",
+            url="https://www.metacareers.com/profile/job_details/1/",
+        )
     )
     with pytest.raises(RuntimeError):
         _run(_META_REF, fetcher)
@@ -256,7 +270,11 @@ _META_ALIVE_NO_PAY = (
 
 def test_meta_alive_with_compensation_returns_detailfetch() -> None:
     fetcher = _FakeFetcher(
-        _FakeResponse(200, text=_META_ALIVE_PAY, url="https://www.metacareers.com/profile/job_details/1526484645064212/")
+        _FakeResponse(
+            200,
+            text=_META_ALIVE_PAY,
+            url="https://www.metacareers.com/profile/job_details/1526484645064212/",
+        )
     )
     got = _run(_META_REF, fetcher)
     assert isinstance(got, DetailFetch)
@@ -270,7 +288,11 @@ def test_meta_alive_with_compensation_returns_detailfetch() -> None:
 
 def test_meta_empty_compensation_falls_back_to_bare_str() -> None:
     fetcher = _FakeFetcher(
-        _FakeResponse(200, text=_META_ALIVE_NO_PAY, url="https://www.metacareers.com/profile/job_details/1526484645064212/")
+        _FakeResponse(
+            200,
+            text=_META_ALIVE_NO_PAY,
+            url="https://www.metacareers.com/profile/job_details/1526484645064212/",
+        )
     )
     got = _run(_META_REF, fetcher)
     assert isinstance(got, str)
@@ -296,7 +318,10 @@ def test_google_request_built_correctly() -> None:
     req = _build_detail_request(detail, _GOOGLE_REF)
     assert req is not None
     assert req.method == "GET"
-    assert req.url == "https://www.google.com/about/careers/applications/jobs/results/85183114006930118"
+    assert (
+        req.url
+        == "https://www.google.com/about/careers/applications/jobs/results/85183114006930118"
+    )
     assert req.tier == "tls"
 
 
@@ -360,19 +385,25 @@ def test_lululemon_alive_extracts_rich_text() -> None:
 
 def test_lululemon_redirect_to_error_is_gone() -> None:
     fetcher = _FakeFetcher(
-        _FakeResponse(302, headers={"location": "https://careers.lululemon.com/en_US/careers/Error"})
+        _FakeResponse(
+            302, headers={"location": "https://careers.lululemon.com/en_US/careers/Error"}
+        )
     )
     assert _run(_LULU_REF, fetcher) is None
 
 
 def test_lululemon_unclassifiable_redirect_raises() -> None:
-    fetcher = _FakeFetcher(_FakeResponse(302, headers={"location": "https://careers.lululemon.com/somewhere-else"}))
+    fetcher = _FakeFetcher(
+        _FakeResponse(302, headers={"location": "https://careers.lululemon.com/somewhere-else"})
+    )
     with pytest.raises(RuntimeError):
         _run(_LULU_REF, fetcher)
 
 
 def test_lululemon_200_without_container_raises() -> None:
-    fetcher = _FakeFetcher(_FakeResponse(200, text="<html><body><p>huh</p></body></html>", url=_LULU_URL))
+    fetcher = _FakeFetcher(
+        _FakeResponse(200, text="<html><body><p>huh</p></body></html>", url=_LULU_URL)
+    )
     with pytest.raises(RuntimeError):
         _run(_LULU_REF, fetcher)
 
@@ -418,7 +449,9 @@ def test_bain_alive_extracts_largest_block() -> None:
 
 
 def test_bain_redirect_to_error_is_gone() -> None:
-    fetcher = _FakeFetcher(_FakeResponse(302, headers={"location": "https://careers.bain.com/jobs/Error"}))
+    fetcher = _FakeFetcher(
+        _FakeResponse(302, headers={"location": "https://careers.bain.com/jobs/Error"})
+    )
     assert _run(_BAIN_REF, fetcher) is None
 
 
@@ -652,7 +685,8 @@ def test_parker_alive_extracts_jsonld_description() -> None:
 def test_parker_redirect_to_job_not_found_is_gone() -> None:
     fetcher = _FakeFetcher(
         _FakeResponse(
-            301, headers={"location": "https://parkercareers.ttcportals.com/jobs?job_not_found=true"}
+            301,
+            headers={"location": "https://parkercareers.ttcportals.com/jobs?job_not_found=true"},
         )
     )
     assert _run(_PARKER_REF, fetcher) is None
@@ -808,7 +842,9 @@ def test_wipro_dead_id_soft200_absent_is_gone() -> None:
 def test_wipro_errorpage_redirect_is_gone() -> None:
     # A wrong-format / moved id 302s to /errorpage -> gone.redirect_marker -> None.
     fetcher = _FakeFetcher(
-        _FakeResponse(302, headers={"location": "https://careers.wipro.com/errorpage/?errortype=404"})
+        _FakeResponse(
+            302, headers={"location": "https://careers.wipro.com/errorpage/?errortype=404"}
+        )
     )
     assert _run(_WIPRO_REF, fetcher) is None
 
@@ -861,9 +897,7 @@ def test_akkodis_request_built_from_template() -> None:
     assert req is not None
     assert req.method == "GET"
     assert req.tier == "plain"
-    assert req.url == (
-        "https://www.akkodis.com/en-us/careers/job-apply?id=US_EN_6_971574_1639156"
-    )
+    assert req.url == ("https://www.akkodis.com/en-us/careers/job-apply?id=US_EN_6_971574_1639156")
 
 
 def test_akkodis_alive_extracts_your_role_excludes_apply_form() -> None:

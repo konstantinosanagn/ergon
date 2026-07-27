@@ -237,7 +237,9 @@ async def main() -> None:
                 taken.add(ck)
                 rec = {"company": ck, "ats": ats, "token": token, "domain": None}
                 _checkpoint_append(ckpt_path, rec)  # durable BEFORE we risk anything else
-                candidates.append({**rec, "_sponsor": sponsor, "_filings": todo[idx].get("filings")})
+                candidates.append(
+                    {**rec, "_sponsor": sponsor, "_filings": todo[idx].get("filings")}
+                )
         except Exception:  # noqa: BLE001 - one bad record must never sink the run
             pass
 

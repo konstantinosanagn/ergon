@@ -77,8 +77,16 @@ def test_core_published_once_and_captures_every_reconcile(tmp_path, monkeypatch)
 
     out = tmp_path / "dist"
     bi.main(
-        ["--incremental", "--sharded", "--detail", "--liveness", "--limit-companies", "5",
-         "--out", str(out)]
+        [
+            "--incremental",
+            "--sharded",
+            "--detail",
+            "--liveness",
+            "--limit-companies",
+            "5",
+            "--out",
+            str(out),
+        ]
     )
 
     # THE MEASURE: the core index is gzipped EXACTLY ONCE (pre-Item-6 this was 3: gate + detail +
@@ -203,7 +211,12 @@ def _publish_core(remote: Path, tmp_path: Path, build_id: str) -> tuple[bytes, s
     (remote / "index.sqlite.gz").write_bytes(gzip.compress(raw))
     (remote / "manifest.json").write_text(
         json.dumps(
-            {"build_id": build_id, "sha256": sha, "bytes": len(raw), "schema_version": SCHEMA_VERSION}
+            {
+                "build_id": build_id,
+                "sha256": sha,
+                "bytes": len(raw),
+                "schema_version": SCHEMA_VERSION,
+            }
         )
     )
     return raw, sha
@@ -215,7 +228,9 @@ def _write_set_manifest(remote: Path, build_id: str, core_sha: str, nbytes: int)
             {
                 "build_id": build_id,
                 "schema_version": SCHEMA_VERSION,
-                "assets": {"index.sqlite.gz": {"sha256": core_sha, "bytes": nbytes, "build_id": build_id}},
+                "assets": {
+                    "index.sqlite.gz": {"sha256": core_sha, "bytes": nbytes, "build_id": build_id}
+                },
             }
         )
     )

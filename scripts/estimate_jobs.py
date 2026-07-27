@@ -35,7 +35,9 @@ async def company_total(ats: str, token: str, fetcher: AsyncFetcher) -> int | No
         if ats == "workday":
             tenant, wd, site = token.split("|")
             url = f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
-            d = await fetcher.post_json(url, json={"appliedFacets": {}, "limit": 1, "offset": 0, "searchText": ""})
+            d = await fetcher.post_json(
+                url, json={"appliedFacets": {}, "limit": 1, "offset": 0, "searchText": ""}
+            )
             return int(d.get("total") or 0)
         if ats == "smartrecruiters":
             d = await fetcher.get_json(

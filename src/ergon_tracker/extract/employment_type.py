@@ -109,7 +109,10 @@ _BODY: tuple[tuple[re.Pattern[str], EmploymentType], ...] = (
         ),
         EmploymentType.TEMPORARY,
     ),
-    (re.compile(rf"\bpart[-\s]?time\s+{_ROLE}\b|\bpart[-\s]?time\b", re.I), EmploymentType.PART_TIME),
+    (
+        re.compile(rf"\bpart[-\s]?time\s+{_ROLE}\b|\bpart[-\s]?time\b", re.I),
+        EmploymentType.PART_TIME,
+    ),
     (
         re.compile(rf"\bfull[-\s]?time\s+{_ROLE}\b|\bthis\s+is\s+a\s+full[-\s]?time\b", re.I),
         EmploymentType.FULL_TIME,
@@ -117,7 +120,9 @@ _BODY: tuple[tuple[re.Pattern[str], EmploymentType], ...] = (
 )
 
 
-def _from_text(text: str, patterns: tuple[tuple[re.Pattern[str], EmploymentType], ...]) -> EmploymentType:
+def _from_text(
+    text: str, patterns: tuple[tuple[re.Pattern[str], EmploymentType], ...]
+) -> EmploymentType:
     for pattern, etype in patterns:
         if pattern.search(text):
             return etype

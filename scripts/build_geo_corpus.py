@@ -58,7 +58,11 @@ async def main() -> None:
     per_ats = _arg("--per-ats", 100)
     per_company = _arg("--per-company", 20)
     max_total = _arg("--max-total", 800)
-    out = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else ROOT / "data" / "geo_candidates.jsonl"
+    out = (
+        Path(sys.argv[sys.argv.index("--out") + 1])
+        if "--out" in sys.argv
+        else ROOT / "data" / "geo_candidates.jsonl"
+    )
 
     load_builtins()
     companies = _sample_companies(per_ats)
@@ -66,7 +70,9 @@ async def main() -> None:
     by_raw: dict[str, dict] = {}
     lock = anyio.Lock()
 
-    async def grab(key: str, ats: str, token: str, domain: str | None, fetcher: AsyncFetcher) -> None:
+    async def grab(
+        key: str, ats: str, token: str, domain: str | None, fetcher: AsyncFetcher
+    ) -> None:
         provider = get_provider(ats)
         if provider is None:
             return
@@ -83,7 +89,14 @@ async def main() -> None:
             lr = _raw_of(job)
             if not lr or len(lr) > 120:
                 continue
-            local.append({"location_raw": lr, "title": (job.title or "").strip(), "source": ats, "company_key": key})
+            local.append(
+                {
+                    "location_raw": lr,
+                    "title": (job.title or "").strip(),
+                    "source": ats,
+                    "company_key": key,
+                }
+            )
         if local:
             async with lock:
                 for r in local:

@@ -186,8 +186,12 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
     return DetailRef(
-        id="515428", source="pinpoint", token="aawdc", apply_url=apply_url,
-        listing_url=None, content_sig="s",
+        id="515428",
+        source="pinpoint",
+        token="aawdc",
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
     )
 
 

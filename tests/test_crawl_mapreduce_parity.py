@@ -172,12 +172,14 @@ def test_kshard_crawl_reduce_matches_single_process(monkeypatch, tmp_path):
     single_dir.mkdir()
     single_fresh = single_dir / "fresh.sqlite"
     s_single: dict = {}
-    outcome_single, cur_single = anyio.run(
-        bi._crawl_due, 1000, s_single, single_fresh, "b1"
-    )
+    outcome_single, cur_single = anyio.run(bi._crawl_due, 1000, s_single, single_fresh, "b1")
     single_db = single_dir / "index.sqlite"
     build_index_from_fresh_db(
-        single_fresh, single_db, build_id="b1", prev_db=None, crawled_keys=_crawled_keys(outcome_single)
+        single_fresh,
+        single_db,
+        build_id="b1",
+        prev_db=None,
+        crawled_keys=_crawled_keys(outcome_single),
     )
     _apply_outcome_tail(s_single, outcome_single, single_fresh, None)
 
@@ -189,7 +191,9 @@ def test_kshard_crawl_reduce_matches_single_process(monkeypatch, tmp_path):
     # --- K-SHARD: run the real map per shard, then the real reduce. ---
     shard_dir = tmp_path / "shard"
     shard_dir.mkdir()
-    save_state({}, shard_dir / "board_state.json")  # the shared base every map downloads (cold: empty)
+    save_state(
+        {}, shard_dir / "board_state.json"
+    )  # the shared base every map downloads (cold: empty)
     per_shard_boards: dict[int, int] = {}
     for i in range(NUM_SHARDS):
         bi._run_crawl_map(
@@ -225,7 +229,11 @@ def test_kshard_crawl_reduce_matches_single_process(monkeypatch, tmp_path):
     )
     reduce_db = shard_dir / "index.sqlite"
     build_index_from_fresh_db(
-        reduce_fresh, reduce_db, build_id="b1", prev_db=None, crawled_keys=_crawled_keys(outcome_reduce)
+        reduce_fresh,
+        reduce_db,
+        build_id="b1",
+        prev_db=None,
+        crawled_keys=_crawled_keys(outcome_reduce),
     )
     _apply_outcome_tail(s_reduce, outcome_reduce, reduce_fresh, None)
 

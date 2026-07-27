@@ -214,8 +214,21 @@ def _fill_list(*items: str) -> str:
 def _alive_html() -> str:
     content = "!*!%3Cp%3EWe are hiring a senior data engineer in Richmond.%3C/p%3E"
     return _fill_list(
-        "266396", "true", "266396", "false", "Job Title", "false", "266396", "false", "true",
-        "Data Engineer", "JOB123", content, content, "TX-Richmond", "TX-Richmond",
+        "266396",
+        "true",
+        "266396",
+        "false",
+        "Job Title",
+        "false",
+        "266396",
+        "false",
+        "true",
+        "Data Engineer",
+        "JOB123",
+        content,
+        content,
+        "TX-Richmond",
+        "TX-Richmond",
     )
 
 
@@ -260,7 +273,11 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_URL, token: str | None = TOKEN) -> DetailRef:
     return DetailRef(
-        id="266396", source="taleo", token=token, apply_url=apply_url, listing_url=None,
+        id="266396",
+        source="taleo",
+        token=token,
+        apply_url=apply_url,
+        listing_url=None,
         content_sig="s",
     )
 

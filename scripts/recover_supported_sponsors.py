@@ -30,9 +30,23 @@ from harvest_tavily import load_key  # noqa: E402
 
 CENSUS = ROOT / "runs" / "gap_ats_census.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_sponsors.json"
-SUPPORTED = {"greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable",
-             "recruitee", "personio", "bamboohr", "breezy", "teamtailor", "join", "rippling",
-             "pinpoint", "eightfold"}
+SUPPORTED = {
+    "greenhouse",
+    "lever",
+    "ashby",
+    "workday",
+    "smartrecruiters",
+    "workable",
+    "recruitee",
+    "personio",
+    "bamboohr",
+    "breezy",
+    "teamtailor",
+    "join",
+    "rippling",
+    "pinpoint",
+    "eightfold",
+}
 
 
 async def main() -> None:

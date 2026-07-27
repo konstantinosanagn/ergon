@@ -203,7 +203,10 @@ def test_snippet_falls_back_to_stripped_description_html_when_text_missing():
     from ergon_tracker.models import JobPosting
 
     job = JobPosting.create(
-        source="jazzhr", source_job_id="job_1", company="Acme", title="Engineer",
+        source="jazzhr",
+        source_job_id="job_1",
+        company="Acme",
+        title="Engineer",
         description_html="<p>Build <b>great</b> things.</p>\n\n<ul><li>Python</li></ul>",
     )
     assert job.description_text is None
@@ -216,8 +219,12 @@ def test_snippet_prefers_description_text_over_html():
     from ergon_tracker.models import JobPosting
 
     job = JobPosting.create(
-        source="greenhouse", source_job_id="1", company="Acme", title="Engineer",
-        description_text="Plain text JD.", description_html="<p>ignored html</p>",
+        source="greenhouse",
+        source_job_id="1",
+        company="Acme",
+        title="Engineer",
+        description_text="Plain text JD.",
+        description_html="<p>ignored html</p>",
     )
     assert to_row(job, build_id="b1")["snippet"] == "Plain text JD."
 
@@ -226,5 +233,7 @@ def test_snippet_none_when_no_description_at_all():
     from ergon_tracker.index.mapping import to_row
     from ergon_tracker.models import JobPosting
 
-    job = JobPosting.create(source="greenhouse", source_job_id="1", company="Acme", title="Engineer")
+    job = JobPosting.create(
+        source="greenhouse", source_job_id="1", company="Acme", title="Engineer"
+    )
     assert to_row(job, build_id="b1")["snippet"] is None

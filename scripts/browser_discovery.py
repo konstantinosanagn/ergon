@@ -130,6 +130,7 @@ _PAGE_PARAMS = ("offset", "start", "from", "page", "pagenumber", "pageindex", "p
 _OFFSET_PARAMS = ("offset", "start", "from", "skip")  # advance by page size, not by 1
 _SIZE_PARAMS = ("resultlimit", "limit", "perpage", "pagesize", "size", "count", "rows")
 
+
 def _norm(k: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(k).lower())
 

@@ -68,13 +68,21 @@ def test_content_version_enabled_reads_env(monkeypatch):
 
 
 def _gh_raw(sid: str, updated_at):
-    return RawJob(source="greenhouse", source_job_id=sid, company="Acme",
-                  payload={"updated_at": updated_at, "title": "Eng"})
+    return RawJob(
+        source="greenhouse",
+        source_job_id=sid,
+        company="Acme",
+        payload={"updated_at": updated_at, "title": "Eng"},
+    )
 
 
 def _rc_raw(sid: str, updated_at):
-    return RawJob(source="recruitee", source_job_id=sid, company="Acme",
-                  payload={"updated_at": updated_at, "title": "Eng"})
+    return RawJob(
+        source="recruitee",
+        source_job_id=sid,
+        company="Acme",
+        payload={"updated_at": updated_at, "title": "Eng"},
+    )
 
 
 def test_greenhouse_content_version_is_raw_updated_at():
@@ -99,8 +107,12 @@ def test_recruitee_content_version_is_raw_updated_at():
 
 
 def _br_raw(sid: str, lastupdated):
-    return RawJob(source="brassring", source_job_id=sid, company="Acme",
-                  payload={"lastupdated": lastupdated, "reqid": sid})
+    return RawJob(
+        source="brassring",
+        source_job_id=sid,
+        company="Acme",
+        payload={"lastupdated": lastupdated, "reqid": sid},
+    )
 
 
 def test_brassring_content_version_is_raw_lastupdated():
@@ -109,7 +121,9 @@ def test_brassring_content_version_is_raw_lastupdated():
     p = BrassRingProvider()
     # Raw served day-granular date; a cross-day edit yields a DIFFERENT token.
     assert p.content_version(_br_raw("1", "20-Jul-2026")) == "20-Jul-2026"
-    assert p.content_version(_br_raw("1", "21-Jul-2026")) != p.content_version(_br_raw("1", "20-Jul-2026"))
+    assert p.content_version(_br_raw("1", "21-Jul-2026")) != p.content_version(
+        _br_raw("1", "20-Jul-2026")
+    )
     # Absent field -> None (falls back to id-only, no regression).
     assert p.content_version(_br_raw("1", None)) is None
     assert p.content_version(RawJob(source="brassring", source_job_id="1", company="Acme")) is None
@@ -145,14 +159,23 @@ class _VProvider(BaseProvider):
     async def fetch(self, token, query, fetcher):
         self.fetch_calls += 1
         return [
-            RawJob(source="greenhouse", source_job_id=i, company="Acme Corp", token=token,
-                   payload={"title": t, "updated_at": v})
+            RawJob(
+                source="greenhouse",
+                source_job_id=i,
+                company="Acme Corp",
+                token=token,
+                payload={"title": t, "updated_at": v},
+            )
             for i, t, v in self._postings
         ]
 
     def normalize(self, raw):
-        return JobPosting.create(source="greenhouse", source_job_id=raw.source_job_id,
-                                 company="Acme Corp", title=raw.payload["title"])
+        return JobPosting.create(
+            source="greenhouse",
+            source_job_id=raw.source_job_id,
+            company="Acme Corp",
+            title=raw.payload["title"],
+        )
 
     def content_version(self, raw):
         v = raw.payload.get("updated_at")
@@ -161,8 +184,12 @@ class _VProvider(BaseProvider):
 
 def _raws(postings):
     return [
-        RawJob(source="greenhouse", source_job_id=i, company="Acme",
-               payload={"title": t, "updated_at": v})
+        RawJob(
+            source="greenhouse",
+            source_job_id=i,
+            company="Acme",
+            payload={"title": t, "updated_at": v},
+        )
         for i, t, v in postings
     ]
 
@@ -182,8 +209,11 @@ def test_fold_on_with_override_folds_version_and_flips_on_edit():
     base = _raws([("1", "A", "v1"), ("2", "B", "v1")])
     edited = _raws([("1", "A2", "v2"), ("2", "B", "v1")])  # SAME ids {1,2}, posting 1 edited (v2)
     h_base = idset_hash(content_fingerprint_ids(base, prov, fold_version=True))
-    h_same = idset_hash(content_fingerprint_ids(_raws([("1", "A", "v1"), ("2", "B", "v1")]),
-                                                prov, fold_version=True))
+    h_same = idset_hash(
+        content_fingerprint_ids(
+            _raws([("1", "A", "v1"), ("2", "B", "v1")]), prov, fold_version=True
+        )
+    )
     h_edit = idset_hash(content_fingerprint_ids(edited, prov, fold_version=True))
     assert h_base == h_same  # unchanged content -> unchanged hash (skip preserved)
     assert h_edit != h_base  # an in-place edit (same id-set) FLIPS the hash -> re-crawl
@@ -234,8 +264,9 @@ def _build_prior_index(tmp_path, prov, *, build_id="prior"):
 
 def _today_states(stamp_hash):
     """A fresh (due) 'today' BoardState seeded with the prior crawl's stamped fingerprint."""
-    return {"greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN,
-                                          idset_hash=stamp_hash)}
+    return {
+        "greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN, idset_hash=stamp_hash)
+    }
 
 
 def _sweep_hash(prior_db, prov, monkeypatch):
@@ -248,7 +279,10 @@ def _sweep_hash(prior_db, prov, monkeypatch):
     con = sqlite3.connect(prior_db)
     anyio.run(
         lambda: sweep_boards(
-            [("greenhouse", _TOKEN)], con, fetcher=object(), board_deltas=deltas,
+            [("greenhouse", _TOKEN)],
+            con,
+            fetcher=object(),
+            board_deltas=deltas,
             now=lambda: "2026-07-20T00:00:00+00:00",
         )
     )
@@ -310,8 +344,10 @@ def _write_sidecar(path: Path, h: str) -> None:
             "added_ids TEXT NOT NULL, idset_hash TEXT NOT NULL, computed_at TEXT NOT NULL, "
             "PRIMARY KEY (source, board_token))"
         )
-        con.execute("INSERT INTO board_deltas VALUES (?,?,?,?,?)",
-                    ("greenhouse", _TOKEN, "[]", h, "2026-07-20T00:00:00+00:00"))
+        con.execute(
+            "INSERT INTO board_deltas VALUES (?,?,?,?,?)",
+            ("greenhouse", _TOKEN, "[]", h, "2026-07-20T00:00:00+00:00"),
+        )
         con.commit()
     finally:
         con.close()

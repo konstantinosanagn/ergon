@@ -38,7 +38,9 @@ CEIPAL_API = re.compile(r'data-ceipal-api-key\s*=\s*["\']([^"\']+)["\']', re.I)
 CEIPAL_CP = re.compile(r'data-ceipal-career-portal-id\s*=\s*["\']([^"\']+)["\']', re.I)
 # JS-injected variants
 CEIPAL_API_JS = re.compile(r'ceipal[_-]?api[_-]?key["\']?\s*[:=]\s*["\']([^"\']+)["\']', re.I)
-CEIPAL_CP_JS = re.compile(r'(?:career[_-]?portal[_-]?id|cp[_-]?id)["\']?\s*[:=]\s*["\']([^"\']+)["\']', re.I)
+CEIPAL_CP_JS = re.compile(
+    r'(?:career[_-]?portal[_-]?id|cp[_-]?id)["\']?\s*[:=]\s*["\']([^"\']+)["\']', re.I
+)
 
 MARKERS = {
     "ceipal": re.compile(r"ceipal", re.I),
@@ -61,8 +63,9 @@ MARKERS = {
 
 def fetch(url: str) -> tuple[int, str]:
     try:
-        r = requests.get(url, impersonate="chrome124", timeout=20, verify=False,
-                         allow_redirects=True)
+        r = requests.get(
+            url, impersonate="chrome124", timeout=20, verify=False, allow_redirects=True
+        )
         return r.status_code, r.text
     except Exception as e:  # noqa: BLE001
         return -1, f"ERR {type(e).__name__}: {e}"

@@ -93,7 +93,9 @@ def main() -> None:
     priority = ["edgar", "wikidata", "slug", "pdl"]
     # Canonical (key-sorted) order so the rebuild is byte-deterministic regardless of the input
     # file's order — makes `--apply` idempotent from any starting point and keeps diffs readable.
-    sec["companies"] = dict(sorted(rebuild_table(sec["companies"], seed, sources, priority).items()))
+    sec["companies"] = dict(
+        sorted(rebuild_table(sec["companies"], seed, sources, priority).items())
+    )
     added = dict.fromkeys(priority, 0)
     for v in sec["companies"].values():
         s = v.get("source")

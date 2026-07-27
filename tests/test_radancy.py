@@ -150,8 +150,12 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
     return DetailRef(
-        id="111", source="radancy", token="jobs.acme.com|Acme", apply_url=apply_url,
-        listing_url=None, content_sig="s",
+        id="111",
+        source="radancy",
+        token="jobs.acme.com|Acme",
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
     )
 
 
@@ -181,7 +185,7 @@ async def test_fetch_detail_503_status_raises() -> None:
 
 async def test_fetch_detail_alive_returns_content() -> None:
     body = "x" * 500  # clears _DETAIL_MIN_LEN
-    html = f'<html><body><main><p>{body}</p></main></body></html>'
+    html = f"<html><body><main><p>{body}</p></main></body></html>"
     fetcher = _FakeFetcher(html=html)
     res = await RadancyProvider().fetch_detail(_detail_ref(), fetcher)
     assert fetcher.calls == [DETAIL_URL]

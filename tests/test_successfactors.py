@@ -207,8 +207,12 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_APPLY_URL) -> DetailRef:
     return DetailRef(
-        id="12345", source="successfactors", token=f"{HOST}|{SITEID}", apply_url=apply_url,
-        listing_url=None, content_sig="s",
+        id="12345",
+        source="successfactors",
+        token=f"{HOST}|{SITEID}",
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
     )
 
 
@@ -237,10 +241,7 @@ async def test_fetch_detail_503_status_raises() -> None:
 
 
 async def test_fetch_detail_alive_returns_content() -> None:
-    html = (
-        '<html><body><div id="jobdescription"><p>Full JD body text here.</p></div>'
-        "</body></html>"
-    )
+    html = '<html><body><div id="jobdescription"><p>Full JD body text here.</p></div></body></html>'
     fetcher = _FakeFetcher(text=html)
     res = await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
     assert fetcher.calls == [DETAIL_APPLY_URL]

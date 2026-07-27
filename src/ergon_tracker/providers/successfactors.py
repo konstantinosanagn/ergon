@@ -82,7 +82,9 @@ _RSS_ITEM = re.compile(r"<item>(.*?)</item>", re.S | re.I)
 _RSS_TITLE = re.compile(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", re.S | re.I)
 _RSS_LINK = re.compile(r"<link>(?:<!\[CDATA\[)?\s*(.*?)\s*(?:\]\]>)?</link>", re.S | re.I)
 # The <description> carries the FULL JD HTML inline (CDATA-wrapped, verified live: avg ~9.5k chars).
-_RSS_DESC = re.compile(r"<description>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</description>", re.S | re.I)
+_RSS_DESC = re.compile(
+    r"<description>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</description>", re.S | re.I
+)
 _RSS_JOBID = re.compile(r"/job/[^/]*?/(\d{6,})/?", re.I)
 _RSS_LOC = re.compile(r"\(([^()]+)\)\s*$")  # trailing "(City, ST, Country)" in the RSS title
 # A SuccessFactors job URL: /{siteid}/job/{slug}/{numericId}/ — the LONG numeric id (SF ids are
@@ -215,9 +217,7 @@ class SuccessFactorsProvider(BaseProvider):
             raws = await self._fetch_rss(host, siteid, limit, fetcher)
         return raws
 
-    async def _rss_jd_map(
-        self, host: str, siteid: str, fetcher: AsyncFetcher
-    ) -> dict[str, str]:
+    async def _rss_jd_map(self, host: str, siteid: str, fetcher: AsyncFetcher) -> dict[str, str]:
         """One RSS feed call -> ``{numeric_job_id: full JD HTML}`` for the newest ~20 postings.
 
         Keyed on the SF numeric job id (``_RSS_JOBID`` off the feed ``<link>``), which equals a

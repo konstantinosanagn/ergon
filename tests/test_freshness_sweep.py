@@ -992,9 +992,9 @@ def test_every_search_index_source_provider_overrides_fetch_detail():
     for source in sorted(SEARCH_INDEX_SOURCES):
         prov = get_provider(source)
         assert prov is not None, f"{source} has no registered provider"
-        assert (
-            type(prov).fetch_detail is not BaseProvider.fetch_detail
-        ), f"{source} is in SEARCH_INDEX_SOURCES but does not override fetch_detail (mass-expiry risk)"
+        assert type(prov).fetch_detail is not BaseProvider.fetch_detail, (
+            f"{source} is in SEARCH_INDEX_SOURCES but does not override fetch_detail (mass-expiry risk)"
+        )
 
 
 def test_sweep_partial_fetch_guard_skips_a_suspicious_mass_departure(tmp_path, monkeypatch):
@@ -1228,7 +1228,9 @@ def test_sweep_without_deltas_collector_is_unchanged(tmp_path, monkeypatch):
     # produces no signal -- zero regression.
     import ergon_tracker.index.freshness as freshness
 
-    idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")])
+    idx = _build_index(
+        tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")]
+    )
     monkeypatch.setattr(
         freshness, "get_provider", _make_get_provider({("greenhouse", "acme"): {"1"}})
     )
@@ -1269,7 +1271,9 @@ def test_sweep_emits_no_delta_on_empty_while_stored_fetch(tmp_path, monkeypatch)
     # transient failure -- the same valve that blocks a mass-expiry must ALSO block a delta.
     import ergon_tracker.index.freshness as freshness
 
-    idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")])
+    idx = _build_index(
+        tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")]
+    )
 
     class _P:
         async def fetch(self, token, query, fetcher):
@@ -1413,7 +1417,14 @@ def test_source_expiry_rate_can_exceed_bounds_on_a_pathological_dict():
 
 def test_check_expiry_alarms_fires_above_threshold_and_floor(caplog):
     stats = {
-        "taleo": {"checked": 10, "candidates": 10, "expired": 8, "confirmed_alive": 2, "unconfirmed": 0, "errored": 0},
+        "taleo": {
+            "checked": 10,
+            "candidates": 10,
+            "expired": 8,
+            "confirmed_alive": 2,
+            "unconfirmed": 0,
+            "errored": 0,
+        },
     }
     with caplog.at_level("WARNING"):
         fired = check_expiry_alarms(stats, rate_threshold=0.5, count_floor=5)

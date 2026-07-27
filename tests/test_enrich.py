@@ -121,7 +121,9 @@ def test_enrich_in_place_never_overwrites_provider_employment_type() -> None:
 
 
 def test_enrich_in_place_leaves_employment_type_unknown_without_signal() -> None:
-    job = JobPosting.create(source="s", source_job_id="1", company="Acme", title="Software Engineer")
+    job = JobPosting.create(
+        source="s", source_job_id="1", company="Acme", title="Software Engineer"
+    )
     enrich_in_place(job)
     assert job.employment_type is EmploymentType.UNKNOWN
 

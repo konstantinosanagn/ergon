@@ -210,7 +210,9 @@ def test_registry_window_caps_giant_limit_and_resumes(monkeypatch):
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
 
     win, nxt = bi._registry_window(0, 999999, max_window=4)
-    assert len(win) == 4 and nxt == 4  # bounded to the cap, cursor advanced (NOT the whole registry)
+    assert (
+        len(win) == 4 and nxt == 4
+    )  # bounded to the cap, cursor advanced (NOT the whole registry)
 
     # Resume: feeding the returned cursor back continues to the next, disjoint slice.
     win2, nxt2 = bi._registry_window(nxt, 999999, max_window=4)
@@ -354,7 +356,10 @@ def test_delta_body_validator_not_idset_skipped_reprocesses_edit(monkeypatch, tm
         "AsyncFetcher",
         _fetcher_returning(
             ConditionalResult(
-                not_modified=False, status_code=200, etag='W/"new"', last_modified=None,
+                not_modified=False,
+                status_code=200,
+                etag='W/"new"',
+                last_modified=None,
                 body=edited_body,
             ),
             calls=cget_calls,
@@ -368,7 +373,10 @@ def test_delta_body_validator_not_idset_skipped_reprocesses_edit(monkeypatch, tm
     fresh = tmp_path / "fresh.sqlite"
     _write_delta_sidecar(fresh, "lever", "acme", fingerprint)
     bs = BoardState(
-        provider="lever", token="acme", etag='W/"old"', next_due="2000-01-01",
+        provider="lever",
+        token="acme",
+        etag='W/"old"',
+        next_due="2000-01-01",
         idset_hash=fingerprint,
     )
     states = {bs.key: bs}
@@ -436,7 +444,10 @@ def test_delta_non_body_validator_still_idset_skips(monkeypatch, tmp_path):
     fresh = tmp_path / "fresh.sqlite"
     _write_delta_sidecar(fresh, "greenhouse", "acme", fingerprint)
     bs = BoardState(
-        provider="greenhouse", token="acme", etag='W/"old"', next_due="2000-01-01",
+        provider="greenhouse",
+        token="acme",
+        etag='W/"old"',
+        next_due="2000-01-01",
         idset_hash=fingerprint,
     )
     states = {bs.key: bs}
@@ -445,9 +456,7 @@ def test_delta_non_body_validator_still_idset_skips(monkeypatch, tmp_path):
 
     assert cget_calls == []  # id-set skip fired FIRST -- the conditional-GET never ran
     assert outcome[bs.key]["not_modified"] is True  # carried forward via the membership-only skip
-    assert (
-        connect(fresh, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
-    )
+    assert connect(fresh, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
 
 
 def test_delta_body_validator_304_still_carries_forward(monkeypatch, tmp_path):
@@ -479,7 +488,10 @@ def test_delta_body_validator_304_still_carries_forward(monkeypatch, tmp_path):
     fresh = tmp_path / "fresh.sqlite"
     _write_delta_sidecar(fresh, "lever", "acme", fingerprint)
     bs = BoardState(
-        provider="lever", token="acme", etag='W/"old"', next_due="2000-01-01",
+        provider="lever",
+        token="acme",
+        etag='W/"old"',
+        next_due="2000-01-01",
         idset_hash=fingerprint,
     )
     states = {bs.key: bs}
@@ -489,6 +501,4 @@ def test_delta_body_validator_304_still_carries_forward(monkeypatch, tmp_path):
     assert cget_calls == [_LEVER_URL]  # fell through to the conditional-GET (not the id-set skip)
     assert outcome[bs.key]["not_modified"] is True  # 304 -> carry forward
     assert outcome[bs.key]["companies"] == set()  # nothing streamed; prior rows carry forward
-    assert (
-        connect(fresh, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
-    )
+    assert connect(fresh, read_only=True).execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0

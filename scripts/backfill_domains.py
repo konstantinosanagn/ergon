@@ -308,11 +308,7 @@ def backfill(index_path: Path, *, dry_run: bool) -> dict[str, int]:
         seed = json.loads(SEED.read_text())
         companies: dict[str, dict] = seed["companies"]
 
-        owned = {
-            _normalize_domain(str(e["domain"]))
-            for e in companies.values()
-            if e.get("domain")
-        }
+        owned = {_normalize_domain(str(e["domain"])) for e in companies.values() if e.get("domain")}
         before_owned = len(owned)
         entries_before = sum(1 for e in companies.values() if e.get("domain"))
 
@@ -357,9 +353,7 @@ def backfill(index_path: Path, *, dry_run: bool) -> dict[str, int]:
             f"entries with domain: {entries_before} -> {entries_before + added} of {total} "
             f"({100 * entries_before / total:.2f}% -> {100 * (entries_before + added) / total:.2f}%)"
         )
-        print(
-            f"distinct domains: {before_owned} -> {before_owned + added}"
-        )
+        print(f"distinct domains: {before_owned} -> {before_owned + added}")
 
         if dry_run:
             print("\n--dry-run: seed.json NOT written")

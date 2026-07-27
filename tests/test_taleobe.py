@@ -100,7 +100,7 @@ DETAIL_URL = f"https://{HOST}/ats/careers/v2/viewRequisition?org=CALTECH&cws=37&
 
 def _jsonld_html(description: str = "<p>Full JD text for the role.</p>") -> str:
     return (
-        "<html><head><script type=\"application/ld+json\">"
+        '<html><head><script type="application/ld+json">'
         f'{{"@type": "JobPosting", "title": "Administrative Assistant", '
         f'"description": "{description}"}}'
         "</script></head><body></body></html>"
@@ -109,7 +109,7 @@ def _jsonld_html(description: str = "<p>Full JD text for the role.</p>") -> str:
 
 def _gone_html() -> str:
     return (
-        "<html><head><script>document.title = \"Job Not Available\";</script></head>"
+        '<html><head><script>document.title = "Job Not Available";</script></head>'
         "<body><span>This job has moved or is no longer available. Please search our "
         "current job openings.</span></body></html>"
     )
@@ -148,7 +148,11 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_URL, token: str | None = TOKEN) -> DetailRef:
     return DetailRef(
-        id="101", source="taleobe", token=token, apply_url=apply_url, listing_url=None,
+        id="101",
+        source="taleobe",
+        token=token,
+        apply_url=apply_url,
+        listing_url=None,
         content_sig="s",
     )
 

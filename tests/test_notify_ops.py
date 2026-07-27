@@ -81,7 +81,10 @@ def test_near_miss_title_does_not_dedup(monkeypatch):
 
 
 def test_failure_and_warning_titles_are_distinct():
-    assert no.build_title("failure", "build-index", "build-index: failing") == "🔴 build-index: failing"
+    assert (
+        no.build_title("failure", "build-index", "build-index: failing")
+        == "🔴 build-index: failing"
+    )
     assert no.build_title("warning", "freshness-sweep") == "⚠️ freshness-sweep: tripwire"
     assert no.build_title("failure", "freshness-sweep") == "🔴 freshness-sweep: failing"
 
@@ -147,7 +150,13 @@ def test_summarize_metrics_regression():
         "ok": False,
         "build_id": "build-99",
         "regressions": [
-            {"metric": "total_jobs", "prev": 1000, "cur": 800, "delta_pct": -20.0, "threshold": -10.0}
+            {
+                "metric": "total_jobs",
+                "prev": 1000,
+                "cur": 800,
+                "delta_pct": -20.0,
+                "threshold": -10.0,
+            }
         ],
     }
     out = no.summarize(data)
@@ -157,7 +166,9 @@ def test_summarize_metrics_regression():
 
 
 def test_summarize_metrics_no_regression():
-    assert no.summarize({"ok": True, "build_id": "b", "regressions": []}) == "metrics: no regressions"
+    assert (
+        no.summarize({"ok": True, "build_id": "b", "regressions": []}) == "metrics: no regressions"
+    )
 
 
 def test_summarize_metrics_tolerates_nonfloat_delta():
@@ -177,8 +188,13 @@ def test_summarize_expiry_alarm():
 
 def test_summarize_jd_sidecar_missing():
     out = no.summarize(
-        {"jd_sidecar_ok": False, "expected": True, "published": False,
-         "reason": "index-jd.sqlite absent", "build_id": "b-99"}
+        {
+            "jd_sidecar_ok": False,
+            "expected": True,
+            "published": False,
+            "reason": "index-jd.sqlite absent",
+            "build_id": "b-99",
+        }
     )
     assert "JD sidecar NOT published" in out and "b-99" in out and "index-jd.sqlite absent" in out
 
@@ -197,7 +213,10 @@ def test_summarize_jd_sidecar_missing():
         ({"fired": ["adp"], "total_expired": 9}, True),
         # JD sidecar (Item 2): a --jd build that failed to publish trips; join-shard skip + published don't.
         ({"jd_sidecar_ok": False, "expected": True, "published": False}, True),
-        ({"jd_sidecar_ok": True, "expected": False, "published": False}, False),  # join shard: jd=False
+        (
+            {"jd_sidecar_ok": True, "expected": False, "published": False},
+            False,
+        ),  # join shard: jd=False
         ({"jd_sidecar_ok": True, "expected": True, "published": True}, False),  # published fine
     ],
 )
@@ -239,10 +258,20 @@ def test_main_warning_suppressed_when_nothing_tripped(monkeypatch, tmp_path):
     monkeypatch.setattr(no, "_run_gh", fake)
     gates = tmp_path / "gates.json"
     gates.write_text(json.dumps({"passed": True, "gates": [{"name": "x", "passed": True}]}))
-    rc = no.main([
-        "--kind", "warning", "--workflow", "build-index", "--run-url", "u",
-        "--from-json", str(gates), "--timestamp", "2026-07-20T00:00:00+00:00",
-    ])
+    rc = no.main(
+        [
+            "--kind",
+            "warning",
+            "--workflow",
+            "build-index",
+            "--run-url",
+            "u",
+            "--from-json",
+            str(gates),
+            "--timestamp",
+            "2026-07-20T00:00:00+00:00",
+        ]
+    )
     assert rc == 0
     assert not fake.ran("issue", "create")  # nothing tripped -> no alert
 
@@ -251,11 +280,23 @@ def test_main_warning_fires_on_failing_gate(monkeypatch, tmp_path):
     fake = FakeGh()
     monkeypatch.setattr(no, "_run_gh", fake)
     gates = tmp_path / "gates.json"
-    gates.write_text(json.dumps({"passed": False, "gates": [{"name": "x", "passed": False, "detail": "d"}]}))
-    rc = no.main([
-        "--kind", "warning", "--workflow", "build-index", "--run-url", "u",
-        "--from-json", str(gates), "--timestamp", "2026-07-20T00:00:00+00:00",
-    ])
+    gates.write_text(
+        json.dumps({"passed": False, "gates": [{"name": "x", "passed": False, "detail": "d"}]})
+    )
+    rc = no.main(
+        [
+            "--kind",
+            "warning",
+            "--workflow",
+            "build-index",
+            "--run-url",
+            "u",
+            "--from-json",
+            str(gates),
+            "--timestamp",
+            "2026-07-20T00:00:00+00:00",
+        ]
+    )
     assert rc == 0
     assert fake.ran("issue", "create")
 
@@ -263,20 +304,39 @@ def test_main_warning_fires_on_failing_gate(monkeypatch, tmp_path):
 def test_main_failure_always_alerts_and_returns_zero(monkeypatch):
     fake = FakeGh(rc=1)  # even with gh fully broken, main must return 0
     monkeypatch.setattr(no, "_run_gh", fake)
-    rc = no.main([
-        "--kind", "failure", "--workflow", "build-index", "--run-url", "u",
-        "--detail", "boom", "--timestamp", "2026-07-20T00:00:00+00:00",
-    ])
+    rc = no.main(
+        [
+            "--kind",
+            "failure",
+            "--workflow",
+            "build-index",
+            "--run-url",
+            "u",
+            "--detail",
+            "boom",
+            "--timestamp",
+            "2026-07-20T00:00:00+00:00",
+        ]
+    )
     assert rc == 0
 
 
 def test_main_missing_json_is_skipped(monkeypatch, tmp_path):
     fake = FakeGh()
     monkeypatch.setattr(no, "_run_gh", fake)
-    rc = no.main([
-        "--kind", "warning", "--workflow", "build-index", "--run-url", "u",
-        "--from-json", str(tmp_path / "nope.json"),
-        "--timestamp", "2026-07-20T00:00:00+00:00",
-    ])
+    rc = no.main(
+        [
+            "--kind",
+            "warning",
+            "--workflow",
+            "build-index",
+            "--run-url",
+            "u",
+            "--from-json",
+            str(tmp_path / "nope.json"),
+            "--timestamp",
+            "2026-07-20T00:00:00+00:00",
+        ]
+    )
     assert rc == 0
     assert not fake.ran("issue", "create")  # unreadable file -> nothing tripped

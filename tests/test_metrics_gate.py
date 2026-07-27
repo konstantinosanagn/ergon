@@ -152,7 +152,9 @@ def test_jd_pct_floor_ok_above_and_disabled_by_default():
     from ergon_tracker.index.metrics_gate import MetricsThresholds
 
     th = MetricsThresholds(jd_pct_floor=55.0)
-    assert check_metrics_regression(_base_metrics(jd_pct=70.0), None, thresholds=th).ok  # above floor
+    assert check_metrics_regression(
+        _base_metrics(jd_pct=70.0), None, thresholds=th
+    ).ok  # above floor
     # default threshold (floor 0 = disabled): a low jd_pct never trips the floor (delta tests intact).
     assert check_metrics_regression(_base_metrics(jd_pct=10.0), None).ok
 

@@ -226,14 +226,10 @@ _UPDATE_CHUNK = 500
 ERGON_FRESHNESS_EXPIRY_ALARM = float(os.environ.get("ERGON_FRESHNESS_EXPIRY_ALARM", "0.5"))
 # Trivial-count floor: a tiny board (e.g. 1 candidate, 1 expiry -> rate 1.0) would otherwise alarm
 # on ordinary noise. Only sources whose ``expired`` count reaches this floor are eligible to alarm.
-ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR = int(
-    os.environ.get("ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR", "5")
-)
+ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR = int(os.environ.get("ERGON_FRESHNESS_EXPIRY_ALARM_FLOOR", "5"))
 
 
-async def board_live_raws(
-    source: str, token: str, fetcher: AsyncFetcher
-) -> list[RawJob] | None:
+async def board_live_raws(source: str, token: str, fetcher: AsyncFetcher) -> list[RawJob] | None:
     """The board's CURRENT postings as RAW provider records -- or ``None`` on any fetch error
     (never raises). The single shared fetch primitive behind BOTH ``board_live_ids`` (id-only
     membership, for the departed/added diff) AND the content-version fingerprint
@@ -558,9 +554,7 @@ async def sweep_boards(
                     # ``idset_hash`` byte-identical to the historical ``idset_hash(live_ids)``.
                     added_ids=frozenset(added_ids(stored_ids, live_ids)),
                     idset_hash=idset_hash(
-                        content_fingerprint_ids(
-                            raws, get_provider(source), fold_version=fold
-                        )
+                        content_fingerprint_ids(raws, get_provider(source), fold_version=fold)
                     ),
                     computed_at=now_s,
                 )

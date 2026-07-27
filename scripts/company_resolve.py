@@ -38,6 +38,7 @@ def _collapse(s: str) -> str:
     otherwise-exact match (registry slug "molson-coors" vs SEC "Molson Coors Beverage")."""
     return re.sub(r"[^a-z0-9]", "", _strip_accents(s).lower())
 
+
 # SEC names carry share-class/state-of-incorp/parenthetical noise that breaks matching:
 # "Alphabet Inc. (Class A)", "Bancorp /MD/", "Foo Corp - Class B". Strip it before normalizing so
 # "Alphabet Inc. (Class A)" -> "alphabet" (then the alias maps it to google).
@@ -49,6 +50,7 @@ _DESIGNATION_RE = re.compile(
 
 def _canon(name: str) -> str:
     return _DESIGNATION_RE.sub(" ", _strip_accents(name))
+
 
 # Tokens that describe a company form/industry but don't identify it — dropped before keying.
 _GENERIC = frozenset(

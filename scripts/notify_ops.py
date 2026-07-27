@@ -70,13 +70,18 @@ def _run_gh(args: list[str]) -> tuple[int, str]:
             timeout=_GH_TIMEOUT_S,
         )
     except Exception as exc:  # noqa: BLE001 - missing binary / timeout / anything -> non-fatal
-        print(f"notify_ops: gh invocation failed ({exc!r}); alert skipped (non-fatal)",
-              file=sys.stderr)
+        print(
+            f"notify_ops: gh invocation failed ({exc!r}); alert skipped (non-fatal)",
+            file=sys.stderr,
+        )
         return (1, "")
     if proc.returncode != 0:
         detail = (proc.stderr or "").strip()
-        print(f"notify_ops: `gh {args[0] if args else ''}` exited {proc.returncode}: "
-              f"{detail} (non-fatal)", file=sys.stderr)
+        print(
+            f"notify_ops: `gh {args[0] if args else ''}` exited {proc.returncode}: "
+            f"{detail} (non-fatal)",
+            file=sys.stderr,
+        )
     return (proc.returncode, proc.stdout or "")
 
 
@@ -84,10 +89,22 @@ def find_open_issue(title: str, label: str) -> int | None:
     """Return the number of an OPEN, ``label``-tagged issue whose title matches ``title`` exactly,
     or ``None`` if none is open (or the lookup failed -- best-effort, so a failed search degrades to
     "create a new issue", never an exception)."""
-    rc, out = _run_gh([
-        "issue", "list", "--state", "open", "--label", label,
-        "--search", f'in:title "{title}"', "--json", "number,title", "--limit", "50",
-    ])
+    rc, out = _run_gh(
+        [
+            "issue",
+            "list",
+            "--state",
+            "open",
+            "--label",
+            label,
+            "--search",
+            f'in:title "{title}"',
+            "--json",
+            "number,title",
+            "--limit",
+            "50",
+        ]
+    )
     if rc != 0 or not out.strip():
         return None
     try:
@@ -107,8 +124,17 @@ def find_open_issue(title: str, label: str) -> int | None:
 def _ensure_label(label: str) -> None:
     """Best-effort: create ``label`` so ``issue create --label`` can't fail on a fresh repo. A
     pre-existing label makes ``gh label create`` exit non-zero -- harmless, swallowed by _run_gh."""
-    _run_gh(["label", "create", label, "--color", "B60205",
-             "--description", "Automated ops alert (notify_ops.py)"])
+    _run_gh(
+        [
+            "label",
+            "create",
+            label,
+            "--color",
+            "B60205",
+            "--description",
+            "Automated ops alert (notify_ops.py)",
+        ]
+    )
 
 
 def create_issue(title: str, body: str, label: str) -> bool:
@@ -304,16 +330,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kind", choices=("failure", "warning"), required=True)
     parser.add_argument("--workflow", required=True, help="Workflow name, e.g. build-index")
     parser.add_argument("--run-url", default="", help="URL of the triggering Actions run")
-    parser.add_argument("--title-key", default=None,
-                        help="Stable dedup key for the issue title (defaults to workflow+kind)")
+    parser.add_argument(
+        "--title-key",
+        default=None,
+        help="Stable dedup key for the issue title (defaults to workflow+kind)",
+    )
     parser.add_argument("--detail", default="", help="Free-text detail appended to the alert")
-    parser.add_argument("--from-json", action="append", default=[], metavar="PATH",
-                        help="Signal file to summarize (repeatable): gates.json / "
-                             "metrics_regression.json / rediscover_queue.json / expiry_alarm.json")
+    parser.add_argument(
+        "--from-json",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Signal file to summarize (repeatable): gates.json / "
+        "metrics_regression.json / rediscover_queue.json / expiry_alarm.json",
+    )
     parser.add_argument("--label", default=DEFAULT_LABEL, help="Fixed dedup label")
-    parser.add_argument("--timestamp", default=None,
-                        help="ISO timestamp for the alert (defaults to now, UTC). Passed IN so "
-                             "tests are deterministic and import never calls the clock.")
+    parser.add_argument(
+        "--timestamp",
+        default=None,
+        help="ISO timestamp for the alert (defaults to now, UTC). Passed IN so "
+        "tests are deterministic and import never calls the clock.",
+    )
     args = parser.parse_args(argv)
 
     # datetime is called HERE (in main), never at import -- keeps the module import side-effect-free
@@ -335,12 +372,7 @@ def main(argv: list[str] | None = None) -> int:
     # Warning mode fed by --from-json: only alert if something actually tripped. This lets the
     # workflow pass the signal files unconditionally and defer the "is there anything to say?"
     # decision to here. A failure kind, or an explicit --detail, always alerts.
-    if (
-        args.kind == "warning"
-        and args.from_json
-        and not any_tripped
-        and not args.detail
-    ):
+    if args.kind == "warning" and args.from_json and not any_tripped and not args.detail:
         print("notify_ops: no tripwire fired; nothing to alert", file=sys.stderr)
         return 0
 

@@ -13,6 +13,7 @@ our slug keys collide on the shared token. So this matcher is deterministic + cu
 
 Run: .venv/bin/python scripts/sp500_crosswalk.py  [--write]  (writes runs/sp500_crosswalk.json)
 """
+
 from __future__ import annotations
 
 import json
@@ -27,24 +28,57 @@ sp = json.loads((ROOT / "runs/sp500.json").read_text())
 
 # Abbreviation / brand aliases: S&P name-form -> our seed key (verified).
 ALIAS = {
-    "alphabet": "google", "metaplatforms": "meta", "jpmorganchase": "jpmorgan", "rtx": "raytheon",
-    "raytheontechnologies": "raytheon", "advancedmicrodevices": "amd", "unitedparcelservice": "ups",
-    "usbancorp": "usbank", "lillyeli": "elililly", "fidelitynationalinformationservices": "fis",
-    "waltdisney": "disney", "tmobileus": "t-mobile", "hewlettpackardenterprise": "hpe",
+    "alphabet": "google",
+    "metaplatforms": "meta",
+    "jpmorganchase": "jpmorgan",
+    "rtx": "raytheon",
+    "raytheontechnologies": "raytheon",
+    "advancedmicrodevices": "amd",
+    "unitedparcelservice": "ups",
+    "usbancorp": "usbank",
+    "lillyeli": "elililly",
+    "fidelitynationalinformationservices": "fis",
+    "waltdisney": "disney",
+    "tmobileus": "t-mobile",
+    "hewlettpackardenterprise": "hpe",
     "unitedhealth": "optumservices",
-    "pgande": "pge", "pgecorporation": "pge",  # "PG&E" -> &->and breaks the "pge" key match
+    "pgande": "pge",
+    "pgecorporation": "pge",  # "PG&E" -> &->and breaks the "pge" key match
 }
 # Generic short keys in seed that entity-checks proved are NAMESAKES (not the S&P company). The real
 # S&P member only counts via its distinct key (brownandbrown, monsterbeverage, …) or is a true gap.
 NAMESAKE_EXCLUDE = {
-    "brown", "monster", "international", "royal", "steel", "universal", "vulcan", "cooper",
-    "genuine", "ralph", "snap", "cms", "vici", "fidelity", "apollo", "bio",
+    "brown",
+    "monster",
+    "international",
+    "royal",
+    "steel",
+    "universal",
+    "vulcan",
+    "cooper",
+    "genuine",
+    "ralph",
+    "snap",
+    "cms",
+    "vici",
+    "fidelity",
+    "apollo",
+    "bio",
     # verified-wrong matches (subsidiary / unrelated namesake — confirmed via live entity-check):
     "berkshire-hathaway-homestate-companies",  # workers-comp subsidiary, not the holding co (no central board)
     "berkshire-hathaway-homeservices-costa-blanca",  # Spanish real-estate FRANCHISE (Dénia/Altea), not BRK
     "electronica-teliar",  # a join.com board, NOT Electronic Arts (EA = gr8people, blocked)
 }
-GENERIC_FIRST = {"american", "united", "general", "national", "first", "new", "international", "global"}
+GENERIC_FIRST = {
+    "american",
+    "united",
+    "general",
+    "national",
+    "first",
+    "new",
+    "international",
+    "global",
+}
 
 
 def strip(s: str) -> str:
@@ -53,13 +87,31 @@ def strip(s: str) -> str:
 
 
 def toks(name: str) -> list[str]:
-    s = re.sub(r"\(.*?\)", "", unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower())
+    s = re.sub(
+        r"\(.*?\)",
+        "",
+        unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower(),
+    )
     s = s.replace("&", " and ")
     return [t for t in re.sub(r"[^a-z0-9 ]", " ", s).split() if t]
 
 
-GEN = {"the", "inc", "corp", "corporation", "co", "company", "companies", "group", "holdings",
-       "plc", "ltd", "international", "global", "incorporated"}
+GEN = {
+    "the",
+    "inc",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "companies",
+    "group",
+    "holdings",
+    "plc",
+    "ltd",
+    "international",
+    "global",
+    "incorporated",
+}
 
 
 def candidates(name: str) -> set[str]:
@@ -101,8 +153,16 @@ for c in sp:
         # prefix either way: handles seed key longer/shorter than name
         # (olddominion<->olddominionfreightline, hartford<->hartfordfinancial)
         if len(cand) >= 6:
-            pm = next((ok for nk, ok in nseed.items()
-                       if nk not in nexclude and (nk.startswith(cand) or cand.startswith(nk)) and len(nk) >= 6), None)
+            pm = next(
+                (
+                    ok
+                    for nk, ok in nseed.items()
+                    if nk not in nexclude
+                    and (nk.startswith(cand) or cand.startswith(nk))
+                    and len(nk) >= 6
+                ),
+                None,
+            )
             if pm:
                 hit = pm
                 break
@@ -113,7 +173,9 @@ for c in sp:
     else:
         gaps.append((nm, c.get("sector")))
 
-print(f"S&P 500: {len(present)}/{len(sp)} = {round(100*len(present)/len(sp))}% captured | {len(gaps)} gap")
+print(
+    f"S&P 500: {len(present)}/{len(sp)} = {round(100 * len(present) / len(sp))}% captured | {len(gaps)} gap"
+)
 print(f"\n=== TRUE GAP ({len(gaps)}) ===")
 for nm, sec in sorted(gaps, key=lambda x: (x[1] or "", x[0])):
     print(f"  [{sec}] {nm}")

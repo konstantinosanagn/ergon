@@ -103,7 +103,15 @@ def _crawl(fresh_path: Path, build_id: str, *, only=None, exclude=None):
     fresh_path.parent.mkdir(parents=True, exist_ok=True)
     outcome, _cursor = anyio.run(
         lambda: bi._crawl_due(
-            100, {}, fresh_path, build_id, 0, False, None, only_sources=only, exclude_sources=exclude
+            100,
+            {},
+            fresh_path,
+            build_id,
+            0,
+            False,
+            None,
+            only_sources=only,
+            exclude_sources=exclude,
         )
     )
     keys = set().union(*(o["companies"] for o in outcome.values())) if outcome else set()

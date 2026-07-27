@@ -55,7 +55,9 @@ _JD_NOISE_SELECTOR = (
     "a[class*=apply], a[class*=button]"
 )
 # Summary-table row labels that carry the posting's location (the Atom feed omits location).
-_LOCATION_LABEL_RE = re.compile(r"\b(location|campus|city|work\s+location|position\s+location)\b", re.I)
+_LOCATION_LABEL_RE = re.compile(
+    r"\b(location|campus|city|work\s+location|position\s+location)\b", re.I
+)
 
 
 @register("peopleadmin")
