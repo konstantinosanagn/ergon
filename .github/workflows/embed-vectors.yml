@@ -14,14 +14,18 @@ name: embed-vectors
 # DECOUPLED FROM THE CORE INDEX PUBLISH: this workflow ONLY publishes the vectors sidecar
 # (index-vectors.sqlite.gz + manifest-vectors.json). It never touches/republishes index.sqlite. It
 # reads the core index + the crawl's fresh-rich embed-text DB that build-index.yml publishes to the
-# index-latest release. Sharing `concurrency: group: build-index` with build-index.yml (and
-# drain-detail.yml) means the three never run simultaneously, so there is no index/asset race.
+# index-latest release. R1: this workflow now runs on its OWN concurrency group (`embed-vectors`),
+# NOT the shared `build-index` group. It is the SOLE writer of the vectors sidecar (R1 stopped
+# build-index.yml from republishing the carried-forward index-vectors.sqlite.gz / manifest-vectors.json
+# it merely downloads for the legacy migration rename), so no other workflow can clobber its publish.
+# It only READS the core, so it may run fully parallel to the daily build (mirrors freshness-sweep.yml).
 on:
   schedule:
     # 06:00 UTC daily -- AFTER build-index (04:17 UTC), which post-cutover takes ~40-90 min and
-    # publishes the fresh-rich.sqlite.gz this matrix consumes. The shared `concurrency: build-index`
-    # group below serializes the two, so if build-index runs long this run simply queues behind it
-    # rather than racing it. This is the sharded embed that REPLACES build-index's inline --rich embed
+    # publishes the fresh-rich.sqlite.gz this matrix consumes. R1 gave this its own concurrency group,
+    # so it no longer queues behind build-index; the 06:00 offset still lets the ~40-90 min build land
+    # fresh-rich.sqlite.gz first. Reads are the only cross-workflow interaction (torn-read skew handled
+    # by the reader's paired-manifest check). This is the sharded embed that REPLACES build-index's inline --rich embed
     # (build-index runs with ERGON_SHARDED_EMBED=1, capturing fresh_rich but skipping the inline embed).
     - cron: "0 6 * * *"
   workflow_dispatch:
@@ -36,7 +40,7 @@ permissions:
   contents: write   # to publish the merged vectors sidecar as a release asset (merge job)
 
 concurrency:
-  group: build-index   # SAME group as build-index.yml / drain-detail.yml -- never runs simultaneously
+  group: embed-vectors   # OWN group (R1) -- sole writer of the vectors sidecar, reads-only of the core, so it runs IN PARALLEL with the daily build (mirrors freshness-sweep.yml); no shared writer => --clobber can't lose an update
   cancel-in-progress: false
 
 env:

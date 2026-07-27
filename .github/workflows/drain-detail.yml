@@ -15,8 +15,15 @@ name: drain-detail
 # index.sqlite. The next daily build-index.yml run downloads the freshly-combined sidecar as its
 # carry-forward and merges its recovered fields into the core index via the EXISTING
 # build_and_publish_detail path (unsharded reconcile finds every already-drained row's sig still
-# current -> 0 refetch, just merges). Sharing `concurrency: group: build-index` with build-index.yml
-# means the two workflows never run simultaneously, so there is no index/asset race either way.
+# current -> 0 refetch, just merges).
+#
+# R1: this workflow now runs on its OWN concurrency group (`drain-detail`), NOT the shared
+# `build-index` group. It became the SOLE writer of the detail sidecar (R1 stopped build-index.yml
+# from republishing index-detail.sqlite.gz / manifest-detail.json), so `gh release upload --clobber`
+# can never lose another workflow's update -- there is no asset it shares a writer with. The shared
+# group used to serialize build+drain to avoid the two-writer race, but that serialization is what
+# STARVED this drain (one-pending eviction). Owning a disjoint asset + its own group lets it run
+# fully parallel to the daily build, exactly like freshness-sweep.yml.
 on:
   workflow_dispatch:
     inputs:
@@ -50,11 +57,12 @@ on:
       location_backfill:
         description: "Set to 1 to ALSO re-fetch already-drained rows on the location-capable sources (workday/oracle/successfactors/eightfold/radancy/rippling/bamboohr/jobvite) that still lack a city/country -- rows drained before their location wiring existed. Preserves recovered salary (fetched_at re-queue, never DELETE). Leave empty for a normal drain."
         default: ""
-  # Daily sharded drain. 09:30 UTC is deliberately OFF build-index.yml's 04:17 slot; the shared
-  # `concurrency: group: build-index` below already serializes the two so they never run at once
-  # (see the decoupling note above). The design is safe by construction -- one politeness bucket per
-  # shard, each drain-only rate probed to its 429 knee, Workable's ~4 req/s single-host tail (~3.2h)
-  # the long pole, comfortably under the 350-min timeout.
+  # Daily sharded drain. 09:30 UTC is deliberately OFF build-index.yml's 04:17 slot, but R1 no longer
+  # RELIES on that offset for correctness: the `concurrency: group: drain-detail` below is disjoint
+  # from build-index's group, so the two may overlap freely (drain owns the detail sidecar outright).
+  # The design is safe by construction -- one politeness bucket per shard, each drain-only rate probed
+  # to its 429 knee, Workable's ~4 req/s single-host tail (~3.2h) the long pole, comfortably under the
+  # 350-min timeout.
   # WATCH the FIRST scheduled run for 429s / gateway 5xx (esp. the Workable + SmartRecruiters
   # megahost shards): if a shard's failure rate climbs, dial its ERGON_*_DETAIL_RATE default down.
   schedule:
@@ -64,7 +72,7 @@ permissions:
   contents: write   # to publish the combined detail sidecar as a release asset (merge job)
 
 concurrency:
-  group: build-index   # SAME group as build-index.yml -- never runs simultaneously with the daily build
+  group: drain-detail   # OWN group (R1) -- sole writer of the detail sidecar, so it runs IN PARALLEL with the daily build (mirrors freshness-sweep.yml); no shared writer => --clobber can't lose an update
   cancel-in-progress: false
 
 env:
@@ -154,13 +162,15 @@ jobs:
           ERGON_DETAIL_MAX: "${{ github.event.inputs.detail_max || '200000' }}"
           # DRAIN-ONLY SmartRecruiters rate raise 3 -> 10 req/s (see http._sr_rate_override). The
           # detail API live-probed clean at 10/s sustained; at 3/s SR's 152k backlog is ~14h (never
-          # finishes one run), at 10/s it's ~4.2h (fits). Safe because this workflow shares
-          # build-index's concurrency group, so it NEVER runs while the daily list-crawl (which stays
-          # at the storm-safe 3/s because it doesn't set this env) is running.
+          # finishes one run), at 10/s it's ~4.2h (fits). R1 moved this workflow to its own concurrency
+          # group, so it may now overlap build-index in principle; in practice the 09:30 cron sits ~5h
+          # after build-index's 04:17 slot, which finishes well inside its timeout, so the daily
+          # list-crawl (storm-safe 3/s, doesn't set this env) is normally done before this starts. A
+          # long-overrunning manual/backfill build is the only overlap window -- watch host 429s there.
           ERGON_SR_DETAIL_RATE: "${{ github.event.inputs.sr_detail_rate || '40' }}"
           # DRAIN-ONLY Workable rate raise 3 -> 8 req/s (see http._apply_drain_rate_overrides). The
           # widget/detail API probed clean at 8/s sustained across 60 distinct boards (0x 429); the
-          # 3/s default was for the list-crawl storm. Same concurrency-group safety as SR above.
+          # 3/s default was for the list-crawl storm. Same schedule-offset separation as SR above.
           ERGON_WORKABLE_DETAIL_RATE: "${{ github.event.inputs.workable_detail_rate || '16' }}"
           # Every single-host detail source raised drain-only to near its probed capacity (see
           # http._DRAIN_RATE_ENV). Each is far below its probed 429 knee; the daily crawl never sets
