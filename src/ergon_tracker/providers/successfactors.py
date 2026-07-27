@@ -30,6 +30,22 @@ discover ``siteid`` from the site's landing page.
 The search row exposes only title + location (no posting date, department, salary, or
 description), so those normalize to ``None`` here — never invented. Posting dates live
 on the per-job detail page, which we don't fetch in bulk.
+
+JD augmenter (RSS)
+------------------
+The list HTML carries no JD, so JD is normally backfilled later by the Tier-3 drain. But SF
+*also* exposes a lightweight full-JD feed at ``/services/rss/job?company={siteid}``: the newest
+~20 postings per board, each with the FULL JD inline in its ``<item>``'s ``<description>`` CDATA
+(verified live: avg ~9.5k, max ~17.9k chars). It will NOT paginate (``&page``/``&startrow`` are
+ignored), so it's an *augmenter*, not a drain-killer — after the HTML list is built we make ONE
+extra feed call and fold the JD into the (top-~20) postings whose SF numeric job id matches. The
+join key is the **numeric job id** (``_RSS_JOBID`` off the feed ``<link>`` == ``source_job_id``
+off the row href), NOT the raw URL: the feed ``<link>`` is XML- and often double-escaped and can
+carry a different path prefix / query string than the stored ``apply_url``, so a URL-equality
+join is unreliable while the 9-10 digit SF id is the module's decisive, exact signal everywhere.
+Every non-top-20 posting is left JD-empty for the drain to backfill; a missing/4xx/timed-out feed
+is non-fatal (falls back to today's no-JD behaviour). SuccessFactors therefore STAYS in the
+Tier-3 drain for the backlog — this only front-loads the newest slice at crawl time.
 """
 
 from __future__ import annotations
@@ -65,6 +81,8 @@ _RSS = "https://{host}/services/rss/job?company={siteid}"
 _RSS_ITEM = re.compile(r"<item>(.*?)</item>", re.S | re.I)
 _RSS_TITLE = re.compile(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", re.S | re.I)
 _RSS_LINK = re.compile(r"<link>(?:<!\[CDATA\[)?\s*(.*?)\s*(?:\]\]>)?</link>", re.S | re.I)
+# The <description> carries the FULL JD HTML inline (CDATA-wrapped, verified live: avg ~9.5k chars).
+_RSS_DESC = re.compile(r"<description>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</description>", re.S | re.I)
 _RSS_JOBID = re.compile(r"/job/[^/]*?/(\d{6,})/?", re.I)
 _RSS_LOC = re.compile(r"\(([^()]+)\)\s*$")  # trailing "(City, ST, Country)" in the RSS title
 # A SuccessFactors job URL: /{siteid}/job/{slug}/{numericId}/ — the LONG numeric id (SF ids are
@@ -183,10 +201,57 @@ class SuccessFactorsProvider(BaseProvider):
             if new == 0:
                 break  # deep-pagination soft-cap returning dupes -> stop
 
+        if raws and not root:
+            # AUGMENTER: fold the newest ~20 postings' full JD in from the RSS feed (one extra call
+            # per board). Non-fatal — a missing/failed feed just leaves JD empty for the drain.
+            jd_map = await self._rss_jd_map(host, siteid, fetcher)
+            for raw in raws:
+                jd = jd_map.get(raw.source_job_id)
+                if jd:
+                    raw.payload["description_html"] = jd
+
         if not raws and not root:
             # Classic RMK site (no path-based CSB search) -> try the RSS job feed.
             raws = await self._fetch_rss(host, siteid, limit, fetcher)
         return raws
+
+    async def _rss_jd_map(
+        self, host: str, siteid: str, fetcher: AsyncFetcher
+    ) -> dict[str, str]:
+        """One RSS feed call -> ``{numeric_job_id: full JD HTML}`` for the newest ~20 postings.
+
+        Keyed on the SF numeric job id (``_RSS_JOBID`` off the feed ``<link>``), which equals a
+        row's ``source_job_id`` — the reliable join (see module docstring on why raw-URL equality
+        is not). Non-fatal on any feed failure (4xx/timeout/empty) -> returns ``{}`` so the board
+        falls back to today's no-JD behaviour and the drain backfills the JD."""
+        try:
+            text = await fetcher.get_text(_RSS.format(host=host, siteid=siteid))
+        except Exception:
+            return {}
+        out: dict[str, str] = {}
+        for block in _RSS_ITEM.findall(text):
+            link_m = _RSS_LINK.search(block)
+            href = _unescape_url(link_m.group(1).strip() if link_m else "")
+            id_m = _RSS_JOBID.search(href)
+            if not id_m:
+                continue
+            jd = self._rss_description(block)
+            if jd:
+                out.setdefault(id_m.group(1), jd)
+        return out
+
+    @staticmethod
+    def _rss_description(block: str) -> str | None:
+        """Full JD HTML out of an ``<item>``'s ``<description>``. CDATA content is literal HTML and
+        used as-is; a feed that instead entity-escaped the HTML (no CDATA -> ``&lt;p&gt;``) is
+        decoded once so the JD reaches enrich as real markup, never literal ``&lt;`` text."""
+        m = _RSS_DESC.search(block)
+        if not m:
+            return None
+        jd = m.group(1).strip()
+        if "&lt;" in jd or "&amp;" in jd:
+            jd = _html.unescape(jd)
+        return jd or None
 
     async def _fetch_rss(
         self, host: str, siteid: str, limit: int | None, fetcher: AsyncFetcher
@@ -218,6 +283,16 @@ class SuccessFactorsProvider(BaseProvider):
             if loc_m:
                 location = loc_m.group(1).strip()
                 title = title[: loc_m.start()].strip()
+            payload: dict[str, str] = {
+                "title": title,
+                "location": location,
+                "url": href,
+                "id": jid,
+            }
+            # Same feed carries the full JD inline — fold it in here for free (no extra call).
+            jd = self._rss_description(block)
+            if jd:
+                payload["description_html"] = jd
             out.append(
                 RawJob(
                     source=self.name,
@@ -225,7 +300,7 @@ class SuccessFactorsProvider(BaseProvider):
                     company=siteid,
                     token=f"{host}|{siteid}",
                     url=href,
-                    payload={"title": title, "location": location, "url": href, "id": jid},
+                    payload=payload,
                 )
             )
             if limit is not None and len(out) >= limit:
@@ -365,6 +440,14 @@ class SuccessFactorsProvider(BaseProvider):
         street = meta("streetAddress")
         return [Location(raw=street)] if street else []
 
+    @staticmethod
+    def _to_text(html: str | None) -> str | None:
+        """Flatten JD HTML to plain text (mirrors greenhouse/workable ``_to_text``)."""
+        if not html:
+            return None
+        text = HTMLParser(html).text(separator=" ", strip=True)
+        return text or None
+
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
         location = str(p.get("location") or "").strip()
@@ -375,6 +458,11 @@ class SuccessFactorsProvider(BaseProvider):
             locations.append(Location(raw=location, is_remote=is_remote))
             if is_remote:
                 remote = RemoteType.REMOTE
+
+        # JD present only for the newest ~20 postings folded in from the RSS feed at crawl time
+        # (see module docstring). Every other posting stays JD-empty for the Tier-3 drain.
+        description_html = p.get("description_html") or None
+        description_text = self._to_text(description_html)
 
         return JobPosting.create(
             source=self.name,
@@ -389,7 +477,7 @@ class SuccessFactorsProvider(BaseProvider):
             salary=None,  # not exposed on the search row
             posted_at=None,  # lives on the per-job detail page, not fetched in bulk
             updated_at=None,
-            description_html=None,
-            description_text=None,
+            description_html=description_html,
+            description_text=description_text,
             raw=raw.payload,
         )
