@@ -1093,6 +1093,7 @@ def _gated_publish(
     build_id: str,
     prev_row_count: int | None = None,
     last_known_rows: int | None = None,
+    prev_jd_pct: float | None = None,
     publish_core: bool = True,
 ) -> bool:
     """Good-or-nothing publish: gate the temp build, promote (+ publish) only if it passes.
@@ -1111,7 +1112,7 @@ def _gated_publish(
     only UPDATEs fields, liveness only flips ``status`` — neither adds/removes rows or changes
     source/sector), so writing it at promote time is byte-identical to writing it post-reconcile.
     """
-    from ergon_tracker.index.gates import evaluate_gates
+    from ergon_tracker.index.gates import evaluate_gates, jd_gate_drop_pct_from_env
 
     allow_cold_start = os.environ.get("ERGON_ALLOW_COLD_START", "").lower() in ("1", "true", "yes")
     rep = evaluate_gates(
@@ -1119,6 +1120,8 @@ def _gated_publish(
         prev_row_count=prev_row_count,
         last_known_rows=last_known_rows,
         allow_cold_start=allow_cold_start,
+        prev_jd_pct=prev_jd_pct,
+        jd_max_drop_pct=jd_gate_drop_pct_from_env(),
     )
     out.mkdir(parents=True, exist_ok=True)
     (out / "gates.json").write_text(json.dumps(rep.to_dict(), indent=2))
@@ -2327,6 +2330,10 @@ def main(argv: list[str]) -> None:
             build_id=build_id,
             prev_row_count=prev_row_count,
             last_known_rows=last_known_rows,
+            # JD-coverage gate baseline: the last published build's jd_pct (same history.jsonl
+            # `published` row the metrics tripwire uses). A collapse vs this now BLOCKS the publish;
+            # a recovery build (climbing coverage) passes. None (first build) -> gate is a no-op pass.
+            prev_jd_pct=(prev_metrics or {}).get("jd_pct"),
             publish_core=False,
         )
         if not ok and prev_snap is not None:
