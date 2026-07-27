@@ -554,6 +554,23 @@ def _no_publish() -> bool:
     return os.environ.get("ERGON_NO_PUBLISH", "") == "1"
 
 
+def _reconcile_only() -> bool:
+    """Merge-only republish switch, ``ERGON_RECONCILE_ONLY`` (env) / ``--reconcile-only`` (CLI), off by
+    default.
+
+    When on, the build SKIPS the crawl + network-fold entirely and runs ONLY the assemble/publish tail
+    against an EMPTY fresh DB: ``build_index_from_fresh_db`` carries EVERY company forward from the prior
+    published index (``crawled_keys`` stays empty), the ``--detail`` merge refills list-only ``snippet``
+    from the already-downloaded ``index-detail.sqlite`` sidecar, and the SAME gates + single publish run.
+    No board is crawled and ``board_state``/``crawl_cursor`` are left effectively untouched (nothing to
+    advance), so a later real build resumes cleanly. Requires a prior published index -- reconcile-only
+    over nothing is meaningless (clean error). This is the ~10-20 min JD-coverage RECOVERY path: a normal
+    build first re-crawls the ~28k never-delta-skipped search-index boards (workday/SR/oracle) -> ~4h,
+    even though recovering coverage after a bad publish needs only the detail merge. Default off =>
+    today's crawl path is byte-for-byte unchanged."""
+    return os.environ.get("ERGON_RECONCILE_ONLY", "") == "1"
+
+
 def _write_no_publish_marker(out: Path, *, build_id: str) -> None:
     """Write ``dist/PUBLISH_SKIPPED`` -- the dry-run signal for ``--no-publish`` / ``ERGON_NO_PUBLISH``.
 
@@ -2088,6 +2105,9 @@ def main(argv: list[str]) -> None:
         False  # R3 REDUCE mode: union the K partials -> today's build/publish tail verbatim
     )
     no_publish = _no_publish()  # dry run: build fully but flag the run as do-NOT-publish-to-prod
+    reconcile_only = (
+        _reconcile_only()
+    )  # merge-only republish: skip crawl, carry-forward all + merge
     shard: int | None = None
     num_shards: int | None = None
     i = 0
@@ -2133,6 +2153,9 @@ def main(argv: list[str]) -> None:
             i += 1
         elif argv[i] == "--no-publish":
             no_publish = True
+            i += 1
+        elif argv[i] == "--reconcile-only":
+            reconcile_only = True
             i += 1
         elif argv[i] == "--shard":
             shard = int(argv[i + 1])
@@ -2236,12 +2259,15 @@ def main(argv: list[str]) -> None:
     # persists the cursor + board_state so a re-run resumes. The daily `--incremental` run is
     # unchanged; this only redirects the previously-dangerous non-incremental invocation.
     if not incremental:
-        print(
-            "[route] non-incremental crawl -> streaming/incremental path "
-            "(bounded window, resumable cursor). A large --limit-companies is served as rotating "
-            "windows; re-run to advance the cursor until the registry is fully covered.",
-            flush=True,
-        )
+        # --reconcile-only also runs the incremental assemble/publish tail, but crawls nothing -- so the
+        # "non-incremental crawl was rerouted" notice would be misleading. Suppress it in that mode only.
+        if not reconcile_only:
+            print(
+                "[route] non-incremental crawl -> streaming/incremental path "
+                "(bounded window, resumable cursor). A large --limit-companies is served as rotating "
+                "windows; re-run to advance the cursor until the registry is fully covered.",
+                flush=True,
+            )
         incremental = True
 
     if incremental:
@@ -2262,6 +2288,15 @@ def main(argv: list[str]) -> None:
         states = load_state(state_path)
         cursor = _load_cursor(cursor_path)
         prev_db = db if db.exists() else None
+        if reconcile_only and prev_db is None:
+            # Merge-only republish carries the PRIOR index forward -- there is nothing to reconcile
+            # without one. Fail clearly rather than crawl-nothing into an empty publish.
+            print(
+                f"--reconcile-only requires an existing published index at {db} "
+                "(download+gunzip the prior index.sqlite.gz first); "
+                "reconcile-only over nothing is meaningless"
+            )
+            raise SystemExit(2)
         prev_row_count = _count_jobs(db) if prev_db else None
         # Durable floor basis: even if the live prev snapshot failed to download, history.jsonl
         # (restored from the release) still records the last published size — so a collapse can't
@@ -2272,7 +2307,19 @@ def main(argv: list[str]) -> None:
         prev_metrics = _last_published_metrics(out / "history.jsonl")
         # Streaming crawl over a rotating window: jobs stream to fresh.sqlite as boards complete.
         fresh_path = out / "fresh.sqlite"
-        if crawl_reduce:
+        if reconcile_only:
+            # --reconcile-only: SKIP the crawl + network-fold entirely. An EMPTY fresh DB makes
+            # build_index_from_fresh_db carry EVERY prior company forward (crawled_keys stays empty),
+            # and the --detail merge below refills list-only `snippet` from the downloaded sidecar --
+            # recovering JD coverage with zero network. outcome empty + next_cursor==cursor => the
+            # crawled_keys/apply_outcome/state-save tail all no-op, leaving board_state + cursor
+            # effectively untouched so a later real build resumes cleanly.
+            from ergon_tracker.index.db import fresh_db as _fresh_db
+
+            _fresh_db(fresh_path)
+            outcome: dict = {}
+            next_cursor = cursor
+        elif crawl_reduce:
             # R3 REDUCE: reconstruct the crawl's outputs from the K map shards instead of crawling.
             # Union the partial fresh DBs (+ JD sidecars) into fresh_path/index-jd.sqlite, merge the
             # per-shard outcomes, and overlay each shard's BoardState deltas onto ``states``. From here
@@ -2299,8 +2346,12 @@ def main(argv: list[str]) -> None:
                 )
         # Fold the first-party Workable network feed into the same fresh.sqlite (its rows flow into
         # the index alongside the crawled boards). Done before changed_companies_sql so new network
-        # companies register as changed.
-        net_keys = anyio.run(_fold_network_into_fresh, fresh_path, network_pages, build_id)
+        # companies register as changed. Skipped under --reconcile-only (no network at all).
+        net_keys: set = (
+            set()
+            if reconcile_only
+            else anyio.run(_fold_network_into_fresh, fresh_path, network_pages, build_id)
+        )
         changed = changed_companies_sql(fresh_path, prev_db)  # SQL diff, no jobs in memory
         crawled_keys: set = (
             set().union(*(o["companies"] for o in outcome.values())) if outcome else set()
