@@ -86,6 +86,22 @@ def test_failure_and_warning_titles_are_distinct():
     assert no.build_title("failure", "freshness-sweep") == "🔴 freshness-sweep: failing"
 
 
+def test_data_quality_and_stale_specs_dedup_to_distinct_issues():
+    """Fix B: the workflow now posts data-quality tripwires (gates/metrics-regression/jd-sidecar)
+    and the chronically-noisy stale-specs rediscover queue under SEPARATE --title-key values, so a
+    real regression opens a FRESH issue instead of being buried as a comment on the perpetually-open
+    stale-specs issue (the 2026-07-26 with_jd 85%->47% collapse landed there unseen). Guards that the
+    two keys can never dedup onto the same issue, and that neither reuses the old catch-all title."""
+    dq = no.build_title("warning", "build-index", "build-index: data-quality")
+    ss = no.build_title("warning", "build-index", "build-index: stale-specs")
+    old = no.build_title("warning", "build-index", "build-index: tripwire")
+    assert dq != ss  # a metrics regression and the stale-specs noise never share an issue
+    assert "data-quality" in dq and "stale-specs" in ss
+    assert dq != old and ss != old  # both moved off the buried catch-all
+    # And a tripped metrics-regression on the data-quality call really would alert:
+    assert no.signal_tripped({"ok": False, "regressions": [{"metric": "jd_pct"}]}) is True
+
+
 # ---------------------------------------------------------------------------------- payloads
 def test_issue_body_is_actionable():
     body = no.format_issue_body(
