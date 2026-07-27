@@ -30,6 +30,9 @@ on:
       jd:
         description: "Persist the full JD into the compressed index-jd.sqlite sidecar (--jd), the re-extraction replay store (Item 2). Also runs automatically on the daily schedule."
         default: "false"
+      reconcile_only:
+        description: "Merge-only republish (--reconcile-only): SKIP the crawl, carry the prior index forward, re-merge the detail/jd sidecars, run gates, publish. ~10-20min vs a full ~4h crawl. Use to restore JD coverage after a bad publish without re-crawling. Pair with detail=true + jd=true."
+        default: "false"
       liveness:
         description: "Force the apply-URL liveness pass (--liveness) on a manual run. Also runs automatically on the daily schedule, mirroring --detail."
         default: "false"
@@ -320,6 +323,7 @@ jobs:
             ${{ (github.event.inputs.detail == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--detail' || '' }} \
             ${{ (github.event.inputs.jd == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--jd' || '' }} \
             ${{ (github.event.inputs.liveness == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--liveness' || '' }} \
+            ${{ github.event.inputs.reconcile_only == 'true' && '--reconcile-only' || '' }} \
             ${{ github.event.inputs.publish == 'false' && '--no-publish' || '' }}
           # Land the final 100% snapshot promptly (the trap kills the loop on the next line's exit).
           if [ -f dist/crawl-progress.json ] && gh release view index-latest >/dev/null 2>&1; then
