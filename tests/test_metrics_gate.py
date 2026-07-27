@@ -135,6 +135,28 @@ def test_jd_pct_small_drop_ok():
     assert rep.ok
 
 
+def test_jd_pct_floor_trips_without_baseline():
+    """The ABSOLUTE floor is baseline-INDEPENDENT: a collapse below it trips even with prev=None --
+    the slow-bleed / no-baseline case the prev-vs-cur point-delta structurally misses. Default-off,
+    so set it explicitly (production sets ERGON_METRICS_JD_PCT_FLOOR)."""
+    from ergon_tracker.index.metrics_gate import MetricsThresholds
+
+    th = MetricsThresholds(jd_pct_floor=55.0)
+    cur = _base_metrics(jd_pct=47.0)  # the 2026-07-26 value, below the 55 floor
+    rep = check_metrics_regression(cur, None, thresholds=th, build_id="b1")
+    assert not rep.ok
+    assert any(r.metric == "jd_pct_floor" for r in rep.regressions)
+
+
+def test_jd_pct_floor_ok_above_and_disabled_by_default():
+    from ergon_tracker.index.metrics_gate import MetricsThresholds
+
+    th = MetricsThresholds(jd_pct_floor=55.0)
+    assert check_metrics_regression(_base_metrics(jd_pct=70.0), None, thresholds=th).ok  # above floor
+    # default threshold (floor 0 = disabled): a low jd_pct never trips the floor (delta tests intact).
+    assert check_metrics_regression(_base_metrics(jd_pct=10.0), None).ok
+
+
 def test_no_baseline_is_ok():
     cur = _base_metrics()
     for prev in (None, {}):

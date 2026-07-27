@@ -34,6 +34,10 @@ _log = logging.getLogger(__name__)
 _DEF_ACTIVE_DROP_PCT = 5.0  # active_jobs falling > this % vs prev build
 _DEF_SOURCE_DROP_PCT = 30.0  # any tracked source's count falling > this % vs prev build
 _DEF_PCT_POINT_DROP = 3.0  # jd_pct / salary_pct / sector_pct falling > this many POINTS vs prev
+_DEF_JD_PCT_FLOOR = 0.0  # ABSOLUTE jd_pct floor -- trip whenever capture falls below this, even with
+# no prior baseline (catches a slow multi-build bleed the point-delta rule misses). 0 = DISABLED (the
+# floor level is deployment-specific, unlike the relative delta rules); production sets it via the
+# workflow's ERGON_METRICS_JD_PCT_FLOOR (55), while tests keep the default-off so delta cases isolate.
 
 _TOP_SOURCES = 15  # how many top sources the metrics baseline tracks (task spec: ~15)
 
@@ -45,6 +49,7 @@ class MetricsThresholds:
     active_drop_pct: float = _DEF_ACTIVE_DROP_PCT
     source_drop_pct: float = _DEF_SOURCE_DROP_PCT
     pct_point_drop: float = _DEF_PCT_POINT_DROP
+    jd_pct_floor: float = _DEF_JD_PCT_FLOOR
 
     @classmethod
     def from_env(cls) -> MetricsThresholds:
@@ -60,6 +65,7 @@ class MetricsThresholds:
             active_drop_pct=_f("ERGON_METRICS_ACTIVE_DROP_PCT", _DEF_ACTIVE_DROP_PCT),
             source_drop_pct=_f("ERGON_METRICS_SOURCE_DROP_PCT", _DEF_SOURCE_DROP_PCT),
             pct_point_drop=_f("ERGON_METRICS_PCT_POINT_DROP", _DEF_PCT_POINT_DROP),
+            jd_pct_floor=_f("ERGON_METRICS_JD_PCT_FLOOR", _DEF_JD_PCT_FLOOR),
         )
 
 
@@ -172,10 +178,25 @@ def check_metrics_regression(
     """
     th = thresholds or MetricsThresholds.from_env()
     bid = build_id or ""
-    if not isinstance(prev, dict) or not prev:
-        return MetricsRegressionReport(regressions=[], build_id=bid)
-
     regressions: list[MetricRegression] = []
+    # ABSOLUTE jd_pct floor -- baseline-INDEPENDENT (checked BEFORE the missing-prev early return), so
+    # it fires on (a) a slow multi-build bleed where each daily step stays under pct_point_drop yet the
+    # total collapses (e.g. 84->75->68->60, the exact shape the 2026-07-26 85%->47% drop took), and
+    # (b) a collapse on a build with no prior baseline. Complements the prev-vs-cur point-delta below.
+    c_jd_floor = _num(cur.get("jd_pct"))
+    if th.jd_pct_floor > 0 and c_jd_floor is not None and c_jd_floor < th.jd_pct_floor:
+        regressions.append(
+            MetricRegression(
+                "jd_pct_floor",
+                th.jd_pct_floor,
+                c_jd_floor,
+                round(c_jd_floor - th.jd_pct_floor, 2),
+                th.jd_pct_floor,
+            )
+        )
+    if not isinstance(prev, dict) or not prev:
+        return MetricsRegressionReport(regressions=regressions, build_id=bid)
+
     try:
         # active_jobs: % drop vs prev.
         p_active = _num(prev.get("active_jobs"))
