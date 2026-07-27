@@ -31,6 +31,16 @@ shard by coincidence -- fine there, since the drain only needs "no bucket split"
 sharing"), ``ISOLATED_HOSTS`` here is carved out of the hash range entirely (shard 0 is RESERVED,
 never a hash target for anything else) so join's shard is guaranteed to contain nothing but join,
 by construction, not by hash luck.
+
+LOAD-BALANCE (crawl map/reduce): the remaining HEAVY single buckets (smartrecruiters, greenhouse,
+workable, ... -- each one unsplittable politeness bucket carrying a large job volume) are PINNED to
+distinct non-join shards via ``CRAWL_MEGAHOST_SHARDS``, exactly like ``detail.py``'s
+``MEGAHOST_SHARDS`` -- because left to the hash several of them collided onto ONE shard (crawl run
+30236311320: shard 5 = 640k jobs, no map/reduce speedup). Pinning is a pure load optimization layered
+UNDER the same partition invariant: a pinned bucket is still ONE bucket on ONE shard, so no host is
+split and the K-shard union is still the whole board set. Note ``board_host`` also reconstructs
+workday's per-tenant ``*.myworkdayjobs.com`` host (the single biggest source, ~580k jobs) so it
+spreads across its ~2,249 tenant buckets by the hash instead of collapsing to one -- see there.
 """
 
 from __future__ import annotations
@@ -40,6 +50,7 @@ import hashlib
 from .detail import rate_key_for_host
 
 __all__ = [
+    "CRAWL_MEGAHOST_SHARDS",
     "ISOLATED_HOSTS",
     "board_host",
     "board_rate_bucket",
@@ -83,6 +94,20 @@ _SUBDOMAIN_TOKEN_SOURCES: dict[str, str] = {
 # component.
 _HOST_PREFIXED_TOKEN_SOURCES: frozenset[str] = frozenset({"oracle", "successfactors", "icims"})
 
+# Workday: the token is a composite ``"{tenant}|{wd}|{site}"`` (providers/workday.py's ``matches()``)
+# and the real fetch host is RECONSTRUCTED from its first two components as
+# ``"{tenant}.{wd}.myworkdayjobs.com"`` (see workday.py's ``_HOST_RE`` / URL template
+# ``https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs``). Unlike the
+# host-prefixed sources above, the host is not a literal token prefix -- it has to be rebuilt.
+# CRITICAL: without this branch workday falls through to the per-board fallback, whose ``"{src}:{tok}"``
+# string is then PORT-STRIPPED by ``rate_key_for_host`` (``_rate_key`` splits on ``:``) down to the
+# single literal bucket ``"workday"`` -- collapsing ALL ~580k workday jobs (the single biggest source,
+# ~40% of the index) onto ONE shard. Reconstructing the real host instead lets ``rate_key_for_host``
+# keep each tenant its own bucket (``myworkdayjobs.com`` is in ``http._PER_TENANT_HOSTS``), spreading
+# workday across ~2,249 buckets exactly as AsyncFetcher already rate-limits it per tenant.
+_WORKDAY_SOURCE = "workday"
+_WORKDAY_HOST = "{tenant}.{wd}.myworkdayjobs.com"
+
 
 def board_host(source: str, token: str) -> str:
     """The literal network host a ``(source, token)`` board's provider ``fetch()`` call hits --
@@ -104,6 +129,11 @@ def board_host(source: str, token: str) -> str:
         return _SUBDOMAIN_TOKEN_SOURCES[src].format(token=tok)
     if src in _HOST_PREFIXED_TOKEN_SOURCES:
         return tok.split("|", 1)[0].strip()
+    if src == _WORKDAY_SOURCE:
+        parts = tok.split("|")
+        if len(parts) >= 2 and parts[0] and parts[1]:
+            return _WORKDAY_HOST.format(tenant=parts[0], wd=parts[1])
+        return f"{src}:{tok}"  # malformed token -- isolated per-board bucket, never guess a host
     return f"{src}:{tok}"
 
 
@@ -123,20 +153,63 @@ def board_rate_bucket(source: str, token: str) -> str:
 # on shard 0, and shard 0 never receives any other bucket via the hash fallback.
 ISOLATED_HOSTS: frozenset[str] = frozenset({"join.com"})
 
+# HEAVY COLLAPSED buckets PINNED to a fixed NON-JOIN shard each, mirroring ``detail.py``'s
+# ``MEGAHOST_SHARDS`` (same "pin the big single buckets so hash luck can't pile them onto one shard"
+# intent). Unlike per-tenant sources (workday/oracle/icims/eightfold/successfactors -- many buckets,
+# already spread by the hash), each of these is a SINGLE unsplittable politeness bucket carrying a
+# large job volume, so left to the hash several collided onto ONE shard (measured on crawl run
+# 30236311320: shard 5 = 640k jobs / 40% / 193 min, no map/reduce speedup at all). Pinning each to a
+# DISTINCT shard spreads them so the map wall-clock floor drops from that 640k monolith toward the
+# single heaviest UNSPLITTABLE bucket (smartrecruiters ~152k) plus the shard's unavoidable hashed
+# baseline (~workday-per-tenant + long-tail), i.e. ~220k / ~15% -- a ~2.9x cut.
+#
+# The assignment is a longest-processing-time bin-pack (heaviest bucket onto the shard with the
+# lowest projected hashed baseline) over the measured ``coverage.json`` volumes (build-2026-07-27):
+#   smartrecruiters.com 152791 | greenhouse.io 134856 | workable.com 65874 | jazz.co 58461 (jazzhr)
+#   lever.co 58273 | ashbyhq.com 49132 | apicapture 30484 | breezy.hr 28091 | jobsyn.org 27305 (dejobs)
+#   rippling.com 14046
+# Shard numbers are the DISTINCT non-join targets (1..NUM_SHARDS-1); the exact number matters only
+# for balance -- correctness (no split, complete+disjoint partition) holds for ANY assignment.
+CRAWL_MEGAHOST_SHARDS: dict[str, int] = {
+    "smartrecruiters.com": 10,
+    "greenhouse.io": 6,
+    "workable.com": 5,
+    "jazz.co": 8,
+    "lever.co": 7,
+    "ashbyhq.com": 3,
+    "apicapture": 4,
+    "breezy.hr": 9,
+    "jobsyn.org": 1,
+    "rippling.com": 2,
+}
+
+
+def _pinned_shard(pin: int, num_shards: int) -> int:
+    """Map a ``CRAWL_MEGAHOST_SHARDS`` pin onto a concrete NON-JOIN shard for this ``num_shards``.
+
+    Folded into ``1 .. num_shards - 1`` (never shard 0, which is join's reserved slot) so a pin is
+    always a valid non-join shard regardless of how ``num_shards`` compares to the pin table -- the
+    same defensive ``% num_shards`` spirit as ``detail._shard_of``, but shifted off shard 0."""
+    return 1 + ((pin - 1) % (num_shards - 1))
+
 
 def _shard_for_bucket(bucket: str, num_shards: int) -> int:
     """Deterministic shard assignment for one politeness bucket.
 
-    An ``ISOLATED_HOSTS`` bucket always maps to shard 0. Every other bucket hashes (SHA-1 --
-    NOT Python's built-in ``hash()``, which is salted per-process via ``PYTHONHASHSEED`` and
-    would make shard assignment disagree across the matrix's independent processes) into shards
-    ``1 .. num_shards - 1`` when ``num_shards > 1`` (so shard 0 is exclusively join's), or into
-    the single shard 0 when ``num_shards == 1`` (nothing to isolate FROM).
+    An ``ISOLATED_HOSTS`` bucket always maps to shard 0. A ``CRAWL_MEGAHOST_SHARDS`` bucket maps to
+    its PINNED non-join shard. Every other bucket hashes (SHA-1 -- NOT Python's built-in ``hash()``,
+    which is salted per-process via ``PYTHONHASHSEED`` and would make shard assignment disagree
+    across the matrix's independent processes) into shards ``1 .. num_shards - 1`` when
+    ``num_shards > 1`` (so shard 0 is exclusively join's), or into the single shard 0 when
+    ``num_shards == 1`` (nothing to isolate FROM, nothing to spread ACROSS).
     """
     if bucket in ISOLATED_HOSTS:
         return 0
     if num_shards <= 1:
         return 0
+    pin = CRAWL_MEGAHOST_SHARDS.get(bucket)
+    if pin is not None:
+        return _pinned_shard(pin, num_shards)
     bucket_count = num_shards - 1
     digest = hashlib.sha1(bucket.encode("utf-8")).hexdigest()
     return 1 + (int(digest, 16) % bucket_count)
