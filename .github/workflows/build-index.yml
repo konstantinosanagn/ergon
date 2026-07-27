@@ -335,36 +335,29 @@ jobs:
           # Only upload artifacts that actually exist (a gate failure or --no-sharded run may omit
           # some), so one missing file never fails the whole publish.
           ASSETS=""
+          # R1 (one-writer-per-asset): the detail sidecar (index-detail.sqlite.gz + manifest-detail.json)
+          # and the vectors sidecar (index-vectors.sqlite.gz + manifest-vectors.json) are DELIBERATELY
+          # absent from this list. They are owned EXCLUSIVELY by drain-detail.yml and embed-vectors.yml
+          # respectively. Build only DOWNLOADS them (detail -> merged into `jobs`; vectors -> legacy
+          # migration rename), never republishes them -- re-uploading a copy build merely downloaded
+          # would clobber the owner's fresher publish (the exact race R1 removes). See
+          # tests/test_release_asset_ownership.py for the enforced pairwise-disjoint invariant.
           for f in index.sqlite.gz manifest.json index-slim.sqlite.gz manifest-slim.json \
-                   manifest-vectors.json manifest-detail.json manifest-liveness.json manifest-jd.json \
+                   manifest-liveness.json manifest-jd.json \
                    index-delta.sqlite.gz manifest-delta.json deltas.json \
                    gates.json board_state.json history.jsonl spec_health.json rediscover_queue.json \
                    shards.json coverage.json INDEX_STATUS.md crawl_cursor.json crawl_cursor-join.json; do
             [ -f "dist/$f" ] && ASSETS="$ASSETS dist/$f"
           done
-          # The vectors db travels ONLY with its manifest. A non-rich run (every scheduled build --
-          # --rich is manual-only) renames the legacy index-rich.sqlite.gz to index-vectors.sqlite.gz
-          # on the runner so a later rich run can migrate it, but never regenerates it and never writes
-          # manifest-vectors.json. Publishing that unpaired file would ship a legacy schema-v2 db under
-          # a name that promises RICH_SCHEMA_VERSION=3. Only a rich build writes both together.
-          [ -f dist/manifest-vectors.json ] && [ -f dist/index-vectors.sqlite.gz ] && \
-            ASSETS="$ASSETS dist/index-vectors.sqlite.gz" || true
-          # Same paired-asset guard for the Tier-3 detail sidecar: publish index-detail.sqlite.gz
-          # ONLY when manifest-detail.json is also present, so a partial/interrupted download of
-          # the prior pair (or any future schema migration, mirroring the vectors legacy-rename
-          # case above) can never ship an unpaired db under a manifest that doesn't describe it.
-          [ -f dist/manifest-detail.json ] && [ -f dist/index-detail.sqlite.gz ] && \
-            ASSETS="$ASSETS dist/index-detail.sqlite.gz" || true
-          # Same paired-asset guard for the full-JD sidecar (Item 2): publish index-jd.sqlite.gz ONLY
+          # Paired-asset guard for the full-JD sidecar (Item 2): publish index-jd.sqlite.gz ONLY
           # when manifest-jd.json is also present, so a partial/interrupted download of the prior pair
-          # can never ship an unpaired db under a manifest that doesn't describe it (identical
-          # reasoning to the vectors/detail guards).
+          # can never ship an unpaired db under a manifest that doesn't describe it.
           [ -f dist/manifest-jd.json ] && [ -f dist/index-jd.sqlite.gz ] && \
             ASSETS="$ASSETS dist/index-jd.sqlite.gz" || true
           # Same paired-asset guard for the liveness sidecar: publish index-liveness.sqlite.gz
           # ONLY when manifest-liveness.json is also present, so a partial/interrupted download of
           # the prior pair can never ship an unpaired db under a manifest that doesn't describe it
-          # (identical reasoning to the vectors/detail guards above).
+          # (identical reasoning to the JD guard above).
           [ -f dist/manifest-liveness.json ] && [ -f dist/index-liveness.sqlite.gz ] && \
             ASSETS="$ASSETS dist/index-liveness.sqlite.gz" || true
           ASSETS="$ASSETS $(ls dist/shard-*.sqlite.gz 2>/dev/null)"

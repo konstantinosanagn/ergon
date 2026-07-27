@@ -108,12 +108,19 @@ def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
 
 
 # manifest-name -> the gz asset it describes. The top-level set manifest (below) aggregates each
-# present pair's sha so a reader can verify the WHOLE published set is internally consistent.
+# present pair's sha so a reader can verify the BUILD-OWNED published set is internally consistent.
+#
+# R2 SCOPE: this covers ONLY the assets THIS build workflow itself writes+publishes (core, slim,
+# liveness, jd -- plus the shards folded in below). The independently-owned sidecars are DELIBERATELY
+# excluded: detail (owned by drain-detail.yml), vectors (embed-vectors.yml), freshness
+# (freshness-sweep.yml). After R1 each of those has a single writer that publishes it on its OWN
+# schedule, so build only ever DOWNLOADS a possibly-newer-than-us copy -- recording that copy's sha
+# here would let a later republish by its owner make build's set manifest look torn, spuriously
+# tripping a set-verifying reader's fallback. Each independent sidecar instead carries its own paired
+# manifest+sha that its own reader verifies individually (see cache.py ensure_fresh paths).
 _SET_ASSET_MANIFESTS = {
     "manifest.json": "index.sqlite.gz",
     "manifest-slim.json": "index-slim.sqlite.gz",
-    "manifest-vectors.json": "index-vectors.sqlite.gz",
-    "manifest-detail.json": "index-detail.sqlite.gz",
     "manifest-liveness.json": "index-liveness.sqlite.gz",
     "manifest-jd.json": "index-jd.sqlite.gz",
 }
@@ -134,9 +141,14 @@ def write_set_manifest(out: Path, *, build_id: str) -> dict:
 
     Built by AGGREGATING the per-asset manifests already on disk (each carries its gz's raw-content
     sha256), so it costs no extra hashing and naturally tolerates a partition run that only rewrote
-    SOME assets: a join-shard run rewrites the core index + shards but carries the detail/jd/liveness
-    sidecars forward — those sidecars' manifests are downloaded into ``out`` and aggregated with
-    their existing (still-live) shas, so the set stays a faithful description of what's on the release.
+    SOME build-owned assets: a join-shard run rewrites the core index + shards but carries the jd/
+    liveness sidecars forward — those manifests are downloaded into ``out`` and aggregated with their
+    existing (still-live) shas, so the set stays a faithful description of the build-owned release.
+
+    R2 SCOPE: the aggregated set is restricted to ``_SET_ASSET_MANIFESTS`` (build-owned) + the shards.
+    The independently-owned sidecars (detail/vectors/freshness) are NOT folded in even when their
+    (downloaded) manifests sit in ``out`` — see the ``_SET_ASSET_MANIFESTS`` note for why recording a
+    sidecar owner might have already superseded would falsely tear this set.
     """
     assets: dict[str, dict] = {}
     for man_name, gz_name in _SET_ASSET_MANIFESTS.items():
@@ -774,23 +786,24 @@ def build_and_publish_detail(
     build_id: str,
     shard: int | None = None,
     num_shards: int | None = None,
-) -> tuple[dict, int]:
-    """Tier-3 reconcile + merge into the promoted core index (recovered fields UPDATEd onto ``jobs``
-    in place), plus publish the detail sidecar itself (``index-detail.sqlite.gz`` +
-    ``manifest-detail.json``).
+) -> dict:
+    """Tier-3 reconcile + MERGE the drained detail fields into the promoted core index (recovered
+    fields UPDATEd onto ``jobs`` in place). Read-only consumption of the ``index-detail.sqlite``
+    sidecar the build already DOWNLOADED — it does NOT publish the sidecar.
 
     ORDERING: callers invoke this AFTER ``_gated_publish`` has PROMOTED ``db_tmp`` -> ``db`` (the
     reconcile needs the final ``jobs`` table, with its real ids/content_hash, to select Tier-3
     candidates against). ``merge_detail_into_index`` then mutates that SAME on-disk db in place.
 
-    Item 6: this NO LONGER re-publishes the core ``index.sqlite.gz``/``manifest.json``. Previously
-    ``_gated_publish`` gzipped the core, then this re-gzipped it with the merged fields, then
-    liveness re-gzipped it AGAIN — up to 3 gzips of a hundreds-of-MB db per build, plus a window in
-    which a reader could pull a half-reconciled core. Now ``_gated_publish(publish_core=False)``
-    defers the gzip; the caller (``main``) runs every reconcile FIRST and then calls
-    ``publish_artifacts`` ONCE, so the fully-merged index is gzipped a single time. This call is
-    still wrapped in try/except by the caller (non-fatal: a detail failure must never block the core
-    publish — the single publish below simply ships the un-merged-but-promoted core).
+    R1: the detail sidecar (``index-detail.sqlite.gz`` + ``manifest-detail.json``) is now owned
+    EXCLUSIVELY by drain-detail.yml. Build used to re-gzip + rewrite that pair on EVERY run (even a
+    merge-only build that fetched nothing), making build + drain two writers of one release asset —
+    which forced them onto a shared ``concurrency`` group and starved the drain. This call therefore
+    STOPS writing the sidecar: it only merges the downloaded sidecar's fields into ``jobs`` and
+    leaves the on-release detail asset untouched for the drain to own. (Item 6 already made this NOT
+    re-publish the core; the single deferred ``publish_artifacts`` in ``main`` ships the fully-merged
+    core once.) Still wrapped in try/except by the caller (non-fatal: a detail failure must never
+    block the core publish).
 
     ``shard``/``num_shards`` are plumbed through to ``_reconcile_detail`` for completeness (both
     default ``None`` -- the ordinary daily/manual ``--detail`` path here always reconciles the
@@ -808,9 +821,7 @@ def build_and_publish_detail(
         # propagate into the external-content `jobs_fts` table -- rebuild it so those postings
         # become MATCHable before the single core publish (in main) ships them.
         _rebuild_jobs_fts(db_path)
-    sha, nbytes = _gzip_file(detail_db, out / "index-detail.sqlite.gz")
-    _write_detail_manifest(out, build_id=build_id, sha=sha, nbytes=nbytes)
-    return stats, nbytes
+    return stats
 
 
 def _write_jd_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> None:
@@ -2128,13 +2139,13 @@ def main(argv: list[str]) -> None:
             # NOT crash the build — log it and carry on; the single core publish below then ships the
             # promoted-but-un-merged core (no torn/partial state).
             try:
-                dstats, dbytes = build_and_publish_detail(
+                dstats = build_and_publish_detail(
                     db, out, build_id=build_id, shard=shard, num_shards=num_shards
                 )
                 print(
                     f"  + detail tier (fetched={dstats['fetched']} failed={dstats['failed']} "
                     f"missing={dstats['missing']} merged={dstats['merged']}) -> "
-                    f"index-detail.sqlite.gz ({dbytes // 1024} KB)"
+                    "merged into core (sidecar owned by drain-detail.yml)"
                 )
             except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
                 print(f"  ! detail tier skipped (non-fatal): {type(exc).__name__}: {exc}")

@@ -106,10 +106,19 @@ def test_core_published_once_and_captures_every_reconcile(tmp_path, monkeypatch)
     assert set_manifest["assets"]["index.sqlite.gz"]["sha256"] == core_sha
     assert set_manifest["build_id"].startswith("build-")
 
+    # R1: build no longer WRITES the detail sidecar -- it merged the downloaded sidecar's fields into
+    # `jobs` (proven by RECOVERED_JD above) but must not re-publish index-detail.sqlite.gz /
+    # manifest-detail.json (those are drain-detail.yml's asset now).
+    assert not (out / "index-detail.sqlite.gz").exists()
+    assert not (out / "manifest-detail.json").exists()
+    # R2: and even if a sidecar HAD been on disk (downloaded), the set manifest stays scoped to
+    # build-owned assets only -- no detail/vectors/freshness keys.
+    assert "index-detail.sqlite.gz" not in set_manifest["assets"]
+
 
 def test_set_manifest_tolerates_partial_rewrite(tmp_path):
-    """A join-shard partition run rewrites only SOME assets; the set manifest must still describe
-    whatever is present (core alone, then core + a carried-forward sidecar)."""
+    """A join-shard partition run rewrites only SOME build-owned assets; the set manifest must still
+    describe whatever is present (core alone, then core + a carried-forward BUILD-OWNED sidecar)."""
     out = tmp_path / "dist"
     out.mkdir()
     # Core-only (as a lean partition run would leave it before sidecars are added back).
@@ -118,15 +127,64 @@ def test_set_manifest_tolerates_partial_rewrite(tmp_path):
     m1 = bi.write_set_manifest(out, build_id="b1")
     assert set(m1["assets"]) == {"index.sqlite.gz"}
 
-    # Add a carried-forward detail sidecar (its own prior build_id) + manifest, regenerate.
-    (out / "index-detail.sqlite.gz").write_bytes(b"detail")
-    (out / "manifest-detail.json").write_text(
+    # Add a carried-forward JD sidecar (build-owned, its own prior build_id) + manifest, regenerate.
+    (out / "index-jd.sqlite.gz").write_bytes(b"jd")
+    (out / "manifest-jd.json").write_text(
         json.dumps({"build_id": "b0", "schema_version": 1, "sha256": "d" * 64, "bytes": 6})
     )
     m2 = bi.write_set_manifest(out, build_id="b1")
-    assert set(m2["assets"]) == {"index.sqlite.gz", "index-detail.sqlite.gz"}
+    assert set(m2["assets"]) == {"index.sqlite.gz", "index-jd.sqlite.gz"}
     # The carried-forward sidecar keeps its OWN build_id + sha (partition tolerance).
-    assert m2["assets"]["index-detail.sqlite.gz"] == {"sha256": "d" * 64, "bytes": 6, "build_id": "b0"}
+    assert m2["assets"]["index-jd.sqlite.gz"] == {"sha256": "d" * 64, "bytes": 6, "build_id": "b0"}
+
+
+def test_set_manifest_excludes_independently_owned_sidecars(tmp_path):
+    """R2: the set manifest is scoped to BUILD-OWNED assets. The detail (drain), vectors (embed) and
+    freshness (sweep) sidecars each have a single non-build writer that republishes them on its own
+    schedule, so build only ever DOWNLOADS a copy of them into ``out``. Recording that (possibly
+    already-superseded) copy's sha in build's set manifest would let the owner's next republish make
+    build's set look torn, spuriously tripping a set-verifying reader's fallback. So even when all
+    three sidecars sit on disk with valid paired manifests, none of them may appear in the set."""
+    out = tmp_path / "dist"
+    out.mkdir()
+    (out / "index.sqlite").write_bytes(b"fake-core")
+    bi.publish_artifacts(out / "index.sqlite", out, build_id="b1")
+
+    # Build-owned sidecars that MUST be included when present.
+    for gz, man in (
+        ("index-slim.sqlite.gz", "manifest-slim.json"),
+        ("index-jd.sqlite.gz", "manifest-jd.json"),
+        ("index-liveness.sqlite.gz", "manifest-liveness.json"),
+    ):
+        (out / gz).write_bytes(b"x")
+        (out / man).write_text(
+            json.dumps({"build_id": "b1", "schema_version": 1, "sha256": "a" * 64, "bytes": 1})
+        )
+    # Independently-owned sidecars (downloaded, NOT build-written) that MUST be excluded -- give them
+    # a *different* build_id + sha to mimic a copy the owner may already have superseded.
+    for gz, man in (
+        ("index-detail.sqlite.gz", "manifest-detail.json"),
+        ("index-vectors.sqlite.gz", "manifest-vectors.json"),
+    ):
+        (out / gz).write_bytes(b"y")
+        (out / man).write_text(
+            json.dumps({"build_id": "other", "schema_version": 1, "sha256": "f" * 64, "bytes": 1})
+        )
+    # Freshness has no paired manifest at all -- also must never appear.
+    (out / "index-freshness.sqlite.gz").write_bytes(b"z")
+
+    assets = set(bi.write_set_manifest(out, build_id="b1")["assets"])
+    assert assets == {
+        "index.sqlite.gz",
+        "index-slim.sqlite.gz",
+        "index-jd.sqlite.gz",
+        "index-liveness.sqlite.gz",
+    }
+    # Explicitly: the independently-owned sidecars' (possibly-stale) shas are NOT recorded, so a
+    # set-verifying reader can never fault on them -> no spurious core-set fallback.
+    assert "index-detail.sqlite.gz" not in assets
+    assert "index-vectors.sqlite.gz" not in assets
+    assert "index-freshness.sqlite.gz" not in assets
 
 
 # --- SDK-side torn-set rejection (ships dark) ------------------------------------------------------
