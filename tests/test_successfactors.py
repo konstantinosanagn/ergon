@@ -267,3 +267,141 @@ async def test_fetch_detail_no_jd_node_raises() -> None:
     fetcher = _FakeFetcher(text=html)
     with pytest.raises(RuntimeError):
         await SuccessFactorsProvider().fetch_detail(_detail_ref(), fetcher)
+
+
+# --- RSS JD augmenter: folds the newest ~20 postings' full JD in at crawl time ---------------
+
+_RSS_URL = f"https://{HOST}/services/rss/job"
+
+
+def _rss(items: list[tuple[str, str, str, str]]) -> str:
+    """Build an SF RSS feed body from (job_id, title, link_href, jd_html) tuples.
+
+    The JD is CDATA-wrapped (as the live feed serves it) and the link deliberately carries a
+    different slug + query string than the search-row href to prove the join is on the numeric
+    job id, not raw-URL equality."""
+    entries = "".join(
+        f"<item><title>{title}</title><link>{link}</link>"
+        f"<description><![CDATA[{jd}]]></description></item>"
+        for _jid, title, link, jd in items
+    )
+    return f'<?xml version="1.0"?><rss><channel>{entries}</channel></rss>'
+
+
+async def test_rss_folds_jd_into_matching_postings() -> None:
+    """The one RSS call folds full JD into the postings whose numeric id matches; a posting with
+    no feed item is left JD-empty for the drain, and the join survives a mismatched slug/query."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)  # search -> jobs 1395167233 and 1399453633
+        # Feed carries JD for 1395167233 only (link has a different slug + escaped query params),
+        # plus an unrelated posting the list never surfaced.
+        respx_mock.get(url__startswith=_RSS_URL).mock(
+            return_value=httpx.Response(
+                200,
+                text=_rss(
+                    [
+                        (
+                            "1395167233",
+                            "Analyst",
+                            "https://careers.ey.com/ey/job/Totally-Different-Slug/"
+                            "1395167233/?src=rss&amp;amp;utm=feed",
+                            "<p>Own the audit engagement.</p><ul><li>5 years</li></ul>",
+                        ),
+                        (
+                            "8888888888",
+                            "Ghost role",
+                            "https://careers.ey.com/ey/job/Ghost/8888888888/",
+                            "<p>Not in the list.</p>",
+                        ),
+                    ]
+                ),
+            )
+        )
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch("careers.ey.com|ey", SearchQuery(), f)
+
+    assert len(raws) == 2
+    matched = SuccessFactorsProvider().normalize(raws[0])  # 1395167233
+    assert matched.description_html == "<p>Own the audit engagement.</p><ul><li>5 years</li></ul>"
+    assert matched.description_text is not None
+    assert "Own the audit engagement." in matched.description_text
+    assert "5 years" in matched.description_text
+    assert "<p>" not in matched.description_text  # flattened
+
+    unmatched = SuccessFactorsProvider().normalize(raws[1])  # 1399453633 -- no feed item
+    assert unmatched.description_html is None
+    assert unmatched.description_text is None
+
+
+async def test_rss_feed_4xx_is_non_fatal() -> None:
+    """A feed that 4xxs leaves every posting JD-empty (drain backfills) and never fails the board."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)
+        respx_mock.get(url__startswith=_RSS_URL).mock(return_value=httpx.Response(404))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch("careers.ey.com|ey", SearchQuery(), f)
+    assert len(raws) == 2
+    assert all(SuccessFactorsProvider().normalize(r).description_html is None for r in raws)
+
+
+async def test_rss_malformed_feed_is_non_fatal() -> None:
+    """A malformed/empty feed body yields no matches and no crash."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)
+        respx_mock.get(url__startswith=_RSS_URL).mock(
+            return_value=httpx.Response(200, text="<not-xml><<<garbage")
+        )
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch("careers.ey.com|ey", SearchQuery(), f)
+    assert len(raws) == 2
+    assert all(SuccessFactorsProvider().normalize(r).description_html is None for r in raws)
+
+
+async def test_rss_escaped_html_description_is_decoded() -> None:
+    """A feed that entity-escaped the JD instead of CDATA-wrapping it is decoded to real markup."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)
+        body = (
+            '<?xml version="1.0"?><rss><channel><item><title>Analyst</title>'
+            "<link>https://careers.ey.com/ey/job/X/1395167233/</link>"
+            "<description>&lt;p&gt;Escaped body.&lt;/p&gt;</description></item></channel></rss>"
+        )
+        respx_mock.get(url__startswith=_RSS_URL).mock(return_value=httpx.Response(200, text=body))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch("careers.ey.com|ey", SearchQuery(), f)
+    matched = SuccessFactorsProvider().normalize(raws[0])
+    assert matched.description_html == "<p>Escaped body.</p>"
+    assert matched.description_text == "Escaped body."
+
+
+async def test_rmk_fallback_folds_jd_for_free() -> None:
+    """When CSB search is empty, the classic-RMK feed path both lists AND folds JD (no extra call)."""
+    host, siteid = "careers.skyworksinc.com", "skyworks"
+    with respx.mock as respx_mock:
+        # CSB search yields nothing -> provider falls back to the RSS feed.
+        respx_mock.get(url__startswith=f"https://{host}/{siteid}/search/").mock(
+            return_value=httpx.Response(200, html="<html><body></body></html>")
+        )
+        respx_mock.get(url__startswith=f"https://{host}/services/rss/job").mock(
+            return_value=httpx.Response(
+                200,
+                text=_rss(
+                    [
+                        (
+                            "1234567890",
+                            "RF Engineer (Austin, TX, US)",
+                            f"https://{host}/job/RF-Engineer/1234567890/",
+                            "<p>Design RF front-end modules.</p>",
+                        )
+                    ]
+                ),
+            )
+        )
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch(f"{host}|{siteid}", SearchQuery(), f)
+
+    assert len(raws) == 1
+    assert raws[0].source_job_id == "1234567890"
+    job = SuccessFactorsProvider().normalize(raws[0])
+    assert job.description_html == "<p>Design RF front-end modules.</p>"
+    assert job.description_text == "Design RF front-end modules."
