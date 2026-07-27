@@ -129,3 +129,46 @@ def test_no_jd_flag_never_trips_sidecar_tripwire(tmp_path, monkeypatch):
     bi.main(["--incremental", "--sharded", "--limit-companies", "5", "--out", str(out)])
     sig = json.loads((out / "jd_sidecar.json").read_text())
     assert sig["expected"] is False and sig["jd_sidecar_ok"] is True
+
+
+def test_no_publish_still_builds_but_flags_skip(tmp_path, monkeypatch):
+    """--no-publish (dry run): the build runs FULLY -- every dist/ artifact + gates are produced
+    exactly as a real build -- but the run is flagged do-NOT-publish via the dist/PUBLISH_SKIPPED
+    marker (the script-level assertion point; the workflow gates its `gh release upload` on the same
+    flag). This is the 2026-07-27 safety fix: a validation dispatch can't overwrite the prod release."""
+    import json
+
+    monkeypatch.setattr(bi, "_crawl_due", _fake_crawl_due)
+    out = tmp_path / "dist"
+    bi.main(
+        ["--incremental", "--sharded", "--limit-companies", "5", "--no-publish", "--out", str(out)]
+    )
+
+    # The build still produced the full local artifact set (the dry run is a real build).
+    for name in ("index.sqlite", "index.sqlite.gz", "manifest.json", "gates.json", "coverage.json"):
+        assert (out / name).exists(), f"--no-publish must still produce {name}"
+    # ...but it dropped the do-not-publish marker naming this build.
+    marker = out / "PUBLISH_SKIPPED"
+    assert marker.exists(), "--no-publish must write the PUBLISH_SKIPPED marker"
+    sig = json.loads(marker.read_text())
+    assert sig["no_publish"] is True and sig["build_id"]
+
+
+def test_default_publishes_no_skip_marker(tmp_path, monkeypatch):
+    """WITHOUT --no-publish the default publish path is taken (byte-for-byte today's daily build):
+    no PUBLISH_SKIPPED marker is written, so the workflow's release-upload steps proceed."""
+    monkeypatch.setattr(bi, "_crawl_due", _fake_crawl_due)
+    monkeypatch.delenv("ERGON_NO_PUBLISH", raising=False)  # ensure the env switch isn't set either
+    out = tmp_path / "dist"
+    bi.main(["--incremental", "--sharded", "--limit-companies", "5", "--out", str(out)])
+    assert not (out / "PUBLISH_SKIPPED").exists(), "default build must NOT flag a publish skip"
+
+
+def test_no_publish_env_switch_flags_skip(tmp_path, monkeypatch):
+    """ERGON_NO_PUBLISH=1 (env) is equivalent to the --no-publish CLI flag -- it's the switch the
+    workflow sets. Same marker, same do-not-publish semantics."""
+    monkeypatch.setattr(bi, "_crawl_due", _fake_crawl_due)
+    monkeypatch.setenv("ERGON_NO_PUBLISH", "1")
+    out = tmp_path / "dist"
+    bi.main(["--incremental", "--sharded", "--limit-companies", "5", "--out", str(out)])
+    assert (out / "PUBLISH_SKIPPED").exists(), "ERGON_NO_PUBLISH=1 must flag a publish skip"
