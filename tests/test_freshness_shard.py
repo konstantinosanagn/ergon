@@ -14,9 +14,11 @@ import hashlib
 import pytest
 
 from ergon_tracker.index.freshness_shard import (
+    CRAWL_MEGAHOST_SHARDS,
     ISOLATED_HOSTS,
     board_host,
     board_rate_bucket,
+    board_shard,
     shard_boards,
 )
 
@@ -42,10 +44,18 @@ from ergon_tracker.index.freshness_shard import (
         ("successfactors", "career25.sapsf.com", "career25.sapsf.com"),
         ("icims", "company.icims.com|new", "company.icims.com"),
         ("icims", "company.icims.com", "company.icims.com"),
+        # workday: composite "{tenant}|{wd}|{site}" -> reconstructed per-tenant host.
+        ("workday", "nvidia|wd5|NVIDIAExternalCareerSite", "nvidia.wd5.myworkdayjobs.com"),
+        ("workday", "salesforce|wd12|External_Career_Site", "salesforce.wd12.myworkdayjobs.com"),
     ],
 )
 def test_board_host_matches_provider_url_convention(source, token, expected_host):
     assert board_host(source, token) == expected_host
+
+
+def test_board_host_workday_malformed_token_falls_back_to_isolated_bucket():
+    # A token missing the tenant/wd components must NEVER guess a host -- isolated per-board bucket.
+    assert board_host("workday", "onlyonepart") == "workday:onlyonepart"
 
 
 def test_board_host_unknown_source_falls_back_to_per_board_bucket():
@@ -79,6 +89,19 @@ def test_board_rate_bucket_per_tenant_oracle_hosts_separate():
 
 def test_board_rate_bucket_join_is_the_isolated_key():
     assert board_rate_bucket("join", "anything") in ISOLATED_HOSTS
+
+
+def test_board_rate_bucket_workday_is_per_tenant_not_one_collapsed_bucket():
+    # THE workday load-imbalance fix: distinct tenants must get DISTINCT buckets (myworkdayjobs.com
+    # is per-tenant), so workday's ~580k jobs spread by the hash instead of collapsing onto one shard.
+    a = board_rate_bucket("workday", "nvidia|wd5|Site")
+    b = board_rate_bucket("workday", "salesforce|wd12|Site")
+    assert a != b
+    assert a == "nvidia.wd5.myworkdayjobs.com"  # NOT the literal "workday" collapse
+    # ...but the SAME tenant is one bucket regardless of the (path-only) site component.
+    assert board_rate_bucket("workday", "nvidia|wd5|SiteA") == board_rate_bucket(
+        "workday", "nvidia|wd5|SiteB"
+    )
 
 
 # --- shard_boards: the partition invariants -----------------------------------------------------
@@ -207,9 +230,12 @@ def test_shard_boards_is_deterministic_across_calls():
 def test_shard_assignment_is_not_pythons_salted_hash():
     # Reproduce the assignment from first principles (sha1, not builtin hash()) to guard against a
     # regression to PYTHONHASHSEED-salted hash() -- which would make shard membership disagree
-    # across independent CI matrix processes.
-    boards = [("greenhouse", "acme"), ("lever", "globex"), ("ashby", "initech")]
+    # across independent CI matrix processes. Uses UNPINNED buckets so the hash path (not the
+    # CRAWL_MEGAHOST_SHARDS pin path) is what's under test.
+    boards = [("recruitee", "acme"), ("teamtailor", "globex"), ("personio", "initech")]
     num_shards = 4
+    for source, _token in boards:
+        assert board_rate_bucket(source, _token) not in CRAWL_MEGAHOST_SHARDS  # sanity: unpinned
     partition = _partition(boards, num_shards)
     for source, token in boards:
         bucket = board_rate_bucket(source, token)
@@ -239,3 +265,98 @@ def test_shard_boards_rejects_zero_num_shards():
 
 def test_shard_boards_empty_boards_list_is_fine():
     assert shard_boards([], 0, 5) == []
+
+
+# --- megahost pinning: heavy collapsed buckets spread across DISTINCT shards ---------------------
+
+# The production crawl matrix (see .github/workflows/crawl-mapreduce.yml) uses NUM_SHARDS=11
+# (shard 0 = join-reserved, shards 1..10 = the non-join map matrix).
+PROD_K = 11
+
+# One representative (source, token) board per pinned heavy bucket -- the source whose board_host
+# resolves to that exact bucket string, so board_shard(source, token, K) exercises the real pin path.
+_BUCKET_SAMPLE_BOARD = {
+    "smartrecruiters.com": ("smartrecruiters", "acme"),
+    "greenhouse.io": ("greenhouse", "acme"),
+    "workable.com": ("workable", "acme"),
+    "jazz.co": ("jazzhr", "acme"),
+    "lever.co": ("lever", "acme"),
+    "ashbyhq.com": ("ashby", "acme"),
+    "apicapture": ("apicapture", "acme"),
+    "breezy.hr": ("breezy", "acme"),
+    "jobsyn.org": ("dejobs", "acme"),
+    "rippling.com": ("rippling", "acme"),
+}
+
+
+def test_pin_sample_boards_cover_every_pinned_bucket():
+    # Guard: the sample table above must stay in lockstep with the pin map, or the tests below would
+    # silently stop exercising a pin.
+    assert set(_BUCKET_SAMPLE_BOARD) == set(CRAWL_MEGAHOST_SHARDS)
+    for bucket, (source, token) in _BUCKET_SAMPLE_BOARD.items():
+        assert board_rate_bucket(source, token) == bucket
+
+
+def test_each_pinned_bucket_lands_on_its_configured_shard():
+    for bucket, (source, token) in _BUCKET_SAMPLE_BOARD.items():
+        pin = CRAWL_MEGAHOST_SHARDS[bucket]
+        expected = 1 + ((pin - 1) % (PROD_K - 1))
+        assert board_shard(source, token, PROD_K) == expected
+
+
+def test_pinned_buckets_are_on_distinct_shards():
+    # THE WHOLE POINT: no two heavy collapsed buckets may share a shard (else the collision the fix
+    # exists to remove is back). With 10 pins over 10 non-join shards this is a bijection.
+    shards = [
+        board_shard(source, token, PROD_K)
+        for source, token in _BUCKET_SAMPLE_BOARD.values()
+    ]
+    assert len(shards) == len(set(shards)), f"pins collided: {sorted(shards)}"
+
+
+def test_no_pinned_bucket_ever_lands_on_the_join_shard():
+    # Shard 0 is join's reserved slot -- a pin must never fold onto it, at ANY shard count.
+    for source, token in _BUCKET_SAMPLE_BOARD.values():
+        for num_shards in (2, 3, 5, 8, 11, 20):
+            assert board_shard(source, token, num_shards) != 0
+
+
+def test_all_boards_of_a_pinned_source_hash_to_its_single_pinned_shard():
+    # No-split: every board of smartrecruiters (one collapsed bucket) must be cohesive on the pin.
+    sr_boards = [("smartrecruiters", f"company-{i}") for i in range(50)]
+    partition = _partition(sr_boards + [("greenhouse", "gh"), ("lever", "lv")], PROD_K)
+    target = _shard_containing(partition, sr_boards[0])
+    assert target == CRAWL_MEGAHOST_SHARDS["smartrecruiters.com"]
+    for b in sr_boards[1:]:
+        assert _shard_containing(partition, b) == target
+
+
+def test_pinned_and_hashed_boards_still_form_a_complete_disjoint_partition():
+    # Coverage invariant WITH pinning on: pinned megahost boards + hashed boards + isolated join +
+    # per-tenant workday all partition cleanly (every board on exactly one shard, union == input).
+    boards = (
+        [("smartrecruiters", f"sr-{i}") for i in range(8)]
+        + [("greenhouse", f"gh-{i}") for i in range(8)]
+        + [("workday", f"tenant{i}|wd5|Site") for i in range(20)]  # per-tenant, hashed spread
+        + [("breezy", f"bz-{i}") for i in range(6)]  # pinned bucket, different tokens same bucket
+        + [("lever", f"lv-{i}") for i in range(5)]
+        + [("recruitee", f"rc-{i}") for i in range(4)]  # unpinned collapsed source
+        + [("join", f"jn-{i}") for i in range(12)]
+    )
+    num_shards = PROD_K
+    partition = _partition(boards, num_shards)
+
+    all_seen: list[tuple[str, str]] = []
+    for lst in partition.values():
+        all_seen.extend(lst)
+    assert len(all_seen) == len(boards)  # disjoint: no board on two shards
+    assert sorted(all_seen) == sorted(boards)  # complete: every board exactly once
+
+
+def test_pinning_does_not_touch_the_single_shard_path():
+    # num_shards == 1: pins are inert -- everything (join, pinned megahosts, hashed) is on shard 0,
+    # byte-identical to the pre-pinning single-shard behavior.
+    boards = [("smartrecruiters", "a"), ("greenhouse", "b"), ("join", "c"), ("workday", "t|wd5|s")]
+    assert set(shard_boards(boards, 0, 1)) == set(boards)
+    for source, token in boards:
+        assert board_shard(source, token, 1) == 0
