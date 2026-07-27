@@ -243,6 +243,7 @@ jobs:
           ERGON_LIVENESS_MAX_BOARDS: "${{ github.event.inputs.liveness_max_boards || '2000' }}"  # liveness: per-run cap on DUE boards re-fetched (rotating cursor, dispatch-overridable)
           ERGON_LIVENESS_CONCURRENCY: "24"           # liveness: in-flight board/detail-confirm fetch concurrency (mirrors ERGON_DETAIL_CONCURRENCY; per-host politeness enforced separately)
           ERGON_LIVENESS_RECHECK_DAYS: "7"           # liveness: don't re-check a row until this many days since its last check (see liveness.py::RECHECK_DAYS)
+          ERGON_METRICS_JD_PCT_FLOOR: "55"           # ABSOLUTE jd_pct floor for the metrics tripwire: alert whenever JD capture falls below 55% even with no baseline (catches a slow multi-build bleed the point-delta misses -- the 2026-07-26 85%->47% collapse). Baseline-independent belt to the relative rules.
         run: |
           # CRAWL PROGRESS HEARTBEAT (observability only): Actions does NOT stream a step's logs
           # until the step ends, so a 1-2h crawl is otherwise a black box. The crawl writes a tiny,
@@ -515,12 +516,20 @@ jobs:
               --detail "build job result: ${{ needs.build.result }}"
           else
             # (b) build succeeded -> inspect the WARN-only tripwires. notify_ops suppresses the
-            # alert unless at least one actually tripped (a FAILing gate, metrics ok=false, or a
-            # non-empty rediscover queue), so this is a no-op on a clean run.
+            # alert unless at least one actually tripped, so these are no-ops on a clean run.
+            # TWO separate dedup titles (do NOT recombine): the stale-specs rediscover queue is
+            # non-empty on essentially EVERY build, so its issue is chronically open and can never
+            # close. Folding the DATA-QUALITY signals (gates / metrics-regression / jd-sidecar) onto
+            # that same title buried the 2026-07-26 with_jd 85%->47% collapse as comment noise on an
+            # already-open issue -- no NEW issue, no operator notice. Splitting them lets the
+            # data-quality issue actually close, so a real regression opens a FRESH, noticeable one.
             python3 scripts/notify_ops.py --kind warning --workflow build-index \
-              --run-url "$RUN_URL" --title-key "build-index: tripwire" \
+              --run-url "$RUN_URL" --title-key "build-index: data-quality" \
               --from-json dist/gates.json \
               --from-json dist/metrics_regression.json \
-              --from-json dist/jd_sidecar.json \
+              --from-json dist/jd_sidecar.json
+            # chronically-noisy stale-spec queue -> its own permanently-open issue, isolated.
+            python3 scripts/notify_ops.py --kind warning --workflow build-index \
+              --run-url "$RUN_URL" --title-key "build-index: stale-specs" \
               --from-json dist/rediscover_queue.json
           fi
