@@ -65,7 +65,11 @@ async def main() -> None:
     per_ats = _arg("--per-ats", 90)
     per_company = _arg("--per-company", 20)
     max_total = _arg("--max-total", 500)
-    out = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else ROOT / "data" / "sponsorship_candidates.jsonl"
+    out = (
+        Path(sys.argv[sys.argv.index("--out") + 1])
+        if "--out" in sys.argv
+        else ROOT / "data" / "sponsorship_candidates.jsonl"
+    )
 
     load_builtins()
     companies = _sample_companies(per_ats)
@@ -73,7 +77,9 @@ async def main() -> None:
     rows: list[dict] = []
     lock = anyio.Lock()
 
-    async def grab(key: str, ats: str, token: str, domain: str | None, fetcher: AsyncFetcher) -> None:
+    async def grab(
+        key: str, ats: str, token: str, domain: str | None, fetcher: AsyncFetcher
+    ) -> None:
         provider = get_provider(ats)
         if provider is None:
             return
@@ -93,7 +99,15 @@ async def main() -> None:
             for win in _windows(desc)[:2]:  # cap per posting
                 if len(win) < 40:
                     continue
-                local.append({"id": job.id, "source": ats, "company_key": key, "title": job.title, "text": win})
+                local.append(
+                    {
+                        "id": job.id,
+                        "source": ats,
+                        "company_key": key,
+                        "title": job.title,
+                        "text": win,
+                    }
+                )
         if local:
             async with lock:
                 rows.extend(local)

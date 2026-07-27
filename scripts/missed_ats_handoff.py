@@ -12,6 +12,7 @@ Respects the A/B boundary: emits CANDIDATES only; never writes seed.json.
 
 Usage::  python scripts/missed_ats_handoff.py
 """
+
 from __future__ import annotations
 
 import json
@@ -66,13 +67,26 @@ async def _fetch_html(url: str) -> str:
 # (Providers already early-exit on limit, so the win here isn't pagination; it's avoiding 50+ spurious
 # matches()/fetches per board.) Maps the detected ATS marker -> provider name(s); unmapped -> try all.
 _ATS_TO_PROVIDER = {
-    "successfactors": ["successfactors"], "lever.co": ["lever"], "myworkdayjobs": ["workday"],
-    "icims.com": ["icims"], "greenhouse.io": ["greenhouse"], "taleo.net": ["taleo", "taleobe"],
-    "phenom": ["phenom"], "teamtailor": ["teamtailor"], "paylocity": ["paylocity"],
-    "dayforce": ["dayforce"], "breezy.hr": ["breezy"], "bamboohr": ["bamboohr"],
-    "workable.com": ["workable"], "ultipro": ["ukg"], "avature.net": ["avature"],
-    "smartrecruiters": ["smartrecruiters"], "recruitee.com": ["recruitee"], "jobvite.com": ["jobvite"],
-    "brassring.com": ["brassring"], "ashbyhq": ["ashby"],
+    "successfactors": ["successfactors"],
+    "lever.co": ["lever"],
+    "myworkdayjobs": ["workday"],
+    "icims.com": ["icims"],
+    "greenhouse.io": ["greenhouse"],
+    "taleo.net": ["taleo", "taleobe"],
+    "phenom": ["phenom"],
+    "teamtailor": ["teamtailor"],
+    "paylocity": ["paylocity"],
+    "dayforce": ["dayforce"],
+    "breezy.hr": ["breezy"],
+    "bamboohr": ["bamboohr"],
+    "workable.com": ["workable"],
+    "ultipro": ["ukg"],
+    "avature.net": ["avature"],
+    "smartrecruiters": ["smartrecruiters"],
+    "recruitee.com": ["recruitee"],
+    "jobvite.com": ["jobvite"],
+    "brassring.com": ["brassring"],
+    "ashbyhq": ["ashby"],
 }
 
 
@@ -98,10 +112,17 @@ async def resolve(entry: dict, providers: list, fetcher: AsyncFetcher) -> dict |
                 raws = await prov.fetch(token, SearchQuery(limit=8), fetcher)
             except Exception:
                 continue
-            if raws and any(name_match(name, str(getattr(r, "company", "") or "")) for r in raws[:5]):
-                return {"company": company_key(name), "ats": prov.name, "token": token,
-                        "domain": entry.get("domain"), "careers_url": entry.get("careers_url"),
-                        "via": "missed-ats-handoff"}
+            if raws and any(
+                name_match(name, str(getattr(r, "company", "") or "")) for r in raws[:5]
+            ):
+                return {
+                    "company": company_key(name),
+                    "ats": prov.name,
+                    "token": token,
+                    "domain": entry.get("domain"),
+                    "careers_url": entry.get("careers_url"),
+                    "via": "missed-ats-handoff",
+                }
     return None
 
 
@@ -113,7 +134,9 @@ async def main() -> None:
     print(f"resolving {len(targets)} missed-ATS boards into candidates...")
 
     results: list[dict | None] = [None] * len(targets)
-    sem = anyio.Semaphore(10)  # cap concurrent boards (the AsyncFetcher caps provider fetches within)
+    sem = anyio.Semaphore(
+        10
+    )  # cap concurrent boards (the AsyncFetcher caps provider fetches within)
     async with AsyncFetcher(timeout=20, retries=1) as f:
 
         async def work(i: int, entry: dict) -> None:
@@ -129,17 +152,26 @@ async def main() -> None:
 
     candidates = [c for c in results if c]
     unresolved = [
-        {"name": e["name"], "domain": e.get("domain"), "detected_ats": e.get("ats"),
-         "careers_url": e.get("careers_url")}
-        for e, c in zip(targets, results, strict=True) if not c
+        {
+            "name": e["name"],
+            "domain": e.get("domain"),
+            "detected_ats": e.get("ats"),
+            "careers_url": e.get("careers_url"),
+        }
+        for e, c in zip(targets, results, strict=True)
+        if not c
     ]
     for c in candidates:
         print(f"  HIT  {c['company'][:34]:36s} {c['ats']}|{c['token']}")
 
     OUT.write_text(json.dumps(candidates, indent=1))
     GAPS.write_text(json.dumps(unresolved, indent=1))
-    print(f"\nresolved {len(candidates)}/{len(targets)} -> {OUT.name} (Stream A: build_registry --dry-run)")
-    print(f"unresolved (ladder needs iframe/JS-host parsing): {len(unresolved)} -> {GAPS.relative_to(ROOT)}")
+    print(
+        f"\nresolved {len(candidates)}/{len(targets)} -> {OUT.name} (Stream A: build_registry --dry-run)"
+    )
+    print(
+        f"unresolved (ladder needs iframe/JS-host parsing): {len(unresolved)} -> {GAPS.relative_to(ROOT)}"
+    )
 
 
 if __name__ == "__main__":

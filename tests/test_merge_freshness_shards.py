@@ -386,9 +386,7 @@ def test_merge_source_stats_is_idempotent_on_rerun(tmp_path):
     mfs.merge_shards([s0], out)  # re-run
     con = sqlite3.connect(str(out))
     try:
-        row = con.execute(
-            "SELECT expired FROM source_stats WHERE source='taleo'"
-        ).fetchone()
+        row = con.execute("SELECT expired FROM source_stats WHERE source='taleo'").fetchone()
         n = con.execute("SELECT COUNT(*) FROM source_stats").fetchone()[0]
     finally:
         con.close()

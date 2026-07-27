@@ -41,7 +41,9 @@ def _find_multi_page_sr_board() -> tuple[str, int] | None:
     for token in _tokens("smartrecruiters", 60):
         url = f"https://api.smartrecruiters.com/v1/companies/{token}/postings"
         try:
-            r = httpx.get(url, params={"limit": _SR_PAGE_LIMIT, "offset": 0}, headers=_H, timeout=15)
+            r = httpx.get(
+                url, params={"limit": _SR_PAGE_LIMIT, "offset": 0}, headers=_H, timeout=15
+            )
         except Exception:
             continue
         if r.status_code != 200:
@@ -58,7 +60,9 @@ def _find_multi_page_icims_new_board() -> tuple[str, int] | None:
         host = token.split("|", 1)[0]
         url = f"https://{host}/api/jobs"
         try:
-            r = httpx.get(url, params={"page": 1, "limit": _ICIMS_PAGE_LIMIT}, headers=_H, timeout=15)
+            r = httpx.get(
+                url, params={"page": 1, "limit": _ICIMS_PAGE_LIMIT}, headers=_H, timeout=15
+            )
         except Exception:
             continue
         if r.status_code != 200:

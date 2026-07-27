@@ -327,8 +327,12 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_APPLY_URL) -> DetailRef:
     return DetailRef(
-        id="x", source="smartrecruiters", token="Visa", apply_url=apply_url,
-        listing_url=None, content_sig="s",
+        id="x",
+        source="smartrecruiters",
+        token="Visa",
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
     )
 
 

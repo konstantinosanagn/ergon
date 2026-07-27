@@ -128,7 +128,9 @@ async def test_fetch_empty_board() -> None:
 
 # --- fetch_detail: 404-vs-transient hardening contract ----------------------
 
-DETAIL_URL = "https://recruiting.ultipro.com/ACME01/JobBoard/g-1/OpportunityDetail?opportunityId=id-0"
+DETAIL_URL = (
+    "https://recruiting.ultipro.com/ACME01/JobBoard/g-1/OpportunityDetail?opportunityId=id-0"
+)
 
 
 class _FakeFetcher:
@@ -159,8 +161,12 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 def _detail_ref(apply_url: str | None = DETAIL_URL) -> DetailRef:
     return DetailRef(
-        id="id-0", source="ukg", token=TOKEN, apply_url=apply_url,
-        listing_url=None, content_sig="s",
+        id="id-0",
+        source="ukg",
+        token=TOKEN,
+        apply_url=apply_url,
+        listing_url=None,
+        content_sig="s",
     )
 
 

@@ -34,7 +34,9 @@ _log = logging.getLogger(__name__)
 _DEF_ACTIVE_DROP_PCT = 5.0  # active_jobs falling > this % vs prev build
 _DEF_SOURCE_DROP_PCT = 30.0  # any tracked source's count falling > this % vs prev build
 _DEF_PCT_POINT_DROP = 3.0  # jd_pct / salary_pct / sector_pct falling > this many POINTS vs prev
-_DEF_JD_PCT_FLOOR = 0.0  # ABSOLUTE jd_pct floor -- trip whenever capture falls below this, even with
+_DEF_JD_PCT_FLOOR = (
+    0.0  # ABSOLUTE jd_pct floor -- trip whenever capture falls below this, even with
+)
 # no prior baseline (catches a slow multi-build bleed the point-delta rule misses). 0 = DISABLED (the
 # floor level is deployment-specific, unlike the relative delta rules); production sets it via the
 # workflow's ERGON_METRICS_JD_PCT_FLOOR (55), while tests keep the default-off so delta cases isolate.
@@ -128,7 +130,9 @@ def _num(value: Any) -> float | None:
     return None
 
 
-def metrics_from_coverage(cov: dict[str, Any], *, top_sources: int = _TOP_SOURCES) -> dict[str, Any]:
+def metrics_from_coverage(
+    cov: dict[str, Any], *, top_sources: int = _TOP_SOURCES
+) -> dict[str, Any]:
     """Reduce a full coverage dict to the compact ``metrics`` baseline block stored in history.jsonl.
 
     Cheap and side-effect-free: it only reads an already-computed coverage dict. ``*_pct`` fields are

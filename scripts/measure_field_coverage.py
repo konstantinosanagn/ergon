@@ -72,7 +72,9 @@ def main() -> int:
             pct = n / tot if tot else 0.0
             print(f"  {label:8} {n:>9,}/{tot:,} = {pct:.1%}")
 
-        print("\nper-source level/salary/degree/years coverage (structured-field-recovery Stage 1):")
+        print(
+            "\nper-source level/salary/degree/years coverage (structured-field-recovery Stage 1):"
+        )
         for src in _TOUCHED_SOURCES:
             _, src_total = _coverage(conn, "1=1", src)
             if src_total == 0:

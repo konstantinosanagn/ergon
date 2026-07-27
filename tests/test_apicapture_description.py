@@ -112,7 +112,9 @@ def test_newly_mapped_specs_populate_description() -> None:
         spec = specs.get(token)
         assert spec is not None, f"{token} missing from apicapture.json"
         got = spec["fields"].get("description")
-        assert got == expected_path, f"{token}: description path drifted ({got!r} != {expected_path!r})"
+        assert got == expected_path, (
+            f"{token}: description path drifted ({got!r} != {expected_path!r})"
+        )
         marker = f"<p>JD-BODY-{token}</p>"
         rec = _record_for(spec, expected_path, marker)
         raw = RawJob(

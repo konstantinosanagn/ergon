@@ -104,8 +104,9 @@ async def _search_page(ats: str, fetcher: AsyncFetcher, token: str, page: int) -
         return []
 
 
-async def harvest(atses: list[str], fetcher: AsyncFetcher, token: str, pages: int,
-                  limit: int) -> list[dict[str, object]]:
+async def harvest(
+    atses: list[str], fetcher: AsyncFetcher, token: str, pages: int, limit: int
+) -> list[dict[str, object]]:
     seed_keys = load_seed_keys()
     candidates: list[dict[str, object]] = []
     global_seen: set[str] = set()

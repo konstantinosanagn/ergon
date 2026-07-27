@@ -58,7 +58,7 @@ _ALIVE_HTML = (
     '<div id="content_inner">'
     '<div id="form_view">'
     "<h2>Requisition Details</h2>"
-    '<table><tr><th>Working Title</th><td>Research Technician</td></tr>'
+    "<table><tr><th>Working Title</th><td>Research Technician</td></tr>"
     "<tr><th>Location</th><td>Omaha, NE</td></tr></table>"
     '<button class="apply">Apply</button>'
     "<p>Position Summary: You will run assays and maintain the lab.</p>"
@@ -95,9 +95,13 @@ def test_peopleadmin_alive_returns_detailfetch_with_location() -> None:
 
 
 def test_peopleadmin_alive_without_location_returns_bare_str() -> None:
-    html = '<html><body><div id="form_view"><p>Just a body, no location table.</p></div></body></html>'
+    html = (
+        '<html><body><div id="form_view"><p>Just a body, no location table.</p></div></body></html>'
+    )
     res = anyio.run(
-        lambda: PeopleAdminProvider().fetch_detail(_ref(), _FakeFetcher(_FakeResponse(200, text=html)))
+        lambda: PeopleAdminProvider().fetch_detail(
+            _ref(), _FakeFetcher(_FakeResponse(200, text=html))
+        )
     )
     assert res == "Just a body, no location table."
 
@@ -138,7 +142,9 @@ def test_peopleadmin_302_elsewhere_raises() -> None:
 def test_peopleadmin_auto_followed_redirect_to_root_returns_none() -> None:
     # Fetcher auto-followed the gone-redirect: 200 on the /postings root with no body -> GONE.
     resp = _FakeResponse(
-        200, text="<html><body><h1>Search</h1></body></html>", url="https://unmc.peopleadmin.com/postings"
+        200,
+        text="<html><body><h1>Search</h1></body></html>",
+        url="https://unmc.peopleadmin.com/postings",
     )
     res = anyio.run(lambda: PeopleAdminProvider().fetch_detail(_ref(), _FakeFetcher(resp)))
     assert res is None

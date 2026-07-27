@@ -100,9 +100,7 @@ def test_swept_coverage_matches_live_firing_rate(tmp_path) -> None:
     coverage. If someone reverts the trainer to sweep plain softmax (the bug), the two diverge and
     this fails.
     """
-    train = pytest.importorskip(
-        "scripts.train_sector_classifier", reason="run from repo root"
-    )
+    train = pytest.importorskip("scripts.train_sector_classifier", reason="run from repo root")
 
     rng = np.random.default_rng(7)
     embed_dim, n, k = 6, 120, 3
@@ -124,13 +122,14 @@ def test_swept_coverage_matches_live_firing_rate(tmp_path) -> None:
     flip = rng.random(n) < 0.3
     y_idx = np.where(flip, (y_idx + 1) % k, y_idx).astype(int)
     centroids = np.vstack(
-        [feats[y_idx == c].mean(axis=0) if (y_idx == c).any() else np.zeros(feat_dim) for c in range(k)]
+        [
+            feats[y_idx == c].mean(axis=0) if (y_idx == c).any() else np.zeros(feat_dim)
+            for c in range(k)
+        ]
     ).astype(np.float32)
 
     # Sweep on the SAME transform inference serves (probs == platt_normalize(logits, ...)).
-    tp, tm, ts, rep = train.sweep_thresholds(
-        probs, feats, centroids, y_idx, target_precision=0.75
-    )
+    tp, tm, ts, rep = train.sweep_thresholds(probs, feats, centroids, y_idx, target_precision=0.75)
     assert 0.0 < rep["coverage"] < 1.0  # a meaningful partial-coverage operating point
 
     p = tmp_path / "cal.npz"

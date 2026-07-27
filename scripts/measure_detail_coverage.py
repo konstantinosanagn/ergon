@@ -58,9 +58,7 @@ def measure(con: sqlite3.Connection, sources: Sequence[str]) -> list[SourceCover
     every field (never divides by zero)."""
     results: list[SourceCoverage] = []
     for source in sources:
-        total_row = con.execute(
-            "SELECT COUNT(*) FROM jobs WHERE source = ?", (source,)
-        ).fetchone()
+        total_row = con.execute("SELECT COUNT(*) FROM jobs WHERE source = ?", (source,)).fetchone()
         total = int(total_row[0]) if total_row else 0
         if total == 0:
             results.append(SourceCoverage(source, 0, {name: 0 for name, _ in _FIELDS}))

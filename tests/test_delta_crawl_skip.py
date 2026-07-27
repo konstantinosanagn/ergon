@@ -149,8 +149,9 @@ def test_delta_skip_matches_full_crawl(monkeypatch, tmp_path):
     out_full, full_keys = _crawl(s_full, full_fresh, prov, "today")
     assert prov.fetch_calls == 1 and out_full["greenhouse|acme"]["not_modified"] is False
     full_db = tmp_path / "full" / "index.sqlite"
-    build_index_from_fresh_db(full_fresh, full_db, build_id="today", prev_db=prior_db,
-                              crawled_keys=full_keys)
+    build_index_from_fresh_db(
+        full_fresh, full_db, build_id="today", prev_db=prior_db, crawled_keys=full_keys
+    )
 
     # --- DELTA path "today": flag on, matching sidecar + stamped fingerprint => board SKIPPED. ---
     monkeypatch.setenv("ERGON_DELTA_CRAWL", "1")
@@ -167,8 +168,9 @@ def test_delta_skip_matches_full_crawl(monkeypatch, tmp_path):
     assert out_delta["greenhouse|acme"]["not_modified"] is True
     assert delta_keys == set()
     delta_db = tmp_path / "delta" / "index.sqlite"
-    build_index_from_fresh_db(delta_fresh, delta_db, build_id="today", prev_db=prior_db,
-                              crawled_keys=delta_keys)
+    build_index_from_fresh_db(
+        delta_fresh, delta_db, build_id="today", prev_db=prior_db, crawled_keys=delta_keys
+    )
 
     # --- PARITY: every data/identity column is byte-identical between the two builds. ---
     cols_full, rows_full = _stable_rows(full_db)

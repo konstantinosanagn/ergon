@@ -56,16 +56,36 @@ _API = "https://api.tavily.com/search"
 # hosts (icims/bamboohr/recruitee/personio/teamtailor) were added to open the lane where many
 # Fortune-500/large-caps actually live — the 8-host set missed them entirely.
 HOSTS = [
-    "boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com", "apply.workable.com",
-    "careers.smartrecruiters.com", "ats.rippling.com", "myworkdayjobs.com", "eightfold.ai",
-    "icims.com", "bamboohr.com", "recruitee.com", "teamtailor.com",
-    "jobs.personio.com", "jobs.personio.de",
+    "boards.greenhouse.io",
+    "jobs.lever.co",
+    "jobs.ashbyhq.com",
+    "apply.workable.com",
+    "careers.smartrecruiters.com",
+    "ats.rippling.com",
+    "myworkdayjobs.com",
+    "eightfold.ai",
+    "icims.com",
+    "bamboohr.com",
+    "recruitee.com",
+    "teamtailor.com",
+    "jobs.personio.com",
+    "jobs.personio.de",
 ]
 _EIGHTFOLD_RE = re.compile(r"([a-z0-9][a-z0-9-]*)\.eightfold\.ai", re.IGNORECASE)
 # Extractors for the path/subdomain ATSes (reused from the CC harvester) whose token == a clean
 # company slug — adjudication works on these even without a display name.
-_EXTRACT_ATSES = ("greenhouse", "lever", "ashby", "workable", "smartrecruiters", "rippling",
-                  "pinpoint", "bamboohr", "recruitee", "teamtailor")
+_EXTRACT_ATSES = (
+    "greenhouse",
+    "lever",
+    "ashby",
+    "workable",
+    "smartrecruiters",
+    "rippling",
+    "pinpoint",
+    "bamboohr",
+    "recruitee",
+    "teamtailor",
+)
 # ATSes resolved via the provider's own matches() (no CC extractor). Each carries a required
 # token marker because some matchers are greedy: ICIMSProvider.matches() claims non-iCIMS career
 # paths (e.g. www.nestleusa.com), so we only accept tokens on a real .icims.com host. (personio's
@@ -107,7 +127,9 @@ def board_of(url: str) -> tuple[str, str] | None:
 # --- adjudication (pure; unit-tested) ---------------------------------------------------------
 
 
-def adjudicate(sponsor: str, ats: str, token: str, board_company: str, live: bool) -> tuple[bool, str]:
+def adjudicate(
+    sponsor: str, ats: str, token: str, board_company: str, live: bool
+) -> tuple[bool, str]:
     """Decide whether ``(ats, token)`` truly belongs to ``sponsor``. Returns (accept, reason).
 
     ``board_company`` is the board's displayed company name (use "" for Workday / unknown).
@@ -156,8 +178,14 @@ def to_candidate(ats: str, token: str) -> dict[str, object]:
     """Build a build_registry candidate (workday split into tenant|wd|site)."""
     if ats == "workday":
         tenant, wd, site = token.split("|")
-        return {"company": tenant, "ats": "workday", "tenant": tenant, "wd": wd, "site": site,
-                "domain": None}
+        return {
+            "company": tenant,
+            "ats": "workday",
+            "tenant": tenant,
+            "wd": wd,
+            "site": site,
+            "domain": None,
+        }
     return {"company": token, "ats": ats, "token": token, "domain": None}
 
 
@@ -180,7 +208,7 @@ async def search_candidates(sponsors: list[dict], key: str) -> list[tuple[dict, 
         except Exception:  # noqa: BLE001
             return
         seen: set[tuple[str, str]] = set()
-        for r in (data.get("results", []) if isinstance(data, dict) else []):
+        for r in data.get("results", []) if isinstance(data, dict) else []:
             b = board_of(r.get("url", ""))
             if b and b not in seen:
                 seen.add(b)
@@ -195,9 +223,9 @@ async def search_candidates(sponsors: list[dict], key: str) -> list[tuple[dict, 
     return out
 
 
-async def fetch_and_judge(triples: list[tuple[dict, str, str]], seed_keys: set[str]) -> tuple[
-    list[dict], list[dict]
-]:
+async def fetch_and_judge(
+    triples: list[tuple[dict, str, str]], seed_keys: set[str]
+) -> tuple[list[dict], list[dict]]:
     """Fetch each candidate board and adjudicate; return (accepted_candidates, decision_log)."""
     load_builtins()
     decisions: dict[int, dict] = {}
@@ -213,13 +241,24 @@ async def fetch_and_judge(triples: list[tuple[dict, str, str]], seed_keys: set[s
                 if live and ats != "workday":
                     board_co = raws[0].company or ""
             except Exception as exc:  # noqa: BLE001
-                decisions[i] = {"sponsor": sponsor["name"], "ats": ats, "token": token,
-                                "accept": False, "reason": f"fetch error {type(exc).__name__}"}
+                decisions[i] = {
+                    "sponsor": sponsor["name"],
+                    "ats": ats,
+                    "token": token,
+                    "accept": False,
+                    "reason": f"fetch error {type(exc).__name__}",
+                }
                 return
         accept, reason = adjudicate(sponsor["name"], ats, token, board_co, live)
-        decisions[i] = {"sponsor": sponsor["name"], "filings": sponsor.get("filings"),
-                        "ats": ats, "token": token, "board_company": board_co,
-                        "accept": accept, "reason": reason}
+        decisions[i] = {
+            "sponsor": sponsor["name"],
+            "filings": sponsor.get("filings"),
+            "ats": ats,
+            "token": token,
+            "board_company": board_co,
+            "accept": accept,
+            "reason": reason,
+        }
 
     async with (
         AsyncFetcher(concurrency=12, per_host_rate=8, timeout=30.0) as fetcher,

@@ -43,32 +43,70 @@ GAP = ROOT / "runs" / "h1b_coverage_gap.json"
 DEFAULT_OUT = ROOT / "runs" / "gap_ats_census.json"
 _API = "https://api.tavily.com/search"
 _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-EXCLUDE = ["linkedin.com", "indeed.com", "ziprecruiter.com", "glassdoor.com", "wikipedia.org",
-           "levels.fyi", "builtin.com", "simplyhired.com", "monster.com", "dice.com"]
+EXCLUDE = [
+    "linkedin.com",
+    "indeed.com",
+    "ziprecruiter.com",
+    "glassdoor.com",
+    "wikipedia.org",
+    "levels.fyi",
+    "builtin.com",
+    "simplyhired.com",
+    "monster.com",
+    "dice.com",
+]
 
 # (signature substring, ats, supported?). Supported entries first -> preferred on ties.
 SIGNATURES: list[tuple[str, str, bool]] = [
-    ("boards.greenhouse.io", "greenhouse", True), ("grnh.se", "greenhouse", True),
-    ("jobs.lever.co", "lever", True), ("jobs.ashbyhq.com", "ashby", True),
-    ("myworkdayjobs.com", "workday", True), ("workdayjobs.com", "workday", True),
-    ("apply.workable.com", "workable", True), ("smartrecruiters.com", "smartrecruiters", True),
-    ("ats.rippling.com", "rippling", True), ("pinpointhq.com", "pinpoint", True),
-    ("bamboohr.com", "bamboohr", True), ("breezy.hr", "breezy", True),
-    ("teamtailor.com", "teamtailor", True), ("recruitee.com", "recruitee", True),
-    ("icims.com", "icims", False), ("taleo.net", "taleo", False),
-    ("successfactors", "successfactors", False), ("sapsf", "successfactors", False),
-    ("eightfold.ai", "eightfold", False), ("jobvite.com", "jobvite", False),
-    ("phenompeople", "phenom", False), ("avature.net", "avature", False),
-    ("applytojob.com", "jazzhr", False), ("oraclecloud.com", "oracle", False),
-    ("/hcmui/", "oracle", False), ("dayforcehcm", "dayforce", False),
-    ("ultipro", "ukg", False), ("paylocity", "paylocity", False),
-    ("workforcenow", "adp", False), ("brassring", "brassring", False),
+    ("boards.greenhouse.io", "greenhouse", True),
+    ("grnh.se", "greenhouse", True),
+    ("jobs.lever.co", "lever", True),
+    ("jobs.ashbyhq.com", "ashby", True),
+    ("myworkdayjobs.com", "workday", True),
+    ("workdayjobs.com", "workday", True),
+    ("apply.workable.com", "workable", True),
+    ("smartrecruiters.com", "smartrecruiters", True),
+    ("ats.rippling.com", "rippling", True),
+    ("pinpointhq.com", "pinpoint", True),
+    ("bamboohr.com", "bamboohr", True),
+    ("breezy.hr", "breezy", True),
+    ("teamtailor.com", "teamtailor", True),
+    ("recruitee.com", "recruitee", True),
+    ("icims.com", "icims", False),
+    ("taleo.net", "taleo", False),
+    ("successfactors", "successfactors", False),
+    ("sapsf", "successfactors", False),
+    ("eightfold.ai", "eightfold", False),
+    ("jobvite.com", "jobvite", False),
+    ("phenompeople", "phenom", False),
+    ("avature.net", "avature", False),
+    ("applytojob.com", "jazzhr", False),
+    ("oraclecloud.com", "oracle", False),
+    ("/hcmui/", "oracle", False),
+    ("dayforcehcm", "dayforce", False),
+    ("ultipro", "ukg", False),
+    ("paylocity", "paylocity", False),
+    ("workforcenow", "adp", False),
+    ("brassring", "brassring", False),
 ]
 # Shared-tenant ATS hosts to pin L1 search to (the board lives on the vendor host).
-SEARCH_HOSTS = ["boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com", "apply.workable.com",
-                "smartrecruiters.com", "myworkdayjobs.com", "ats.rippling.com", "icims.com",
-                "taleo.net", "successfactors.com", "jobvite.com", "eightfold.ai", "avature.net",
-                "applytojob.com", "oraclecloud.com"]
+SEARCH_HOSTS = [
+    "boards.greenhouse.io",
+    "jobs.lever.co",
+    "jobs.ashbyhq.com",
+    "apply.workable.com",
+    "smartrecruiters.com",
+    "myworkdayjobs.com",
+    "ats.rippling.com",
+    "icims.com",
+    "taleo.net",
+    "successfactors.com",
+    "jobvite.com",
+    "eightfold.ai",
+    "avature.net",
+    "applytojob.com",
+    "oraclecloud.com",
+]
 SUPPORTED = {a for _, a, s in SIGNATURES if s}
 
 
@@ -101,7 +139,7 @@ async def layer1_host_search(sponsor: str, key: str, fetcher: AsyncFetcher) -> s
         data = await fetcher.post_json(_API, json=body, headers={"Authorization": f"Bearer {key}"})
     except Exception:  # noqa: BLE001
         return None
-    for x in (data.get("results", []) if isinstance(data, dict) else []):
+    for x in data.get("results", []) if isinstance(data, dict) else []:
         url = x.get("url", "")
         hit = detect_ats(url)
         if hit and name_in_url(sponsor, url):
@@ -243,8 +281,15 @@ async def main() -> None:
     ranked = sorted(n_filings.items(), key=lambda kv: -kv[1])
     report = {
         "scope": f"top {len(sponsors)} uncovered sponsors by filing volume",
-        "by_ats": [{"ats": a, "supported": a in SUPPORTED, "sponsors": n_sponsors[a],
-                    "filings": n_filings[a]} for a, _ in ranked],
+        "by_ats": [
+            {
+                "ats": a,
+                "supported": a in SUPPORTED,
+                "sponsors": n_sponsors[a],
+                "filings": n_filings[a],
+            }
+            for a, _ in ranked
+        ],
         "per_sponsor": per_sponsor,
     }
     out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")

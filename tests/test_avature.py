@@ -283,7 +283,7 @@ async def test_data_endpoint_full_board() -> None:
 
 DETAIL_URL = f"https://{HOST}/{PORTAL}/JobDetail/Some-Slug/20316"
 _GONE_403_BODY = (
-    '<html><body><section><div><h2>An error has occurred</h2></div>'
+    "<html><body><section><div><h2>An error has occurred</h2></div>"
     '<div class="section__content"><article class="article"><div class="article__content">'
     '<p class="paragraph">Page not found</p></div></article></div></section></body></html>'
 )

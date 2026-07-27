@@ -211,9 +211,7 @@ def test_phenom_genuine_phenom_no_derivable_seq_raises() -> None:
 
 def test_phenom_native_direct_200_returns_jd_text() -> None:
     # Bare /job/{seq} resolves directly (no locale-prefix redirect quirk on this tenant).
-    fetcher = _FakeFetcher(
-        request_response=_FakeResponse(200, text=_jsonld_html("Native JD text"))
-    )
+    fetcher = _FakeFetcher(request_response=_FakeResponse(200, text=_jsonld_html("Native JD text")))
     ref = DetailRef(
         id="11",
         source="phenom",

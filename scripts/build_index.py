@@ -843,7 +843,9 @@ def _write_jd_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> No
     )
 
 
-def build_and_publish_jd(db_path: Path, jd_db: Path, out: Path, *, build_id: str) -> tuple[dict, int]:
+def build_and_publish_jd(
+    db_path: Path, jd_db: Path, out: Path, *, build_id: str
+) -> tuple[dict, int]:
     """Prune the crawl-populated full-JD sidecar to the just-published core index's live ids, then
     gzip-publish ``index-jd.sqlite.gz`` + ``manifest-jd.json`` (Item 2). Called AFTER ``_gated_publish``
     promoted the core index, on the ``ok`` path only, so the sidecar never ships out of sync with an
@@ -1548,9 +1550,7 @@ async def _crawl_due(
                 # ``idset_hash({source_job_id})``. Same helper + same provider (get_provider) + same
                 # flag the sweep uses, so the stamp and the sweep hash agree by construction.
                 state.idset_hash = idset_hash(
-                    content_fingerprint_ids(
-                        raws, provider, fold_version=content_version_on
-                    )
+                    content_fingerprint_ids(raws, provider, fold_version=content_version_on)
                 )
             # Sub-phase C (enrich-reuse): for a crawled DELTA board, load THIS board's prior
             # enriched rows keyed by id so an unchanged posting (matching enrich_hash) can copy its
@@ -1610,9 +1610,7 @@ async def _crawl_due(
 
                         write_fresh_rich(con, board_jobs)
                     if jd_con is not None:  # full JD text (Item 2): one batched upsert per board
-                        jd_store.put_many(
-                            jd_con, ((j.id, full_jd_text(j)) for j in board_jobs)
-                        )
+                        jd_store.put_many(jd_con, ((j.id, full_jd_text(j)) for j in board_jobs))
                     pending["rows"] += len(board_jobs)
                     rows_total["n"] += len(board_jobs)
                     if pending["rows"] >= 20000:
@@ -1681,9 +1679,7 @@ async def _crawl_due(
     crawl_deadline_s = float(os.environ.get("ERGON_CRAWL_DEADLINE_S") or "0")
     crawl_deadline = (time.monotonic() + crawl_deadline_s) if crawl_deadline_s > 0 else None
     try:
-        async with AsyncFetcher(
-            timeout=12.0, retries=2, concurrency=crawl_concurrency
-        ) as fetcher:
+        async with AsyncFetcher(timeout=12.0, retries=2, concurrency=crawl_concurrency) as fetcher:
             # Bounded worker pool over the interleaved board queue: O(workers) memory + coroutines
             # regardless of window size (the old start_soon-per-board fan-out was O(window)), same
             # downstream limiters, one board raising never sinks a sibling (grab already isolates
@@ -1843,7 +1839,9 @@ def _union_fresh_shards(out: Path, dest: Path, num_shards: int) -> int:
     con = connect(dest)
     merged = 0
     try:
-        con.execute("PRAGMA foreign_keys = OFF")  # companies aggregated later (build_index_from_fresh_db)
+        con.execute(
+            "PRAGMA foreign_keys = OFF"
+        )  # companies aggregated later (build_index_from_fresh_db)
         cols = ",".join(_JOB_COLS)
         for i in range(num_shards):
             part = out / f"fresh-shard-{i}.sqlite"
@@ -1929,7 +1927,9 @@ def _run_crawl_map(
     state_path = out / "board_state.json"
     cursor_path = out / _cursor_filename(only_sources)
     states = load_state(state_path)
-    base_keys = set(states)  # boards this shard did NOT introduce (to isolate its never-seen additions)
+    base_keys = set(
+        states
+    )  # boards this shard did NOT introduce (to isolate its never-seen additions)
     cursor = _load_cursor(cursor_path)
     prev_db = db if db.exists() else None
     fresh_path = out / f"fresh-shard-{shard}.sqlite"
@@ -2046,8 +2046,12 @@ def main(argv: list[str]) -> None:
     network_pages = 0  # 0 disables the workable_network bulk feed; >0 = pages to pull
     detail_shard_only = False  # drain-matrix mode: sharded reconcile only, no crawl/build/merge
     embed_shard_only = False  # embed-matrix mode: sharded vector embed only, no crawl/build
-    crawl_map = False  # R3 crawl-matrix MAP mode: crawl this shard's slice -> partial fresh DB + deltas
-    crawl_reduce = False  # R3 REDUCE mode: union the K partials -> today's build/publish tail verbatim
+    crawl_map = (
+        False  # R3 crawl-matrix MAP mode: crawl this shard's slice -> partial fresh DB + deltas
+    )
+    crawl_reduce = (
+        False  # R3 REDUCE mode: union the K partials -> today's build/publish tail verbatim
+    )
     shard: int | None = None
     num_shards: int | None = None
     i = 0

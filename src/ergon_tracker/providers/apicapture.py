@@ -504,9 +504,7 @@ def _relay_value_text(val: Any) -> str | None:
     """Flatten one Relay JSON value to text: a ``[{"item": ...}]`` bullet list, a plain string, or
     a ``{"__html": "<p>…"}``-wrapped HTML string (Meta wraps its description that way)."""
     if isinstance(val, list):
-        items = [
-            _strip_html(str(it.get("item") or "")) for it in val if isinstance(it, dict)
-        ]
+        items = [_strip_html(str(it.get("item") or "")) for it in val if isinstance(it, dict)]
         return " ".join(p for p in items if p).strip() or None
     if isinstance(val, str):
         s = val.strip()
@@ -790,7 +788,10 @@ def _salary_from_relay_container(resp_text: str, cfg: dict[str, Any]) -> Salary 
             interval = _SAL_INTERVALS[m.group(1).lower()]
             break
     return Salary(
-        min_amount=lo, max_amount=hi, currency=_norm_currency(cfg.get("currency")), interval=interval
+        min_amount=lo,
+        max_amount=hi,
+        currency=_norm_currency(cfg.get("currency")),
+        interval=interval,
     )
 
 
@@ -852,9 +853,7 @@ async def _tls_request(req: _DetailReq) -> _DetailResp:
             req.url, json=req.json_body, headers=req.headers, allow_redirects=req.follow_redirects
         )
     else:
-        r = await session.get(
-            req.url, headers=req.headers, allow_redirects=req.follow_redirects
-        )
+        r = await session.get(req.url, headers=req.headers, allow_redirects=req.follow_redirects)
     return _resp_of(r)
 
 

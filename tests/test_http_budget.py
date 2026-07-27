@@ -115,9 +115,7 @@ async def test_raising_global_cap_never_breaches_per_host_cap() -> None:
     transport, _live, peak = _tracking_transport()
     # per_host_rate huge so the token bucket is NOT the binding constraint -- the per-host
     # in-flight semaphore is what must hold the line.
-    async with _fetcher(
-        transport, concurrency=200, per_host_rate=100_000
-    ) as f:
+    async with _fetcher(transport, concurrency=200, per_host_rate=100_000) as f:
         assert f.global_concurrency == 200
         await _fire(f, [f"https://api.singlehost.test/{i}" for i in range(120)])
 
@@ -144,9 +142,7 @@ async def test_global_cap_permits_more_total_than_per_host_across_hosts() -> Non
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     async with AsyncFetcher(client=client, concurrency=200, per_host_rate=100_000) as f:
-        urls = [
-            f"https://host{h}.test/{i}" for h in range(6) for i in range(20)
-        ]
+        urls = [f"https://host{h}.test/{i}" for h in range(6) for i in range(20)]
         await _fire(f, urls)
 
     # Every individual host stayed within the per-host cap...

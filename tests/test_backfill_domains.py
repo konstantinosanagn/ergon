@@ -30,7 +30,9 @@ spec.loader.exec_module(bf)
 
 
 # --- fixtures / helpers ------------------------------------------------------------------------
-def make_index(path: Path, *, jobs: list[tuple[str, str]], companies: list[tuple[str, int]]) -> None:
+def make_index(
+    path: Path, *, jobs: list[tuple[str, str]], companies: list[tuple[str, int]]
+) -> None:
     """Write a minimal index sqlite: ``jobs(company_key, company_domain)`` and
     ``companies(company_key, open_roles)`` — the only columns the backfill reads."""
     con = sqlite3.connect(path)
@@ -158,7 +160,9 @@ def test_collision_tiebreak_is_lexicographic(tmp_path, monkeypatch) -> None:
     assert data["zzz-co"]["domain"] is None
 
 
-def test_idempotent_second_run_adds_zero_and_byte_identical(tmp_path, monkeypatch, empty_index) -> None:
+def test_idempotent_second_run_adds_zero_and_byte_identical(
+    tmp_path, monkeypatch, empty_index
+) -> None:
     seed = tmp_path / "seed.json"
     make_seed(
         seed,
@@ -204,7 +208,8 @@ def test_format_round_trip_loads_and_resolves(tmp_path, monkeypatch, empty_index
 
     seed = tmp_path / "seed.json"
     make_seed(
-        seed, {"netapp": {"ats": "successfactors", "token": "jobs.netapp.com|netapp", "domain": None}}
+        seed,
+        {"netapp": {"ats": "successfactors", "token": "jobs.netapp.com|netapp", "domain": None}},
     )
     run(monkeypatch, seed, empty_index)
 

@@ -58,8 +58,13 @@ class _Provider:
 
     async def fetch(self, token, query, fetcher):
         return [
-            RawJob(source="greenhouse", source_job_id=i, company="Acme Corp", token=token,
-                   payload={"body": b, "title": _TITLES[i]})
+            RawJob(
+                source="greenhouse",
+                source_job_id=i,
+                company="Acme Corp",
+                token=token,
+                payload={"body": b, "title": _TITLES[i]},
+            )
             for i, b in _BODIES[self.mode].items()
         ]
 
@@ -67,8 +72,11 @@ class _Provider:
         # level set explicitly (not UNKNOWN) so enrich never changes content_hash -> an unchanged
         # posting's enrich_hash is stable and the reuse path can fire.
         return JobPosting.create(
-            source="greenhouse", source_job_id=raw.source_job_id, company="Acme Corp",
-            title=raw.payload["title"], level=JobLevel.SENIOR,
+            source="greenhouse",
+            source_job_id=raw.source_job_id,
+            company="Acme Corp",
+            title=raw.payload["title"],
+            level=JobLevel.SENIOR,
             description_text=raw.payload["body"],
         )
 
@@ -187,7 +195,10 @@ class _InferLevelProvider:
     async def fetch(self, token, query, fetcher):
         return [
             RawJob(
-                source="greenhouse", source_job_id="7", company="Acme Corp", token=token,
+                source="greenhouse",
+                source_job_id="7",
+                company="Acme Corp",
+                token=token,
                 payload={"body": "Requires 9+ years of experience.", "title": "Engineer"},
             )
         ]
@@ -196,8 +207,11 @@ class _InferLevelProvider:
         # NOTE: level deliberately left UNKNOWN -> enrich_in_place infers it (level_from_years),
         # mutating content_hash. The stored enrich_hash MUST be the pre-enrich value for reuse to fire.
         return JobPosting.create(
-            source="greenhouse", source_job_id=raw.source_job_id, company="Acme Corp",
-            title=raw.payload["title"], description_text=raw.payload["body"],
+            source="greenhouse",
+            source_job_id=raw.source_job_id,
+            company="Acme Corp",
+            title=raw.payload["title"],
+            description_text=raw.payload["body"],
         )
 
 

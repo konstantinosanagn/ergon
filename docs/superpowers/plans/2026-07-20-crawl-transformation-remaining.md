@@ -28,13 +28,22 @@ evidence-first, gate-hard discipline: measure/verify before claiming, ship behin
 5. Rollback: the flag is one line — flip off → next build reverts to full crawl.
 **Verify:** delta index ≡ full on real boards; row-floor green; run well under 330 min.
 
-## Plan 2 — Lift the enrich-reuse hit-rate
+## Plan 2 — Lift the enrich-reuse hit-rate  ✅ SHIPPED 2026-07-20 (merge 1a2dc89)
 **Goal:** close the review-flagged gap (`enrich_hash` computed pre-enrich vs stored post-enrich →
 enrichment-derived fields always miss reuse; safe but low-rate).
-**Approach:** store a PRE-enrich fingerprint column (hash of the normalized inputs enrichment consumes,
-computed before `enrich_in_place`) and key reuse on it.
-**Gate:** delta-vs-full parity still byte-identical; measure hit-rate before/after on real boards.
-**Dependency:** AFTER Plan 1 step-3 measurement — don't optimize blind.
+**Root cause (proven, not guessed):** `content_hash` reads `job.level`+`job.salary`; `enrich_in_place`
+MUTATES both (level inferred, salary parsed). Stored `enrich_hash` was post-enrich; the reuse path
+compares it to the freshly-crawled job's *pre*-enrich hash → every enrich-derived-field posting was a
+GUARANTEED miss, re-enriched daily even when byte-identical.
+**Shipped:** a transient `JobPosting._enrich_input_hash` PrivateAttr (not serialized/user-facing),
+stamped on the raw normalized job BEFORE enrich; `to_row` persists it into the existing `enrich_hash`
+column (NO schema bump — that column's sole reader is the reuse path). Reuse now compares
+pre-vs-pre. Fully fail-safe: unstamped paths fall back to the post-enrich hash → miss+re-enrich, never
+stale. Real-index measure (live 1.47M rows): 24.4% inferred-level + 27.6% salary = **44.1% union were
+pre-fix guaranteed misses** → honest lift ~24–44% of an unchanged board's postings flip miss→hit.
+**Gate met:** new inferred-level parity+reuse test (verified FAIL on old / PASS on new, rows
+byte-identical); full suite 2412 passed, ruff/mypy clean. Exact cron hit-rate confirms as the delta
+ramp fills.
 
 ## Plan 3 — board_token coverage push  (task #40)  [STARTING NOW]
 **Goal:** raise freshness board coverage past registry-exact 71.5%.

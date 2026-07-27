@@ -78,7 +78,9 @@ async def test_pool_benchmark_greenhouse_vs_join() -> None:
         wall = time.monotonic() - t0
 
     print("\n--- crawl_pool live benchmark ---")
-    print(f"boards={len(boards)} wall={wall:.1f}s processed={stats.processed} failed={stats.failed}")
+    print(
+        f"boards={len(boards)} wall={wall:.1f}s processed={stats.processed} failed={stats.failed}"
+    )
     for src in ("greenhouse", "join"):
         n = per_source_count[src]
         secs = per_source_time[src]

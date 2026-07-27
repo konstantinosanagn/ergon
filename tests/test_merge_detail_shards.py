@@ -181,7 +181,9 @@ def test_partial_shard_set_without_base_drops_missing_shard_rows(tmp_path):
     """Reproduces the destructive-combine bug: a shard that timed out never uploaded, so the
     fresh-empty combine publishes ONLY the finished shard's rows and (via the drain's --clobber)
     permanently deletes the missing shard's previously-drained rows -> with_jd cliff."""
-    s0 = _mk_shard(tmp_path, "index-detail-shard-0.sqlite", [{"id": "A", "sig": "sA", "snippet": "JD-A"}])
+    s0 = _mk_shard(
+        tmp_path, "index-detail-shard-0.sqlite", [{"id": "A", "sig": "sA", "snippet": "JD-A"}]
+    )
     # shard 1 (row B) "timed out" and never uploaded -> absent from the merge input.
     out = tmp_path / "combined.sqlite"
     mds.merge_shards([s0], out)  # legacy fresh-empty combine, no base
@@ -213,4 +215,7 @@ def test_partial_shard_set_with_base_preserves_missing_shard_rows(tmp_path):
     con = open_detail(str(out))
     got = dict(con.execute("SELECT id, snippet FROM job_detail ORDER BY id").fetchall())
     con.close()
-    assert got == {"A": "JD-A-new", "B": "JD-B"}  # A refreshed from the shard, B PRESERVED from base
+    assert got == {
+        "A": "JD-A-new",
+        "B": "JD-B",
+    }  # A refreshed from the shard, B PRESERVED from base

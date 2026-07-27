@@ -125,16 +125,22 @@ def test_lever_fetch_detail_non_dict_payload_raises() -> None:
 
 def test_lever_fetch_detail_empty_description_raises() -> None:
     with pytest.raises(RuntimeError):
-        anyio.run(lambda: LeverProvider().fetch_detail(_ref(), _FakeFetcher({"descriptionPlain": "  "})))
+        anyio.run(
+            lambda: LeverProvider().fetch_detail(_ref(), _FakeFetcher({"descriptionPlain": "  "}))
+        )
 
 
 def test_lever_fetch_detail_missing_description_raises() -> None:
     with pytest.raises(RuntimeError):
-        anyio.run(lambda: LeverProvider().fetch_detail(_ref(), _FakeFetcher({"text": "title only"})))
+        anyio.run(
+            lambda: LeverProvider().fetch_detail(_ref(), _FakeFetcher({"text": "title only"}))
+        )
 
 
 def test_lever_fetch_detail_unbuildable_ref_raises() -> None:
     # No token AND no lever-shaped URL -> unbuildable (indeterminate), never a death signal.
     ref = _ref(token=None, apply_url="https://example.com/not-lever")
     with pytest.raises(RuntimeError):
-        anyio.run(lambda: LeverProvider().fetch_detail(ref, _FakeFetcher({"descriptionPlain": "x"})))
+        anyio.run(
+            lambda: LeverProvider().fetch_detail(ref, _FakeFetcher({"descriptionPlain": "x"}))
+        )

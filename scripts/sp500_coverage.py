@@ -5,6 +5,7 @@ cron). Reads runs/sp500.json (constituents; refresh from the datahub CSV). Fuzzy
 to reconcile brand-vs-legal names (Alphabet->google, RTX->raytheon, AMD, UPS, etc.).
 Usage: .venv/bin/python scripts/sp500_coverage.py
 """
+
 import json
 import re
 import unicodedata
@@ -13,24 +14,43 @@ from pathlib import Path
 from rapidfuzz import fuzz, process
 
 ROOT = Path(__file__).resolve().parents[1]
-seed = json.loads((ROOT/"src/ergon_tracker/registry/data/seed.json").read_text())["companies"]
-sp = json.loads((ROOT/"runs/sp500.json").read_text())
+seed = json.loads((ROOT / "src/ergon_tracker/registry/data/seed.json").read_text())["companies"]
+sp = json.loads((ROOT / "runs/sp500.json").read_text())
+
 
 def strip(s):
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
 def norm(name):
     n = re.sub(r"\(.*?\)", "", name.lower()).replace("&", "and")
-    n = re.sub(r"\b(inc|corp|corporation|co|company|companies|holdings|group|the|plc|ltd|llc|sa|nv|"
-               r"incorporated|enterprise|technologies|technology|systems|industries|international|"
-               r"financial|services|pharmaceuticals|laboratories|brands|beverage|stores)\b", "", n)
+    n = re.sub(
+        r"\b(inc|corp|corporation|co|company|companies|holdings|group|the|plc|ltd|llc|sa|nv|"
+        r"incorporated|enterprise|technologies|technology|systems|industries|international|"
+        r"financial|services|pharmaceuticals|laboratories|brands|beverage|stores)\b",
+        "",
+        n,
+    )
     return strip(n)
 
+
 nkeys = {strip(k): k for k in seed}
-ALIAS = {"alphabet": "google", "metaplatforms": "meta", "jpmorganchase": "jpmorgan", "rtx": "raytheon",
-         "advancedmicrodevices": "amd", "unitedparcelservice": "ups", "usbancorp": "usbank",
-         "lillyeli": "elililly", "fidelitynationalinformation": "fis", "waltdisney": "disney",
-         "tmobileus": "t-mobile", "unitedhealth": None, "berkshirehathaway": None}
+ALIAS = {
+    "alphabet": "google",
+    "metaplatforms": "meta",
+    "jpmorganchase": "jpmorgan",
+    "rtx": "raytheon",
+    "advancedmicrodevices": "amd",
+    "unitedparcelservice": "ups",
+    "usbancorp": "usbank",
+    "lillyeli": "elililly",
+    "fidelitynationalinformation": "fis",
+    "waltdisney": "disney",
+    "tmobileus": "t-mobile",
+    "unitedhealth": None,
+    "berkshirehathaway": None,
+}
 
 matched, missing = 0, []
 for c in sp:
@@ -59,6 +79,8 @@ for c in sp:
     else:
         missing.append((nm, c.get("sector")))
 
-print(f"S&P 500 coverage: {matched}/{len(sp)} = {round(100*matched/len(sp))}%  | gap: {len(missing)}")
+print(
+    f"S&P 500 coverage: {matched}/{len(sp)} = {round(100 * matched / len(sp))}%  | gap: {len(missing)}"
+)
 for nm, sec in sorted(missing, key=lambda x: (x[1] or "", x[0])):
     print(f"  [{sec}] {nm}")

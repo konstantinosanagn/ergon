@@ -132,12 +132,16 @@ def test_global_crawl_deadline_stops_dispatch(monkeypatch, tmp_path):
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider())
     monkeypatch.setattr(base_mod, "load_builtins", lambda: None)
     monkeypatch.setattr(http_mod, "AsyncFetcher", _Fetcher)
-    monkeypatch.setenv("ERGON_CRAWL_HOST_BUDGET_S", "0")  # per-host box OFF -> isolate the global one
+    monkeypatch.setenv(
+        "ERGON_CRAWL_HOST_BUDGET_S", "0"
+    )  # per-host box OFF -> isolate the global one
     monkeypatch.setenv("ERGON_CRAWL_DEADLINE_S", "60")
     ticks = {"t": 0.0}
 
     def _fast_forward():
-        ticks["t"] += 1000.0  # every call jumps far past the just-computed (earlier, smaller) deadline
+        ticks["t"] += (
+            1000.0  # every call jumps far past the just-computed (earlier, smaller) deadline
+        )
         return ticks["t"]
 
     monkeypatch.setattr(bi.time, "monotonic", _fast_forward)

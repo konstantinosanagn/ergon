@@ -20,6 +20,7 @@ Best used on known-good SPA targets, not blind micro-cap sweeps.
 
 Usage::  python scripts/tier1_capture.py [--limit N] [--concurrency 4] [--offset 0]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,8 +39,10 @@ from browser_discovery import find_records_path, propose_spec, verify_spec_async
 TARGETS = ROOT / "scripts" / "browser_tier1_targets.json"
 OUT_CAND = ROOT / "scripts" / "cand_tier1.json"
 OUT_SPECS = ROOT / "scripts" / "tier1_specs.json"
-_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 
 def _records_len(response: object, path: list) -> int:
@@ -80,8 +83,11 @@ async def capture_one(browser: object, entry: dict, settle_ms: int) -> dict | No
             if (req.method or "GET").upper() == "POST":
                 with __import__("contextlib").suppress(Exception):
                     body = json.loads(req.post_data or "{}")
-            best = (n, {"url": req.url, "method": req.method, "body": body,
-                        "headers": dict(req.headers)}, data)
+            best = (
+                n,
+                {"url": req.url, "method": req.method, "body": body, "headers": dict(req.headers)},
+                data,
+            )
     await ctx.close()
     if best is None:
         return None
@@ -89,8 +95,14 @@ async def capture_one(browser: object, entry: dict, settle_ms: int) -> dict | No
         spec = propose_spec(best[1], best[2], company=entry["name"], token=token)
     except Exception:
         return None
-    return {"company": entry["company"], "name": entry["name"], "ats": "apicapture",
-            "token": token, "spec": spec, "careers_url": entry["careers_url"]}
+    return {
+        "company": entry["company"],
+        "name": entry["name"],
+        "ats": "apicapture",
+        "token": token,
+        "spec": spec,
+        "careers_url": entry["careers_url"],
+    }
 
 
 async def main() -> None:
@@ -104,7 +116,9 @@ async def main() -> None:
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        print("needs Playwright: uv pip install ergon-tracker[browser] && playwright install chromium")
+        print(
+            "needs Playwright: uv pip install ergon-tracker[browser] && playwright install chromium"
+        )
         sys.exit(1)
 
     targets = json.loads(TARGETS.read_text())[args.offset : args.offset + args.limit]
@@ -136,9 +150,13 @@ async def main() -> None:
             r["verify"] = msg
             hits.append(r)
             print(f"  VERIFIED {r['name']}: {msg}", flush=True)
-    OUT_CAND.write_text(json.dumps([{k: v for k, v in h.items() if k != "spec"} for h in hits], indent=1))
+    OUT_CAND.write_text(
+        json.dumps([{k: v for k, v in h.items() if k != "spec"} for h in hits], indent=1)
+    )
     OUT_SPECS.write_text(json.dumps({h["token"]: h["spec"] for h in hits}, indent=1))
-    print(f"\nVERIFIED {len(hits)}/{len(targets)} (of {len(proposed)} proposed) -> {OUT_CAND.name} + {OUT_SPECS.name}")
+    print(
+        f"\nVERIFIED {len(hits)}/{len(targets)} (of {len(proposed)} proposed) -> {OUT_CAND.name} + {OUT_SPECS.name}"
+    )
 
 
 if __name__ == "__main__":

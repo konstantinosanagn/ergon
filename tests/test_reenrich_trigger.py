@@ -113,7 +113,10 @@ def test_version_bump_reenriches_carried_rows_from_jd(monkeypatch, tmp_path):
 
     # The COLD baseline: what a full re-enrich of the stored JD produces (title from the prior row).
     cold = JobPosting.create(
-        source="greenhouse", source_job_id="1", company="Acme Corp", title="Staff Engineer",
+        source="greenhouse",
+        source_job_id="1",
+        company="Acme Corp",
+        title="Staff Engineer",
         description_text=_JD,
     )
     enrich_in_place(cold, infer_level_from_experience=True)
@@ -123,8 +126,12 @@ def test_version_bump_reenriches_carried_rows_from_jd(monkeypatch, tmp_path):
     _bump_version(monkeypatch, 2)
     today_db = tmp_path / "today.sqlite"
     build_index_from_fresh_db(
-        _empty_fresh(tmp_path), today_db, build_id="today",
-        prev_db=prior_db, crawled_keys=set(), jd_db_path=jd_db,
+        _empty_fresh(tmp_path),
+        today_db,
+        build_id="today",
+        prev_db=prior_db,
+        crawled_keys=set(),
+        jd_db_path=jd_db,
     )
 
     # Direction 2a: the row WITH a stored JD was re-enriched from that JD == the cold re-enrich, and
@@ -154,8 +161,12 @@ def test_version_bump_reenriches_employment_type_from_jd(monkeypatch, tmp_path):
     # A prior row carrying a STALE/wrong employment_type (contract) — so a pass proves re-extraction,
     # not reuse. from_row/to_row round-trip employment_type, so the stale value is genuinely stored.
     stale = JobPosting.create(
-        source="greenhouse", source_job_id=sid, company="Acme Corp", title="Software Engineer Intern",
-        employment_type=EmploymentType.CONTRACT, board_token=_TOKEN,
+        source="greenhouse",
+        source_job_id=sid,
+        company="Acme Corp",
+        title="Software Engineer Intern",
+        employment_type=EmploymentType.CONTRACT,
+        board_token=_TOKEN,
     )
     fresh_prior = tmp_path / "fresh_prior.sqlite"
     fresh_db(fresh_prior)
@@ -166,7 +177,9 @@ def test_version_bump_reenriches_employment_type_from_jd(monkeypatch, tmp_path):
     con.close()
     prior_db = tmp_path / "prior.sqlite"
     build_index_from_fresh_db(fresh_prior, prior_db, build_id="prior")
-    assert _row(prior_db, jid)["employment_type"] == EmploymentType.CONTRACT.value  # stale is stored
+    assert (
+        _row(prior_db, jid)["employment_type"] == EmploymentType.CONTRACT.value
+    )  # stale is stored
 
     jd_db = tmp_path / "index-jd.sqlite"
     jcon = jd_store.open_jd_store(str(jd_db))
@@ -177,8 +190,12 @@ def test_version_bump_reenriches_employment_type_from_jd(monkeypatch, tmp_path):
     _bump_version(monkeypatch, 2)
     today_db = tmp_path / "today.sqlite"
     build_index_from_fresh_db(
-        _empty_fresh(tmp_path), today_db, build_id="today",
-        prev_db=prior_db, crawled_keys=set(), jd_db_path=jd_db,
+        _empty_fresh(tmp_path),
+        today_db,
+        build_id="today",
+        prev_db=prior_db,
+        crawled_keys=set(),
+        jd_db_path=jd_db,
     )
     # The stale 'contract' is discarded; re-enrich re-derives 'internship' from the stored JD.
     assert _row(today_db, jid)["employment_type"] == EmploymentType.INTERNSHIP.value
@@ -192,14 +209,22 @@ def test_version_unchanged_is_byte_identical_noop(monkeypatch, tmp_path):
     # stamp) -> the re-enrich pass must not fire.
     same_db = tmp_path / "same.sqlite"
     build_index_from_fresh_db(
-        _empty_fresh(tmp_path), same_db, build_id="same",
-        prev_db=prior_db, crawled_keys=set(), jd_db_path=jd_db,
+        _empty_fresh(tmp_path),
+        same_db,
+        build_id="same",
+        prev_db=prior_db,
+        crawled_keys=set(),
+        jd_db_path=jd_db,
     )
     # Build again with NO sidecar at all (re-enrich impossible) -> the reference carry-forward.
     ref_db = tmp_path / "ref.sqlite"
     build_index_from_fresh_db(
-        _empty_fresh(tmp_path), ref_db, build_id="same",
-        prev_db=prior_db, crawled_keys=set(), jd_db_path=None,
+        _empty_fresh(tmp_path),
+        ref_db,
+        build_id="same",
+        prev_db=prior_db,
+        crawled_keys=set(),
+        jd_db_path=None,
     )
 
     # The carried rows are byte-identical whether or not the JD sidecar was passed: version unchanged
@@ -217,7 +242,11 @@ def test_reenrich_pass_is_strict_noop_when_version_matches(monkeypatch, tmp_path
 
     today_db = tmp_path / "today.sqlite"
     build_index_from_fresh_db(
-        _empty_fresh(tmp_path), today_db, build_id="today", prev_db=prior_db, crawled_keys=set(),
+        _empty_fresh(tmp_path),
+        today_db,
+        build_id="today",
+        prev_db=prior_db,
+        crawled_keys=set(),
     )
     con = connect(today_db)
     try:
@@ -242,7 +271,11 @@ def test_reenrich_fires_only_for_carried_not_crawled(monkeypatch, tmp_path):
     # directly to isolate the crawled-key scoping.
     today_db = tmp_path / "today.sqlite"
     build_index_from_fresh_db(
-        _empty_fresh(tmp_path), today_db, build_id="today", prev_db=prior_db, crawled_keys=set(),
+        _empty_fresh(tmp_path),
+        today_db,
+        build_id="today",
+        prev_db=prior_db,
+        crawled_keys=set(),
     )
     acme = normalize_company("Acme Corp")
 

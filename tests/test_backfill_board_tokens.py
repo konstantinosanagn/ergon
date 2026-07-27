@@ -32,9 +32,24 @@ def _insert(
         "remote, level, employment_type, board_token, status, first_seen, last_seen, fetched_at, "
         "build_id, apply_url, listing_url) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
-            jid, f"h-{jid}", company_key, source, "Co", domain, "Engineer",
-            "unknown", "mid", "fulltime", board_token, status, "t", "t", "t", "b",
-            apply_url, listing_url,
+            jid,
+            f"h-{jid}",
+            company_key,
+            source,
+            "Co",
+            domain,
+            "Engineer",
+            "unknown",
+            "mid",
+            "fulltime",
+            board_token,
+            status,
+            "t",
+            "t",
+            "t",
+            "b",
+            apply_url,
+            listing_url,
         ),
     )
 
@@ -182,7 +197,10 @@ def test_url_derivation_tries_listing_url_and_ignores_garbage(tmp_path):
         con.execute("PRAGMA foreign_keys = OFF")
         # apply_url is garbage (parser returns None) -> falls back to a real listing_url
         _insert(
-            con, "fallback", source="smartrecruiters", company_key="nokey",
+            con,
+            "fallback",
+            source="smartrecruiters",
+            company_key="nokey",
             apply_url="not-a-url",
             listing_url="https://jobs.smartrecruiters.com/AcmeCorp/744000012345678",
         )

@@ -105,8 +105,14 @@ def row_to_candidate(ats: str, row: dict[str, str]) -> dict[str, object] | None:
         if not token:
             return None
         tenant, wd, site = token.split("|")
-        return {"company": key, "ats": "workday", "tenant": tenant, "wd": wd, "site": site,
-                "domain": None}
+        return {
+            "company": key,
+            "ats": "workday",
+            "tenant": tenant,
+            "wd": wd,
+            "site": site,
+            "domain": None,
+        }
 
     # Simple ATSes: prefer the slug; fall back to extracting it from the url via the provider.
     token = slug
@@ -170,15 +176,20 @@ async def ingest(atses: list[str], fetcher: AsyncFetcher, limit: int | None) -> 
         if text is None:
             continue
         cands, skipped = parse_jobhive_csv(text, ats)
-        new = [c for c in cands if str(c["company"]) not in seed_keys
-               and str(c["company"]) not in global_seen]
+        new = [
+            c
+            for c in cands
+            if str(c["company"]) not in seed_keys and str(c["company"]) not in global_seen
+        ]
         for c in new:
             global_seen.add(str(c["company"]))
         if limit is not None:
             new = new[:limit]
         all_candidates.extend(new)
-        print(f"  [{ats}] rows->candidates={len(cands)} unmappable={skipped} "
-              f"new(after seed/dedupe)={len(new)}")
+        print(
+            f"  [{ats}] rows->candidates={len(cands)} unmappable={skipped} "
+            f"new(after seed/dedupe)={len(new)}"
+        )
     return all_candidates
 
 

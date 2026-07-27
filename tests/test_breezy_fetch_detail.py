@@ -130,9 +130,7 @@ def test_breezy_302_to_board_root_returns_none() -> None:
 
 
 def test_breezy_302_to_absolute_board_root_returns_none() -> None:
-    fetcher = _FakeFetcher(
-        _FakeResponse(302, headers={"location": "https://acme.breezy.hr/"})
-    )
+    fetcher = _FakeFetcher(_FakeResponse(302, headers={"location": "https://acme.breezy.hr/"}))
     result = anyio.run(lambda: BreezyProvider().fetch_detail(_ref(), fetcher))
     assert result is None
 
@@ -140,9 +138,7 @@ def test_breezy_302_to_absolute_board_root_returns_none() -> None:
 def test_breezy_autofollowed_200_board_root_returns_none() -> None:
     # If the fetcher AUTO-followed the gone-redirect, we land on a 200 board-root page with no
     # #description; the final URL being the board root classifies it as GONE.
-    fetcher = _FakeFetcher(
-        _FakeResponse(200, text=_BOARD_ROOT_HTML, url="https://acme.breezy.hr/")
-    )
+    fetcher = _FakeFetcher(_FakeResponse(200, text=_BOARD_ROOT_HTML, url="https://acme.breezy.hr/"))
     result = anyio.run(lambda: BreezyProvider().fetch_detail(_ref(), fetcher))
     assert result is None
 
