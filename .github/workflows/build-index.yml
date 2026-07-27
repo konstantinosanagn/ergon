@@ -42,6 +42,9 @@ on:
       delta_crawl:
         description: "Delta-driven crawl (ERGON_DELTA_CRAWL). '1' skips re-crawling unchanged deterministic boards (idset_hash match from the freshness sidecar) and reuses prior enrichment for unchanged postings. Ships DARK: leave '' until the delta-vs-full parity run passes, then set '1' to flip on (or hardcode it in the crawl step env below for the daily cron)."
         default: ""
+      publish:
+        description: "Publish to the PRODUCTION index-latest release. Default TRUE (the daily build publishes, unchanged). Set 'false' for a validation dry run: the build + gates run and dist/ is uploaded as a workflow artifact, but the release is never written. Only an explicit 'false' skips publishing; a blank (scheduled cron) always publishes."
+        default: "true"
 
 permissions:
   contents: write          # to publish the release asset
@@ -309,12 +312,15 @@ jobs:
           # ONLY on the non-join daily crawl -- they maintain WHOLE-index sidecars once per day, so
           # the lean join shard skips them (its non-join rows carry forward untouched, and the
           # sidecars it doesn't rewrite simply persist on the release).
+          # --no-publish ONLY when the dispatch explicitly set publish=false (a validation dry run);
+          # a scheduled cron has an empty inputs.publish, so this is byte-for-byte today's command.
           uv run python scripts/build_index.py --incremental \
             --limit-companies "$ERGON_CRAWL_LIMIT" --sharded --out dist \
             ${{ (github.event.inputs.rich == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--rich' || '' }} \
             ${{ (github.event.inputs.detail == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--detail' || '' }} \
             ${{ (github.event.inputs.jd == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--jd' || '' }} \
-            ${{ (github.event.inputs.liveness == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--liveness' || '' }}
+            ${{ (github.event.inputs.liveness == 'true' || (github.event_name == 'schedule' && env.ERGON_CRAWL_PARTITION != 'join')) && '--liveness' || '' }} \
+            ${{ github.event.inputs.publish == 'false' && '--no-publish' || '' }}
           # Land the final 100% snapshot promptly (the trap kills the loop on the next line's exit).
           if [ -f dist/crawl-progress.json ] && gh release view index-latest >/dev/null 2>&1; then
             gh release upload index-latest dist/crawl-progress.json --clobber || true
@@ -328,7 +334,10 @@ jobs:
           ERGON_SPEC_HEALTH: dist/spec_health.json
         run: uv run python scripts/spec_health_cron.py
 
+      # Only an explicit publish=false (a validation dry run) skips this; a scheduled cron leaves
+      # inputs.publish blank -> the condition is true -> the daily build publishes exactly as before.
       - name: Publish snapshot to the stable index-latest release
+        if: ${{ github.event.inputs.publish != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -387,6 +396,7 @@ jobs:
           fi
 
       - name: Publish the crawl's fresh-rich embed-text DB (for embed-vectors.yml to consume)
+        if: ${{ github.event.inputs.publish != 'false' }}
         # ADDITIVE (does NOT remove the inline --rich embed above -- we validate the sharded
         # embed-vectors.yml path against this baseline before cutting the inline embed). The crawl
         # captures FULL descriptions to the fresh DB's `fresh_rich` table (src/ergon_tracker/index/
@@ -456,8 +466,10 @@ jobs:
       # lost and the next run would re-crawl the same window forever. Sync ONLY the crawl-progress
       # metadata to the release even on failure so the next scheduled/manual run resumes from where
       # this one got to. Pure progress metadata — the gated index is NEVER republished here.
+      # Gated on publish too (a dry run must not advance the production crawl cursor). On a scheduled
+      # cron inputs.publish is blank -> always() && true -> byte-for-byte today's resume-on-failure sync.
       - name: Sync crawl cursor + board_state to release (resume even on failure)
-        if: always()
+        if: ${{ always() && github.event.inputs.publish != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

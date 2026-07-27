@@ -539,6 +539,38 @@ def _sharded_embed() -> bool:
     return os.environ.get("ERGON_SHARDED_EMBED", "") == "1"
 
 
+def _no_publish() -> bool:
+    """Dry-run publish switch, ``ERGON_NO_PUBLISH`` (env) / ``--no-publish`` (CLI), default off.
+
+    When on, the build still runs FULLY -- crawl, build, gates, and every ``dist/`` artifact are
+    produced exactly as a real build -- but the run is flagged as a dry run that must NOT be uploaded
+    to the production ``index-latest`` release. The actual ``gh release upload`` lives in the workflow
+    steps (this script only writes ``dist/``), so the enforcement is twofold: the workflow gates its
+    upload steps on this same flag AND skips them, while this script drops a ``dist/PUBLISH_SKIPPED``
+    marker so the intent is visible to a human and to the workflow-artifact inspector (and gives the
+    build a script-level assertion point). Default off => today's behaviour (the daily build publishes)
+    is byte-for-byte unchanged. This exists to stop an experimental/validation dispatch (e.g. the
+    shelved crawl-mapreduce.yml) from overwriting the production release -- the 2026-07-27 incident."""
+    return os.environ.get("ERGON_NO_PUBLISH", "") == "1"
+
+
+def _write_no_publish_marker(out: Path, *, build_id: str) -> None:
+    """Write ``dist/PUBLISH_SKIPPED`` -- the dry-run signal for ``--no-publish`` / ``ERGON_NO_PUBLISH``.
+
+    Records that this build produced every ``dist/`` artifact locally but must NOT reach the
+    production ``index-latest`` release. Never touches the release itself (the workflow's gated upload
+    steps do the actual skipping); this is the visible marker + the build's script-level assertion
+    point. See ``_no_publish``."""
+    (out / "PUBLISH_SKIPPED").write_text(
+        json.dumps({"build_id": build_id, "no_publish": True}, indent=2)
+    )
+    print(
+        f"[no-publish] dry run: dist/ artifacts produced but NOT published to index-latest "
+        f"({build_id})",
+        flush=True,
+    )
+
+
 def _liveness_max_boards() -> int | None:
     """Per-run bound on the number of DUE boards the liveness pass re-fetches, ``ERGON_LIVENESS_
     MAX_BOARDS`` (env), default 2000. A board re-fetch here costs the same as one normal crawl
@@ -2052,6 +2084,7 @@ def main(argv: list[str]) -> None:
     crawl_reduce = (
         False  # R3 REDUCE mode: union the K partials -> today's build/publish tail verbatim
     )
+    no_publish = _no_publish()  # dry run: build fully but flag the run as do-NOT-publish-to-prod
     shard: int | None = None
     num_shards: int | None = None
     i = 0
@@ -2094,6 +2127,9 @@ def main(argv: list[str]) -> None:
             i += 1
         elif argv[i] == "--crawl-reduce":
             crawl_reduce = True
+            i += 1
+        elif argv[i] == "--no-publish":
+            no_publish = True
             i += 1
         elif argv[i] == "--shard":
             shard = int(argv[i + 1])
@@ -2494,6 +2530,11 @@ def main(argv: list[str]) -> None:
         if ok:
             sset = write_set_manifest(out, build_id=build_id)
             print(f"  + set manifest -> manifest-set.json ({len(sset['assets'])} assets)")
+        # Dry-run signal: every dist/ artifact above was produced normally, but this run is flagged
+        # do-NOT-publish. The workflow gates its `gh release upload` steps on the same flag and skips
+        # them; here we only drop the visible marker (never touch the release). See _no_publish.
+        if no_publish:
+            _write_no_publish_marker(out, build_id=build_id)
         print(
             f"incremental build: crawled {len(outcome)} due boards, {fresh_jobs_count} fresh jobs, "
             f"{n} total{' -> published' if ok else ' (gates FAILED, kept previous)'}"

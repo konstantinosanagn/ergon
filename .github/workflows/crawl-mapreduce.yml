@@ -36,6 +36,9 @@ on:
       sharded:
         description: "Build + publish the sector shards + slim tier (--sharded) in the reduce. Default true."
         default: "true"
+      publish:
+        description: "Publish the reduce's index to the PRODUCTION index-latest release. Default FALSE: a validation dispatch builds + gates + measures but must NEVER overwrite prod (2026-07-27 incident). The dist/ output is uploaded as a workflow artifact for inspection instead. Set 'true' only for a deliberate promotion."
+        default: "false"
 
 permissions:
   contents: write   # the reduce publishes the index-latest release assets
@@ -234,15 +237,25 @@ jobs:
           ERGON_SHARDED_EMBED: "1"                    # vectors owned by embed-vectors.yml (reduce never inline-embeds)
           ERGON_DETAIL_MAX: "0"                       # detail is merge-only here; the sharded drain owns fetching
         run: |
-          JD_FLAG=""; SHARDED_FLAG=""
+          JD_FLAG=""; SHARDED_FLAG=""; NO_PUBLISH_FLAG=""
           [ "${{ github.event.inputs.jd || 'true' }}" = "true" ] && JD_FLAG="--jd"
           [ "${{ github.event.inputs.sharded || 'true' }}" = "true" ] && SHARDED_FLAG="--sharded"
+          # DEFAULT DRY RUN (do-not-publish): unless the dispatch explicitly opts in with publish=true,
+          # build + gate the index but flag it do-NOT-publish, so a validation run can't overwrite the
+          # production index-latest release (the 2026-07-27 76%->40% JD regression). The publish + the
+          # cursor-sync steps below are gated on the same input; the dist/ output is uploaded as a
+          # workflow artifact for inspection instead.
+          [ "${{ github.event.inputs.publish }}" != "true" ] && NO_PUBLISH_FLAG="--no-publish"
           uv run python scripts/build_index.py --incremental --crawl-reduce \
             --num-shards ${{ env.NUM_SHARDS }} \
             --limit-companies "${{ github.event.inputs.limit_companies || '60000' }}" \
-            $SHARDED_FLAG $JD_FLAG --out dist
+            $SHARDED_FLAG $JD_FLAG $NO_PUBLISH_FLAG --out dist
 
+      # OPT-IN PRODUCTION PUBLISH: only a dispatch that explicitly set publish=true reaches the
+      # index-latest release. The default (publish=false) skips this step entirely -- a validation
+      # run measures + uploads its dist/ as a workflow artifact (below) but NEVER overwrites prod.
       - name: Publish snapshot to the stable index-latest release (the SOLE release writer)
+        if: ${{ github.event.inputs.publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -270,8 +283,28 @@ jobs:
           # Atomicity pivot (Item 6): the set manifest LAST, in its own call after every other asset.
           [ -f dist/manifest-set.json ] && gh release upload index-latest dist/manifest-set.json --clobber || true
 
-      - name: Sync crawl cursor + board_state to release (resume even on a later-step failure)
+      # Upload the reduce's dist/ output as a workflow artifact so a DRY-RUN validation dispatch
+      # (publish=false) is still fully inspectable -- gates.json, coverage.json, the marker, the built
+      # index -- without ever touching the production release. Runs regardless of the publish input.
+      - name: Upload reduce output for inspection (dry-run validation)
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reduce-output
+          path: |
+            dist/gates.json
+            dist/coverage.json
+            dist/INDEX_STATUS.md
+            dist/manifest.json
+            dist/manifest-set.json
+            dist/PUBLISH_SKIPPED
+            dist/index.sqlite.gz
+          if-no-files-found: ignore
+
+      # Cursor/state sync ALSO writes to the production release, so it too is opt-in: a dry-run
+      # validation run must not advance the production crawl cursor. Gated on the same publish input.
+      - name: Sync crawl cursor + board_state to release (resume even on a later-step failure)
+        if: ${{ always() && github.event.inputs.publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
