@@ -64,6 +64,47 @@ class GateReport:
         )
 
 
+def _jd_gate_result(con: Any, *, prev_jd_pct: float | None, jd_max_drop_pct: float) -> GateResult:
+    """JD-coverage regression check against an OPEN connection.
+
+    ``with_jd``/``active`` mirror coverage.compute_coverage exactly, so this jd_pct is the same
+    number the metrics tripwire baselines on. RELATIVE and one-directional: fails only on a DROP,
+    so a recovery build always passes and no baseline passes.
+
+    MUST be evaluated on the FINAL artifact, after the Tier-3 detail merge has filled `snippet`.
+    Run pre-merge it measures crawl-time JD only, which on a full re-crawl is structurally low and
+    cannot clear any baseline set by a carry-forward build. See evaluate_jd_coverage.
+    """
+    active = con.execute("SELECT COUNT(*) FROM jobs WHERE status='active'").fetchone()[0]
+    with_jd = con.execute(
+        "SELECT COUNT(*) FROM jobs WHERE snippet IS NOT NULL AND TRIM(snippet) != '' "
+        "AND status='active'"
+    ).fetchone()[0]
+    jd_pct = round(with_jd / active * 100, 2) if active else 0.0
+    if prev_jd_pct is None:
+        return GateResult("jd_coverage", True, f"{jd_pct}% (no baseline)")
+    drop = prev_jd_pct - jd_pct
+    return GateResult(
+        "jd_coverage",
+        drop <= jd_max_drop_pct,
+        f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct})",
+    )
+
+
+def evaluate_jd_coverage(
+    db_path: Path | str,
+    *,
+    prev_jd_pct: float | None = None,
+    jd_max_drop_pct: float = _DEF_JD_MAX_DROP_PCT,
+) -> GateResult:
+    """Standalone JD-coverage gate, for the POST-reconcile check on the artifact being shipped."""
+    con = connect(db_path, read_only=True)
+    try:
+        return _jd_gate_result(con, prev_jd_pct=prev_jd_pct, jd_max_drop_pct=jd_max_drop_pct)
+    finally:
+        con.close()
+
+
 def evaluate_gates(
     db_path: Path | str,
     *,
@@ -73,6 +114,7 @@ def evaluate_gates(
     min_ratio: float = 0.75,
     prev_jd_pct: float | None = None,
     jd_max_drop_pct: float = _DEF_JD_MAX_DROP_PCT,
+    include_jd: bool = True,
 ) -> GateReport:
     """Run all publish gates against a built index. Pure read; never mutates the DB.
 
@@ -129,27 +171,9 @@ def evaluate_gates(
         ).fetchone()[0]
         rep.results.append(GateResult("company_fk_intact", orphans == 0, f"{orphans} orphan rows"))
 
-        # JD-coverage regression gate: block a build whose JD-text capture % COLLAPSED vs the last
-        # published build. ``with_jd`` / ``active`` mirror coverage.compute_coverage exactly (active
-        # rows carrying a non-empty snippet), so the gate's jd_pct is the same number the tripwire
-        # baselines on. RELATIVE + one-directional (fails only on a DROP > threshold), so a recovery
-        # build always passes; no baseline PASSES. This is the HARD stop the WARN-only tripwire isn't.
-        active = con.execute("SELECT COUNT(*) FROM jobs WHERE status='active'").fetchone()[0]
-        with_jd = con.execute(
-            "SELECT COUNT(*) FROM jobs WHERE snippet IS NOT NULL AND TRIM(snippet) != '' "
-            "AND status='active'"
-        ).fetchone()[0]
-        jd_pct = round(with_jd / active * 100, 2) if active else 0.0
-        if prev_jd_pct is None:
-            rep.results.append(GateResult("jd_coverage", True, f"{jd_pct}% (no baseline)"))
-        else:
-            drop = prev_jd_pct - jd_pct
+        if include_jd:
             rep.results.append(
-                GateResult(
-                    "jd_coverage",
-                    drop <= jd_max_drop_pct,
-                    f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct})",
-                )
+                _jd_gate_result(con, prev_jd_pct=prev_jd_pct, jd_max_drop_pct=jd_max_drop_pct)
             )
     finally:
         con.close()

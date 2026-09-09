@@ -1144,6 +1144,8 @@ def _gated_publish(
     last_known_rows: int | None = None,
     prev_jd_pct: float | None = None,
     publish_core: bool = True,
+    include_jd: bool = True,
+    publish_cov: bool = True,
 ) -> bool:
     """Good-or-nothing publish: gate the temp build, promote (+ publish) only if it passes.
 
@@ -1156,10 +1158,13 @@ def _gated_publish(
     ``main`` path passes ``publish_core=False`` so the gzip is DEFERRED until AFTER the
     ``--detail``/``--liveness`` reconciles have mutated ``final_db`` in place — the caller then calls
     ``publish_artifacts`` ONCE, so the fully-reconciled core is gzipped a single time per build
-    instead of up to three (gate, post-detail, post-liveness). ``publish_coverage`` still runs here
-    either way: coverage counts (rows, by_source, by_sector) are INVARIANT to the reconciles (detail
-    only UPDATEs fields, liveness only flips ``status`` — neither adds/removes rows or changes
-    source/sector), so writing it at promote time is byte-identical to writing it post-reconcile.
+    instead of up to three (gate, post-detail, post-liveness). ``include_jd``/``publish_cov`` (False on the incremental path) defer the JD-coverage gate and
+    coverage.json until AFTER those reconciles. The old claim that coverage is "INVARIANT to the
+    reconciles" was wrong: compute_coverage filters ``status='active'`` and the detail merge fills
+    ``snippet``/salary, so a pre-merge reading under-reports JD and salary and over-reports active.
+    Worse, the JD gate read pre-merge is unsatisfiable by a full re-crawl — fresh rows are list-only
+    until the merge, so coverage collapses against a baseline set by carry-forward builds and the
+    merge that would restore it is itself gated on the result. See main() for the post-merge gate.
     """
     from ergon.index.gates import evaluate_gates, jd_gate_drop_pct_from_env
 
@@ -1171,6 +1176,7 @@ def _gated_publish(
         allow_cold_start=allow_cold_start,
         prev_jd_pct=prev_jd_pct,
         jd_max_drop_pct=jd_gate_drop_pct_from_env(),
+        include_jd=include_jd,
     )
     out.mkdir(parents=True, exist_ok=True)
     (out / "gates.json").write_text(json.dumps(rep.to_dict(), indent=2))
@@ -1181,11 +1187,14 @@ def _gated_publish(
     tmp_db.replace(final_db)  # atomic promote
     if publish_core:
         publish_artifacts(final_db, out, build_id=build_id)
-    cov = publish_coverage(final_db, out, build_id=build_id)
-    print(
-        f"gates passed: {rep.summary()} | coverage: {cov['total_jobs']} jobs, "
-        f"{len(cov['by_source'])} providers, {len(cov['by_sector'])} sectors"
-    )
+    if publish_cov:
+        cov = publish_coverage(final_db, out, build_id=build_id)
+        print(
+            f"gates passed: {rep.summary()} | coverage: {cov['total_jobs']} jobs, "
+            f"{len(cov['by_source'])} providers, {len(cov['by_sector'])} sectors"
+        )
+    else:
+        print(f"structural gates passed: {rep.summary()}")
     return True
 
 
@@ -2422,41 +2431,12 @@ def main(argv: list[str]) -> None:
             # a recovery build (climbing coverage) passes. None (first build) -> gate is a no-op pass.
             prev_jd_pct=(prev_metrics or {}).get("jd_pct"),
             publish_core=False,
+            include_jd=False,  # JD is merged in below; gating it here is unsatisfiable
+            publish_cov=False,  # coverage must describe the reconciled artifact
         )
         if not ok and prev_snap is not None:
             prev_snap.replace(db)  # gates failed -> restore the previous snapshot
             prev_snap = None
-        # Product-metric observability: compute this build's compact metrics block (only on a real
-        # publish — `db` is the promoted new index then; on gate-fail it's the restored prev, whose
-        # metrics we must not re-baseline), run the NON-FATAL regression tripwire, and store the
-        # block in history.jsonl as the next build's baseline. Emitted AFTER publish_coverage; never
-        # changes the publish decision (`ok` is already final above).
-        cur_metrics: dict | None = None
-        if ok:
-            try:
-                cur_metrics = _compute_metrics(db)
-                _emit_metrics_regression(cur_metrics, prev_metrics, out, build_id=build_id)
-            except Exception as exc:  # noqa: BLE001 - metrics observability must never fail a build
-                print(f"  ! metrics observability skipped (non-fatal): {type(exc).__name__}: {exc}")
-        append_history(
-            out / "history.jsonl",
-            {
-                "build_id": build_id,
-                "date": _today(),
-                "due_boards": len(outcome),
-                "fresh_jobs": fresh_jobs_count,
-                "total_jobs": n,
-                "changed_companies": len(changed),
-                "throttled_boards": sum(1 for o in outcome.values() if o["http_429"]),
-                "errored_boards": sum(1 for o in outcome.values() if o["error"]),
-                "not_modified_boards": sum(1 for o in outcome.values() if o.get("not_modified")),
-                "cursor": cursor,
-                "next_cursor": next_cursor,
-                "window": limit,
-                "published": ok,
-                "metrics": cur_metrics,
-            },
-        )
         if ok and rich and not _sharded_embed():  # inline embed UNLESS the sharded matrix owns it
             # NON-FATAL: the rich tier is an optional enhancement. The main index is already gated +
             # promoted above, so an embedding OOM/timeout/model-download failure must NOT crash the
@@ -2560,6 +2540,77 @@ def main(argv: list[str]) -> None:
                 print(f"  ! liveness tier skipped (non-fatal): {type(exc).__name__}: {exc}")
         # Item 6: the ONE core publish. Every reconcile that mutates `db` (detail merge, liveness
         # flips) has now run, so gzip index.sqlite.gz + write manifest.json exactly once — capturing
+        # POST-RECONCILE JD-COVERAGE GATE. This is the real gate, and it must run HERE — after
+        # the detail merge has filled `snippet`. Evaluated before the merge it measures crawl-time
+        # JD only: a full re-crawl replaces carried rows with list-only ones, coverage collapses
+        # against a baseline set by carry-forward builds, and the merge that would restore it is
+        # itself gated on the result. That deadlock blocked every non-join build from 2026-07-28.
+        if ok:
+            from ergon.index.gates import evaluate_jd_coverage, jd_gate_drop_pct_from_env
+
+            jd_res = evaluate_jd_coverage(
+                db,
+                prev_jd_pct=(prev_metrics or {}).get("jd_pct"),
+                jd_max_drop_pct=jd_gate_drop_pct_from_env(),
+            )
+            gates_path = out / "gates.json"
+            try:
+                gj = json.loads(gates_path.read_text())
+            except Exception:  # noqa: BLE001 - gates.json is advisory here; the verdict is jd_res
+                gj = {"passed": True, "gates": []}
+            # NB: the key is "gates", matching GateReport.to_dict(). Writing "results" here left the
+            # real list untouched and silently dropped the verdict.
+            gj["gates"] = [g for g in gj.get("gates", []) if g.get("name") != "jd_coverage"]
+            gj["gates"].append(
+                {"name": jd_res.name, "passed": jd_res.passed, "detail": jd_res.detail}
+            )
+            gj["passed"] = all(g.get("passed") for g in gj["gates"])
+            gates_path.write_text(json.dumps(gj, indent=2))
+            if not jd_res.passed:
+                print(f"POST-RECONCILE GATE FAILED — not publishing. jd_coverage={jd_res.detail}")
+                ok = False
+                if prev_snap is not None:
+                    prev_snap.replace(db)  # restore the previous snapshot
+                    prev_snap = None
+            else:
+                print(f"  + post-reconcile jd_coverage ok: {jd_res.detail}")
+        if ok:
+            cov = publish_coverage(db, out, build_id=build_id)
+            print(
+                f"  + coverage (reconciled): {cov['total_jobs']} jobs, "
+                f"{len(cov['by_source'])} providers, {len(cov['by_sector'])} sectors"
+            )
+        # Product-metric observability: compute this build's compact metrics block (only on a real
+        # publish — `db` is the promoted new index then; on gate-fail it's the restored prev, whose
+        # metrics we must not re-baseline), run the NON-FATAL regression tripwire, and store the
+        # block in history.jsonl as the next build's baseline. Emitted AFTER publish_coverage; never
+        # changes the publish decision (`ok` is already final above).
+        cur_metrics: dict | None = None
+        if ok:
+            try:
+                cur_metrics = _compute_metrics(db)
+                _emit_metrics_regression(cur_metrics, prev_metrics, out, build_id=build_id)
+            except Exception as exc:  # noqa: BLE001 - metrics observability must never fail a build
+                print(f"  ! metrics observability skipped (non-fatal): {type(exc).__name__}: {exc}")
+        append_history(
+            out / "history.jsonl",
+            {
+                "build_id": build_id,
+                "date": _today(),
+                "due_boards": len(outcome),
+                "fresh_jobs": fresh_jobs_count,
+                "total_jobs": n,
+                "changed_companies": len(changed),
+                "throttled_boards": sum(1 for o in outcome.values() if o["http_429"]),
+                "errored_boards": sum(1 for o in outcome.values() if o["error"]),
+                "not_modified_boards": sum(1 for o in outcome.values() if o.get("not_modified")),
+                "cursor": cursor,
+                "next_cursor": next_cursor,
+                "window": limit,
+                "published": ok,
+                "metrics": cur_metrics,
+            },
+        )
         # the fully-reconciled index. Gated on `ok`, UNGUARDED (a plain local gzip+write): it must
         # never sit inside a sidecar's non-fatal try/except, so a torn/half set can never ship.
         if ok:
