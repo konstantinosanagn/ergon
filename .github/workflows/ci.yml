@@ -64,7 +64,14 @@ jobs:
       - name: pip-audit
         run: |
           uv pip install pip-audit
-          # --strict fails on an unfixable/unknown advisory rather than passing quietly.
-          # If a finding is accepted, add `--ignore-vuln GHSA-xxxx` here WITH a reason comment —
+          # NO --strict, deliberately. --strict also fails when a package cannot be audited, and
+          # ergon-tracker itself is unpublished on PyPI, so it is permanently unauditable and
+          # --strict failed 100% of the time regardless of whether any CVE existed. (--skip-editable
+          # does not help: a skipped editable is still a skip.) Auditing the exported lockfile via
+          # `-r` avoids that, but pip-audit's -r mode builds a throwaway venv and was not verifiable
+          # here, so it is not worth the flakiness. Without --strict the step still FAILS on any
+          # known advisory, which is the signal we actually want; the unpublished local package
+          # shows up as a harmless "skipped" note.
+          # If a finding is ever accepted, add `--ignore-vuln GHSA-xxxx` here WITH a reason —
           # never silence the whole step.
-          uv run pip-audit --strict --progress-spinner off
+          uv run pip-audit --progress-spinner off
