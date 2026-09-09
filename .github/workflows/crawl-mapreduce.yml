@@ -278,7 +278,7 @@ jobs:
             gh release upload index-latest $ASSETS --clobber
           else
             gh release create index-latest $ASSETS --title index-latest \
-              --notes "Daily ergon-tracker search-index snapshot."
+              --notes "Daily ergon search-index snapshot."
           fi
           # Atomicity pivot (Item 6): the set manifest LAST, in its own call after every other asset.
           [ -f dist/manifest-set.json ] && gh release upload index-latest dist/manifest-set.json --clobber || true

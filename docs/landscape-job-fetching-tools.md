@@ -253,7 +253,7 @@ Cloned and read at the source level (not from README blurbs). **All three are si
 
 ## 10. Coverage scorecard — how much of jobhive we extracted (2026-06-17)
 
-> The product is now **`ergon_tracker`** (formerly jobspine). The registry grew **1,453 → ~49,051 verified-live company boards** (~34×, and still growing via giant-capture + jobhive ingest), every entry confirmed live through our own providers before merging — vs jobhive's static, partly-stale snapshot.
+> The product is now **`ergon`** (formerly jobspine). The registry grew **1,453 → ~49,051 verified-live company boards** (~34×, and still growing via giant-capture + jobhive ingest), every entry confirmed live through our own providers before merging — vs jobhive's static, partly-stale snapshot.
 
 **We extracted ~89% of jobhive's entire tenant universe.** jobhive publishes **26 ATS CSVs / 63,390 tenants**; we now have **providers for 14 of them**, covering **56,172 tenants (89%)**.
 

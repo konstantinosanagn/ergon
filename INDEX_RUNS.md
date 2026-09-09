@@ -87,7 +87,7 @@ board_state, history). The build/gate/publish pipeline works for real.
 assumes a **public** repo (anonymous free downloads + unlimited free Actions minutes).
 
 **This is a blocker for "v1 done / works for others." Options (user decision):**
-1. **Make the repo public** (`gh repo edit konstantinosanagn/ergon-tracker --visibility public`) —
+1. **Make the repo public** (`gh repo edit konstantinosanagn/ergon --visibility public`) —
    restores the design's premise; users download the index anonymously for free. (The user chose
    "Public" earlier when the repo was created; it became private since.)
 2. **Keep private** → the index can't be a free public download. Would need either (a) token-auth
@@ -130,9 +130,9 @@ shards + single file + coverage.json + INDEX_STATUS.md). Verified end-to-end for
 token-less user.
 
 **Throttle-proof on every surface** (broad query → served by index, 0 ATS calls):
-- SDK `AsyncErgonTracker.search` → `health: [('index', True, n)]`
-- CLI `ergon-tracker search` → index result (Visa Staff Data Engineer)
-- MCP `search_jobs` (via `AsyncErgonTracker`) → `health: [('index', True, 5)]`
+- SDK `AsyncErgon.search` → `health: [('index', True, n)]`
+- CLI `ergon search` → index result (Visa Staff Data Engineer)
+- MCP `search_jobs` (via `AsyncErgon`) → `health: [('index', True, 5)]`
 
 **Optimized routing (v2):** sector query → 1 small shard (~2MB, 0.6s); broad query →
 single-file (0 shards). Proven live.

@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import RawJob, SalaryInterval
-from ergon_tracker.providers.teamtailor import TeamtailorProvider
+from ergon.models import RawJob, SalaryInterval
+from ergon.providers.teamtailor import TeamtailorProvider
 
 
 def _raw(jobposting: dict[str, Any] | None = None) -> RawJob:

@@ -12,9 +12,9 @@ from __future__ import annotations
 import random
 from datetime import datetime, timezone
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.models import (
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.models import (
     EmploymentType,
     JobLevel,
     JobPosting,
@@ -154,8 +154,8 @@ def test_slim_tier_identical_to_full_for_routed_queries(tmp_path):
     # _slim_serves() deems safe. This locks that contract: for EVERY routed query, slim must return
     # exactly the same results as the full index — else _slim_serves is out of sync with the nulled
     # columns and slim would silently serve wrong results.
-    from ergon_tracker.index.build import build_slim_index
-    from ergon_tracker.index.router import _slim_serves
+    from ergon.index.build import build_slim_index
+    from ergon.index.router import _slim_serves
 
     rng = random.Random(99)
     full = tmp_path / "full.sqlite"
@@ -183,8 +183,8 @@ def test_shard_tier_identical_to_full_for_sector_queries(tmp_path):
     # The router sends sector-scoped queries to a single shard. Lock that contract: a sector query
     # against the sharded backend must return exactly the full index's results for that sector —
     # else sharding silently drops/duplicates results.
-    from ergon_tracker.index.backend import ShardedIndexBackend
-    from ergon_tracker.index.build import build_sharded_index
+    from ergon.index.backend import ShardedIndexBackend
+    from ergon.index.build import build_sharded_index
 
     rng = random.Random(7)
     jobs = _make_jobs(rng, 80)
@@ -212,7 +212,7 @@ def test_delta_applied_index_queries_identically_to_fresh_build(tmp_path):
     # Returning-user path: a user one build behind applies a delta. Lock that the delta-applied
     # index returns EXACTLY the fresh full build's results for every filter — a stronger guarantee
     # than id-set equality, catching a column silently missing from the delta's row copy.
-    from ergon_tracker.index.build import apply_delta, build_delta
+    from ergon.index.build import apply_delta, build_delta
 
     rng = random.Random(2024)
     prev_jobs = _make_jobs(rng, 80)

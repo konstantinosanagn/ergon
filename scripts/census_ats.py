@@ -46,11 +46,11 @@ from census_successfactors import (  # noqa: E402
 from harvest_commoncrawl import load_seed_keys  # noqa: E402
 from harvest_tavily import load_key  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
-from ergon_tracker.providers.icims import ICIMSProvider  # noqa: E402
-from ergon_tracker.providers.phenom import PhenomProvider  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.providers.icims import ICIMSProvider  # noqa: E402
+from ergon.providers.phenom import PhenomProvider  # noqa: E402
 
 load_builtins()
 DEFAULT_OUT = ROOT / "scripts" / "candidates_ats.json"

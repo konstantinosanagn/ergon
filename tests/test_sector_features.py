@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np  # noqa: E402
 
-from ergon_tracker.extract.sector_features import (
+from ergon.extract.sector_features import (
     TLD_VOCAB,
     assemble,
     build_input_text,

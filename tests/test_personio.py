@@ -14,9 +14,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.personio import PersonioProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.personio import PersonioProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -145,7 +145,7 @@ async def test_normalize_maps_structured_salary_information() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await PersonioProvider().fetch("personio", SearchQuery(), f)
 
-    from ergon_tracker.models import SalaryInterval
+    from ergon.models import SalaryInterval
 
     job = PersonioProvider().normalize(raws[0])
     assert job.salary is not None

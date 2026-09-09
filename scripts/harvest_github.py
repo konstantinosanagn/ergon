@@ -36,7 +36,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from harvest_commoncrawl import CONFIGS, load_seed_keys  # noqa: E402  (reuse extractors + seed)
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
 
 DEFAULT_OUT = ROOT / "scripts" / "candidates_github.json"
 

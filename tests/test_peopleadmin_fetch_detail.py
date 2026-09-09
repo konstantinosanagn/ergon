@@ -13,9 +13,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import DetailFetch
-from ergon_tracker.providers.peopleadmin import PeopleAdminProvider
+from ergon.index.detail import DetailRef
+from ergon.models import DetailFetch
+from ergon.providers.peopleadmin import PeopleAdminProvider
 
 
 class _FakeResponse:
@@ -202,8 +202,8 @@ def test_peopleadmin_unbuildable_ref_raises() -> None:
 def test_peopleadmin_departed_row_expired_by_liveness_confirm(tmp_path) -> None:
     import sqlite3
 
-    from ergon_tracker.index.db import fresh_db
-    from ergon_tracker.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
+    from ergon.index.db import fresh_db
+    from ergon.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
 
     assert "peopleadmin" in CONFIRM_VIA_DETAIL_SOURCES
 

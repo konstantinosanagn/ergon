@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.sector import SectorExtractor
+from ergon.extract.base import ExtractInput
+from ergon.extract.sector import SectorExtractor
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "sector_corpus.jsonl"
 

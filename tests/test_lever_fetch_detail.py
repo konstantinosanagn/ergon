@@ -14,8 +14,8 @@ import anyio
 import httpx
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.lever import LeverProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.lever import LeverProvider
 
 
 class _FakeFetcher:

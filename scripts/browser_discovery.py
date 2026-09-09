@@ -16,7 +16,7 @@ thin, swappable shell:
 
 2. **Propose (deterministic, this module).** ``propose_spec`` classifies the captured response shape
    — locates the job-records array, the total-count field, and maps our fields against ATS vocabulary
-   — and emits an :mod:`ergon_tracker.providers.apicapture` spec. This is the careerscout
+   — and emits an :mod:`ergon.providers.apicapture` spec. This is the careerscout
    "response-shape classification" idea, made pure and regression-tested against real specs.
 
 Propose, don't dispose: the emitted spec is *verified live* through the apicapture provider (and the
@@ -304,10 +304,10 @@ async def verify_spec_async(spec: dict[str, Any], token: str) -> tuple[int, str]
     module-global ``_load_specs``, so callers must NOT run this concurrently for different tokens —
     verify sequentially (the batch capturer does)."""
     sys.path.insert(0, str(ROOT / "src"))
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers import apicapture as ap
-    from ergon_tracker.providers.apicapture import ApiCaptureProvider
+    from ergon.http import AsyncFetcher
+    from ergon.models import SearchQuery
+    from ergon.providers import apicapture as ap
+    from ergon.providers.apicapture import ApiCaptureProvider
 
     # Inject the proposed spec into the provider's in-memory map so we can verify it live BEFORE it is
     # ever written to apicapture.json (propose -> verify -> only then merge).

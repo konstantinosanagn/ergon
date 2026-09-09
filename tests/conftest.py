@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for ergon_tracker tests."""
+"""Shared pytest fixtures for ergon tests."""
 
 from __future__ import annotations
 

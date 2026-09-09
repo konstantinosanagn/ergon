@@ -9,9 +9,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import SearchQuery, make_job_id
-from ergon_tracker.providers.zwayam import ZwayamProvider
+from ergon.http import AsyncFetcher
+from ergon.models import SearchQuery, make_job_id
+from ergon.providers.zwayam import ZwayamProvider
 
 pytestmark = pytest.mark.anyio
 

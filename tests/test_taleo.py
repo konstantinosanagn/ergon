@@ -8,11 +8,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.taleo import TaleoProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.providers.taleo import TaleoProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -157,7 +157,7 @@ async def test_fetch_bare_host_discovers_cs_and_portal() -> None:
 def test_legacy_ftl_stream_parser() -> None:
     """Legacy jobsearch.ajax sites embed page-1 jobs as a '!|!' stream; parse id/title/loc/date
     with type-classified columns (tenant-specific order) and dedupe."""
-    from ergon_tracker.providers.taleo import TaleoProvider
+    from ergon.providers.taleo import TaleoProvider
 
     def job(jid, title, *cols):
         # signature: id‖title‖id‖title‖id‖id‖id‖id‖id‖ then tenant columns

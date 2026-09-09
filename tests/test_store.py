@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ergon_tracker.registry.store import SeedRegistry
+from ergon.registry.store import SeedRegistry
 
 
 def test_seed_loads_and_is_nonempty() -> None:

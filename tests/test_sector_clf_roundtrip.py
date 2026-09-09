@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ergon_tracker.extract.sector_clf import load_sector_model, save_sector_model
+from ergon.extract.sector_clf import load_sector_model, save_sector_model
 
 
 def _tiny_model(tmp_path):
@@ -57,7 +57,7 @@ def test_missing_file_returns_none() -> None:
     assert load_sector_model("/nonexistent/model.npz") is None
 
 
-from ergon_tracker.extract.sector_features import assemble, cl2n  # noqa: E402
+from ergon.extract.sector_features import assemble, cl2n  # noqa: E402
 
 
 def test_predicted_class_matches_sklearn(tmp_path) -> None:

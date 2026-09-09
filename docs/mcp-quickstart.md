@@ -1,6 +1,6 @@
-# MCP quickstart — use ergon-tracker from Claude (and other agents)
+# MCP quickstart — use ergon from Claude (and other agents)
 
-ergon-tracker ships an [MCP](https://modelcontextprotocol.io) server so an LLM can search jobs,
+ergon ships an [MCP](https://modelcontextprotocol.io) server so an LLM can search jobs,
 resolve a company's ATS, and list sources — as native tools.
 
 ## Tools exposed
@@ -23,8 +23,8 @@ resolve a company's ATS, and list sources — as native tools.
 Once published (see [Publishing](#publishing-maintainers)), no clone or venv is needed:
 
 ```bash
-uv tool install ergon-tracker          # or: pipx install ergon-tracker
-# adds `ergon-tracker` + `ergon-tracker-mcp` to your PATH; the registry (57k+ boards) is bundled
+uv tool install ergon          # or: pipx install ergon
+# adds `ergon` + `ergon-mcp` to your PATH; the registry (57k+ boards) is bundled
 ```
 
 Or run the MCP server with **zero install** via `uvx` (auto-fetches + runs) — see the config below.
@@ -32,8 +32,8 @@ Or run the MCP server with **zero install** via `uvx` (auto-fetches + runs) — 
 ### Option B — from source (today / contributors)
 
 ```bash
-git clone https://github.com/konstantinosanagn/ergon-tracker
-cd ergon-tracker
+git clone https://github.com/konstantinosanagn/ergon
+cd ergon
 uv venv && uv pip install -e ".[mcp]"
 # optional: add ".[semantic]" to enable semantic=true (embedding) ranking
 ```
@@ -41,7 +41,7 @@ uv venv && uv pip install -e ".[mcp]"
 Confirm it runs:
 
 ```bash
-ergon-tracker-mcp        # starts the stdio server (Ctrl-C to stop)
+ergon-mcp        # starts the stdio server (Ctrl-C to stop)
 ```
 
 ## Claude Desktop
@@ -54,23 +54,23 @@ Edit the config file:
 ```json
 {
   "mcpServers": {
-    "ergon-tracker": {
-      "command": "ergon-tracker-mcp"
+    "ergon": {
+      "command": "ergon-mcp"
     }
   }
 }
 ```
 
-If `ergon-tracker-mcp` isn't on Claude Desktop's PATH, use the absolute path to the console
-script inside your venv (e.g. `/path/to/ergon-tracker/.venv/bin/ergon-tracker-mcp`), or run via
+If `ergon-mcp` isn't on Claude Desktop's PATH, use the absolute path to the console
+script inside your venv (e.g. `/path/to/ergon/.venv/bin/ergon-mcp`), or run via
 your environment manager:
 
 ```json
 {
   "mcpServers": {
-    "ergon-tracker": {
+    "ergon": {
       "command": "uv",
-      "args": ["run", "--project", "/abs/path/to/ergon-tracker", "ergon-tracker-mcp"]
+      "args": ["run", "--project", "/abs/path/to/ergon", "ergon-mcp"]
     }
   }
 }
@@ -81,8 +81,8 @@ To enable the keyed sources (Adzuna/USAJOBS) and/or semantic tuning, pass env va
 ```json
 {
   "mcpServers": {
-    "ergon-tracker": {
-      "command": "ergon-tracker-mcp",
+    "ergon": {
+      "command": "ergon-mcp",
       "env": {
         "ADZUNA_APP_ID": "...",
         "ADZUNA_APP_KEY": "...",
@@ -97,15 +97,15 @@ To enable the keyed sources (Adzuna/USAJOBS) and/or semantic tuning, pass env va
 (The server also reads a `.env` in the repo root, so setting `env` here is optional if you've
 created that file.)
 
-Restart Claude Desktop. You should see `ergon-tracker` listed under the tools/🔌 menu.
+Restart Claude Desktop. You should see `ergon` listed under the tools/🔌 menu.
 
 ## Claude Code
 
 ```bash
-claude mcp add ergon-tracker -- ergon-tracker-mcp
+claude mcp add ergon -- ergon-mcp
 ```
 
-Then in a session: *"use ergon-tracker to find senior backend roles in Germany over €80k."* The
+Then in a session: *"use ergon to find senior backend roles in Germany over €80k."* The
 model translates that into a `search_jobs` call (`keywords`, `country`, `level`, `salary_min`),
 and gets back deduped, relevance-ranked postings with scores.
 
@@ -205,9 +205,9 @@ No clone, no venv, no PATH juggling — `uvx` fetches and runs the published pac
 ```json
 {
   "mcpServers": {
-    "ergon-tracker": {
+    "ergon": {
       "command": "uvx",
-      "args": ["--from", "ergon-tracker[mcp]", "ergon-tracker-mcp"]
+      "args": ["--from", "ergon[mcp]", "ergon-mcp"]
     }
   }
 }
@@ -227,5 +227,5 @@ uv pip install --python .venv/bin/python build twine
 .venv/bin/twine upload dist/*                    # needs a PyPI token; tag the release first
 ```
 
-Verified: clean-venv `pip install ergon-tracker[mcp]` imports, registers all providers, and loads the
-bundled `seed.json` (57k+ boards); both `ergon-tracker` and `ergon-tracker-mcp` console scripts work.
+Verified: clean-venv `pip install ergon[mcp]` imports, registers all providers, and loads the
+bundled `seed.json` (57k+ boards); both `ergon` and `ergon-mcp` console scripts work.

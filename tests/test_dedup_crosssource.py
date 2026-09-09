@@ -3,8 +3,8 @@ unions all sources."""
 
 from __future__ import annotations
 
-from ergon_tracker import JobPosting, Location, RemoteType, Salary
-from ergon_tracker.dedup import deduplicate
+from ergon import JobPosting, Location, RemoteType, Salary
+from ergon.dedup import deduplicate
 
 
 def _job(source: str, sid: str, title: str, company: str, **kw: object) -> JobPosting:

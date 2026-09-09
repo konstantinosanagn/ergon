@@ -23,10 +23,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
-from ergon_tracker.models import JobLevel, JobPosting, RawJob, make_job_id  # noqa: E402
+from ergon.index.build import build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
+from ergon.models import JobLevel, JobPosting, RawJob, make_job_id  # noqa: E402
 
 _TOKEN = "acme"
 # Distinct titles so the two postings are NOT fuzzy-deduped into one. id "1" is stable (same body
@@ -86,7 +86,7 @@ def _crawl_and_build(states, work_dir, prov, build_id, prev_db, monkeypatch):
     fresh = work_dir / "fresh.sqlite"
     # Spy on enrich_in_place (local-imported inside _crawl_due at call time, so patching the module
     # attribute is picked up). Counts how many postings were actually enriched this run.
-    import ergon_tracker.enrich as enrich_mod
+    import ergon.enrich as enrich_mod
 
     real = enrich_mod.enrich_in_place
     calls = {"n": 0}
@@ -127,8 +127,8 @@ def _years(db: Path, sid: str):
 
 
 def test_enrich_reuse_matches_full_and_reenriches_changed_body(monkeypatch, tmp_path):
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     prov = _Provider()
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
@@ -216,8 +216,8 @@ class _InferLevelProvider:
 
 
 def test_enrich_reuse_fires_for_inferred_level_posting(monkeypatch, tmp_path):
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     prov = _InferLevelProvider()
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)

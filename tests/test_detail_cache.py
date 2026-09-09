@@ -4,8 +4,8 @@ import gzip
 import hashlib
 import json
 
-from ergon_tracker.index.cache import DetailCache
-from ergon_tracker.index.detail import DETAIL_SCHEMA_VERSION, open_detail
+from ergon.index.cache import DetailCache
+from ergon.index.detail import DETAIL_SCHEMA_VERSION, open_detail
 
 
 def _build_detail(tmp_path, *, name="detail.sqlite"):

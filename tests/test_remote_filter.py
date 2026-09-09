@@ -3,9 +3,9 @@ index SQL and SearchQuery.matches() in agreement. Untagged onsite postings are d
 
 from __future__ import annotations
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.models import JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.models import JobPosting, Location, RemoteType, SearchQuery
 
 
 def _job(sid, *, title="Engineer", remote=RemoteType.UNKNOWN, raw="", is_remote=False):

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.build import build_index
+from ergon.index.db import connect
+from ergon.index.query import search_rows
+from ergon.models import JobPosting, Location, RemoteType, SearchQuery
 
 NOW = datetime.now(timezone.utc)
 

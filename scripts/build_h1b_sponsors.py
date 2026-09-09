@@ -9,7 +9,7 @@ rows, 75+ columns. This is a *build-time* ETL: download one or more of those wor
 It streams the rows (openpyxl read-only, so the giant file never loads fully into memory), keeps
 employers whose CASE_STATUS is *certified*, normalizes the employer name the same way dedup does
 (so "STRIPE, INC." -> "stripe" matches a "Stripe" posting), counts certified filings, and writes
-a compact ``src/ergon_tracker/registry/data/h1b_sponsors.json`` consumed by ``extract/visa.py``.
+a compact ``src/ergon/registry/data/h1b_sponsors.json`` consumed by ``extract/visa.py``.
 
 The parsing logic (``sponsors_from_rows``) is a pure function over row dicts, so it is unit-tested
 without needing a real workbook.
@@ -26,9 +26,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.dedup import normalize_company  # noqa: E402
+from ergon.dedup import normalize_company  # noqa: E402
 
-OUT = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "h1b_sponsors.json"
+OUT = ROOT / "src" / "ergon" / "registry" / "data" / "h1b_sponsors.json"
 
 # Header names vary slightly across fiscal years; match case-insensitively against these.
 _EMPLOYER_COLS = ("EMPLOYER_NAME", "EMPLOYER_BUSINESS_DBA", "EMPLOYER_LEGAL_BUSINESS_NAME")

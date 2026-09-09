@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.index.db import connect, fresh_db
-from ergon_tracker.index.gates import (
+from ergon.index.db import connect, fresh_db
+from ergon.index.gates import (
     _DEF_JD_MAX_DROP_PCT,
     evaluate_gates,
     jd_gate_drop_pct_from_env,

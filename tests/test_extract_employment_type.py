@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.employment_type import EmploymentTypeExtractor
-from ergon_tracker.models import EmploymentType
+from ergon.extract.base import ExtractInput
+from ergon.extract.employment_type import EmploymentTypeExtractor
+from ergon.models import EmploymentType
 
 _ex = EmploymentTypeExtractor()
 

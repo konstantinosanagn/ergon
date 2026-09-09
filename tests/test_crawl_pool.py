@@ -7,7 +7,7 @@ from collections.abc import Iterator
 import anyio
 import pytest
 
-from ergon_tracker.crawl_pool import gather, run_pool, stream_pool
+from ergon.crawl_pool import gather, run_pool, stream_pool
 
 
 async def test_pool_bounds_concurrency() -> None:

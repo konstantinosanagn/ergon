@@ -1,6 +1,6 @@
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType
+from ergon.index.build import build_index
+from ergon.index.db import connect
+from ergon.models import JobLevel, JobPosting, Location, RemoteType
 
 
 def _job(sid, company, title, **kw):

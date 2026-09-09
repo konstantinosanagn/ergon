@@ -1,7 +1,7 @@
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.coverage import compute_coverage, render_status_md
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, Salary
+from ergon.index.build import build_index
+from ergon.index.coverage import compute_coverage, render_status_md
+from ergon.index.db import connect
+from ergon.models import JobLevel, JobPosting, Location, RemoteType, Salary
 
 
 def _jobs():

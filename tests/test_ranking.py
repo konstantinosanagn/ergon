@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker.models import JobPosting, Location
-from ergon_tracker.ranking import rank, register_reranker, score_text
+from ergon.models import JobPosting, Location
+from ergon.ranking import rank, register_reranker, score_text
 
 
 def _job(

@@ -70,7 +70,7 @@ most of what the architecture review asked R6/R7 to buy. The marginal-value bar 
 
 ### 1.1 The reader contract today (what R6 would change)
 
-`src/ergon_tracker/index/cache.py` defines five downloader classes — `IndexCache` (core),
+`src/ergon/index/cache.py` defines five downloader classes — `IndexCache` (core),
 `SlimCache`, `RichCache` (vectors), `DetailCache`, `ShardCache`. Every one follows the **same
 manifest-then-blob** pattern:
 
@@ -369,7 +369,7 @@ and asserts the reader resolves the OLD set with no tearing. This is the offline
 
 The crawl writes `fresh.sqlite` (+ the JD sidecar) as a **durable GitHub Actions workflow artifact**;
 a **separate assemble+publish job** downloads that artifact, runs `build_index_from_fresh_db`
-(`src/ergon_tracker/index/build.py:833`) + the gated publish. A publish/build/gate failure then loses
+(`src/ergon/index/build.py:833`) + the gated publish. A publish/build/gate failure then loses
 **no fetched work** — the fetch is durable in the artifact, so recovery is just re-running the assemble
 job, not re-crawling.
 
@@ -496,7 +496,7 @@ for *validation*, it did exactly what it is built to do: gate-check its index an
 had **more rows** (a full crawl) but **lower JD coverage** (no Tier-3 detail merge in that validation
 run), so:
 
-- It **passed the publish gate.** The gate (`src/ergon_tracker/index/gates.py:46-102`) enforces
+- It **passed the publish gate.** The gate (`src/ergon/index/gates.py:46-102`) enforces
   `integrity_check`, `schema_version`, a **row-count floor** (`rows ≥ 0.75 × prev`, `gates.py:78-85`),
   no-duplicate-ids, and company-FK-intact. A full-crawl index has *more* rows, so the row floor passed
   comfortably. **There is no JD-coverage gate.**

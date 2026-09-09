@@ -2,8 +2,8 @@ import sqlite3
 
 import anyio
 
-from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.detail import (
+from ergon.index.db import fresh_db
+from ergon.index.detail import (
     DetailRef,
     detail_sig,
     ensure_detail_schema,
@@ -423,7 +423,7 @@ def test_reconcile_prefers_structured_detailfetch_salary_over_body(tmp_path):
     # even when the text body carries a DIFFERENT parseable figure -- the structured range wins
     # (enrich only fills a still-empty field, and the reconcile seeds it first). Proves the whole
     # str|DetailFetch plumbing end to end.
-    from ergon_tracker.models import DetailFetch, Salary, SalaryInterval
+    from ergon.models import DetailFetch, Salary, SalaryInterval
 
     idx = _mk_index(tmp_path, [("1", "rippling", "http://x/1", "h1", None)])
     det = str(tmp_path / "detail.sqlite")
@@ -449,7 +449,7 @@ def test_reconcile_prefers_structured_detailfetch_salary_over_body(tmp_path):
 
 def test_reconcile_detailfetch_without_salary_falls_back_to_body(tmp_path):
     # DetailFetch(salary=None) must behave exactly like a bare str: the body extractor fills salary.
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     idx = _mk_index(tmp_path, [("1", "rippling", "http://x/1", "h1", None)])
     det = str(tmp_path / "detail.sqlite")
@@ -469,7 +469,7 @@ def test_reconcile_recovers_structured_location_and_merges_country(tmp_path):
     # list-scrape geo. Also exercises the v1->v2 sidecar column migration implicitly (fresh db).
     import sqlite3
 
-    from ergon_tracker.models import DetailFetch, Location
+    from ergon.models import DetailFetch, Location
 
     # index row with a placeholder location and NULL city/country (the Arcus/jobvite case)
     idx = tmp_path / "index.sqlite"
@@ -519,7 +519,7 @@ def test_ensure_detail_schema_migrates_v1_sidecar_adds_city_country(tmp_path):
     # A pre-existing v1 sidecar (no city/country) must gain the columns without data loss.
     import sqlite3
 
-    from ergon_tracker.index.detail import ensure_detail_schema
+    from ergon.index.detail import ensure_detail_schema
 
     p = tmp_path / "old.sqlite"
     c = sqlite3.connect(p)
@@ -584,7 +584,7 @@ def _seed_drained(det_path, *, id_, content_hash, salary_min, fetched_at="2026-0
 def _loc_fetch(with_salary=True):
     """fetch_detail stub returning a DetailFetch that carries a structured location (and, by default,
     a re-parseable salary in the JD body). NEVER embeds/network -- pure in-memory."""
-    from ergon_tracker.models import DetailFetch, Location
+    from ergon.models import DetailFetch, Location
 
     async def fake(ref):
         body = "Senior Engineer in New York. "
@@ -758,7 +758,7 @@ def _ref(id_, sig, source="oracle"):
 
 
 def test_record_attempt_persists_sig_and_increments(tmp_path):
-    from ergon_tracker.index.detail import _record_attempt
+    from ergon.index.detail import _record_attempt
 
     con = open_detail(str(tmp_path / "d.sqlite"))
     _record_attempt(con, _ref("x", "SIGA"))
@@ -773,7 +773,7 @@ def test_record_attempt_persists_sig_and_increments(tmp_path):
 
 
 def test_record_attempt_resets_budget_when_posting_changes(tmp_path):
-    from ergon_tracker.index.detail import RETRY_CAP, _eligible, _load_existing, _record_attempt
+    from ergon.index.detail import RETRY_CAP, _eligible, _load_existing, _record_attempt
 
     con = open_detail(str(tmp_path / "d.sqlite"))
     for _ in range(RETRY_CAP):
@@ -791,7 +791,7 @@ def test_record_attempt_resets_budget_when_posting_changes(tmp_path):
 
 def test_eligible_reaches_retry_cap_gate_once_sig_persisted(tmp_path):
     # Directly exercise the gate: a failed row with a MATCHING persisted sig is skipped at the cap.
-    from ergon_tracker.index.detail import RETRY_CAP, _eligible, _load_existing, _record_attempt
+    from ergon.index.detail import RETRY_CAP, _eligible, _load_existing, _record_attempt
 
     con = open_detail(str(tmp_path / "d.sqlite"))
     for _ in range(RETRY_CAP - 1):
@@ -808,7 +808,7 @@ def test_dead_row_abandoned_after_retry_cap_across_runs(tmp_path):
     # THE regression/stress test: a row whose fetch ALWAYS fails must be attempted exactly RETRY_CAP
     # times across successive reconcile passes, then permanently skipped -- NOT re-fetched every run
     # (the pre-fix behaviour that burned ~96% of the finisher drain on dead rows).
-    from ergon_tracker.index.detail import RETRY_CAP
+    from ergon.index.detail import RETRY_CAP
 
     idx = _mk_index(tmp_path, [("dead", "oracle", "http://x/dead", "h", None)])
     det = str(tmp_path / "detail.sqlite")

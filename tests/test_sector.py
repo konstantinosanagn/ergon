@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.sector import SectorExtractor, load_sector_index
+from ergon.extract.base import ExtractInput
+from ergon.extract.sector import SectorExtractor, load_sector_index
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +61,7 @@ def test_corrected_company_sectors(extractor: SectorExtractor, key: str, expecte
 
 # --- company-name fallback (applied only when the curated table misses) ---
 
-from ergon_tracker.extract.sector import name_sector  # noqa: E402
+from ergon.extract.sector import name_sector  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -143,13 +143,13 @@ def test_extractor_falls_back_to_name(extractor: SectorExtractor) -> None:
 def test_company_sector_exact_brand_map(company: str, sector: str) -> None:
     # Large opaque-brand employers with no industry word in their name are classified by the
     # high-precision exact company-name map (job-count-weighted coverage win).
-    from ergon_tracker.extract.sector import company_sector
+    from ergon.extract.sector import company_sector
 
     assert company_sector(company) == sector
 
 
 def test_company_sector_unknown_stays_none() -> None:
-    from ergon_tracker.extract.sector import company_sector
+    from ergon.extract.sector import company_sector
 
     assert company_sector("Some Opaque Holdings LLC") is None
     assert company_sector(None) is None

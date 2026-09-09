@@ -8,8 +8,8 @@ from typing import Any
 
 import anyio
 
-from ergon_tracker.crawl_pool import run_pool
-from ergon_tracker.crawl_progress import ProgressHeartbeat, atomic_write_json
+from ergon.crawl_pool import run_pool
+from ergon.crawl_progress import ProgressHeartbeat, atomic_write_json
 
 
 class FakeClock:

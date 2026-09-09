@@ -10,7 +10,7 @@ import sqlite3
 
 from scripts.reset_detail_attempts import count_stuck, reset_stuck_attempts
 
-from ergon_tracker.index.detail import RETRY_CAP, open_detail
+from ergon.index.detail import RETRY_CAP, open_detail
 
 
 def _seed(path: str) -> None:

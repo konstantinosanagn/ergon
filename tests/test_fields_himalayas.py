@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import JobLevel, RawJob
-from ergon_tracker.providers.himalayas import HimalayasProvider
+from ergon.models import JobLevel, RawJob
+from ergon.providers.himalayas import HimalayasProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

@@ -2,7 +2,7 @@
 
 Runs one host-shard's board-membership check against an ALREADY-BUILT index and writes the
 confirmed-departed ids to a small sidecar sqlite db -- the PINNED contract
-``ergon_tracker.index.build.apply_freshness_expiries`` (Phase 2) already knows how to carry
+``ergon.index.build.apply_freshness_expiries`` (Phase 2) already knows how to carry
 forward: ``expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)``.
 
 Usage:
@@ -13,10 +13,10 @@ Usage:
 
 THE INDEX PASSED VIA ``--index`` IS NEVER MUTATED: it is opened read-only for the whole run, only
 to (1) enumerate this shard's active boards and (2) read the rows needed to re-verify them. The
-real engine (``ergon_tracker.index.freshness.sweep_all_boards``) mutates status='active' rows to
+real engine (``ergon.index.freshness.sweep_all_boards``) mutates status='active' rows to
 status='expired' IN PLACE by design (see freshness.py's module docstring) -- so rather than fight
 that contract, this CLI gives it an isolated, throwaway TEMP COPY (built via
-``ergon_tracker.index.db.fresh_db`` + a row-for-row copy of just this shard's active jobs/
+``ergon.index.db.fresh_db`` + a row-for-row copy of just this shard's active jobs/
 job_sources rows) to mutate, then reads back whichever rows the engine flipped to 'expired' as the
 confirmed-departed set, and discards the temp copy. See ``_detect_departed`` below.
 
@@ -38,16 +38,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.index.db import connect, fresh_db  # noqa: E402
-from ergon_tracker.index.freshness import (  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.index.db import connect, fresh_db  # noqa: E402
+from ergon.index.freshness import (  # noqa: E402
     DETERMINISTIC_SOURCES,
     SEARCH_INDEX_SOURCES,
     BoardDelta,
     sweep_all_boards,
 )
-from ergon_tracker.index.freshness_shard import shard_boards  # noqa: E402
-from ergon_tracker.providers.base import load_builtins  # noqa: E402
+from ergon.index.freshness_shard import shard_boards  # noqa: E402
+from ergon.providers.base import load_builtins  # noqa: E402
 
 # The only sources the engine (`DETERMINISTIC_SOURCES | SEARCH_INDEX_SOURCES`) knows how to sweep
 # -- boards on any other source are never selected, so a shard never wastes a slot on a board the
@@ -66,7 +66,7 @@ _SIDECAR_SCHEMA = (
 # The per-board added-side change signal the daily build consumes to decide, cheaply, whether a
 # board's membership moved since it was last crawled. One row per board that the sweep could
 # DETERMINE a full, trustworthy live id-set for (deterministic sources only -- see
-# ``ergon_tracker.index.freshness.sweep_all_boards``); a truncated/failed/undetermined fetch emits
+# ``ergon.index.freshness.sweep_all_boards``); a truncated/failed/undetermined fetch emits
 # NO row for that board, never a partial fingerprint. ``added_ids`` is a JSON array of the raw
 # ``source_job_id``s the board now lists that our index does not already hold active (sorted, so the
 # serialization is stable/diffable); ``idset_hash`` is the stable SHA-1 fingerprint of the live
@@ -82,7 +82,7 @@ _BOARD_DELTAS_SCHEMA = (
 # Expiry-rate-monitor addition -- ALONGSIDE ``expired_ids``/``board_deltas`` (whose contracts are
 # unchanged). This shard's OWN per-source counts (the dict ``sweep_all_boards`` returns), so the
 # merge step can SUM them across every shard before evaluating the drift tripwire
-# (``ergon_tracker.index.freshness.check_expiry_alarms``) on the true, cross-shard totals -- a
+# (``ergon.index.freshness.check_expiry_alarms``) on the true, cross-shard totals -- a
 # single shard only ever sees a slice of a source's boards, so its own rate is not a trustworthy
 # per-source signal in isolation (see that function's docstring). Columns cover the UNION of both
 # counts shapes this module produces (deterministic: checked/departed/expired/errored;
@@ -196,7 +196,7 @@ def _stats_rows(stats: dict[str, dict[str, int]]) -> list[_StatsRow]:
     """Serialize ``sweep_all_boards``'s per-source counts into ``source_stats`` rows, in
     ``_STATS_KEYS`` column order -- a key absent from a given source's counts shape (deterministic
     lacks ``candidates``/``confirmed_alive``/``unconfirmed``; search-index lacks ``departed``)
-    contributes 0 rather than erroring, per :func:`ergon_tracker.index.freshness.source_expiry_rate`'s
+    contributes 0 rather than erroring, per :func:`ergon.index.freshness.source_expiry_rate`'s
     own ``.get(..., 0)`` convention."""
     rows: list[_StatsRow] = []
     for source, counts in sorted(stats.items()):
@@ -216,7 +216,7 @@ def _write_sidecar(
     stats_rows: list[tuple[str, int, int, int, int, int, int, int]] | None = None,
 ) -> None:
     """Write the PINNED freshness sidecar contract exactly (see
-    ``ergon_tracker.index.build.apply_freshness_expiries``'s docstring, which the daily build's
+    ``ergon.index.build.apply_freshness_expiries``'s docstring, which the daily build's
     carry-forward reads against byte-for-byte): one table ``expired_ids(id TEXT PRIMARY KEY,
     expired_at TEXT NOT NULL, reason TEXT)`` -- UNCHANGED -- PLUS the Phase-2 ``board_deltas`` table
     (see ``_BOARD_DELTAS_SCHEMA``) carrying the per-board added-side change signal, PLUS the

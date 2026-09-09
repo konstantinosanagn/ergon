@@ -1,4 +1,4 @@
-# jobspine / ergon-tracker — System Map
+# jobspine / ergon — System Map
 
 **Generated:** 2026-07-20 · a grand-perspective conceptual review consolidated from an 8-lane
 parallel code survey (Core SDK, Providers, Index build, Extraction, Serving, Automations, Registry,
@@ -21,7 +21,7 @@ live ATS boards for targeted company queries.
 ## 2. The stack (top to bottom)
 
 ```
- CONSUMPTION   Python SDK · CLI (ergon-tracker) · MCP (ergon-tracker-mcp, 9 tools) · HTTP QUERY /jobs
+ CONSUMPTION   Python SDK · CLI (ergon) · MCP (ergon-mcp, 9 tools) · HTTP QUERY /jobs
       │        serialization.job_to_dict = one shared wire shape
  ─────┼──────────────────────────────────────────────────────────────────────────────────
  QUERY/SERVE   engine.run_search → index fast-path (router: full/slim/sharded + vector rerank)
@@ -50,17 +50,17 @@ live ATS boards for targeted company queries.
 
 | Path | Role |
 |---|---|
-| `src/ergon_tracker/models.py` | The `JobPosting` contract + `SearchQuery.matches()` client filter |
-| `src/ergon_tracker/{client,engine,sync}.py` | Async/sync entry + `run_search` orchestrator (index fast-path + live fan-out) |
-| `src/ergon_tracker/{ranking,dedup,canonicalize}.py` | BM25F rank · cross-source merge · Company rollup |
-| `src/ergon_tracker/{http,crawl_pool}.py` | `AsyncFetcher` (rate/breaker/budget) · bounded worker pool |
-| `src/ergon_tracker/providers/` (54) | The ATS moat. `base.py` = Protocol + registry |
-| `src/ergon_tracker/extract/` (15) + `enrich.py` | Field extraction (deterministic-first) |
-| `src/ergon_tracker/semantic.py`, `extract/sector_clf.py` | ML tier — **built but unwired from enrich** |
-| `src/ergon_tracker/index/` (18) | Build, schema, gates, freshness, delta, sidecars, client cache |
-| `src/ergon_tracker/serve/query_app.py` | HTTP QUERY surface (ETag/304, cache, single-flight) |
-| `src/ergon_tracker/{cli,mcp_server}.py` | CLI (6 cmds) · MCP (9 tools) |
-| `src/ergon_tracker/registry/` + `data/` | The crawl universe + gold data assets |
+| `src/ergon/models.py` | The `JobPosting` contract + `SearchQuery.matches()` client filter |
+| `src/ergon/{client,engine,sync}.py` | Async/sync entry + `run_search` orchestrator (index fast-path + live fan-out) |
+| `src/ergon/{ranking,dedup,canonicalize}.py` | BM25F rank · cross-source merge · Company rollup |
+| `src/ergon/{http,crawl_pool}.py` | `AsyncFetcher` (rate/breaker/budget) · bounded worker pool |
+| `src/ergon/providers/` (54) | The ATS moat. `base.py` = Protocol + registry |
+| `src/ergon/extract/` (15) + `enrich.py` | Field extraction (deterministic-first) |
+| `src/ergon/semantic.py`, `extract/sector_clf.py` | ML tier — **built but unwired from enrich** |
+| `src/ergon/index/` (18) | Build, schema, gates, freshness, delta, sidecars, client cache |
+| `src/ergon/serve/query_app.py` | HTTP QUERY surface (ETag/304, cache, single-flight) |
+| `src/ergon/{cli,mcp_server}.py` | CLI (6 cmds) · MCP (9 tools) |
+| `src/ergon/registry/` + `data/` | The crawl universe + gold data assets |
 | `scripts/` (~90) | ~10 on the automated path; rest = one-off discovery/coverage tooling |
 | `.github/workflows/` (7) | The freshness automation loop |
 | `tests/` (232, ~1,994 fns) + `tests/fixtures/` | Ratcheting recall/precision gates + parity + corpora |
@@ -71,11 +71,11 @@ live ATS boards for targeted company queries.
 
 | Surface | Entry | Audience | Notes |
 |---|---|---|---|
-| **Python SDK** | `from ergon_tracker import search` / `AsyncErgonTracker` | app/pipeline devs | sync + async; `to_pandas/to_polars` |
-| **CLI** | `ergon-tracker {search,match-resume,resolve,sources,sponsors,version}` | terminal users | ~25 search flags; no `--max-degree` (MCP has it) |
-| **MCP server** | `ergon-tracker-mcp` (stdio, 9 tools) | AI agents / Claude | search_jobs, whats_new, match_resume, assess_fit, h1b_jobs, list_companies… |
+| **Python SDK** | `from ergon import search` / `AsyncErgon` | app/pipeline devs | sync + async; `to_pandas/to_polars` |
+| **CLI** | `ergon {search,match-resume,resolve,sources,sponsors,version}` | terminal users | ~25 search flags; no `--max-degree` (MCP has it) |
+| **MCP server** | `ergon-mcp` (stdio, 9 tools) | AI agents / Claude | search_jobs, whats_new, match_resume, assess_fit, h1b_jobs, list_companies… |
 | **HTTP QUERY** | `serve.serve()` → `QUERY /jobs` | backend/agent fleets | ETag/304, cache, single-flight — **undocumented + no console script** |
-| **Prebuilt index** | auto-download to `~/.cache/ergon-tracker` | all broad-search consumers | delta/chain updates, slim + per-sector shards, sha256-verified |
+| **Prebuilt index** | auto-download to `~/.cache/ergon` | all broad-search consumers | delta/chain updates, slim + per-sector shards, sha256-verified |
 
 ---
 
@@ -164,7 +164,7 @@ Ranked; items flagged by ≥2 independent lanes are **high-confidence**.
 7. **Consolidate the 4 copy-paste tier caches** ⟵ *lane 3.* Only `IndexCache` has delta support;
    slim/detail/rich full-download every build.
 8. **Ship serve/ as a real surface** ⟵ *lane 5.* A production-shaped HTTP QUERY server with zero
-   docs and no console script. Add `ergon-tracker-serve` + README section (lowest-effort win).
+   docs and no console script. Add `ergon-serve` + README section (lowest-effort win).
 
 ### C. RELIABILITY / STRESS-TEST
 9. **No alerting anywhere** ⟵ *lane 6.* Every operational failure is silent (continue-on-error +

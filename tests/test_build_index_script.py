@@ -15,8 +15,8 @@ from build_index import (  # noqa: E402
     publish_artifacts,
 )
 
-from ergon_tracker.index.build import build_index  # noqa: E402
-from ergon_tracker.models import JobPosting  # noqa: E402
+from ergon.index.build import build_index  # noqa: E402
+from ergon.models import JobPosting  # noqa: E402
 
 
 def test_interleave_by_ats_balances_clustered_registry():
@@ -91,8 +91,8 @@ def test_fold_network_into_fresh_appends_and_returns_keys(tmp_path):
     import httpx
     import respx
 
-    from ergon_tracker.dedup import normalize_company
-    from ergon_tracker.index.db import connect, fresh_db
+    from ergon.dedup import normalize_company
+    from ergon.index.db import connect, fresh_db
 
     fresh = tmp_path / "fresh.sqlite"
     fresh_db(fresh)  # create the index schema the incremental crawl streams into
@@ -131,7 +131,7 @@ def test_fold_network_into_fresh_appends_and_returns_keys(tmp_path):
 def test_fold_network_into_fresh_noop_when_disabled(tmp_path):
     import anyio
 
-    from ergon_tracker.index.db import fresh_db
+    from ergon.index.db import fresh_db
 
     fresh = tmp_path / "fresh.sqlite"
     fresh_db(fresh)
@@ -148,7 +148,7 @@ def test_publish_writes_gz_and_manifest(tmp_path):
     out = tmp_path / "dist"
     publish_artifacts(src, out, build_id="b1")
     man = json.loads((out / "manifest.json").read_text())
-    from ergon_tracker.index.db import SCHEMA_VERSION
+    from ergon.index.db import SCHEMA_VERSION
 
     assert man["build_id"] == "b1" and man["schema_version"] == SCHEMA_VERSION
     raw = gzip.decompress((out / "index.sqlite.gz").read_bytes())
@@ -170,7 +170,7 @@ def test_append_history_accumulates(tmp_path):
 def test_build_and_publish_shards_gzips(tmp_path):
     from build_index import build_and_publish_shards
 
-    from ergon_tracker.models import JobPosting
+    from ergon.models import JobPosting
 
     jobs = [
         JobPosting.create(
@@ -198,7 +198,7 @@ def test_new_boards_selects_unseen_and_caps():
     )
     bi = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bi)
-    from ergon_tracker.index.scheduler import BoardState
+    from ergon.index.scheduler import BoardState
 
     items = [
         ("a", {"ats": "greenhouse", "token": "acme"}),
@@ -225,8 +225,8 @@ def test_deltas_window_accumulates_contiguous_chain_across_builds(tmp_path):
     )
     bi = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bi)
-    from ergon_tracker.index.build import build_index
-    from ergon_tracker.models import JobPosting
+    from ergon.index.build import build_index
+    from ergon.models import JobPosting
 
     def _job(sid, title):
         return JobPosting.create(source="greenhouse", source_job_id=sid, company="Co", title=title)
@@ -268,8 +268,8 @@ def test_write_vectors_manifest_satisfies_the_richcache_consumer(tmp_path):
     every user -- silently, because absence of the sidecar is a legitimate non-event that never raises.
     So publish exactly what build_index.py publishes, then make the actual cache consume it.
     """
-    from ergon_tracker.index.cache import RichCache
-    from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
+    from ergon.index.cache import RichCache
+    from ergon.index.rich import RICH_SCHEMA_VERSION
 
     remote = tmp_path / "remote"
     remote.mkdir()

@@ -4,11 +4,11 @@
 The daily host-sharded freshness matrix (``.github/workflows/freshness-sweep.yml``) runs 20
 parallel ``python -m scripts.freshness_sweep`` jobs, each producing its own
 ``index-freshness-shard-N.sqlite`` covering a DISJOINT slice of boards (every board's politeness
-bucket hashes to exactly ONE shard -- see ``ergon_tracker.index.freshness_shard.shard_boards``).
+bucket hashes to exactly ONE shard -- see ``ergon.index.freshness_shard.shard_boards``).
 The workflow's separate ``merge`` job runs this script to union all 20 shard sidecars back into a
 single combined ``index-freshness.sqlite``, which is then gzipped and published to the
 ``index-latest`` release. The next daily ``build-index.yml`` run downloads that combined sidecar
-and carries its expiries forward via ``ergon_tracker.index.build.apply_freshness_expiries`` --
+and carries its expiries forward via ``ergon.index.build.apply_freshness_expiries`` --
 this script never touches the core index itself.
 
 Usage:
@@ -16,7 +16,7 @@ Usage:
       --out dist/index-freshness.sqlite
 
 Each shard sidecar is the PINNED contract ``scripts/freshness_sweep.py`` writes (and
-``ergon_tracker.index.build.apply_freshness_expiries`` reads): one table
+``ergon.index.build.apply_freshness_expiries`` reads): one table
 ``expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)``. That DDL is
 duplicated here as a literal (rather than imported from ``scripts.freshness_sweep``) because this
 script is invoked as a direct file path (``python scripts/merge_freshness_shards.py``, mirroring
@@ -24,12 +24,12 @@ script is invoked as a direct file path (``python scripts/merge_freshness_shards
 the ``scripts/`` directory itself, not the repo root, so ``import scripts.freshness_sweep`` would
 not resolve. Otherwise stdlib only (sqlite3, argparse, glob via ``Path.glob``) for the union logic
 -- the one exception is the expiry-rate-monitor's drift tripwire, which imports its canonical
-formula from ``ergon_tracker.index.freshness`` (see the import block below for why that resolves).
+formula from ``ergon.index.freshness`` (see the import block below for why that resolves).
 
 EXPIRY-RATE MONITOR (drift tripwire): this merge is also where each shard's own ``source_stats``
 counts (see ``freshness_sweep.py``'s ``_SOURCE_STATS_SCHEMA``) get SUMMED into one grand total per
 source and published into the combined sidecar's ``source_stats`` table -- inspectable directly
-(``SELECT * FROM source_stats``). ``ergon_tracker.index.freshness.check_expiry_alarms`` is then
+(``SELECT * FROM source_stats``). ``ergon.index.freshness.check_expiry_alarms`` is then
 evaluated on those merged totals (never a single shard's slice -- see that function's docstring for
 why) to WARN when a source's expiry rate spikes, e.g. a body-marker soft-404 source (adp/taleo/
 taleobe) whose "confirmed dead" marker match starts drifting onto live postings. Observability
@@ -48,7 +48,7 @@ from pathlib import Path
 # The expiry-rate-monitor's drift tripwire (``check_expiry_alarms``/``source_expiry_rate``) is the
 # ONE piece of this script that needs real logic beyond "union some rows" -- rather than duplicate
 # it here (and risk the two formulas drifting apart), import the canonical implementation from
-# ``ergon_tracker.index.freshness``. This mirrors ``scripts/freshness_sweep.py``'s own
+# ``ergon.index.freshness``. This mirrors ``scripts/freshness_sweep.py``'s own
 # ``sys.path.insert(0, str(ROOT / "src"))`` trick so the import resolves regardless of HOW this
 # file is invoked (``python scripts/merge_freshness_shards.py`` from the repo root, where
 # ``sys.path[0]`` is ``scripts/`` itself, not the root) -- everything else in this module stays
@@ -56,14 +56,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.freshness import check_expiry_alarms  # noqa: E402
+from ergon.index.freshness import check_expiry_alarms  # noqa: E402
 
 _SHARD_GLOB = "index-freshness-shard-*.sqlite"
 
 # Pinned contract -- MUST stay byte-for-byte identical (modulo IF NOT EXISTS, needed here since
 # the output db may already carry earlier shards' rows across merge calls) to
 # `scripts/freshness_sweep.py`'s `_SIDECAR_SCHEMA` and the table shape
-# `ergon_tracker.index.build.apply_freshness_expiries` ATTACHes and reads. If that contract ever
+# `ergon.index.build.apply_freshness_expiries` ATTACHes and reads. If that contract ever
 # changes, update all three together.
 _SIDECAR_SCHEMA = (
     "CREATE TABLE IF NOT EXISTS expired_ids"
@@ -173,7 +173,7 @@ def merge_shards(shard_paths: list[Path], out_path: Path) -> dict[str, int | lis
     way a natural-keyed row can).
 
     DRIFT TRIPWIRE: after every shard's counts are summed, ``check_expiry_alarms`` (the canonical
-    ``ergon_tracker.index.freshness`` implementation -- see the WHY at this module's top) is
+    ``ergon.index.freshness`` implementation -- see the WHY at this module's top) is
     evaluated on the MERGED, cross-shard totals -- never a single shard's slice, which is not a
     trustworthy per-source rate on its own. This ONLY logs a WARNING for any source whose expiry
     rate spiked past ``ERGON_FRESHNESS_EXPIRY_ALARM``; it never touches ``expired_ids``,

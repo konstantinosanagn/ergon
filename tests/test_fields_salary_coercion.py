@@ -6,8 +6,8 @@ recruitee/teamtailor/join into one helper, plus join's zero-decimal-currency div
 minor unit).
 """
 
-from ergon_tracker.extract.comp import coerce_amount
-from ergon_tracker.providers.join import _minor_amount
+from ergon.extract.comp import coerce_amount
+from ergon.providers.join import _minor_amount
 
 # --- coerce_amount --------------------------------------------------------------
 

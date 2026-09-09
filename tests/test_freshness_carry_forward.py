@@ -16,16 +16,16 @@ from __future__ import annotations
 
 import sqlite3
 
-from ergon_tracker.index.build import apply_freshness_expiries, build_index_from_fresh_db
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import Location, RemoteType, SearchQuery
+from ergon.index.build import apply_freshness_expiries, build_index_from_fresh_db
+from ergon.index.db import connect
+from ergon.index.query import search_rows
+from ergon.models import Location, RemoteType, SearchQuery
 
 _JOBS_TABLE_SQL = "CREATE TABLE jobs(id TEXT PRIMARY KEY, status TEXT)"
 
 
 def _make_job(source_job_id: str, *, title: str = "Backend Engineer"):
-    from ergon_tracker.models import JobPosting
+    from ergon.models import JobPosting
 
     return JobPosting.create(
         source="greenhouse",
@@ -38,8 +38,8 @@ def _make_job(source_job_id: str, *, title: str = "Backend Engineer"):
 
 
 def _fresh_db_with_jobs(path, jobs, *, build_id) -> None:
-    from ergon_tracker.index.build import append_jobs
-    from ergon_tracker.index.db import fresh_db
+    from ergon.index.build import append_jobs
+    from ergon.index.db import fresh_db
 
     fresh_db(path)
     con = connect(path)

@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from ergon_tracker.index.db import SCHEMA_VERSION, connect, fresh_db
+from ergon.index.db import SCHEMA_VERSION, connect, fresh_db
 
 
 def test_fresh_db_has_expected_tables(tmp_path):

@@ -38,8 +38,8 @@ from company_resolve import core_tokens  # noqa: E402
 from harvest_aggregator_apply_urls import resolve_ats_url  # noqa: E402
 from harvest_tokens import company_key  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.providers.base import load_builtins  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.providers.base import load_builtins  # noqa: E402
 
 DEFAULT_OUT = ROOT / "scripts" / "candidates_careers.json"
 CLEARBIT = "https://autocomplete.clearbit.com/v1/companies/suggest"

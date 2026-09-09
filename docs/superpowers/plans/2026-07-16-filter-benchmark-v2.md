@@ -6,7 +6,7 @@
 
 **Architecture:** A `scripts/bench/` package holds pure, unit-tested logic (schema, stratified sampling, extractor runner, agreement/triage, scoring with confidence intervals, report rendering); thin CLIs drive the offline phases (crawl → label → adjudicate → score). Ground truth = a 3-way blind LLM fleet (majority vote) auto-accepted where it agrees with the live extractor, with humans adjudicating only triage-ordered conflicts via a self-contained "Label Auditor" HTML Artifact. Large corpora/labels stay out of git; only the report, enlarged fixtures, and the auditor are tracked.
 
-**Tech Stack:** Python 3.10–3.13, pytest + respx, ruff, mypy --strict; existing `ergon_tracker` SDK (providers, `enrich_in_place`, extractors); the Agent/Workflow fleet for labeling; a single static HTML file for the auditor.
+**Tech Stack:** Python 3.10–3.13, pytest + respx, ruff, mypy --strict; existing `ergon` SDK (providers, `enrich_in_place`, extractors); the Agent/Workflow fleet for labeling; a single static HTML file for the auditor.
 
 ## Global Constraints
 
@@ -188,7 +188,7 @@ def allocate(available: dict[str, int], total: int, floor: int) -> dict[str, int
 - Create: `tests/bench/test_predict.py`
 
 **Interfaces:**
-- Consumes: `CorpusRow` (Task 0), `ergon_tracker.enrich.enrich_in_place`, `JobPosting`.
+- Consumes: `CorpusRow` (Task 0), `ergon.enrich.enrich_in_place`, `JobPosting`.
 - Produces: `predict(row: dict) -> dict[str, Any]` — reconstruct a `JobPosting` from the corpus row (title + description + location + structured salary), run the real enrichment, and read back the extractor's value for every field in `FIELDS` (normalized to the same vocabulary the fleet labels use: level→str, salary→`{min,max,currency}|None`, yoe→`{min,max}|None`, degree→str|None, sponsorship→bool|None, remote→bool, posted_at passthrough, etc.).
 
 - [ ] **Step 1: Write the failing test** (uses a JD that states level+salary+yoe+degree so the extractors fire)
@@ -364,7 +364,7 @@ def test_predict_reads_back_extractor_values():
 ### Task 12: diagnose, fix, ratchet, publish
 
 **Files:**
-- Modify: the specific `src/ergon_tracker/extract/*.py` / `providers/*.py` the report indicts (per-ATS defects)
+- Modify: the specific `src/ergon/extract/*.py` / `providers/*.py` the report indicts (per-ATS defects)
 - Modify: enlarged `tests/fixtures/<field>_corpus.jsonl` (promote human-confirmed rows into the ratcheting fixtures)
 - Modify: `tests/test_<field>_recall.py` gate constants; `README.md` / `docs/extraction-baseline.md` accuracy tables
 

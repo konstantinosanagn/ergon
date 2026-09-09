@@ -34,7 +34,7 @@ from dataclasses import dataclass
 import anyio
 import httpx
 
-from ergon_tracker.http import DEFAULT_HEADERS
+from ergon.http import DEFAULT_HEADERS
 
 _WIDGET = "https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true"
 _5XX = {500, 502, 503, 504}

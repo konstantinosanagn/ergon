@@ -18,7 +18,7 @@ free/fast/polite. Tier 3 pays that cost **incrementally and politely**, draining
 runs exactly as the rich embedding ramp did.
 
 ## What already exists (Tier 3 reuses, doesn't reinvent)
-- **Politeness/concurrency is built.** `ergon_tracker.http.AsyncFetcher` already provides bounded
+- **Politeness/concurrency is built.** `ergon.http.AsyncFetcher` already provides bounded
   global concurrency, per-host token-bucket rate limiting, `Retry-After`-honoring retries, and a
   per-host circuit breaker — with Workday tenants rate-limited *per full host* (independent data
   centers) after a past 429 storm. `build_index._interleave_by_ats` spreads load across backends.

@@ -1,4 +1,4 @@
-"""Tests for AsyncErgonTracker.search's staleness-guard defaulting (index-freshness fix).
+"""Tests for AsyncErgon.search's staleness-guard defaulting (index-freshness fix).
 
 By default, a query that doesn't already set ``max_last_seen_age_days`` gets it defaulted to 21
 (the safe staleness backstop — see SearchQuery.max_last_seen_age_days). ``include_stale=True``
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.client import AsyncErgonTracker
-from ergon_tracker.models import SearchQuery, SearchResult
+from ergon.client import AsyncErgon
+from ergon.models import SearchQuery, SearchResult
 
 pytestmark = pytest.mark.anyio
 
@@ -22,8 +22,8 @@ async def _search_and_capture(monkeypatch, query, **kwargs):
         captured["query"] = q
         return SearchResult(jobs=[], health=[])
 
-    monkeypatch.setattr("ergon_tracker.engine.run_search", fake_run_search)
-    tracker = AsyncErgonTracker()
+    monkeypatch.setattr("ergon.engine.run_search", fake_run_search)
+    tracker = AsyncErgon()
     await tracker.search(query, **kwargs)
     return captured["query"]
 

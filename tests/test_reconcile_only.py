@@ -26,10 +26,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import append_jobs, build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect, fresh_db  # noqa: E402
-from ergon_tracker.index.detail import detail_sig, open_detail  # noqa: E402
-from ergon_tracker.models import JobPosting  # noqa: E402
+from ergon.index.build import append_jobs, build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect, fresh_db  # noqa: E402
+from ergon.index.detail import detail_sig, open_detail  # noqa: E402
+from ergon.models import JobPosting  # noqa: E402
 
 _JD = "We are hiring a Backend Engineer to build distributed systems. Requires 5+ years experience."
 

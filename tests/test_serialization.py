@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker.models import JobPosting, Location
-from ergon_tracker.serialization import _MAX_TEXT, job_to_dict
+from ergon.models import JobPosting, Location
+from ergon.serialization import _MAX_TEXT, job_to_dict
 
 
 def _job(**kw: object) -> JobPosting:

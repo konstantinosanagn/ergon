@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import RawJob
-from ergon_tracker.providers.lever import LeverProvider
+from ergon.models import RawJob
+from ergon.providers.lever import LeverProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

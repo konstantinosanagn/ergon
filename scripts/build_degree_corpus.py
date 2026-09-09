@@ -34,10 +34,10 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
-from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.registry.store import SeedRegistry  # noqa: E402
 
 # Broad education net — intentionally a SUPERSET of degree.py's final patterns (see module docstring).
 # Standalone "education"/"qualifications"/"experience" are NOT anchors (they flood every JD); the

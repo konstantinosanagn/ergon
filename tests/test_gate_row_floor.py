@@ -13,8 +13,8 @@ import json
 import sys
 from pathlib import Path
 
-from ergon_tracker.index.db import connect, fresh_db
-from ergon_tracker.index.gates import evaluate_gates
+from ergon.index.db import connect, fresh_db
+from ergon.index.gates import evaluate_gates
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))

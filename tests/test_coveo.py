@@ -12,9 +12,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import RawJob, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.coveo import CoveoProvider
+from ergon.http import AsyncFetcher
+from ergon.models import RawJob, RemoteType, SearchQuery, make_job_id
+from ergon.providers.coveo import CoveoProvider
 
 pytestmark = pytest.mark.anyio
 

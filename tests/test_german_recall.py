@@ -26,10 +26,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.comp import CompExtractor
-from ergon_tracker.extract.degree import DegreeExtractor
-from ergon_tracker.extract.yoe import YoeExtractor
+from ergon.extract.base import ExtractInput
+from ergon.extract.comp import CompExtractor
+from ergon.extract.degree import DegreeExtractor
+from ergon.extract.yoe import YoeExtractor
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -40,11 +40,11 @@ from typing import Any, Protocol
 
 import anyio
 
-from ergon_tracker.extract.base import html_to_text
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import DetailFetch, JobPosting, RawJob, SearchQuery
-from ergon_tracker.providers.base import get_provider, load_builtins
+from ergon.extract.base import html_to_text
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import DetailFetch, JobPosting, RawJob, SearchQuery
+from ergon.providers.base import get_provider, load_builtins
 
 from .schema import corpus_row, write_jsonl
 from .strata import allocate
@@ -90,7 +90,7 @@ MIN_BOARDS_PER_PROVIDER = 3
 class _CompanyRegistry(Protocol):
     """Structural contract for the registry ``select_targets`` reads company/ATS data from.
 
-    Matches ``ergon_tracker.registry.store.SeedRegistry`` (``.all() -> {company_key: {"ats",
+    Matches ``ergon.registry.store.SeedRegistry`` (``.all() -> {company_key: {"ats",
     "token", "domain"}}``) without importing it, so the pure helper is unit-testable against a
     tiny synthetic stub instead of the real 58k-company packaged registry.
     """
@@ -386,7 +386,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    from ergon_tracker.registry.store import SeedRegistry
+    from ergon.registry.store import SeedRegistry
 
     registry = SeedRegistry()
 

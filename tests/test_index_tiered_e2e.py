@@ -11,11 +11,11 @@ import gzip
 import hashlib
 import json
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_delta, build_index, build_slim_index
-from ergon_tracker.index.cache import IndexCache, SlimCache
-from ergon_tracker.index.db import SCHEMA_VERSION, connect
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_delta, build_index, build_slim_index
+from ergon.index.cache import IndexCache, SlimCache
+from ergon.index.db import SCHEMA_VERSION, connect
+from ergon.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
 def _job(sid, company, title, **kw):

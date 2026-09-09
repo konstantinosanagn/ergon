@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.extract.sponsorship import detect_sponsorship
-from ergon_tracker.models import JobPosting, SearchQuery
+from ergon.enrich import enrich_in_place
+from ergon.extract.sponsorship import detect_sponsorship
+from ergon.models import JobPosting, SearchQuery
 
 
 @pytest.mark.parametrize(

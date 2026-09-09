@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Deterministic company->sector map from SEC EDGAR SIC codes.
 
-Matches ergon_tracker registry companies (seed.json) to SEC EDGAR public companies
+Matches ergon registry companies (seed.json) to SEC EDGAR public companies
 by normalized name / domain stem, fetches each match's SIC via the submissions
-API, and maps SIC -> ergon_tracker's 27-label sector vocab.
+API, and maps SIC -> ergon's 27-label sector vocab.
 
 Free, no API key. Sends a descriptive User-Agent per SEC fair-access policy and
 throttles to <=10 req/s. Output: scripts/sector_edgar.json (matched public
@@ -18,10 +18,10 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SEED = os.path.join(ROOT, "src/ergon_tracker/registry/data/seed.json")
-SECTORS = os.path.join(ROOT, "src/ergon_tracker/registry/data/sectors.json")
+SEED = os.path.join(ROOT, "src/ergon/registry/data/seed.json")
+SECTORS = os.path.join(ROOT, "src/ergon/registry/data/sectors.json")
 OUT = os.path.join(ROOT, "scripts/sector_edgar.json")
-UA = "ergon_tracker-research konstantinos.a@tavily.com"
+UA = "ergon-research konstantinos.a@tavily.com"
 
 SUFFIX = {
     "inc",
@@ -96,7 +96,7 @@ def norm_key(k):
 
 # ---- SIC -> 27-label vocab ----------------------------------------------------
 def sic_to_vocab(code):
-    """Map a 4-digit SIC code to one of ergon_tracker's 27 sector labels, or None."""
+    """Map a 4-digit SIC code to one of ergon's 27 sector labels, or None."""
     try:
         c = int(code)
     except (TypeError, ValueError):

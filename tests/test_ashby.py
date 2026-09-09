@@ -10,9 +10,9 @@ import pytest
 import respx
 
 from conftest import load_fixture
-from ergon_tracker import EmploymentType, RemoteType, SalaryInterval
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.providers.ashby import AshbyProvider
+from ergon import EmploymentType, RemoteType, SalaryInterval
+from ergon.http import AsyncFetcher
+from ergon.providers.ashby import AshbyProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -98,7 +98,7 @@ async def test_normalize_full_field_mapping() -> None:
 
 
 def test_normalize_missing_fields_default_to_unknown() -> None:
-    from ergon_tracker.models import RawJob
+    from ergon.models import RawJob
 
     raw = RawJob(source="ashby", source_job_id="x1", company="acme", payload={"title": "Eng"})
     job = _provider().normalize(raw)
@@ -111,6 +111,6 @@ def test_normalize_missing_fields_default_to_unknown() -> None:
 
 
 def _query():  # type: ignore[no-untyped-def]
-    from ergon_tracker.models import SearchQuery
+    from ergon.models import SearchQuery
 
     return SearchQuery()

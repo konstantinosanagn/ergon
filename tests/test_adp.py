@@ -8,11 +8,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import SearchQuery
-from ergon_tracker.providers.adp import ADPProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import SearchQuery
+from ergon.providers.adp import ADPProvider
 
 pytestmark = pytest.mark.anyio
 

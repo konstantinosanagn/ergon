@@ -1,4 +1,4 @@
-# ergon-tracker
+# ergon
 
 Unified, free job search over **50+ sources** (46 company-ATS adapters + 8 aggregators) in one
 Python package. It fetches live postings, canonicalizes them into one schema, **dedupes** the same role
@@ -6,8 +6,8 @@ posted on many sites, enriches each posting (level, location, salary, years of e
 sector, **H-1B visa sponsorship**), and ranks by relevance — as an **SDK**, a **CLI**, and an
 **MCP server** so humans *and* AI agents can use it.
 
-> Names: install/repo = **`ergon-tracker`**, Python import = **`ergon_tracker`**, commands =
-> **`ergon-tracker`** and **`ergon-tracker-mcp`**.
+> Names: install/repo = **`ergon`**, Python import = **`ergon`**, commands =
+> **`ergon`** and **`ergon-mcp`**.
 
 ## What you get
 
@@ -33,8 +33,8 @@ Everything is **free** — no paid APIs. Two optional sources (Adzuna, USAJOBS) 
 Not on PyPI yet — install from the repo:
 
 ```bash
-git clone https://github.com/konstantinosanagn/ergon-tracker
-cd ergon-tracker
+git clone https://github.com/konstantinosanagn/ergon
+cd ergon
 uv venv && uv pip install -e ".[mcp]"     # or: python -m venv .venv && pip install -e ".[mcp]"
 ```
 
@@ -45,7 +45,7 @@ Extras: `[mcp]` (agent server), `[semantic]` (NL embedding search), `[pandas]`/`
 ### SDK
 
 ```python
-from ergon_tracker import search
+from ergon import search
 
 # Roles at a specific company (auto-detects its ATS):
 res = search("engineer", companies=["stripe.com"], limit=10)
@@ -78,30 +78,30 @@ status + index `as_of`), and `.to_dicts()` / `.to_pandas()` / `.to_polars()`.
 Async is first-class:
 
 ```python
-from ergon_tracker import AsyncErgonTracker, SearchQuery
-async with AsyncErgonTracker() as et:
+from ergon import AsyncErgon, SearchQuery
+async with AsyncErgon() as et:
     res = await et.search(SearchQuery(keywords="data scientist", remote=True, limit=25))
 ```
 
 ### CLI
 
 ```bash
-ergon-tracker search "engineer" --country Germany --level senior --remote --limit 20
-ergon-tracker search "software engineer" --city "New York" --max-years 2 --strict-years \
+ergon search "engineer" --country Germany --level senior --remote --limit 20
+ergon search "software engineer" --city "New York" --max-years 2 --strict-years \
   --salary-min 140000 --salary-currency USD --posted-within-days 30
-ergon-tracker search "deep learning" --semantic                  # embedding-ranked
-ergon-tracker search "backend" --visa-sponsor --sponsorship      # known H-1B sponsor + posting doesn't refuse
-ergon-tracker match-resume resume.pdf --country USA --limit 20   # rank roles by fit to a résumé file
-ergon-tracker sponsors "stripe"                                  # known H-1B sponsors + last-filed date
-ergon-tracker resolve stripe.com                                 # -> {ats: greenhouse, token: stripe}
-ergon-tracker sources                                            # every registered provider
-ergon-tracker search "backend" --json | jq                       # machine-readable
+ergon search "deep learning" --semantic                  # embedding-ranked
+ergon search "backend" --visa-sponsor --sponsorship      # known H-1B sponsor + posting doesn't refuse
+ergon match-resume resume.pdf --country USA --limit 20   # rank roles by fit to a résumé file
+ergon sponsors "stripe"                                  # known H-1B sponsors + last-filed date
+ergon resolve stripe.com                                 # -> {ats: greenhouse, token: stripe}
+ergon sources                                            # every registered provider
+ergon search "backend" --json | jq                       # machine-readable
 ```
 
 ### MCP (Claude / AI agents)
 
 ```bash
-ergon-tracker-mcp     # stdio MCP server
+ergon-mcp     # stdio MCP server
 ```
 
 Nine tools, pick by intent:
@@ -124,7 +124,7 @@ Client config (Claude Desktop / Claude Code): **[docs/mcp-quickstart.md](docs/mc
 Broad queries (no `companies=`) are served from a **free daily SQLite/FTS5 snapshot** of every ATS
 we track (**~1.5M active jobs across ~44k companies** — see [INDEX_STATUS.md](INDEX_STATUS.md)),
 published to a stable GitHub Release. The SDK downloads it once (cached under
-`~/.cache/ergon-tracker`), verifies it (sha256 + schema version), and queries it **locally** — so
+`~/.cache/ergon`), verifies it (sha256 + schema version), and queries it **locally** — so
 broad search is fast and makes **zero ATS requests at query time**.
 
 - **Built by one CI crawler, not by users** — a tiered incremental crawl with per-host rate limiting;
@@ -141,7 +141,7 @@ broad search is fast and makes **zero ATS requests at query time**.
 
 ## Sources (50+)
 
-Run `ergon-tracker sources` for the exact live list (54 registered providers).
+Run `ergon sources` for the exact live list (54 registered providers).
 
 **Company ATS (46 adapters):** Greenhouse · Lever · Ashby · Workday · SmartRecruiters · Workable ·
 Recruitee · Personio · BambooHR · Breezy · Teamtailor · join.com · Rippling · Pinpoint ·

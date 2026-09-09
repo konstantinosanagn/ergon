@@ -13,9 +13,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.breezy import BreezyProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.breezy import BreezyProvider
 
 
 class _FakeResponse:
@@ -222,8 +222,8 @@ def test_breezy_reconstructs_url_from_token_and_id() -> None:
 def test_breezy_is_drain_only_not_liveness_confirm() -> None:
     from scripts.build_index import _TIER3_DETAIL_SOURCES
 
-    from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES
-    from ergon_tracker.index.liveness import CONFIRM_VIA_DETAIL_SOURCES
+    from ergon.index.freshness import DETERMINISTIC_SOURCES
+    from ergon.index.liveness import CONFIRM_VIA_DETAIL_SOURCES
 
     # Wired for the Tier-3 JD drain...
     assert "breezy" in _TIER3_DETAIL_SOURCES

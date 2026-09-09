@@ -6,11 +6,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import SearchQuery
-from ergon_tracker.providers import apicapture as ap
-from ergon_tracker.providers.apicapture import ApiCaptureProvider, apply_token_to_spec
-from ergon_tracker.token_store import TokenStore
+from ergon.http import AsyncFetcher
+from ergon.models import SearchQuery
+from ergon.providers import apicapture as ap
+from ergon.providers.apicapture import ApiCaptureProvider, apply_token_to_spec
+from ergon.token_store import TokenStore
 
 pytestmark = pytest.mark.anyio
 

@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import SearchQuery
-from ergon_tracker.providers.paylocity import PaylocityProvider
+from ergon.http import AsyncFetcher
+from ergon.models import SearchQuery
+from ergon.providers.paylocity import PaylocityProvider
 
 pytestmark = pytest.mark.anyio
 

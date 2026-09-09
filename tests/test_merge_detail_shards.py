@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.index.detail import open_detail
+from ergon.index.detail import open_detail
 
 mds = pytest.importorskip("scripts.merge_detail_shards", reason="run from repo root")
 

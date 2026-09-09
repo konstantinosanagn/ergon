@@ -1,7 +1,7 @@
 import pytest
 
-from ergon_tracker.extract.level import level_from_ats_vocab
-from ergon_tracker.models import JobLevel
+from ergon.extract.level import level_from_ats_vocab
+from ergon.models import JobLevel
 
 
 @pytest.mark.parametrize(

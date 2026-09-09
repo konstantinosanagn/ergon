@@ -23,7 +23,7 @@ from harvest_commoncrawl import load_seed_keys  # noqa: E402
 from harvest_tavily import load_key  # noqa: E402
 from harvest_tokens import _core, name_match  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
 
 GIANTS = ROOT / "runs" / "giants.json"
 EXCLUDE = [

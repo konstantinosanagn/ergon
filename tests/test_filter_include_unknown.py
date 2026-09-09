@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ergon_tracker.models import JobLevel, JobPosting, SearchQuery
+from ergon.models import JobLevel, JobPosting, SearchQuery
 
 
 def _job(level: JobLevel = JobLevel.UNKNOWN, sector: str | None = None) -> JobPosting:

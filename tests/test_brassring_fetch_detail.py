@@ -15,9 +15,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import DetailFetch
-from ergon_tracker.providers.brassring import BrassRingProvider
+from ergon.index.detail import DetailRef
+from ergon.models import DetailFetch
+from ergon.providers.brassring import BrassRingProvider
 
 _BOOTSTRAP_HTML = (
     '<html><body><input name="__RequestVerificationToken" value="TESTRFT">'

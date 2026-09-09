@@ -22,17 +22,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import ergon_tracker.index.build as build_mod  # noqa: E402
-import ergon_tracker.index.mapping as mapping_mod  # noqa: E402
-from ergon_tracker.enrich import enrich_in_place  # noqa: E402
-from ergon_tracker.index import jd_store  # noqa: E402
-from ergon_tracker.index.build import (  # noqa: E402
+import ergon.index.build as build_mod  # noqa: E402
+import ergon.index.mapping as mapping_mod  # noqa: E402
+from ergon.enrich import enrich_in_place  # noqa: E402
+from ergon.index import jd_store  # noqa: E402
+from ergon.index.build import (  # noqa: E402
     append_jobs,
     build_index_from_fresh_db,
     reenrich_carried_forward,
 )
-from ergon_tracker.index.db import connect, fresh_db  # noqa: E402
-from ergon_tracker.models import JobLevel, JobPosting, make_job_id  # noqa: E402
+from ergon.index.db import connect, fresh_db  # noqa: E402
+from ergon.models import JobLevel, JobPosting, make_job_id  # noqa: E402
 
 # A JD whose cold enrichment (years=9 -> SENIOR) DIFFERS from the deliberately-stale prior row
 # (years=2), so a passing test proves the re-enrich actually re-extracted and did not merely reuse.
@@ -152,7 +152,7 @@ def test_version_bump_reenriches_employment_type_from_jd(monkeypatch, tmp_path):
     """Cross-item guard (Item 3 x Item 8): employment_type is an enrich-produced field, so a version
     bump must reset it and write the re-extracted value back. Regression lock for _REENRICH_COLS +
     the reset block dropping employment_type (which would silently fail to propagate Item 8's field)."""
-    from ergon_tracker.models import EmploymentType
+    from ergon.models import EmploymentType
 
     jd = "We are hiring interns. This is a paid summer internship. Requires strong CS fundamentals."
     sid = "10"
@@ -261,7 +261,7 @@ def test_reenrich_pass_is_strict_noop_when_version_matches(monkeypatch, tmp_path
 def test_reenrich_fires_only_for_carried_not_crawled(monkeypatch, tmp_path):
     """A row whose company_key IS in crawled_keys (freshly crawled) is left as the crawl wrote it —
     only the carried backlog is replayed from the JD sidecar."""
-    from ergon_tracker.dedup import normalize_company
+    from ergon.dedup import normalize_company
 
     prior_db = _build_prior(tmp_path)
     jd_db = tmp_path / "index-jd.sqlite"

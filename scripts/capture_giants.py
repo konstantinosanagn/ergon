@@ -39,9 +39,9 @@ from harvest_tokens import _core, name_match  # noqa: E402
 
 from census_successfactors import tavily  # noqa: E402  # isort: skip
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
 
 load_builtins()
 DEFAULT_OUT = ROOT / "scripts" / "candidates_giants.json"

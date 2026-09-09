@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.yoe import YoeExtractor
+from ergon.extract.base import ExtractInput
+from ergon.extract.yoe import YoeExtractor
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "yoe_corpus.jsonl"
 

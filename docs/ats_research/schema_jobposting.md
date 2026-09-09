@@ -17,7 +17,7 @@ Google for Jobs' crawler renders JavaScript, so **many** big career sites inject
 crackable this way if the JSON-LD is **server-rendered** (present in the raw HTML). This was
 the make-or-break test for every domain below.
 
-## Live results (curl, UA `Mozilla/5.0 (compatible; ergon_tracker bot)`, 2026-06-18)
+## Live results (curl, UA `Mozilla/5.0 (compatible; ergon bot)`, 2026-06-18)
 
 | Domain | Job sitemap? | Per-job JSON-LD server-rendered? | Verdict |
 | --- | --- | --- | --- |

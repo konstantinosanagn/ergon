@@ -17,10 +17,10 @@ from __future__ import annotations
 import anyio
 import httpx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.join import JoinProvider
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.join import JoinProvider
 
 _APPLY_URL = "https://join.com/companies/acme/jobs/123456"
 

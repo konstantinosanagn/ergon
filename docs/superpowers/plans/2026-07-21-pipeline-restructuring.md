@@ -11,7 +11,7 @@
 ## Global Constraints (apply to EVERY task, verbatim)
 
 - **PARITY GATE (non-negotiable):** every change ships with a test proving the new pipeline produces a **byte-identical `jobs` table to the old EXCEPT the intended delta**, on REAL boards (the delta-crawl parity tests are the template: `tests/test_delta_crawl_skip.py`, `tests/test_index_matches_parity.py`). No architectural change merges without one.
-- **Gate every task:** `python -m pytest -q` + `ruff check src tests scripts` + `mypy src/ergon_tracker` all green. Real tests, not only synthetic.
+- **Gate every task:** `python -m pytest -q` + `ruff check src tests scripts` + `mypy src/ergon` all green. Real tests, not only synthetic.
 - **Stress-test the concurrency:** any change to the crawl/detail/publish paths must be validated under the real concurrent worker pool (not just single-threaded), and any new I/O must `await` the shared fetcher (no blocking calls, no per-call clients, stateless providers).
 - **Clean, no-fluff, organized code** matching the surrounding module's idiom; DRY; YAGNI; frequent commits.
 - **No assumptions — measure.** Verify claims against the real index (`scratchpad/index.sqlite`) or live probing before asserting. (The audit lesson: probe, don't assume.)
@@ -70,7 +70,7 @@ Recon proved the plan's premise stale: `ERGON_DELTA_CRAWL` is already ON in prod
 **Goal:** Stop discard-after-extract. Store the full JD (compressed) so extraction is **replayable without re-crawl** → retroactive re-enrichment (Item 3) + un-caps every JD-derived field.
 
 **Files:**
-- Create: a JD store — either a new `index-jd.sqlite` sidecar (`id → compressed full JD`) mirroring the detail/rich sidecar pattern (`src/ergon_tracker/index/jd_store.py`), OR a compressed `description_full` blob column. **Decision: a separate compressed sidecar** (keeps the core index small; the SDK/rich already handle sidecars; avoids bloating the ~hundreds-of-MB core). Confirm size impact by measuring real JD lengths.
+- Create: a JD store — either a new `index-jd.sqlite` sidecar (`id → compressed full JD`) mirroring the detail/rich sidecar pattern (`src/ergon/index/jd_store.py`), OR a compressed `description_full` blob column. **Decision: a separate compressed sidecar** (keeps the core index small; the SDK/rich already handle sidecars; avoids bloating the ~hundreds-of-MB core). Confirm size impact by measuring real JD lengths.
 - Modify: `scripts/build_index.py` publish path — write + publish the JD sidecar (like `write_fresh_rich`), carry-forward tolerant.
 - Modify: `.github/workflows/build-index.yml` — download/publish the JD sidecar.
 - Test: `tests/test_jd_store.py` — a fetched JD round-trips (compress→store→read) identical; carry-forward preserves it; absent sidecar is non-fatal.
@@ -86,7 +86,7 @@ Recon proved the plan's premise stale: `ERGON_DELTA_CRAWL` is already ON in prod
 **Goal:** Workable is list-only BY ACCIDENT — the bulk call omits `?details=true`. Adding it returns every JD in the ONE call we already make, eliminating workable's drain. (workable.py's own docstring already documents this.)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/workable.py` — `fetch()` adds `?details=true`; `normalize()` captures the `description`. Honor the per-board dedup the docstring notes (first posting pays, siblings reuse by shortcode).
+- Modify: `src/ergon/providers/workable.py` — `fetch()` adds `?details=true`; `normalize()` captures the `description`. Honor the per-board dedup the docstring notes (first posting pays, siblings reuse by shortcode).
 - Modify: `scripts/build_index.py:_TIER3_DETAIL_SOURCES` + `liveness.CONFIRM_VIA_DETAIL_SOURCES` — remove workable if its JD now comes from bulk (or keep as fallback — verify).
 - Test: `tests/test_workable.py` — fetch with `?details=true` returns JD inline; normalize populates description.
 

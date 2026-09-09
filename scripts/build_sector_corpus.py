@@ -23,10 +23,10 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
-from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.registry.store import SeedRegistry  # noqa: E402
 
 
 def _arg(flag: str, default: int) -> int:

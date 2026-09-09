@@ -6,8 +6,8 @@ import json
 
 from tests.test_rich_index import FAKE, _build_rich, _job
 
-from ergon_tracker.index.cache import RichCache
-from ergon_tracker.index.rich import RICH_SCHEMA_VERSION, open_rich, vector_search
+from ergon.index.cache import RichCache
+from ergon.index.rich import RICH_SCHEMA_VERSION, open_rich, vector_search
 
 
 def _publish_rich(remote, tmp_path, *, build_id="b1", name="rich.sqlite", jobs=None):

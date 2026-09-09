@@ -40,12 +40,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from harvest_commoncrawl import CONFIGS, load_seed_keys  # noqa: E402
 from harvest_tavily import load_key  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
-from ergon_tracker.providers.icims import ICIMSProvider  # noqa: E402
-from ergon_tracker.providers.personio import PersonioProvider  # noqa: E402
-from ergon_tracker.providers.workday import WorkdayProvider  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.providers.icims import ICIMSProvider  # noqa: E402
+from ergon.providers.personio import PersonioProvider  # noqa: E402
+from ergon.providers.workday import WorkdayProvider  # noqa: E402
 
 GAP = ROOT / "runs" / "h1b_coverage_gap.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_sponsors.json"

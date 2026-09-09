@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from token_mint import DEFAULT_STORE, MintError, _load_targets, mint  # noqa: E402
 
-from ergon_tracker.token_store import TokenStore  # noqa: E402
+from ergon.token_store import TokenStore  # noqa: E402
 
 DEFAULT_MARGIN = 0.2  # re-mint once <20% of the TTL remains, so a token can't lapse mid-crawl
 

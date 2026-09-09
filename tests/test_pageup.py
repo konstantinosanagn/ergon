@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import SearchQuery, make_job_id
-from ergon_tracker.providers.pageup import PageUpProvider
+from ergon.http import AsyncFetcher
+from ergon.models import SearchQuery, make_job_id
+from ergon.providers.pageup import PageUpProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -106,7 +106,7 @@ async def test_double_escaped_body_yields_salary_and_teaser_does_not_shadow() ->
     # only once (leaving "&lt;p&gt;…" that garbles the snippet) and (b) put the short <description>
     # teaser into description_text, which input_from_job PREFERS -> the full JD (with salary) never
     # reached enrich (pageup was ~0% salary). Now the body is fully decoded and the teaser is dropped.
-    from ergon_tracker.enrich import enrich_in_place
+    from ergon.enrich import enrich_in_place
 
     # Truly double-escaped body carrying a salary; teaser has NO pay.
     body = (

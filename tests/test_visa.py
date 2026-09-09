@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.extract import visa
-from ergon_tracker.extract.visa import SponsorIndex
-from ergon_tracker.models import JobPosting, SearchQuery
+from ergon.enrich import enrich_in_place
+from ergon.extract import visa
+from ergon.extract.visa import SponsorIndex
+from ergon.models import JobPosting, SearchQuery
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -65,8 +65,8 @@ def test_sponsors_from_rows_handles_alt_header_and_us_dates() -> None:
 def test_enrich_sets_visa_sponsor_and_last_filed(monkeypatch) -> None:
     idx = _idx(stripe={"n": 5, "last": "2025-06-30"})
     monkeypatch.setattr(visa, "load_sponsor_index", lambda: idx)
-    monkeypatch.setattr("ergon_tracker.enrich.is_h1b_sponsor", lambda c: idx.is_sponsor(c))
-    monkeypatch.setattr("ergon_tracker.enrich.h1b_last_filed", lambda c: idx.last_filed(c))
+    monkeypatch.setattr("ergon.enrich.is_h1b_sponsor", lambda c: idx.is_sponsor(c))
+    monkeypatch.setattr("ergon.enrich.h1b_last_filed", lambda c: idx.last_filed(c))
 
     job = _job("Stripe, Inc.")
     enrich_in_place(job)
@@ -165,7 +165,7 @@ def test_directory_search_ranks_by_volume_and_filters() -> None:
 
 # --- on-disk format tolerance ----------------------------------------------
 def test_coerce_legacy_formats() -> None:
-    from ergon_tracker.extract.visa import _coerce_records
+    from ergon.extract.visa import _coerce_records
 
     assert _coerce_records({"a": {"n": 2, "last": "2025-01-01"}})["a"]["last"] == "2025-01-01"
     assert _coerce_records({"a": 3})["a"]["n"] == 3  # legacy count-only

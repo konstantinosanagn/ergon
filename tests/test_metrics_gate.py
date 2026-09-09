@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.coverage import compute_coverage
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.metrics_gate import (
+from ergon.index.build import build_index
+from ergon.index.coverage import compute_coverage
+from ergon.index.db import connect
+from ergon.index.metrics_gate import (
     MetricsThresholds,
     check_metrics_regression,
     metrics_from_coverage,
 )
-from ergon_tracker.models import JobPosting
+from ergon.models import JobPosting
 
 
 def _job(source: str, sid: str, company: str, title: str, *, desc=None):
@@ -139,7 +139,7 @@ def test_jd_pct_floor_trips_without_baseline():
     """The ABSOLUTE floor is baseline-INDEPENDENT: a collapse below it trips even with prev=None --
     the slow-bleed / no-baseline case the prev-vs-cur point-delta structurally misses. Default-off,
     so set it explicitly (production sets ERGON_METRICS_JD_PCT_FLOOR)."""
-    from ergon_tracker.index.metrics_gate import MetricsThresholds
+    from ergon.index.metrics_gate import MetricsThresholds
 
     th = MetricsThresholds(jd_pct_floor=55.0)
     cur = _base_metrics(jd_pct=47.0)  # the 2026-07-26 value, below the 55 floor
@@ -149,7 +149,7 @@ def test_jd_pct_floor_trips_without_baseline():
 
 
 def test_jd_pct_floor_ok_above_and_disabled_by_default():
-    from ergon_tracker.index.metrics_gate import MetricsThresholds
+    from ergon.index.metrics_gate import MetricsThresholds
 
     th = MetricsThresholds(jd_pct_floor=55.0)
     assert check_metrics_regression(

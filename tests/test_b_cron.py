@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from spec_health_cron import check_specs  # noqa: E402
 from tier2_refresh import needs_refresh, refresh  # noqa: E402
 
-from ergon_tracker.spec_health import SpecHealth  # noqa: E402
-from ergon_tracker.token_store import TokenStore  # noqa: E402
+from ergon.spec_health import SpecHealth  # noqa: E402
+from ergon.token_store import TokenStore  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
@@ -172,8 +172,8 @@ def test_spec_health_cron_main_wires_threshold(tmp_path, monkeypatch):
 
     import spec_health_cron
 
-    import ergon_tracker.http as http_mod
-    from ergon_tracker.providers import apicapture as apicapture_mod
+    import ergon.http as http_mod
+    from ergon.providers import apicapture as apicapture_mod
 
     monkeypatch.setattr(spec_health_cron, "ROOT", tmp_path)  # so main()'s relative_to() log works
     monkeypatch.setattr(spec_health_cron, "HEALTH_PATH", tmp_path / "health.json")
@@ -207,7 +207,7 @@ def test_spec_health_cron_main_wires_threshold(tmp_path, monkeypatch):
 def test_tier2_refresh_main_wires_margin_frac(tmp_path, monkeypatch):
     import tier2_refresh
 
-    from ergon_tracker.token_store import TokenStore as _RealTokenStore
+    from ergon.token_store import TokenStore as _RealTokenStore
 
     t = [0.0]
     store_path = tmp_path / "tokens.json"

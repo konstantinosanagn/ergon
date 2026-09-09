@@ -17,14 +17,14 @@
 ### Task 1: `Company` canonical model
 
 **Files:**
-- Modify: `src/ergon_tracker/models.py` (add `Company`; add to `__all__`)
+- Modify: `src/ergon/models.py` (add `Company`; add to `__all__`)
 - Test: `tests/test_company_model.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_company_model.py
-from ergon_tracker.models import Company
+from ergon.models import Company
 
 def test_company_defaults_and_fields():
     c = Company(company_key="stripe", display_name="Stripe")
@@ -33,7 +33,7 @@ def test_company_defaults_and_fields():
     assert c.domain is None and c.h1b_sponsor is None
 
 def test_company_is_exported():
-    import ergon_tracker.models as m
+    import ergon.models as m
     assert "Company" in m.__all__
 ```
 
@@ -44,7 +44,7 @@ Expected: FAIL (`ImportError: cannot import name 'Company'`)
 
 - [ ] **Step 3: Add the model**
 
-In `src/ergon_tracker/models.py`, add after the `Salary` class:
+In `src/ergon/models.py`, add after the `Salary` class:
 
 ```python
 class Company(BaseModel):
@@ -73,7 +73,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/models.py tests/test_company_model.py
+git add src/ergon/models.py tests/test_company_model.py
 git commit -m "feat(index): add canonical Company model"
 ```
 
@@ -82,15 +82,15 @@ git commit -m "feat(index): add canonical Company model"
 ### Task 2: Company canonicalizer (`aggregate_companies`)
 
 **Files:**
-- Create: `src/ergon_tracker/canonicalize.py`
+- Create: `src/ergon/canonicalize.py`
 - Test: `tests/test_canonicalize.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_canonicalize.py
-from ergon_tracker.canonicalize import aggregate_companies
-from ergon_tracker.models import JobPosting
+from ergon.canonicalize import aggregate_companies
+from ergon.models import JobPosting
 
 def _job(company, **kw):
     return JobPosting.create(source="greenhouse", source_job_id=company+kw.get("t",""),
@@ -113,12 +113,12 @@ def test_aggregate_fills_domain_and_sector_when_present():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_canonicalize.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.canonicalize`)
+Expected: FAIL (`ModuleNotFoundError: ergon.canonicalize`)
 
 - [ ] **Step 3: Implement the canonicalizer**
 
 ```python
-# src/ergon_tracker/canonicalize.py
+# src/ergon/canonicalize.py
 """Aggregate canonical JobPostings into canonical Company entities (reuses dedup keys)."""
 
 from __future__ import annotations
@@ -165,7 +165,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/canonicalize.py tests/test_canonicalize.py
+git add src/ergon/canonicalize.py tests/test_canonicalize.py
 git commit -m "feat(index): aggregate_companies canonicalizer (reuses normalize_company)"
 ```
 
@@ -174,9 +174,9 @@ git commit -m "feat(index): aggregate_companies canonicalizer (reuses normalize_
 ### Task 3: Versioned schema + DB connection helper
 
 **Files:**
-- Create: `src/ergon_tracker/index/__init__.py` (empty)
-- Create: `src/ergon_tracker/index/schema.sql`
-- Create: `src/ergon_tracker/index/db.py`
+- Create: `src/ergon/index/__init__.py` (empty)
+- Create: `src/ergon/index/schema.sql`
+- Create: `src/ergon/index/db.py`
 - Test: `tests/test_index_db.py`
 - Modify: `pyproject.toml` (ensure `index/schema.sql` ships in the wheel)
 
@@ -184,7 +184,7 @@ git commit -m "feat(index): aggregate_companies canonicalizer (reuses normalize_
 
 ```python
 # tests/test_index_db.py
-from ergon_tracker.index.db import SCHEMA_VERSION, connect, fresh_db
+from ergon.index.db import SCHEMA_VERSION, connect, fresh_db
 
 def test_fresh_db_has_expected_tables(tmp_path):
     p = tmp_path / "i.sqlite"
@@ -212,12 +212,12 @@ def test_schema_version_is_int():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_db.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.db`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.db`)
 
 - [ ] **Step 3a: Write `schema.sql`**
 
 ```sql
--- src/ergon_tracker/index/schema.sql  (SCHEMA_VERSION must match db.py)
+-- src/ergon/index/schema.sql  (SCHEMA_VERSION must match db.py)
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE companies (
@@ -291,7 +291,7 @@ CREATE INDEX idx_jobsrc_job ON job_sources(job_id);
 - [ ] **Step 3b: Write `db.py`**
 
 ```python
-# src/ergon_tracker/index/db.py
+# src/ergon/index/db.py
 """SQLite connection + fresh-DB helpers for the search index."""
 
 from __future__ import annotations
@@ -304,7 +304,7 @@ SCHEMA_VERSION = 1
 
 
 def _schema_sql() -> str:
-    return (files("ergon_tracker.index") / "schema.sql").read_text(encoding="utf-8")
+    return (files("ergon.index") / "schema.sql").read_text(encoding="utf-8")
 
 
 def connect(path: Path | str, *, read_only: bool = False) -> sqlite3.Connection:
@@ -336,7 +336,7 @@ def fresh_db(path: Path | str) -> None:
 In `pyproject.toml`, under `[tool.hatch.build.targets.wheel.force-include]`, add:
 
 ```toml
-"src/ergon_tracker/index/schema.sql" = "ergon_tracker/index/schema.sql"
+"src/ergon/index/schema.sql" = "ergon/index/schema.sql"
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -347,7 +347,7 @@ Expected: PASS (3 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/index/ tests/test_index_db.py pyproject.toml
+git add src/ergon/index/ tests/test_index_db.py pyproject.toml
 git commit -m "feat(index): versioned SQLite/FTS5 schema + db helpers"
 ```
 
@@ -356,7 +356,7 @@ git commit -m "feat(index): versioned SQLite/FTS5 schema + db helpers"
 ### Task 4: Row mapping (`to_row` / `from_row`)
 
 **Files:**
-- Create: `src/ergon_tracker/index/mapping.py`
+- Create: `src/ergon/index/mapping.py`
 - Test: `tests/test_index_mapping.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -364,8 +364,8 @@ git commit -m "feat(index): versioned SQLite/FTS5 schema + db helpers"
 ```python
 # tests/test_index_mapping.py
 from datetime import datetime, timezone
-from ergon_tracker.index.mapping import to_row, from_row
-from ergon_tracker.models import JobPosting, Location, Salary, SalaryInterval, JobLevel, RemoteType
+from ergon.index.mapping import to_row, from_row
+from ergon.models import JobPosting, Location, Salary, SalaryInterval, JobLevel, RemoteType
 
 def _job():
     return JobPosting.create(
@@ -389,7 +389,7 @@ def test_round_trip_preserves_indexed_fields():
     assert j2.locations[0].city == "Berlin" and j2.locations[0].country == "Germany"
 
 def test_to_row_sets_role_family_and_company_key():
-    from ergon_tracker.dedup import normalize_company, normalize_title
+    from ergon.dedup import normalize_company, normalize_title
     row = to_row(_job(), build_id="b1")
     assert row["company_key"] == normalize_company("Stripe")
     assert row["role_family"] == normalize_title("Senior Backend Engineer")
@@ -399,12 +399,12 @@ def test_to_row_sets_role_family_and_company_key():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_mapping.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.mapping`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.mapping`)
 
 - [ ] **Step 3: Implement mapping**
 
 ```python
-# src/ergon_tracker/index/mapping.py
+# src/ergon/index/mapping.py
 """The single JobPosting <-> SQLite row mapping (build + read share it)."""
 
 from __future__ import annotations
@@ -489,7 +489,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/index/mapping.py tests/test_index_mapping.py
+git add src/ergon/index/mapping.py tests/test_index_mapping.py
 git commit -m "feat(index): JobPosting<->row mapping (single source of truth)"
 ```
 
@@ -498,16 +498,16 @@ git commit -m "feat(index): JobPosting<->row mapping (single source of truth)"
 ### Task 5: Index builder
 
 **Files:**
-- Create: `src/ergon_tracker/index/build.py`
+- Create: `src/ergon/index/build.py`
 - Test: `tests/test_index_build.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_index_build.py
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobPosting, Location, RemoteType, JobLevel
+from ergon.index.build import build_index
+from ergon.index.db import connect
+from ergon.models import JobPosting, Location, RemoteType, JobLevel
 
 def _job(sid, company, title, **kw):
     return JobPosting.create(source=kw.pop("source", "greenhouse"), source_job_id=sid,
@@ -543,12 +543,12 @@ def test_build_dedups_same_job_from_two_sources(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_build.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.build`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.build`)
 
 - [ ] **Step 3: Implement the builder**
 
 ```python
-# src/ergon_tracker/index/build.py
+# src/ergon/index/build.py
 """Build a SQLite/FTS5 index file from canonical JobPostings (deterministic, integrity-checked)."""
 
 from __future__ import annotations
@@ -623,7 +623,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/index/build.py tests/test_index_build.py
+git add src/ergon/index/build.py tests/test_index_build.py
 git commit -m "feat(index): deterministic index builder (dedup+companies+FTS+integrity)"
 ```
 
@@ -632,17 +632,17 @@ git commit -m "feat(index): deterministic index builder (dedup+companies+FTS+int
 ### Task 6: Query layer (`SearchQuery` → SQL) + `matches()` parity
 
 **Files:**
-- Create: `src/ergon_tracker/index/query.py`
+- Create: `src/ergon/index/query.py`
 - Test: `tests/test_index_query.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_index_query.py
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import JobPosting, JobLevel, SearchQuery, Location, RemoteType
+from ergon.index.build import build_index
+from ergon.index.db import connect
+from ergon.index.query import search_rows
+from ergon.models import JobPosting, JobLevel, SearchQuery, Location, RemoteType
 
 def _job(sid, title, **kw):
     return JobPosting.create(source="greenhouse", source_job_id=sid, company=kw.pop("company","Co"),
@@ -682,12 +682,12 @@ def test_matches_parity_on_filters(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_query.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.query`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.query`)
 
 - [ ] **Step 3: Implement the query translator**
 
 ```python
-# src/ergon_tracker/index/query.py
+# src/ergon/index/query.py
 """Translate a SearchQuery into SQL over the index, mirroring SearchQuery.matches() semantics."""
 
 from __future__ import annotations
@@ -765,7 +765,7 @@ Expected: PASS (3 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/index/query.py tests/test_index_query.py
+git add src/ergon/index/query.py tests/test_index_query.py
 git commit -m "feat(index): SearchQuery->SQL translator with matches() parity"
 ```
 
@@ -774,16 +774,16 @@ git commit -m "feat(index): SearchQuery->SQL translator with matches() parity"
 ### Task 7: `IndexBackend` interface + `SqliteIndexBackend`
 
 **Files:**
-- Create: `src/ergon_tracker/index/backend.py`
+- Create: `src/ergon/index/backend.py`
 - Test: `tests/test_index_backend.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_index_backend.py
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.models import JobPosting, SearchQuery, Location, RemoteType, JobLevel
+from ergon.index.build import build_index
+from ergon.index.backend import SqliteIndexBackend
+from ergon.models import JobPosting, SearchQuery, Location, RemoteType, JobLevel
 
 def _job(sid, title, **kw):
     return JobPosting.create(source="greenhouse", source_job_id=sid, company=kw.pop("company","Co"),
@@ -809,12 +809,12 @@ def test_backend_unavailable_when_missing(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_backend.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.backend`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.backend`)
 
 - [ ] **Step 3: Implement the backend**
 
 ```python
-# src/ergon_tracker/index/backend.py
+# src/ergon/index/backend.py
 """IndexBackend protocol + the SQLite implementation."""
 
 from __future__ import annotations
@@ -886,7 +886,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/index/backend.py tests/test_index_backend.py
+git add src/ergon/index/backend.py tests/test_index_backend.py
 git commit -m "feat(index): IndexBackend protocol + SqliteIndexBackend"
 ```
 
@@ -895,7 +895,7 @@ git commit -m "feat(index): IndexBackend protocol + SqliteIndexBackend"
 ### Task 8: `IndexCache` (download / verify / freshness)
 
 **Files:**
-- Create: `src/ergon_tracker/index/cache.py`
+- Create: `src/ergon/index/cache.py`
 - Test: `tests/test_index_cache.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -903,9 +903,9 @@ git commit -m "feat(index): IndexBackend protocol + SqliteIndexBackend"
 ```python
 # tests/test_index_cache.py
 import gzip, hashlib, json
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.cache import IndexCache
-from ergon_tracker.models import JobPosting
+from ergon.index.build import build_index
+from ergon.index.cache import IndexCache
+from ergon.models import JobPosting
 
 def _publish(remote_dir, tmp_path):
     src = tmp_path / "src.sqlite"
@@ -922,7 +922,7 @@ def test_cache_downloads_verifies_and_opens(tmp_path):
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
     path = cache.ensure_fresh()
     assert path is not None and path.exists()
-    from ergon_tracker.index.backend import SqliteIndexBackend
+    from ergon.index.backend import SqliteIndexBackend
     assert SqliteIndexBackend(path).available() is True
 
 def test_cache_rejects_corrupt_download(tmp_path):
@@ -936,12 +936,12 @@ def test_cache_rejects_corrupt_download(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_cache.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.cache`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.cache`)
 
 - [ ] **Step 3: Implement the cache**
 
 ```python
-# src/ergon_tracker/index/cache.py
+# src/ergon/index/cache.py
 """Download + verify + freshness-gate the published index snapshot."""
 
 from __future__ import annotations
@@ -955,12 +955,12 @@ from pathlib import Path
 
 from .db import SCHEMA_VERSION
 
-log = logging.getLogger("ergon_tracker.index")
-_DEFAULT_BASE = "https://github.com/konstantinosanagn/ergon-tracker/releases/latest/download"
+log = logging.getLogger("ergon.index")
+_DEFAULT_BASE = "https://github.com/konstantinosanagn/ergon/releases/latest/download"
 
 
 def _default_cache_dir() -> Path:
-    return Path.home() / ".cache" / "ergon-tracker"
+    return Path.home() / ".cache" / "ergon"
 
 
 def _fetch(url: str) -> bytes:
@@ -1013,7 +1013,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/index/cache.py tests/test_index_cache.py
+git add src/ergon/index/cache.py tests/test_index_cache.py
 git commit -m "feat(index): IndexCache download/verify/freshness with live-fallback returns"
 ```
 
@@ -1022,18 +1022,18 @@ git commit -m "feat(index): IndexCache download/verify/freshness with live-fallb
 ### Task 9: Route broad queries through the index (with live fallback)
 
 **Files:**
-- Modify: `src/ergon_tracker/engine.py` (add index routing at the top of `run_search`)
-- Create: `src/ergon_tracker/index/router.py` (decide + load backend; keeps engine thin)
+- Modify: `src/ergon/engine.py` (add index routing at the top of `run_search`)
+- Create: `src/ergon/index/router.py` (decide + load backend; keeps engine thin)
 - Test: `tests/test_index_routing.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_index_routing.py
-import ergon_tracker.index.router as router
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.models import JobPosting, SearchQuery, JobLevel
+import ergon.index.router as router
+from ergon.index.build import build_index
+from ergon.index.backend import SqliteIndexBackend
+from ergon.models import JobPosting, SearchQuery, JobLevel
 
 def test_router_uses_index_for_broad_query(tmp_path, monkeypatch):
     p = tmp_path / "i.sqlite"
@@ -1060,12 +1060,12 @@ def test_env_off_disables_index(monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_index_routing.py -q`
-Expected: FAIL (`ModuleNotFoundError: ergon_tracker.index.router`)
+Expected: FAIL (`ModuleNotFoundError: ergon.index.router`)
 
 - [ ] **Step 3: Implement the router**
 
 ```python
-# src/ergon_tracker/index/router.py
+# src/ergon/index/router.py
 """Decide whether a query should be served from the index, and do it safely (never raise)."""
 
 from __future__ import annotations
@@ -1077,7 +1077,7 @@ from ..models import JobPosting, SearchQuery
 from .backend import SqliteIndexBackend
 from .cache import IndexCache
 
-log = logging.getLogger("ergon_tracker.index")
+log = logging.getLogger("ergon.index")
 
 
 def _load_backend() -> SqliteIndexBackend | None:
@@ -1103,7 +1103,7 @@ def try_index(query: SearchQuery) -> list[JobPosting] | None:
 
 - [ ] **Step 4: Wire it into `run_search`**
 
-In `src/ergon_tracker/engine.py`, at the very start of `run_search` (after `load_builtins()/load_plugins()`), add:
+In `src/ergon/engine.py`, at the very start of `run_search` (after `load_builtins()/load_plugins()`), add:
 
 ```python
     from .index.router import try_index
@@ -1130,7 +1130,7 @@ Expected: PASS (all previous tests + new). Live/targeted tests unaffected (route
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ergon_tracker/index/router.py src/ergon_tracker/engine.py tests/test_index_routing.py
+git add src/ergon/index/router.py src/ergon/engine.py tests/test_index_routing.py
 git commit -m "feat(index): route broad queries to the index with guaranteed live fallback"
 ```
 
@@ -1151,8 +1151,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from build_index import publish_artifacts  # noqa: E402
-from ergon_tracker.index.build import build_index
-from ergon_tracker.models import JobPosting
+from ergon.index.build import build_index
+from ergon.models import JobPosting
 
 def test_publish_writes_gz_and_manifest(tmp_path):
     src = tmp_path / "i.sqlite"
@@ -1193,7 +1193,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.build import build_index  # noqa: E402
+from ergon.index.build import build_index  # noqa: E402
 
 
 def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
@@ -1208,10 +1208,10 @@ def publish_artifacts(db_path: Path, out_dir: Path, *, build_id: str) -> None:
 
 async def _crawl(limit_companies: int) -> list:
     import anyio  # noqa: F401  (anyio.run is the entry below)
-    from ergon_tracker.engine import _plan_targets, run_search  # reuse the live engine
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.registry.store import SeedRegistry
+    from ergon.engine import _plan_targets, run_search  # reuse the live engine
+    from ergon.http import AsyncFetcher
+    from ergon.models import SearchQuery
+    from ergon.registry.store import SeedRegistry
 
     keys = list(SeedRegistry().all())[:limit_companies]
     q = SearchQuery(companies=keys)  # bounded crawl via existing engine
@@ -1272,10 +1272,10 @@ git commit -m "feat(index): minimal bounded build script + publish artifacts"
 # tests/test_index_e2e.py
 """Build -> publish to a temp 'release' -> cache downloads+verifies -> query -> live fallback."""
 
-import ergon_tracker.index.router as router
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.cache import IndexCache
-from ergon_tracker.models import JobPosting, SearchQuery, JobLevel, Location, RemoteType
+import ergon.index.router as router
+from ergon.index.build import build_index
+from ergon.index.cache import IndexCache
+from ergon.models import JobPosting, SearchQuery, JobLevel, Location, RemoteType
 
 def _jobs():
     return [
@@ -1298,7 +1298,7 @@ def test_full_pipeline_offline(tmp_path, monkeypatch):
         {"build_id":"b1","schema_version":1,"sha256":hashlib.sha256(raw).hexdigest(),"bytes":len(raw)}))
     # point the router's backend loader at a cache fed by the temp remote
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=tmp_path / "cache")
-    from ergon_tracker.index.backend import SqliteIndexBackend
+    from ergon.index.backend import SqliteIndexBackend
     def _load():
         p = cache.ensure_fresh()
         return SqliteIndexBackend(p) if p else None
@@ -1347,7 +1347,7 @@ Expected: prints `built index: N jobs -> dist/index.sqlite.gz (+manifest.json)` 
 Run:
 ```bash
 .venv/bin/python - <<'PY'
-from ergon_tracker.index.db import connect
+from ergon.index.db import connect
 con = connect("dist/index.sqlite", read_only=True)
 print("rows:", con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
 print("companies:", con.execute("SELECT COUNT(*) FROM companies").fetchone()[0])
@@ -1362,9 +1362,9 @@ Expected: non-zero rows/companies, FTS returns hits, integrity `ok`.
 ```bash
 # SDK + router against the freshly built local index:
 ERGON_INDEX=on .venv/bin/python - <<'PY'
-import ergon_tracker.index.router as router
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.models import SearchQuery
+import ergon.index.router as router
+from ergon.index.backend import SqliteIndexBackend
+from ergon.models import SearchQuery
 router._load_backend = lambda: SqliteIndexBackend("dist/index.sqlite")
 res = router.try_index(SearchQuery(keywords="engineer", limit=5))
 for j in res: print(j.score if j.score is not None else "-", j.company, "|", j.title)

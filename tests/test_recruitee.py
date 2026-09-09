@@ -13,9 +13,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.recruitee import RecruiteeProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.recruitee import RecruiteeProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -119,7 +119,7 @@ async def test_fetch_empty_or_missing_offers() -> None:
 
 
 def test_normalize_apply_url_falls_back_to_careers_url() -> None:
-    from ergon_tracker.models import RawJob
+    from ergon.models import RawJob
 
     raw = RawJob(
         source="recruitee",

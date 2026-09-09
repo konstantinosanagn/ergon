@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import anyio
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import JobPosting
-from ergon_tracker.providers.jobvite import JobviteProvider
+from ergon.enrich import enrich_in_place
+from ergon.index.detail import DetailRef
+from ergon.models import JobPosting
+from ergon.providers.jobvite import JobviteProvider
 
 _URL = "https://jobs.jobvite.com/acme/job/oABC123"
 
@@ -72,7 +72,7 @@ def test_fetch_detail_missing_url_or_jsonld_returns_none() -> None:
 
 
 def test_fetch_detail_returns_structured_locations() -> None:
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     page = (
         "<html><head>"

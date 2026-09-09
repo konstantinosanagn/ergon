@@ -10,12 +10,12 @@ import pytest
 import respx
 
 from conftest import load_fixture
-from ergon_tracker import RemoteType
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import EmploymentType, SearchQuery
-from ergon_tracker.providers.themuse import TheMuseProvider
+from ergon import RemoteType
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import EmploymentType, SearchQuery
+from ergon.providers.themuse import TheMuseProvider
 
 pytestmark = pytest.mark.anyio
 

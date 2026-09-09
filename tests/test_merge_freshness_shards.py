@@ -2,7 +2,7 @@
 (the daily host-sharded matrix's `index-freshness-shard-N.sqlite` outputs) into one combined
 `index-freshness.sqlite`, for the freshness-sweep workflow's `merge` job. Schema DDL is the pinned
 ``expired_ids(id TEXT PRIMARY KEY, expired_at TEXT NOT NULL, reason TEXT)`` contract also written
-by `scripts/freshness_sweep.py` and read by `ergon_tracker.index.build.apply_freshness_expiries`.
+by `scripts/freshness_sweep.py` and read by `ergon.index.build.apply_freshness_expiries`.
 """
 
 from __future__ import annotations

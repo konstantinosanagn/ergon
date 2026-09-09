@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from resolve_careers import company_domains  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
 
 # Names matching these are non-operating entities (no employees, no careers board) — skip them.
 _NONOP_RE = re.compile(

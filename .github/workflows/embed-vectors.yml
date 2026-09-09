@@ -252,5 +252,5 @@ jobs:
             gh release upload index-latest $ASSETS --clobber
           else
             gh release create index-latest $ASSETS --title index-latest \
-              --notes "Daily ergon-tracker search-index snapshot."
+              --notes "Daily ergon search-index snapshot."
           fi

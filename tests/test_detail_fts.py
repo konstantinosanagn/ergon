@@ -24,8 +24,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_index import _rebuild_jobs_fts  # noqa: E402
 
-from ergon_tracker.index.db import fresh_db  # noqa: E402
-from ergon_tracker.index.detail import merge_detail_into_index, reconcile_detail_tier  # noqa: E402
+from ergon.index.db import fresh_db  # noqa: E402
+from ergon.index.detail import merge_detail_into_index, reconcile_detail_tier  # noqa: E402
 
 _NOW = "2026-07-12T00:00:00Z"
 _RARE_WORD = "quargleflux"  # appears only in the recovered JD's snippet, nowhere else in the row

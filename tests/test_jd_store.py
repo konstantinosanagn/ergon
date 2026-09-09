@@ -20,17 +20,17 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index import jd_store  # noqa: E402
-from ergon_tracker.index.build import build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.index.mapping import (  # noqa: E402
+from ergon.index import jd_store  # noqa: E402
+from ergon.index.build import build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.index.mapping import (  # noqa: E402
     _SNIPPET,
     _snippet_source,
     full_jd_text,
     to_row,
 )
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
-from ergon_tracker.models import JobPosting, RawJob  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
+from ergon.models import JobPosting, RawJob  # noqa: E402
 
 
 # --- unit: schema + round-trip ------------------------------------------------------------------
@@ -204,8 +204,8 @@ def _crawl_build(states, base: Path, capture_jd: bool):
 
 @pytest.fixture
 def _patched(monkeypatch):
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     prov = _Provider()
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)

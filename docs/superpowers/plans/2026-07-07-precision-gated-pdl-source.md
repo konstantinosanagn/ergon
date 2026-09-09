@@ -38,7 +38,7 @@
 **Modify:**
 - `scripts/merge_sectors.py` — extract a pure `apply_priority(...)`, add `pdl` source + priority entry.
 - `tests/test_merge_sectors.py` — NEW, tests `apply_priority` gap-fill.
-- `src/ergon_tracker/registry/data/sectors.json` — the merged result (shipped win).
+- `src/ergon/registry/data/sectors.json` — the merged result (shipped win).
 - `tests/test_sector_recall.py` — ratchet `COVERAGE_GATE`.
 - `docs/extraction-baseline.md` — record the new coverage/accuracy.
 
@@ -341,7 +341,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 3: Build + stress gate + merge into sectors.json
 
-**Files:** writes `scripts/sector_pdl.json`, updates `src/ergon_tracker/registry/data/sectors.json`.
+**Files:** writes `scripts/sector_pdl.json`, updates `src/ergon/registry/data/sectors.json`.
 
 - [ ] **Step 1: Full unit sweep (green before any heavy run)**
 
@@ -382,7 +382,7 @@ Expected: prints `sector accuracy-when-covered: …` (must be ≥ 68%, expect �
 
 **Files:**
 - Modify: `tests/test_sector_recall.py`, `docs/extraction-baseline.md`
-- Commit: `scripts/sector_pdl.json`, `src/ergon_tracker/registry/data/sectors.json`
+- Commit: `scripts/sector_pdl.json`, `src/ergon/registry/data/sectors.json`
 
 - [ ] **Step 1: Ratchet `COVERAGE_GATE`**
 
@@ -406,7 +406,7 @@ Add a `### Sector — precision-gated PDL source (2026-07-07)` subsection to `do
 - [ ] **Step 4: Commit the shipped data + docs**
 
 ```bash
-git add scripts/sector_pdl.json src/ergon_tracker/registry/data/sectors.json tests/test_sector_recall.py docs/extraction-baseline.md
+git add scripts/sector_pdl.json src/ergon/registry/data/sectors.json tests/test_sector_recall.py docs/extraction-baseline.md
 git commit -m "feat(sector): ship precision-gated PDL gap-fill into sectors.json + ratchet coverage gate
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"

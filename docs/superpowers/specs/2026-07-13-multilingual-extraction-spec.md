@@ -12,7 +12,7 @@ Enterprise giants (workday/oracle/icims/eightfold/radancy) are 80–100% English
 Top pools: **German ~55–64k** (join-driven), **French ~24k**, **Spanish ~10k**.
 
 ## Architecture (additive, English provably unchanged)
-1. **`ExtractInput` gains `language: str = "en"`** (`src/ergon_tracker/extract/base.py`) — the single choke point
+1. **`ExtractInput` gains `language: str = "en"`** (`src/ergon/extract/base.py`) — the single choke point
    every extractor reads. Default `"en"` keeps every existing call site (incl. the four `test_*_recall.py`) intact.
    `input_from_job` sets it from a detected language (below); until wired, everything stays `"en"`.
 2. **Per-language vocab dicts.** In each extractor, rename the English vocab constants to `dict[str, X]` keyed by

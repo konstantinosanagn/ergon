@@ -20,9 +20,9 @@ import anyio
 import httpx
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.workable import (
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.workable import (
     _MAX_BOARD_FETCH_ATTEMPTS,
     WorkableProvider,
     _reset_workable_cache,

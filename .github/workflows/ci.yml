@@ -34,7 +34,7 @@ jobs:
       - name: Type check
         run: uv run mypy
       - name: Test
-        run: uv run pytest --cov=ergon_tracker --cov-report=term-missing
+        run: uv run pytest --cov=ergon --cov-report=term-missing
 
   # Known-CVE scan (PyPI Advisory DB + OSV).
   audit:

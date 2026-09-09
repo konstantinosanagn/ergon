@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.comp import parse_salary
+from ergon.extract.comp import parse_salary
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "salary_corpus.jsonl"
 

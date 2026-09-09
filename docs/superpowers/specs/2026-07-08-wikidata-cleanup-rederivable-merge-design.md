@@ -81,7 +81,7 @@ hand-curated (1,453, locked) + edgar/wikidata(cleaned)/slug/pdl ──merge_sect
 ## Deliverables
 - **Create:** `scripts/clean_sector_wikidata.py`, `tests/test_clean_wikidata.py`.
 - **Modify:** `scripts/merge_sectors.py` (lock only hand-curated; rebuild), `scripts/sector_wikidata.json`
-  (cleaned), `src/ergon_tracker/registry/data/sectors.json` (re-merged), `tests/test_merge_sectors.py`.
+  (cleaned), `src/ergon/registry/data/sectors.json` (re-merged), `tests/test_merge_sectors.py`.
 - **Record:** `docs/extraction-baseline.md` — the cleanup + re-derivable-merge note + before/after numbers.
 
 ## Constraints honored

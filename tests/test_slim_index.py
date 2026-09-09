@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index, build_slim_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index, build_slim_index
+from ergon.index.db import connect
+from ergon.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
 def _job(sid, company, title, **kw):

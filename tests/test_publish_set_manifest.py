@@ -24,8 +24,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build_index as bi  # noqa: E402
 from tests.test_build_main_wiring import _fake_crawl_due  # noqa: E402
 
-from ergon_tracker.index.cache import IndexCache  # noqa: E402
-from ergon_tracker.index.db import SCHEMA_VERSION, connect  # noqa: E402
+from ergon.index.cache import IndexCache  # noqa: E402
+from ergon.index.db import SCHEMA_VERSION, connect  # noqa: E402
 
 
 # --- fake reconciles: mutate the promoted core in place, create their sidecar file -----------------
@@ -197,8 +197,8 @@ def test_set_manifest_excludes_independently_owned_sidecars(tmp_path):
 
 # --- SDK-side torn-set rejection (ships dark) ------------------------------------------------------
 def _publish_core(remote: Path, tmp_path: Path, build_id: str) -> tuple[bytes, str]:
-    from ergon_tracker.index.build import build_index
-    from ergon_tracker.models import JobPosting
+    from ergon.index.build import build_index
+    from ergon.models import JobPosting
 
     src = tmp_path / f"src-{build_id}.sqlite"
     build_index(

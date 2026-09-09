@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker.models import RawJob
-from ergon_tracker.providers.paycom import PaycomProvider
+from ergon.models import RawJob
+from ergon.providers.paycom import PaycomProvider
 
 KEY = "7C5AC05D8D2EC046AE4FAF26F5F9712E"
 

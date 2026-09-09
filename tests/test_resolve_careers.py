@@ -16,7 +16,7 @@ _SPEC = importlib.util.spec_from_file_location(
 rc = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(rc)  # type: ignore[union-attr]
 
-from ergon_tracker.providers.base import load_builtins  # noqa: E402
+from ergon.providers.base import load_builtins  # noqa: E402
 
 load_builtins()
 
@@ -100,7 +100,7 @@ async def test_company_domains_uses_clearbit_then_guess():
     import httpx
     import respx
 
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     payload = [{"name": "Salesforce", "domain": "salesforce.com"}]
     with respx.mock:
@@ -114,7 +114,7 @@ async def test_company_domains_uses_clearbit_then_guess():
 
 
 async def test_company_domains_override_short_circuits():
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     async with AsyncFetcher() as f:
         assert await rc.company_domains("Anything", f, override="given.com") == ["given.com"]

@@ -14,7 +14,7 @@ from pathlib import Path
 from rapidfuzz import fuzz, process
 
 ROOT = Path(__file__).resolve().parents[1]
-seed = json.loads((ROOT / "src/ergon_tracker/registry/data/seed.json").read_text())["companies"]
+seed = json.loads((ROOT / "src/ergon/registry/data/seed.json").read_text())["companies"]
 sp = json.loads((ROOT / "runs/sp500.json").read_text())
 
 

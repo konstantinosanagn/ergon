@@ -1,8 +1,8 @@
 import json
 
-from ergon_tracker.index.build import build_sharded_index, sector_slug
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobPosting, Location, RemoteType
+from ergon.index.build import build_sharded_index, sector_slug
+from ergon.index.db import connect
+from ergon.models import JobPosting, Location, RemoteType
 
 
 def _job(sid, company, title, sector=None):
@@ -48,8 +48,8 @@ def test_build_sharded_writes_one_shard_per_sector(tmp_path):
 
 
 def test_sharded_backend_sector_and_cross_sector(tmp_path):
-    from ergon_tracker.index.backend import ShardedIndexBackend
-    from ergon_tracker.models import SearchQuery
+    from ergon.index.backend import ShardedIndexBackend
+    from ergon.models import SearchQuery
 
     jobs = [
         _job("1", "Stripe", "Backend Engineer", sector="Fintech"),
@@ -70,9 +70,9 @@ def test_sharded_backend_sector_and_cross_sector(tmp_path):
 
 
 def test_sharded_parity_with_single_file(tmp_path):
-    from ergon_tracker.index.backend import ShardedIndexBackend, SqliteIndexBackend
-    from ergon_tracker.index.build import build_index
-    from ergon_tracker.models import SearchQuery
+    from ergon.index.backend import ShardedIndexBackend, SqliteIndexBackend
+    from ergon.index.build import build_index
+    from ergon.models import SearchQuery
 
     jobs = [
         _job("1", "Stripe", "Backend Engineer", sector="Fintech"),
@@ -102,8 +102,8 @@ def _publish_shards(remote, src_dir):
 
 
 def test_shardcache_downloads_only_needed_shard(tmp_path):
-    from ergon_tracker.index.cache import ShardCache
-    from ergon_tracker.models import SearchQuery
+    from ergon.index.cache import ShardCache
+    from ergon.models import SearchQuery
 
     src = tmp_path / "build"
     build_sharded_index(
@@ -130,8 +130,8 @@ def test_shardcache_downloads_only_needed_shard(tmp_path):
 
 
 def test_shardcache_missing_sector_returns_none(tmp_path):
-    from ergon_tracker.index.cache import ShardCache
-    from ergon_tracker.models import SearchQuery
+    from ergon.index.cache import ShardCache
+    from ergon.models import SearchQuery
 
     src = tmp_path / "build"
     build_sharded_index([_job("1", "Stripe", "Eng", sector="Fintech")], src, build_id="b1")
@@ -144,12 +144,12 @@ def test_shardcache_missing_sector_returns_none(tmp_path):
 def test_sharded_from_db_parity_with_in_memory(tmp_path):
     # build_sharded_index_from_db (SQL, memory-bounded) must produce the same shards as the
     # in-memory build_sharded_index for the same jobs.
-    from ergon_tracker.index.build import (
+    from ergon.index.build import (
         build_index,
         build_sharded_index,
         build_sharded_index_from_db,
     )
-    from ergon_tracker.index.db import connect
+    from ergon.index.db import connect
 
     jobs = [
         _job("1", "Stripe", "Backend Engineer", sector="Fintech"),
@@ -188,7 +188,7 @@ def test_sharded_from_db_parity_with_in_memory(tmp_path):
 def test_parallel_shard_build_no_loss(tmp_path, monkeypatch):
     """Force the ProcessPoolExecutor path (ERGON_SHARD_WORKERS=2) over several sectors and assert the
     shards partition the index with no row loss/duplication — the parallel publish optimization."""
-    from ergon_tracker.index.build import build_index, build_sharded_index_from_db
+    from ergon.index.build import build_index, build_sharded_index_from_db
 
     monkeypatch.setenv("ERGON_SHARD_WORKERS", "2")
     jobs = [

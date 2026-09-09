@@ -35,7 +35,7 @@ from harvest_tokens import _core  # noqa: E402
 from census_successfactors import tavily  # noqa: E402  # isort: skip
 
 GIANTS = ROOT / "runs" / "giants.json"
-SPECS = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "apicapture.json"
+SPECS = ROOT / "src" / "ergon" / "registry" / "data" / "apicapture.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_apicap.json"
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
@@ -351,7 +351,7 @@ async def main() -> None:
         urls = await tavily(f"{brand} careers", key, fetcher)
         urls_by_idx[idx] = residual_urls(brand, g["name"], urls)
 
-    from ergon_tracker.http import AsyncFetcher  # noqa: E402
+    from ergon.http import AsyncFetcher  # noqa: E402
 
     async with (
         AsyncFetcher(concurrency=8, per_host_rate=4, timeout=15.0, retries=3) as tav,

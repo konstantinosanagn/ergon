@@ -1,0 +1,170 @@
+"""Semantic reranking (Layer 2) — optional, embeddings-based.
+
+Lexical BM25 (the default :mod:`ergon.ranking`) matches *tokens*. It can't tell that
+"ML engineer" and "Machine Learning" mean the same thing, or rank a role for the *meaning* of
+"fintech using Rust, remote-friendly". This module adds that, using small CPU embedding models
+via `fastembed` (ONNX) — no GPU, no API, fully local. It is an **opt-in extra**::
+
+    pip install 'ergon[semantic]'
+
+and is engaged per search with ``semantic=True``. It implements the
+:class:`ergon.ranking.Reranker` protocol, so it plugs into the existing ranking seam:
+lexical BM25 narrows to a top-K candidate set, then embeddings reorder it by cosine similarity.
+
+The model (~130 MB) downloads once on first use and is cached by `fastembed`. The model is
+loaded lazily and memoized, so importing this module never downloads anything.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterator
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any
+
+from .config import get_env
+
+if TYPE_CHECKING:
+    from .models import JobPosting
+
+__all__ = ["SemanticReranker", "get_semantic_reranker", "DEFAULT_MODEL"]
+
+# Default: BAAI/bge-small-en-v1.5 — ~67 MB on disk, 384-dim. fastembed already ships it as a
+# quantized ONNX build (quantization is on by default — that's the whole point of fastembed over
+# sentence-transformers/PyTorch), so there is no separate "quantize it ourselves" step.
+# Two free, no-accuracy-loss tuning knobs are exposed via env / .env instead:
+#   ERGON_SEMANTIC_MODEL   — swap in a smaller/quantized variant (e.g. a *Q model) or a bigger one
+#   ERGON_SEMANTIC_THREADS — ONNX Runtime intra-op threads (cap CPU use, or raise for throughput)
+DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def _default_model() -> str:
+    return get_env("ERGON_SEMANTIC_MODEL") or DEFAULT_MODEL
+
+
+# How much of each posting to embed. Title carries the most signal; we prepend it and add a
+# bounded slice of the description so long postings don't dominate or slow things down.
+_DESC_CHARS = 600
+
+
+def _job_text(job: JobPosting) -> str:
+    parts = [job.title or ""]
+    if job.department:
+        parts.append(job.department)
+    if job.description_text:
+        parts.append(job.description_text[:_DESC_CHARS])
+    return " — ".join(p for p in parts if p)
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+class SemanticReranker:
+    """Embeddings reranker: scores jobs by cosine similarity to the query.
+
+    Implements the ``Reranker`` protocol (``rerank(query, jobs) -> list[float]``). The embedding
+    model is created lazily on first ``rerank`` call so constructing this object is cheap.
+    """
+
+    def __init__(self, model_name: str | None = None, threads: int | None = None) -> None:
+        self.model_name = model_name or _default_model()
+        self.threads = threads
+        self._model: Any = None  # set lazily to a fastembed TextEmbedding in _ensure_model
+
+    def _ensure_model(self) -> None:
+        if self._model is not None:
+            return
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as exc:  # pragma: no cover - exercised only without the extra
+            raise ImportError(
+                "Semantic search needs the optional extra: pip install 'ergon[semantic]'"
+            ) from exc
+        kwargs: dict[str, Any] = {"model_name": self.model_name}
+        threads = self.threads if self.threads is not None else get_env("ERGON_SEMANTIC_THREADS")
+        if threads:
+            kwargs["threads"] = int(threads)
+        self._model = TextEmbedding(**kwargs)
+
+    def rerank(self, query: str, jobs: list[JobPosting]) -> list[float]:
+        if not jobs:
+            return []
+        self._ensure_model()
+        assert self._model is not None
+        texts = [_job_text(j) for j in jobs]
+        # fastembed returns numpy arrays; tolist() keeps this dependency-light (no numpy import).
+        query_vec = next(iter(self._model.embed([query]))).tolist()
+        doc_vecs = [v.tolist() for v in self._model.embed(texts)]
+        return [_cosine(query_vec, dv) for dv in doc_vecs]
+
+    def embed_texts(
+        self, texts: list[str], *, batch_size: int = 256, parallel: int | None = None
+    ) -> list[list[float]]:
+        """Embed raw texts → float vectors. ``parallel`` maps to fastembed's data-parallel encoding
+        (``0`` = use all CPU cores via worker processes, ``None`` = single, ``N`` = N workers) — the
+        build-time throughput lever for embedding the whole corpus."""
+        if not texts:
+            return []
+        self._ensure_model()
+        assert self._model is not None
+        return [
+            v.tolist() for v in self._model.embed(texts, batch_size=batch_size, parallel=parallel)
+        ]
+
+    def embed_jobs(
+        self, jobs: list[JobPosting], *, batch_size: int = 256, parallel: int | None = None
+    ) -> list[list[float]]:
+        """Embed postings using the SAME text representation as ``rerank`` (title + dept + desc slice),
+        so a pre-stored vector and a query-time rerank are directly comparable."""
+        return self.embed_texts(
+            [_job_text(j) for j in jobs], batch_size=batch_size, parallel=parallel
+        )
+
+    def embed_jobs_iter(
+        self, jobs: list[JobPosting], *, batch_size: int = 256, parallel: int | None = None
+    ) -> Iterator[tuple[JobPosting, list[float]]]:
+        """Stream ``(job, vector)`` as fastembed yields them — memory-bounded (no 840k-vector list held)
+        AND data-parallel. The build/reconcile path consumes this to quantize+store incrementally."""
+        if not jobs:
+            return
+        self._ensure_model()
+        assert self._model is not None
+        texts = [_job_text(j) for j in jobs]
+        stream = self._model.embed(texts, batch_size=batch_size, parallel=parallel)
+        for job, vec in zip(jobs, stream, strict=True):
+            yield job, vec.tolist()
+
+    def embed_texts_iter(
+        self, texts: list[str], *, batch_size: int = 256, parallel: int | None = None
+    ) -> Iterator[list[float]]:
+        """Stream embeddings for raw texts (memory-bounded + data-parallel) — the incremental rich
+        reconcile consumes this to quantize+store the crawled window without holding all vectors."""
+        if not texts:
+            return
+        self._ensure_model()
+        assert self._model is not None
+        for vec in self._model.embed(texts, batch_size=batch_size, parallel=parallel):
+            yield vec.tolist()
+
+    def embed_query(self, query: str) -> list[float]:
+        """Embed a single query string (for searching against pre-stored job vectors)."""
+        self._ensure_model()
+        assert self._model is not None
+        return [float(x) for x in next(iter(self._model.embed([query])))]
+
+
+@lru_cache(maxsize=4)
+def get_semantic_reranker(model_name: str | None = None) -> SemanticReranker:
+    """Return a memoized :class:`SemanticReranker` (one model load per process, per model name).
+
+    ``model_name=None`` resolves to ``ERGON_SEMANTIC_MODEL`` or :data:`DEFAULT_MODEL`. Raises
+    ``ImportError`` with install guidance the first time it embeds if the ``semantic`` extra is
+    not installed.
+    """
+    return SemanticReranker(model_name)

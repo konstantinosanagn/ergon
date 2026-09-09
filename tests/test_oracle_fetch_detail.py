@@ -10,9 +10,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.oracle import OracleProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.oracle import OracleProvider
 
 
 class _FakeFetcher:
@@ -270,7 +270,7 @@ def test_base_fetch_detail_is_none() -> None:
 
 
 def test_oracle_fetch_detail_recovers_structured_location() -> None:
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     payload = _orc_payload("<p>JD.</p>", None, None)
     payload["items"][0]["PrimaryLocation"] = "Orlando, FL, United States"

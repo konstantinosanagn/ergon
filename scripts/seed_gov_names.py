@@ -34,9 +34,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from company_resolve import is_covered  # noqa: E402
 from harvest_tokens import company_key, load_existing  # noqa: E402
 
-from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
+from ergon.registry.store import SeedRegistry  # noqa: E402
 
-H1B = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "h1b_sponsors.json"
+H1B = ROOT / "src" / "ergon" / "registry" / "data" / "h1b_sponsors.json"
 EDGAR = ROOT / "scripts" / "_edgar_candidates.json"
 DEFAULT_OUT = ROOT / "scripts" / "gov_names.txt"
 

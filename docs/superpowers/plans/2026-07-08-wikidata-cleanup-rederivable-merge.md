@@ -31,7 +31,7 @@
 ## File Structure
 
 **Create:** `scripts/clean_sector_wikidata.py` (pure filter + CLI), `tests/test_clean_wikidata.py`.
-**Modify:** `scripts/merge_sectors.py` (extract `rebuild_table`, lock only hand-curated), `tests/test_merge_sectors.py` (add rebuild test), `scripts/sector_wikidata.json` (cleaned), `src/ergon_tracker/registry/data/sectors.json` (re-merged), `docs/extraction-baseline.md` (record).
+**Modify:** `scripts/merge_sectors.py` (extract `rebuild_table`, lock only hand-curated), `tests/test_merge_sectors.py` (add rebuild test), `scripts/sector_wikidata.json` (cleaned), `src/ergon/registry/data/sectors.json` (re-merged), `docs/extraction-baseline.md` (record).
 
 ---
 
@@ -259,7 +259,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 3: Clean + re-merge + measure + record
 
-**Files:** rewrites `scripts/sector_wikidata.json`, `src/ergon_tracker/registry/data/sectors.json`; modifies `docs/extraction-baseline.md`.
+**Files:** rewrites `scripts/sector_wikidata.json`, `src/ergon/registry/data/sectors.json`; modifies `docs/extraction-baseline.md`.
 
 - [ ] **Step 1: Unit sweep (green before touching data)**
 
@@ -270,7 +270,7 @@ Expected: all PASS.
 
 Run:
 ```bash
-.venv/bin/python -c "import json,collections; d=json.load(open('src/ergon_tracker/registry/data/sectors.json'))['companies']; print(collections.Counter(v.get('source','<hand>') for v in d.values() if v.get('sector')))"
+.venv/bin/python -c "import json,collections; d=json.load(open('src/ergon/registry/data/sectors.json'))['companies']; print(collections.Counter(v.get('source','<hand>') for v in d.values() if v.get('sector')))"
 ```
 Record the before counts (expect `<hand> 1453, slug 8322, wikidata 1912, pdl 1343, edgar 594`).
 
@@ -297,7 +297,7 @@ Record the AFTER composition (rerun the Step-2 one-liner). Expect: hand-curated 
 
 ```bash
 .venv/bin/python scripts/merge_sectors.py --apply
-git diff --stat src/ergon_tracker/registry/data/sectors.json
+git diff --stat src/ergon/registry/data/sectors.json
 ```
 Expected: the second `--apply` produces **no change** to sectors.json (empty `git diff`). If it changes, the rebuild is non-deterministic — STOP and investigate before committing.
 
@@ -311,7 +311,7 @@ Expected: accuracy-when-covered ≥ 0.68 (record it; expect ≥ 73.4%) and cover
 Add a `### Sector — Wikidata cleanup + re-derivable merge (2026-07-08)` subsection to `docs/extraction-baseline.md`: the wikidata drop count (junk_industry + short_slug), the before/after table composition, the gold accuracy/coverage after re-merge, that the merge is now re-derivable (only hand-curated locked) + idempotent, and that hand-curation was untouched.
 
 ```bash
-git add scripts/sector_wikidata.json src/ergon_tracker/registry/data/sectors.json docs/extraction-baseline.md
+git add scripts/sector_wikidata.json src/ergon/registry/data/sectors.json docs/extraction-baseline.md
 git commit -m "chore(sector): purge wikidata junk + rebuild sectors.json (re-derivable merge)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"

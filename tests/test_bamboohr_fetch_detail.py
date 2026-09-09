@@ -11,9 +11,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef, _detail_parts
-from ergon_tracker.models import DetailFetch, SalaryInterval
-from ergon_tracker.providers.bamboohr import BambooHRProvider
+from ergon.index.detail import DetailRef, _detail_parts
+from ergon.models import DetailFetch, SalaryInterval
+from ergon.providers.bamboohr import BambooHRProvider
 
 
 class _FakeFetcher:
@@ -90,7 +90,7 @@ def test_parse_detail_ref_from_url_and_token_fallback() -> None:
 
 
 def test_fetch_detail_recovers_structured_location() -> None:
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     payload = {
         "result": {

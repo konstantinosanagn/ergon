@@ -10,7 +10,7 @@ fewer) -- the same distinction the plan's live gates enforce.
 Usage:
     uv run python scripts/measure_field_coverage.py
 
-Reads ``~/.cache/ergon-tracker/index.sqlite`` (the locally built index). If it doesn't exist yet
+Reads ``~/.cache/ergon/index.sqlite`` (the locally built index). If it doesn't exist yet
 (e.g. a fresh checkout that hasn't run ``scripts/build_index.py``), prints a friendly message and
 exits 0 -- this is an operator convenience, not a CI gate.
 """
@@ -21,7 +21,7 @@ import os
 import sqlite3
 import sys
 
-INDEX_PATH = os.path.expanduser("~/.cache/ergon-tracker/index.sqlite")
+INDEX_PATH = os.path.expanduser("~/.cache/ergon/index.sqlite")
 
 # Providers Tasks 2-7 of the structured-field-recovery plan mapped structured fields for.
 _TOUCHED_SOURCES = (

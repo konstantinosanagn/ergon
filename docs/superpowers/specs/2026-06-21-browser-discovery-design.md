@@ -89,7 +89,7 @@ Reuses the existing **propose → live-verify → merge** seam (`candidates.json
 
 ## Tier-2 implementation (built 2026-06-22)
 
-The token subsystem is live as `ergon_tracker.token_store.TokenStore` + an apicapture injection hook.
+The token subsystem is live as `ergon.token_store.TokenStore` + an apicapture injection hook.
 The browser stays an offline shell; the store + replay are the pure, tested core.
 
 **`TokenStore`** (file-backed, secrets-grade `0600`, gitignored, never logged):
@@ -124,7 +124,7 @@ store); pure logic unit-tested. `--state cap.json` also mints from a Playwright-
   margin of expiry → re-mint). Runs **before** the crawl (opt-in: only when `scripts/tier2_mint.json`
   exists; `continue-on-error` so a browser flake never breaks the build). Tokens land in
   `dist/tier2_tokens.json`, which the build reads via `$ERGON_TOKEN_STORE`.
-- `scripts/spec_health_cron.py` + `ergon_tracker.spec_health.SpecHealth` — replays every apicapture
+- `scripts/spec_health_cron.py` + `ergon.spec_health.SpecHealth` — replays every apicapture
   spec **after** the build, records ok/fail, and emits `rediscover_queue.json` for specs that failed
   `threshold` (default 3) times in a row. The streak persists across builds (`spec_health.json` is
   downloaded + re-published on the `index-latest` release, like `board_state.json`).

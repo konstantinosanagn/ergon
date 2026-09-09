@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import anyio
 
-from ergon_tracker.engine import run_search
-from ergon_tracker.models import JobPosting, SearchQuery
+from ergon.engine import run_search
+from ergon.models import JobPosting, SearchQuery
 
 
 def test_semantic_reranks_index_results(monkeypatch):
-    import ergon_tracker.index.router as router
-    import ergon_tracker.semantic as semantic
+    import ergon.index.router as router
+    import ergon.semantic as semantic
 
     jobs = [
         JobPosting.create(source="greenhouse", source_job_id=str(i), company="C", title=t)
@@ -36,7 +36,7 @@ def test_semantic_reranks_index_results(monkeypatch):
 
 
 def test_index_lexical_when_not_semantic(monkeypatch):
-    import ergon_tracker.index.router as router
+    import ergon.index.router as router
 
     jobs = [JobPosting.create(source="greenhouse", source_job_id="1", company="C", title="Alpha")]
     monkeypatch.setattr(router, "try_index", lambda q: list(jobs))

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ergon_tracker.index.build import (
+from ergon.index.build import (
     append_jobs,
     build_index,
     build_index_incremental,
     build_index_streaming,
 )
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType
+from ergon.index.db import connect
+from ergon.models import JobLevel, JobPosting, Location, RemoteType
 
 
 def _job(sid, company, title, **kw):
@@ -71,7 +71,7 @@ def test_streaming_fts_queryable(tmp_path):
 
 
 def test_append_jobs_exact_id_dedup(tmp_path):
-    from ergon_tracker.index.db import fresh_db
+    from ergon.index.db import fresh_db
 
     p = tmp_path / "d.sqlite"
     fresh_db(p)
@@ -119,7 +119,7 @@ def test_streaming_carry_forward_matches_incremental(tmp_path):
 
 
 def test_changed_companies_sql_parity(tmp_path):
-    from ergon_tracker.index.build import changed_companies, changed_companies_sql
+    from ergon.index.build import changed_companies, changed_companies_sql
 
     prev_jobs = [
         _job("1", "Stripe", "Backend Engineer"),
@@ -147,7 +147,7 @@ def test_changed_companies_sql_parity(tmp_path):
 
 
 def test_changed_companies_sql_no_prev(tmp_path):
-    from ergon_tracker.index.build import changed_companies_sql
+    from ergon.index.build import changed_companies_sql
 
     fresh = tmp_path / "fresh.sqlite"
     build_index([_job("1", "Stripe", "Eng"), _job("2", "Ramp", "Eng")], fresh, build_id="b1")
@@ -157,7 +157,7 @@ def test_changed_companies_sql_no_prev(tmp_path):
 def test_build_from_fresh_db_matches_incremental(tmp_path):
     # Crawl writes fresh jobs to a DB; build_index_from_fresh_db + carry-forward must match the
     # in-memory build_index_incremental oracle.
-    from ergon_tracker.index.build import (
+    from ergon.index.build import (
         build_index_from_fresh_db,
         build_index_streaming,
     )
@@ -185,7 +185,7 @@ def test_build_from_fresh_db_matches_incremental(tmp_path):
 
 def test_carry_forward_corrupt_prev_degrades_to_fresh_only(tmp_path):
     # A truncated/corrupt prev index must NOT crash the build — it degrades to fresh-only.
-    from ergon_tracker.index.build import build_index_from_fresh_db, build_index_streaming
+    from ergon.index.build import build_index_from_fresh_db, build_index_streaming
 
     fresh = tmp_path / "fresh.sqlite"
     build_index_streaming([[_job("1", "Stripe", "Backend Engineer")]], fresh, build_id="b1")
@@ -204,8 +204,8 @@ def test_carry_forward_corrupt_prev_degrades_to_fresh_only(tmp_path):
 def test_relevel_from_years_reclassifies_unknown(tmp_path):
     # Carried-forward jobs built before years-inference: level=unknown but years stored. The
     # re-level pass reclassifies them from the stored years (no re-crawl).
-    from ergon_tracker.index.build import _relevel_from_years, append_jobs
-    from ergon_tracker.index.db import connect, fresh_db
+    from ergon.index.build import _relevel_from_years, append_jobs
+    from ergon.index.db import connect, fresh_db
 
     p = tmp_path / "i.sqlite"
     fresh_db(p)

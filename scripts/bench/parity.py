@@ -1,13 +1,13 @@
 """Parity check: verify the LIVE filter path (``SearchQuery.matches()``, applied to a
 ``JobPosting`` fetched straight from an ATS) and the prebuilt-index SQL path
-(``ergon_tracker.index.query.search_rows`` / its ``_where`` clause builder, run against the
+(``ergon.index.query.search_rows`` / its ``_where`` clause builder, run against the
 sqlite snapshot) reach the SAME accept/reject decision for a given ``(query, job)`` pair -- i.e. a
 user gets the same jobs whether they search live or search the index.
 
 Method: rather than reimplementing ``_where()``'s SQL semantics in Python (which would just test
 one hand-written mirror against another and could silently drift from the real clause builder),
 this module runs the REAL SQL path: the REAL ``to_row()`` mapping
-(``ergon_tracker.index.mapping.to_row`` -- the exact function ``build_index`` uses) turns ``job``
+(``ergon.index.mapping.to_row`` -- the exact function ``build_index`` uses) turns ``job``
 into a single index row in a throwaway in-memory sqlite table (plus its ``jobs_fts`` index, built
 the same way ``build_index`` builds it), and the REAL ``search_rows()`` runs against it unchanged.
 No fixture files, no ``build_index()`` call, no network -- a scratch one-row "index" is
@@ -38,9 +38,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from ergon_tracker.index.mapping import to_row
-from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import JobPosting, SearchQuery
+from ergon.index.mapping import to_row
+from ergon.index.query import search_rows
+from ergon.models import JobPosting, SearchQuery
 
 __all__ = [
     "SQL_ONLY_FIELDS",

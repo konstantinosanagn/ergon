@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import RawJob, SalaryInterval
-from ergon_tracker.providers.recruitee import RecruiteeProvider
+from ergon.models import RawJob, SalaryInterval
+from ergon.providers.recruitee import RecruiteeProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

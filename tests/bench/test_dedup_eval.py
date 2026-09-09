@@ -1,5 +1,5 @@
 """Tests for scripts.bench.dedup_eval: candidate near-duplicate pairing and precision/recall of
-``ergon_tracker.dedup.deduplicate()`` merges against a labeled "same role?" set.
+``ergon.dedup.deduplicate()`` merges against a labeled "same role?" set.
 
 All inputs are synthetic, in-memory ``JobPosting`` clusters -- no network.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from scripts.bench.dedup_eval import pair_key, predicted_merges, sample_pairs, score_dedup
 
-from ergon_tracker.models import JobLevel, JobPosting, Location
+from ergon.models import JobLevel, JobPosting, Location
 
 
 def _job(

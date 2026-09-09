@@ -1,4 +1,4 @@
-"""Tests for the ergon_tracker MCP server (skipped if the optional `mcp` extra isn't installed)."""
+"""Tests for the ergon MCP server (skipped if the optional `mcp` extra isn't installed)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-pytest.importorskip("mcp", reason="install ergon_tracker[mcp] to test the MCP server")
+pytest.importorskip("mcp", reason="install ergon[mcp] to test the MCP server")
 
-from ergon_tracker import mcp_server as srv  # noqa: E402
+from ergon import mcp_server as srv  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
@@ -83,8 +83,8 @@ async def test_search_jobs_broad_uses_index_not_live(monkeypatch) -> None:
     # A broad search (no companies/sources) must be served by the prebuilt index, NOT fanned out
     # to live aggregators/registry. Regression for the agent-safety guard that used to force
     # sources=aggregators and thereby bypass the index entirely.
-    import ergon_tracker.index.router as router
-    from ergon_tracker.models import JobPosting
+    import ergon.index.router as router
+    from ergon.models import JobPosting
 
     fake = [
         JobPosting.create(source="greenhouse", source_job_id="1", company="Acme", title="ML Eng")
@@ -100,7 +100,7 @@ async def test_search_jobs_broad_uses_index_not_live(monkeypatch) -> None:
 async def test_search_jobs_broad_falls_back_to_aggregators_when_index_down(monkeypatch) -> None:
     # If the index is unavailable, a broad search falls back to aggregators (fast/safe), NEVER a
     # live fan-out across the whole registry.
-    import ergon_tracker.index.router as router
+    import ergon.index.router as router
 
     monkeypatch.setattr(router, "try_index", lambda q: None)
     captured = {}
@@ -115,11 +115,11 @@ async def test_search_jobs_broad_falls_back_to_aggregators_when_index_down(monke
         async def search(self, query, **kwargs):
             captured["sources"] = query.sources
             captured["kwargs"] = kwargs
-            from ergon_tracker.models import SearchResult
+            from ergon.models import SearchResult
 
             return SearchResult(jobs=[], health=[])
 
-    monkeypatch.setattr(srv, "AsyncErgonTracker", lambda *a, **k: _FakeJS())
+    monkeypatch.setattr(srv, "AsyncErgon", lambda *a, **k: _FakeJS())
     await srv.search_jobs(keywords="nurse", limit=5)
     assert set(captured["sources"]) == set(srv.AGGREGATOR_PROVIDERS)  # aggregators, not 46k boards
 
@@ -129,7 +129,7 @@ async def test_search_jobs_live_fallback_passes_include_stale(monkeypatch) -> No
     # doesn't re-default max_last_seen_age_days (already resolved by search_jobs's own param
     # default) — otherwise an explicit max_last_seen_age_days=None (user wants stale postings)
     # would be silently clobbered back to 21.
-    import ergon_tracker.index.router as router
+    import ergon.index.router as router
 
     monkeypatch.setattr(router, "try_index", lambda q: None)
     captured = {}
@@ -143,11 +143,11 @@ async def test_search_jobs_live_fallback_passes_include_stale(monkeypatch) -> No
 
         async def search(self, query, **kwargs):
             captured["kwargs"] = kwargs
-            from ergon_tracker.models import SearchResult
+            from ergon.models import SearchResult
 
             return SearchResult(jobs=[], health=[])
 
-    monkeypatch.setattr(srv, "AsyncErgonTracker", lambda *a, **k: _FakeJS())
+    monkeypatch.setattr(srv, "AsyncErgon", lambda *a, **k: _FakeJS())
     await srv.search_jobs(keywords="nurse", limit=5, max_last_seen_age_days=None)
     assert captured["kwargs"] == {"include_stale": True}
 
@@ -155,8 +155,8 @@ async def test_search_jobs_live_fallback_passes_include_stale(monkeypatch) -> No
 async def test_search_jobs_forwards_new_filters_to_index(monkeypatch) -> None:
     # The years/employment/currency/recency filters must reach the SearchQuery the index sees,
     # so a friend can use them via MCP (the years filter is the "0-2 yrs / new grad" use case).
-    from ergon_tracker.index import router
-    from ergon_tracker.models import EmploymentType
+    from ergon.index import router
+    from ergon.models import EmploymentType
 
     captured = {}
 
@@ -186,7 +186,7 @@ async def test_search_jobs_forwards_new_filters_to_index(monkeypatch) -> None:
 async def test_search_jobs_forwards_degree_filter_to_index(monkeypatch) -> None:
     # The education filter (no competitor API has one) must reach the SearchQuery the index
     # sees — the "new grad: exclude M.D./Ph.D.-gated roles" use case.
-    from ergon_tracker.index import router
+    from ergon.index import router
 
     captured = {}
 
@@ -208,7 +208,7 @@ async def test_search_jobs_forwards_degree_filter_to_index(monkeypatch) -> None:
 
 
 async def test_search_jobs_default_max_last_seen_age_days_21(monkeypatch) -> None:
-    from ergon_tracker.index import router
+    from ergon.index import router
 
     captured = {}
 
@@ -222,7 +222,7 @@ async def test_search_jobs_default_max_last_seen_age_days_21(monkeypatch) -> Non
 
 
 async def test_search_jobs_explicit_none_disables_staleness_guard(monkeypatch) -> None:
-    from ergon_tracker.index import router
+    from ergon.index import router
 
     captured = {}
 
@@ -237,7 +237,7 @@ async def test_search_jobs_explicit_none_disables_staleness_guard(monkeypatch) -
 
 async def test_job_dict_includes_degree_fields() -> None:
     # Consumers must see BOTH the level and the required/preferred nuance on every result.
-    from ergon_tracker.models import JobPosting
+    from ergon.models import JobPosting
 
     j = JobPosting.create(
         source="greenhouse",
@@ -254,7 +254,7 @@ async def test_job_dict_includes_degree_fields() -> None:
 async def test_job_dict_includes_years_and_core_fields() -> None:
     # "fetch information": the agent-facing dict must surface the rich fields, incl. the years a
     # role requires (so a years-filtered result can show why it matched).
-    from ergon_tracker.models import JobPosting, Salary
+    from ergon.models import JobPosting, Salary
 
     j = JobPosting.create(
         source="greenhouse",
@@ -275,11 +275,11 @@ async def test_job_dict_includes_years_and_core_fields() -> None:
 async def test_index_health_reports_freshness(monkeypatch) -> None:
     # The index health must carry as_of (which daily build served the query) so an agent can judge
     # data freshness.
-    from ergon_tracker.index import router
+    from ergon.index import router
 
     monkeypatch.setattr(router, "try_index_ranked", lambda q: [])
     monkeypatch.setattr(
-        "ergon_tracker.index.cache.cached_index_build_id", lambda *a, **k: "build-2026-06-19-42"
+        "ergon.index.cache.cached_index_build_id", lambda *a, **k: "build-2026-06-19-42"
     )
     out = await srv.search_jobs(keywords="engineer")
     assert out["health"][0]["source"] == "index"

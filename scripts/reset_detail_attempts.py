@@ -22,7 +22,7 @@ Usage:
   uv run python scripts/reset_detail_attempts.py --detail-db dist/index-detail.sqlite
   uv run python scripts/reset_detail_attempts.py --detail-db dist/index-detail.sqlite --dry-run
 
-Reuses ``ergon_tracker.index.detail.open_detail`` for schema (no duplicated DDL); otherwise stdlib
+Reuses ``ergon.index.detail.open_detail`` for schema (no duplicated DDL); otherwise stdlib
 only. ``open_detail`` is idempotent, so pointing this at a not-yet-existing sidecar simply creates
 an empty one (0 rows rescued) rather than erroring.
 """
@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.detail import open_detail  # noqa: E402
+from ergon.index.detail import open_detail  # noqa: E402
 
 # The empty-snippet predicate: rows that never captured a JD snippet (the real-column signal for
 # "not recovered yet" -- see index/detail.py::_tier3_rows, which uses the identical test on the

@@ -13,12 +13,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ergon_tracker.extract.sector_clf import (
+from ergon.extract.sector_clf import (
     load_sector_model,
     platt_normalize,
     save_sector_model,
 )
-from ergon_tracker.extract.sector_features import TLD_VOCAB, assemble, cl2n
+from ergon.extract.sector_features import TLD_VOCAB, assemble, cl2n
 
 
 def _save(tmp_path, *, tld_vocab=TLD_VOCAB, embed_dim=3, **overrides):

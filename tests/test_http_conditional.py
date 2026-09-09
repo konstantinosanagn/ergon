@@ -5,7 +5,7 @@ from __future__ import annotations
 import anyio
 import httpx
 
-from ergon_tracker.http import AsyncFetcher
+from ergon.http import AsyncFetcher
 
 _ETAG = 'W/"abc123"'
 

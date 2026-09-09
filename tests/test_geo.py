@@ -1,11 +1,11 @@
-"""Tests for deterministic geo (city/country) extraction in ``ergon_tracker.extract.geo``."""
+"""Tests for deterministic geo (city/country) extraction in ``ergon.extract.geo``."""
 
 from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.extract.geo import normalize_geo
-from ergon_tracker.models import Location
+from ergon.extract.geo import normalize_geo
+from ergon.models import Location
 
 
 def _geo(raw: str) -> Location:

@@ -13,8 +13,8 @@ Real (sampled) markup shapes exercised here, per inventory-D:
 
 from __future__ import annotations
 
-from ergon_tracker.models import EmploymentType
-from ergon_tracker.providers.taleobe import _match_employment, _parse_rows
+from ergon.models import EmploymentType
+from ergon.providers.taleobe import _match_employment, _parse_rows
 
 HOST = "phf.tbe.taleo.net/phf03"
 

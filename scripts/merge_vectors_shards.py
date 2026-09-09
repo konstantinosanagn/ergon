@@ -11,8 +11,8 @@ is the vectors sibling of ``scripts/merge_detail_shards.py``.
 Usage:
   uv run python scripts/merge_vectors_shards.py --shards-dir dist --out dist/index-vectors.sqlite
 
-Reuses ``ergon_tracker.index.rich._ensure_schema`` for the ``job_vectors``/``meta`` schema (no
-duplicated DDL) -- that's the only dependency on the ``ergon_tracker`` package; otherwise stdlib only
+Reuses ``ergon.index.rich._ensure_schema`` for the ``job_vectors``/``meta`` schema (no
+duplicated DDL) -- that's the only dependency on the ``ergon`` package; otherwise stdlib only
 (sqlite3, argparse, glob via ``Path.glob``).
 """
 
@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.rich import _ensure_schema  # noqa: E402
+from ergon.index.rich import _ensure_schema  # noqa: E402
 
 _SHARD_GLOB = "index-vectors-shard-*.sqlite"
 
