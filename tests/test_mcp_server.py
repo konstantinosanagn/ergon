@@ -32,7 +32,7 @@ async def test_every_tool_has_description_and_schema() -> None:
     tools = await srv.mcp.list_tools()
     for tool in tools:
         assert tool.description
-        assert tool.inputSchema  # FastMCP derives JSON Schema from the signature
+        assert tool.input_schema  # MCPServer derives JSON Schema from the signature
 
 
 def test_list_sources_reports_providers_and_registry() -> None:

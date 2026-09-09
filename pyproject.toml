@@ -16,24 +16,32 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Typing :: Typed",
 ]
+# UPPER BOUNDS ARE DELIBERATE. Every floor below was written once and then left to drift; by
+# 2026-09 four deps had silently crossed a MAJOR (stamina 24->26, hishel 0.x->1.x, rich 13->15,
+# mcp 1->2) and only the local .venv's install date kept CI green. mcp 2.0 finally broke it for
+# real (FastMCP -> MCPServer), and because nothing pinned it the breakage was invisible until a
+# fresh resolve. A `<next-major` cap turns "silent rot" into "a deliberate, reviewable bump".
+# Raise a cap when you migrate, not before.
 dependencies = [
-  "httpx[http2]>=0.27",
-  "anyio>=4.3",
-  "aiolimiter>=1.1",
-  "stamina>=24.2",
-  "pydantic>=2.6",
-  "hishel>=0.0.30",
-  "selectolax>=0.3.21",
-  "curl_cffi>=0.7",
-  "rapidfuzz>=3.6",
-  "typer>=0.12",
-  "rich>=13.7",
+  "httpx[http2]>=0.27,<1",
+  "anyio>=4.3,<5",
+  "aiolimiter>=1.1,<2",
+  "stamina>=24.2",          # CalVer (YY.MINOR) — a numeric cap would block next year's release
+  "pydantic>=2.6,<3",
+  "hishel>=0.0.30,<2",
+  "selectolax>=0.3.21,<1",
+  "curl_cffi>=0.7,<1",
+  "rapidfuzz>=3.6,<4",
+  "typer>=0.12,<1",
+  "rich>=13.7,<16",
 ]
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.2"]
 polars = ["polars>=0.20"]
-mcp = ["mcp>=1.12"]
+# mcp 2.x renamed FastMCP -> MCPServer and moved mcp.server.fastmcp -> mcp.server.mcpserver.
+# mcp_server.py targets the 2.x API, so 2.2 is a hard floor; <3 so the next rename is a choice.
+mcp = ["mcp>=2.2,<3"]
 semantic = ["fastembed>=0.3"]
 # HTTP QUERY (RFC 10008) search surface — only needed to RUN the server (ergon_tracker.serve.serve);
 # the ASGI app itself is dependency-light and testable in-process via httpx (a core dep).
@@ -52,6 +60,8 @@ dev = [
   "mypy==2.1.0",    # PINNED for the same reproducibility reason: a floating type-checker surprises CI with new errors.
   "openpyxl>=3.1",
   "numpy>=1.26",
+  "pip-audit>=2.7",  # local `pip-audit` — same known-CVE scan the CI `audit` job runs
+  "pre-commit>=3.7", # local gates: `pre-commit install` once, see .pre-commit-config.yaml
 ]
 
 [project.urls]

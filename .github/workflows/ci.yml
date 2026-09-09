@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  # DRIFT CANARY. The repo can sit for weeks with no commit; a push/PR-only CI therefore proves
+  # nothing about whether the code still builds against current dependencies. mcp 2.0 shipped
+  # 2026-07-28, one day after the last commit, and would have gone unnoticed until whoever
+  # pushed next hit four red legs with zero tests run. A weekly full-matrix run surfaces that
+  # within 7 days instead. (Note: scheduled runs do NOT count as repo activity for GitHub's
+  # 60-day workflow auto-disable — that still needs a real commit or a manual re-enable.)
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
 
 jobs:
   test:
@@ -22,11 +31,40 @@ jobs:
         run: uv venv --python ${{ matrix.python-version }}
       - name: Install
         run: uv pip install -e ".[dev,pandas,polars,mcp]"
+      # scripts/ is 22.7k LOC and includes build_index.py, the entire production build — it was
+      # outside both gates until now. Both commands already pass on it clean, so this costs
+      # nothing and closes the gap. (mypy still covers src/ only: scripts/ needs ~470 annotations
+      # before it can be added — tracked, not silently skipped.)
       - name: Lint
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests scripts
       - name: Format check
-        run: uv run ruff format --check src tests
+        run: uv run ruff format --check src tests scripts
       - name: Type check
         run: uv run mypy
       - name: Test
         run: uv run pytest --cov=ergon_tracker --cov-report=term-missing
+
+  # Known-CVE scan over the resolved dependency tree. pip-audit (PyPA/Trail of Bits) checks the
+  # PyPI Advisory DB + OSV. Free, no account, no token.
+  #
+  # It also runs on a weekly cron, NOT only on push: a new advisory against a dependency you
+  # already have is the common case, and this repo can go weeks without a commit — a PR-only
+  # gate would never fire in that window.
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Create venv
+        run: uv venv
+      - name: Install (runtime + optional extras, so extras are audited too)
+        run: uv pip install -e ".[mcp,pandas,polars]"
+      - name: pip-audit
+        run: |
+          uv pip install pip-audit
+          # --strict fails on an unfixable/unknown advisory rather than passing quietly.
+          # If a finding is accepted, add `--ignore-vuln GHSA-xxxx` here WITH a reason comment —
+          # never silence the whole step.
+          uv run pip-audit --strict --progress-spinner off

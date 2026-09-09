@@ -25,7 +25,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from .client import AsyncErgonTracker
 from .engine import AGGREGATOR_PROVIDERS
@@ -80,7 +80,7 @@ Index vs. live — how to choose your `search_jobs` call:
   of those providers — slower; only do it when explicitly scoping to a provider.
 """
 
-mcp = FastMCP("ergon-tracker", instructions=_INSTRUCTIONS)
+mcp = MCPServer("ergon-tracker", instructions=_INSTRUCTIONS)
 
 
 def _days_ago(days: int | None) -> datetime | None:

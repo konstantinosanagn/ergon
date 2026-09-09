@@ -38,8 +38,13 @@ bench/*.jsonl
 .idea/
 .vscode/
 
-# Advisory lockfiles (e.g. seed.json.lock from build_registry concurrency lock)
+# Advisory RUNTIME lockfiles (e.g. seed.json.lock from build_registry's concurrency lock).
+# uv.lock is exempt: it is the dependency lockfile and belongs in the repo. It was collateral
+# damage of this glob, which is why CI resolved dependencies fresh on every run and silently
+# drifted (mcp 1 -> 2 broke the build with nothing pinned). Dependabot's uv ecosystem also
+# requires the lockfile to be committed.
 *.lock
+!uv.lock
 
 scripts/.h1b_cache/
 

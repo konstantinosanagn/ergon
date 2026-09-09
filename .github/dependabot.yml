@@ -1,0 +1,45 @@
+# Dependency update automation. Free on public repos; no token or third-party app needed.
+#
+# WHY THIS EXISTS: every runtime dependency floated on a bare `>=` floor, so CI resolved fresh
+# on each run and drifted silently. By 2026-09 four deps had crossed a MAJOR unnoticed (stamina
+# 24->26, hishel 0.x->1.x, rich 13->15) and mcp 2.0's FastMCP -> MCPServer rename would have
+# turned CI red on the next push with nothing to explain why. Dependabot turns each of those
+# into a dated PR you can read, instead of a surprise on an unrelated commit.
+#
+# Pairs with the `<next-major` caps in pyproject.toml: the caps stop a major landing silently,
+# Dependabot tells you one is available.
+version: 2
+
+updates:
+  # Python deps. "uv" (not "pip") is the correct ecosystem for a uv.lock project — it updates
+  # uv.lock AND the matching pyproject.toml constraint. Requires uv.lock to be committed,
+  # which is why .gitignore now exempts it.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the safe stuff. Majors stay separate so each gets its own review.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions themselves. The daily build currently emits Node 20 deprecation warnings for
+  # actions/checkout@v4, actions/cache@v4, actions/upload-artifact@v4 and astral-sh/setup-uv@v5 —
+  # exactly the drift this catches, and one nobody would notice from a passing run.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns: ["*"]
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"

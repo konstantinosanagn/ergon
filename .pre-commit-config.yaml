@@ -1,0 +1,51 @@
+# Local pre-commit hooks — the same gates CI runs, but before the commit exists.
+#
+# Setup (once):   uv pip install pre-commit && pre-commit install
+# Run on demand:  pre-commit run --all-files
+# Bypass once:    git commit --no-verify
+#
+# The ruff rev below is PINNED to the exact version in pyproject.toml's [dev] extra. Keep the two
+# in lockstep: a floating formatter reformats differently across versions and CI's
+# `ruff format --check` then fails on code that was clean locally. That already cost days of red
+# CI once, which is why pyproject pins it.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.17 # MUST match `ruff==` in pyproject.toml [dev]
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        args: [--fix]
+        files: ^(src|tests|scripts)/
+      - id: ruff-format
+        name: ruff (format)
+        files: ^(src|tests|scripts)/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # The workflows are the production automation; a YAML typo there is a silent outage.
+        files: ^\.github/
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        # The tracked tree is ~23MB and the largest legitimate file is seed.json at 5.3MB.
+        # This blocks an accidental index/DB/corpus dump, not the real data assets.
+        args: [--maxkb=6000]
+
+  # mypy runs on src/ only, matching pyproject's `files` setting and CI. scripts/ needs ~470
+  # annotations before it can join; adding it here would make every commit fail.
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.1.0 # MUST match `mypy==` in pyproject.toml [dev]
+    hooks:
+      - id: mypy
+        files: ^src/ergon_tracker/
+        args: [--config-file=pyproject.toml]
+        # Hook envs are isolated, so mypy needs the typed deps it follows into.
+        additional_dependencies:
+          - pydantic>=2.6
+          - types-requests
