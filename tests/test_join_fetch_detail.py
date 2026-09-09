@@ -16,13 +16,22 @@ from __future__ import annotations
 
 import anyio
 import httpx
+import pytest
 
 from ergon.http import AsyncFetcher
 from ergon.index.detail import DetailRef
 from ergon.providers.base import BaseProvider
 from ergon.providers.join import JoinProvider
 
+# fetch_detail's contract: an INDETERMINATE condition raises rather than returning None,
+# because a returned None expires a live index row. These are the shapes it may raise as.
+_INDETERMINATE = (RuntimeError, httpx.HTTPError, OSError, ValueError)
+
 _APPLY_URL = "https://join.com/companies/acme/jobs/123456"
+
+
+# fetch_detail's contract: an INDETERMINATE condition raises rather than returning None, because
+# a returned None expires a live index row. These are the shapes it may raise as.
 
 
 class _FakeResponse:
@@ -105,7 +114,7 @@ def test_join_fetch_detail_falls_back_to_description_when_schema_missing() -> No
     assert desc == "Plain markdown JD text 2"
 
 
-def test_join_fetch_detail_no_job_key_is_none() -> None:
+def test_join_fetch_detail_no_job_key_raises() -> None:
     html = (
         "<html><head></head><body>"
         '<script id="__NEXT_DATA__" type="application/json">'
@@ -115,18 +124,18 @@ def test_join_fetch_detail_no_job_key_is_none() -> None:
     )
     fetcher = _FakeFetcher(html)
     ref = _make_ref(_APPLY_URL)
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
 
 
-def test_join_fetch_detail_no_next_data_script_is_none() -> None:
+def test_join_fetch_detail_no_next_data_script_raises() -> None:
     fetcher = _FakeFetcher("<html><body>no next data here</body></html>")
     ref = _make_ref(_APPLY_URL)
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
 
 
-def test_join_fetch_detail_malformed_json_is_none() -> None:
+def test_join_fetch_detail_malformed_json_raises() -> None:
     html = (
         "<html><head></head><body>"
         '<script id="__NEXT_DATA__" type="application/json">{not valid json</script>'
@@ -134,32 +143,32 @@ def test_join_fetch_detail_malformed_json_is_none() -> None:
     )
     fetcher = _FakeFetcher(html)
     ref = _make_ref(_APPLY_URL)
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
 
 
-def test_join_fetch_detail_non_dict_job_is_none() -> None:
+def test_join_fetch_detail_non_dict_job_raises() -> None:
     # ``job`` truthy but not a dict must not raise (the SmartRecruiters/Workday regression).
     html = _next_data_html('"oops"')
     fetcher = _FakeFetcher(html)
     ref = _make_ref(_APPLY_URL)
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
 
 
-def test_join_fetch_detail_both_urls_none_is_none() -> None:
+def test_join_fetch_detail_both_urls_none_raises() -> None:
     fetcher = _FakeFetcher(_next_data_html('{"schemaDescription":"<p>JD...</p>"}'))
     ref = _make_ref(None, None)
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []
 
 
-def test_join_fetch_detail_non_join_urls_is_none() -> None:
+def test_join_fetch_detail_non_join_urls_raises() -> None:
     fetcher = _FakeFetcher(_next_data_html('{"schemaDescription":"<p>JD...</p>"}'))
     ref = _make_ref("https://example.com/not-a-join-url", "https://also-not-join.com/x")
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
     assert fetcher.calls == []
 
 
@@ -173,11 +182,11 @@ def test_join_fetch_detail_falls_back_to_listing_url() -> None:
     assert fetcher.calls == [listing_url]
 
 
-def test_join_fetch_detail_get_text_failure_is_none() -> None:
+def test_join_fetch_detail_get_text_failure_raises() -> None:
     fetcher = _FakeFetcher(None)  # raises inside request()
     ref = _make_ref(_APPLY_URL)
-    desc = anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(ref, fetcher))
 
 
 # --- Long redirect chains: exercised via a real AsyncFetcher + httpx.MockTransport, so httpx's
@@ -248,15 +257,17 @@ def test_join_fetch_detail_exactly_at_redirect_cap_succeeds() -> None:
     assert calls == 1
 
 
-def test_join_fetch_detail_exceeding_redirect_cap_is_none() -> None:
-    # One hop past the client's max_redirects -> httpx.TooManyRedirects internally, caught by
-    # fetch_detail's broad except, returns None (never raises out of fetch_detail).
+def test_join_fetch_detail_exceeding_redirect_cap_raises() -> None:
+    """One hop past max_redirects is a TRANSPORT failure, not evidence the posting is gone.
+
+    It must propagate: returning None here would expire a live row because a redirect chain grew
+    by one hop. Still exactly one rate-limit token regardless of hops.
+    """
     html = _next_data_html('{"schemaDescription":"<p>Unreachable</p>"}')
     fetcher = _fetcher_with_transport(_mock_transport(redirect_hops=31, final_html=html))
     ref = _make_ref(_APPLY_URL)
-    desc, calls = anyio.run(_fetch_counting_requests, fetcher, ref)
-    assert desc is None
-    assert calls == 1
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(_fetch_counting_requests, fetcher, ref)
 
 
 def test_base_fetch_detail_is_none() -> None:

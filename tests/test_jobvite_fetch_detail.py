@@ -8,13 +8,23 @@ jobvite doesn't disclose salary, but the body powers yoe/degree/level/skills ext
 from __future__ import annotations
 
 import anyio
+import httpx
+import pytest
 
 from ergon.enrich import enrich_in_place
 from ergon.index.detail import DetailRef
 from ergon.models import JobPosting
 from ergon.providers.jobvite import JobviteProvider
 
+# fetch_detail's contract: an INDETERMINATE condition raises rather than returning None,
+# because a returned None expires a live index row. These are the shapes it may raise as.
+_INDETERMINATE = (RuntimeError, httpx.HTTPError, OSError, ValueError)
+
 _URL = "https://jobs.jobvite.com/acme/job/oABC123"
+
+
+# fetch_detail's contract: an INDETERMINATE condition raises rather than returning None, because
+# a returned None expires a live index row. These are the shapes it may raise as.
 
 
 class _FakeFetcher:
@@ -62,13 +72,13 @@ def test_fetch_detail_body_yields_yoe_and_degree_through_enrich() -> None:
     assert job.degree_min == "bachelor"
 
 
-def test_fetch_detail_missing_url_or_jsonld_returns_none() -> None:
-    assert (
-        anyio.run(lambda: JobviteProvider().fetch_detail(_ref(None), _FakeFetcher(_PAGE))) is None
-    )
+def test_fetch_detail_missing_url_or_jsonld_raises() -> None:
+    """Indeterminate inputs must RAISE, never return None — None expires a live index row."""
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JobviteProvider().fetch_detail(_ref(None), _FakeFetcher(_PAGE)))
     for page in ("<html><body>no json-ld</body></html>", "", "not html"):
-        res = anyio.run(lambda p=page: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(p)))
-        assert res is None
+        with pytest.raises(_INDETERMINATE):
+            anyio.run(lambda p=page: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(p)))
 
 
 def test_fetch_detail_returns_structured_locations() -> None:

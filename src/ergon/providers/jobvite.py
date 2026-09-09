@@ -29,6 +29,7 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+import httpx
 from selectolax.parser import HTMLParser, Node
 
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
@@ -155,17 +156,22 @@ class JobviteProvider(BaseProvider):
         for some company templates). The per-job page (== ``ref.apply_url``) has an
         ``application/ld+json`` ``JobPosting`` with the full ``description`` AND a structured
         ``jobLocation`` (city/region/country). Return the body (so yoe/degree/level extract) plus the
-        structured locations so the merge can fill the index row's NULL city/country. Non-raising:
-        any missing URL, fetch failure, or absent/empty JSON-LD ``description`` returns ``None``."""
+        structured locations so the merge can fill the index row's NULL city/country. RETURN/RAISE CONTRACT (see BaseProvider.fetch_detail): ``None`` ONLY on a real HTTP 404/410,
+        because a returned ``None`` EXPIRES A LIVE INDEX ROW. A missing URL, a timeout, a 5xx/429,
+        an empty body, or absent/empty JSON-LD ``description`` all RAISE. jobvite is in
+        DETERMINISTIC_SOURCES, so real departures are caught by board membership; this confirm
+        exists only to reject list-reshuffle false positives."""
         url = ref.apply_url or ref.listing_url
         if not url:
-            return None
+            raise RuntimeError(f"jobvite detail: no derivable detail URL for {ref!s}")
         try:
             html = await fetcher.get_text(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code in (404, 410):
+                return None
+            raise
         if not isinstance(html, str) or not html:
-            return None
+            raise RuntimeError(f"jobvite detail: empty page body for {ref!s}")
         for job in self.extract_jsonld_jobs(html):
             description = job.get("description")
             if isinstance(description, str) and description.strip():
@@ -175,7 +181,7 @@ class JobviteProvider(BaseProvider):
                 if locations:
                     return DetailFetch(text=description, locations=locations)
                 return description
-        return None
+        raise RuntimeError(f"jobvite detail: no JobPosting JSON-LD description for {ref!s}")
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
