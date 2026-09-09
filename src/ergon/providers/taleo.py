@@ -40,6 +40,7 @@ from urllib.parse import unquote
 
 import httpx
 
+from ..exceptions import ProviderError
 from ..models import JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
@@ -207,15 +208,18 @@ class TaleoProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         host, cs, portal = self._split(token)
         if not host:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("taleo", f"unparseable token {token!r}")
         page_html: str | None = None
         if not (cs and portal):
             resolved = await self._discover(host, cs, fetcher)
             if resolved is None:
-                return []
+                # never []: an empty list reads as "board is empty" and expires live rows.
+                raise ProviderError("taleo", f"portal discovery failed for {token!r}")
             cs, portal, page_html = resolved
         if not cs:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("taleo", f"no career-section resolved for {token!r}")
 
         # Modern faceted-search Taleo: the public REST endpoint. If it yields nothing (legacy
         # jobsearch.ajax sites return 0 here), fall back to parsing the jobsearch.ftl HTML stream.
@@ -226,8 +230,9 @@ class TaleoProvider(BaseProvider):
         if page_html is None:
             try:
                 page_html = await fetcher.get_text(_PAGE.format(host=host, cs=cs))
-            except Exception:
-                return []
+            except Exception as exc:
+                # never []: an empty list reads as "board is empty" and expires live rows.
+                raise ProviderError("taleo", f"the board fetch failed for {token!r}") from exc
         return self._raws_from_ftl(page_html, host, cs, query.limit)
 
     async def _fetch_rest(

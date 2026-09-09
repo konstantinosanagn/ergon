@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+from ..exceptions import ProviderError
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -86,21 +87,25 @@ class JobDivaProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         h, teamid, company = self._parse(token)
         if not h:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jobdiva", f"unparseable token {token!r}")
         if not teamid:
             teamid = await self._teamid(h, fetcher)
         if not teamid:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jobdiva", f"could not resolve teamid for {token!r}")
         # Mint a session token (Basic header the browser sends is ignored server-side).
         try:
             auth = await fetcher.get_json(
                 _AUTH, params={"a": h}, headers={"portalid": "1", "compid": "-1", "a": h}
             )
-        except Exception:
-            return []
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jobdiva", f"the board fetch failed for {token!r}") from exc
         sess = auth.get("token") if isinstance(auth, dict) else None
         if not sess:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jobdiva", f"auth returned no session token for {token!r}")
         hdr = {
             "portalid": teamid,
             "compid": "0",
@@ -123,7 +128,8 @@ class JobDivaProvider(BaseProvider):
         # Probe the total with a 1-row window, then pull everything in one top-anchored window.
         probe = await _search(1, 1)
         if probe is None:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jobdiva", f"the search probe failed for {token!r}")
         total = int(probe.get("total") or 0)
         if total <= 0:
             return []

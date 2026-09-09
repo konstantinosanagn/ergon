@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
+from ..exceptions import ProviderError
 from ..extract.comp import coerce_amount
 from ..extract.level import level_from_ats_vocab
 from ..models import (
@@ -135,8 +136,9 @@ class PersonioProvider(BaseProvider):
         text = await fetcher.get_text(url)
         try:
             root = ET.fromstring(text)
-        except ET.ParseError:
-            return []
+        except ET.ParseError as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("personio", f"the board fetch failed for {token!r}") from exc
 
         raws: list[RawJob] = []
         # Positions may be nested directly or wrapped; ``iter`` is robust to either.

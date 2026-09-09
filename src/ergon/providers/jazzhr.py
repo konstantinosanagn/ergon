@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
+from ..exceptions import ProviderError
 from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
@@ -114,12 +115,14 @@ class JazzHRProvider(BaseProvider):
             return []
         try:
             xml = await fetcher.get_text(_FEED.format(sub=sub))
-        except Exception:
-            return []  # network/HTTP failure — degrade gracefully
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jazzhr", f"the board fetch failed for {token!r}") from exc
         try:
             root = ET.fromstring(xml)
-        except ET.ParseError:
-            return []
+        except ET.ParseError as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jazzhr", f"the board fetch failed for {token!r}") from exc
 
         limit = query.limit
         seen: set[str] = set()

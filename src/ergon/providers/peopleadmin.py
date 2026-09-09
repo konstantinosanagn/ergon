@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit
 
+from ..exceptions import ProviderError
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -91,8 +92,9 @@ class PeopleAdminProvider(BaseProvider):
         host = self._host(token)
         try:
             text = await fetcher.get_text(_FEED.format(host=host))
-        except Exception:
-            return []
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("peopleadmin", f"the board fetch failed for {token!r}") from exc
         limit = query.limit
         raws: list[RawJob] = []
         seen: set[str] = set()

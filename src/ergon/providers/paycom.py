@@ -22,6 +22,7 @@ import re
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
+from ..exceptions import ProviderError
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -104,11 +105,13 @@ class PaycomProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         key, company = self._parse(token)
         if not _CK_RE.fullmatch(key):
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("paycom", f"unparseable client key in {token!r}")
         try:
             from playwright.async_api import async_playwright
-        except ImportError:
-            return []
+        except ImportError as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("paycom", f"the browser lane is unavailable for {token!r}") from exc
         limit = query.limit
         portal = (
             f"https://www.paycomonline.net/v4/ats/web.php/jobs?clientkey={key}&fromClientSide=true"

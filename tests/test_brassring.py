@@ -9,6 +9,7 @@ import httpx
 import pytest
 import respx
 
+from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
 from ergon.models import RemoteType, SearchQuery, make_job_id
 from ergon.providers.brassring import BrassRingProvider
@@ -149,19 +150,23 @@ async def test_fetch_respects_limit() -> None:
     assert len(raws) == 1
 
 
-async def test_fetch_degrades_without_csrf_token() -> None:
+async def test_fetch_raises_without_csrf_token() -> None:
+    """A failure to bootstrap must RAISE, not return []. An empty list reads as "board is
+    empty" to the crawl and the liveness/freshness passes, which expires every row."""
     with respx.mock as respx_mock:
         respx_mock.get(url__startswith=HOME).mock(
             return_value=httpx.Response(200, html="<html><body>no token</body></html>")
         )
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await BrassRingProvider().fetch(TOKEN, SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await BrassRingProvider().fetch(TOKEN, SearchQuery(), f)
 
 
-async def test_fetch_degrades_on_home_error() -> None:
+async def test_fetch_raises_on_home_error() -> None:
+    """A failed fetch must RAISE, not return []. An empty list reads as "board is empty"
+    to the crawl and the liveness/freshness passes, which expires every row on it."""
     with respx.mock as respx_mock:
         respx_mock.get(url__startswith=HOME).mock(return_value=httpx.Response(500))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await BrassRingProvider().fetch(TOKEN, SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await BrassRingProvider().fetch(TOKEN, SearchQuery(), f)

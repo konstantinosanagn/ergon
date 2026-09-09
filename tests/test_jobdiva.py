@@ -6,6 +6,7 @@ import httpx
 import pytest
 import respx
 
+from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
 from ergon.models import RemoteType, SearchQuery, make_job_id
 from ergon.providers.jobdiva import JobDivaProvider
@@ -116,18 +117,22 @@ async def test_fetch_respects_limit() -> None:
     assert len(raws) == 1
 
 
-async def test_fetch_degrades_on_auth_error() -> None:
+async def test_fetch_raises_on_auth_error() -> None:
+    """A failed fetch must RAISE, not return []. An empty list reads as "board is empty"
+    to the crawl and the liveness/freshness passes, which expires every row on it."""
     with respx.mock as respx_mock:
         respx_mock.get(AUTH).mock(return_value=httpx.Response(400, text='"Invalid"'))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await JobDivaProvider().fetch(f"{HASH}|167|Acme", SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await JobDivaProvider().fetch(f"{HASH}|167|Acme", SearchQuery(), f)
 
 
-async def test_fetch_degrades_when_no_teamid() -> None:
+async def test_fetch_raises_when_no_teamid() -> None:
+    """A failure to bootstrap must RAISE, not return []. An empty list reads as "board is
+    empty" to the crawl and the liveness/freshness passes, which expires every row."""
     # hash-only token, portal page has no teamid -> no fetch
     with respx.mock as respx_mock:
         respx_mock.get(PORTAL).mock(return_value=httpx.Response(200, text="<html>nothing</html>"))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await JobDivaProvider().fetch(HASH, SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await JobDivaProvider().fetch(HASH, SearchQuery(), f)

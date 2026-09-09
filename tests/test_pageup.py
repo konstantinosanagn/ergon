@@ -6,6 +6,7 @@ import httpx
 import pytest
 import respx
 
+from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
 from ergon.models import SearchQuery, make_job_id
 from ergon.providers.pageup import PageUpProvider
@@ -93,12 +94,14 @@ async def test_fetch_respects_limit() -> None:
     assert len(raws) == 5
 
 
-async def test_fetch_empty_on_error() -> None:
+async def test_fetch_raises_on_error() -> None:
+    """A failed fetch must RAISE, not return []. An empty list reads as "board is empty"
+    to the crawl and the liveness/freshness passes, which expires every row on it."""
     with respx.mock as respx_mock:
         respx_mock.get(RSS_URL).mock(return_value=httpx.Response(503))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await PageUpProvider().fetch("669|University of Alabama", SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await PageUpProvider().fetch("669|University of Alabama", SearchQuery(), f)
 
 
 async def test_double_escaped_body_yields_salary_and_teaser_does_not_shadow() -> None:
