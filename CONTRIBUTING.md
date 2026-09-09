@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/konstantinosanagn/ergon-tracker
-cd ergon-tracker
+git clone https://github.com/konstantinosanagn/ergon
+cd ergon
 uv venv && uv pip install -e ".[dev,mcp,pandas,polars]"
 pre-commit install
 ```

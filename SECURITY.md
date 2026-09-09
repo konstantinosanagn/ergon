@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately via
-[GitHub Security Advisories](https://github.com/konstantinosanagn/ergon-tracker/security/advisories/new).
+[GitHub Security Advisories](https://github.com/konstantinosanagn/ergon/security/advisories/new).
 Do not open a public issue.
 
 Expect an acknowledgement within 7 days. This is a single-maintainer project, so please allow
