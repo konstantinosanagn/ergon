@@ -146,6 +146,14 @@ CONFIRM_VIA_DETAIL_SOURCES: tuple[str, ...] = (
 _STREAK_THRESHOLD_UNCONFIRMED = 2
 _STREAK_THRESHOLD_CONFIRMED = 1
 
+# Empty-board valve + partial-fetch guard, ported from freshness.py (sweep_boards). liveness had
+# neither: process_board skipped only on a None board, so a board that came back EMPTY was treated
+# as a fully successful fetch of an empty board and every row on it became a list-miss. 14
+# providers return `[]` on a swallowed 429/5xx/timeout rather than raising, so that is exactly the
+# shape a transient failure takes. Two consecutive runs then expired the whole board.
+_MAX_BOARD_EXPIRE_FRACTION = float(os.environ.get("ERGON_LIVENESS_MAX_EXPIRE_FRACTION", "0.5"))
+_MIN_BOARD_FOR_FRACTION_GUARD = int(os.environ.get("ERGON_LIVENESS_FRACTION_GUARD_MIN", "20"))
+
 _JOBS_COLUMNS = (
     "id, source, board_token, company_key, apply_url, listing_url, content_hash, title, level"
 )
@@ -331,6 +339,7 @@ async def reconcile_liveness_tier(
                 "confirm_errored": 0,
                 "boards_fetched": 0,
                 "boards_failed": 0,
+                "boards_undetermined": 0,
                 "unresolved": unresolved,
             }
             # Single writer lock: board-fetch and stage-2 confirm-fetch network calls run
@@ -415,9 +424,29 @@ async def reconcile_liveness_tier(
                     async with write_lock:
                         counts["boards_failed"] += 1
                     return  # transient board failure -- leave every row on it untouched this run
+                tier3 = source in confirm_sources
+                # EMPTY-BOARD VALVE + PARTIAL-FETCH GUARD, ported from freshness.py — but ONLY for
+                # sources without a per-posting confirm. 14 providers return `[]` on a swallowed
+                # 429/5xx/timeout rather than raising, so for a streak-only source an empty board
+                # is indistinguishable from a failed fetch and the list-miss is the ONLY signal.
+                #
+                # For a CONFIRM_VIA_DETAIL source the confirm IS the second signal, and it is the
+                # whole reason those sources are listed: an empty board there must still fall
+                # through to per-posting adjudication, which (since the fetch_detail contract fix)
+                # raises on transient and returns None only on a real gone-signal. Applying the
+                # valve to them would disable the very mechanism that makes an empty board safe.
+                # Both guards apply only to SIZEABLE boards: the risk being mitigated is a MASS
+                # expiry, and a board holding a handful of rows going empty is ordinary closure,
+                # not the shape of a swallowed fetch failure. Guarding small boards would block
+                # legitimate expiry (a fully-closed board would never clear) for no safety gain.
+                if not tier3 and len(board_rows) >= _MIN_BOARD_FOR_FRACTION_GUARD:
+                    missing = sum(1 for r in board_rows if str(r["id"]) not in fresh_ids)
+                    if not fresh_ids or missing > _MAX_BOARD_EXPIRE_FRACTION * len(board_rows):
+                        async with write_lock:
+                            counts["boards_undetermined"] += 1
+                        return
                 async with write_lock:
                     counts["boards_fetched"] += 1
-                tier3 = source in confirm_sources
                 for r in board_rows:
                     await classify_row(r, fresh_ids, tier3)
 

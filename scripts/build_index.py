@@ -2545,12 +2545,21 @@ def main(argv: list[str]) -> None:
         # against a baseline set by carry-forward builds, and the merge that would restore it is
         # itself gated on the result. That deadlock blocked every non-join build from 2026-07-28.
         if ok:
-            from ergon.index.gates import evaluate_jd_coverage, jd_gate_drop_pct_from_env
+            from ergon.index.gates import (
+                evaluate_active_floor,
+                evaluate_jd_coverage,
+                jd_gate_drop_pct_from_env,
+            )
 
             jd_res = evaluate_jd_coverage(
                 db,
                 prev_jd_pct=(prev_metrics or {}).get("jd_pct"),
                 jd_max_drop_pct=jd_gate_drop_pct_from_env(),
+            )
+            # Also post-reconcile, and for the same reason: the liveness pass above is what
+            # expires rows, so this has to run after it. row_floor cannot see an expiry at all.
+            active_res = evaluate_active_floor(
+                db, prev_active=(prev_metrics or {}).get("active_jobs")
             )
             gates_path = out / "gates.json"
             try:
@@ -2559,20 +2568,25 @@ def main(argv: list[str]) -> None:
                 gj = {"passed": True, "gates": []}
             # NB: the key is "gates", matching GateReport.to_dict(). Writing "results" here left the
             # real list untouched and silently dropped the verdict.
-            gj["gates"] = [g for g in gj.get("gates", []) if g.get("name") != "jd_coverage"]
-            gj["gates"].append(
-                {"name": jd_res.name, "passed": jd_res.passed, "detail": jd_res.detail}
+            post = [jd_res, active_res]
+            names = {r.name for r in post}
+            gj["gates"] = [g for g in gj.get("gates", []) if g.get("name") not in names]
+            gj["gates"].extend(
+                {"name": r.name, "passed": r.passed, "detail": r.detail} for r in post
             )
             gj["passed"] = all(g.get("passed") for g in gj["gates"])
             gates_path.write_text(json.dumps(gj, indent=2))
-            if not jd_res.passed:
-                print(f"POST-RECONCILE GATE FAILED — not publishing. jd_coverage={jd_res.detail}")
+            failed = [r for r in post if not r.passed]
+            if failed:
+                summary = "; ".join(f"{r.name}={r.detail}" for r in failed)
+                print(f"POST-RECONCILE GATE FAILED — not publishing. {summary}")
                 ok = False
                 if prev_snap is not None:
                     prev_snap.replace(db)  # restore the previous snapshot
                     prev_snap = None
             else:
-                print(f"  + post-reconcile jd_coverage ok: {jd_res.detail}")
+                print(f"  + post-reconcile ok: jd_coverage={jd_res.detail}")
+                print(f"  + post-reconcile ok: active_row_floor={active_res.detail}")
         if ok:
             cov = publish_coverage(db, out, build_id=build_id)
             print(
