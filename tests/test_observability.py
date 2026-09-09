@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ergon_tracker.observability import (
+from ergon.observability import (
     Timer,
     build_health,
     count_sanity_check,

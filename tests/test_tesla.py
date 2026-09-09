@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ergon_tracker.providers.tesla import TeslaProvider
+from ergon.providers.tesla import TeslaProvider
 
 _STATE = {
     "lookup": {

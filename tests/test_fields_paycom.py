@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import EmploymentType, RawJob
-from ergon_tracker.providers.paycom import PaycomProvider
+from ergon.models import EmploymentType, RawJob
+from ergon.providers.paycom import PaycomProvider
 
 KEY = "7C5AC05D8D2EC046AE4FAF26F5F9712E"
 

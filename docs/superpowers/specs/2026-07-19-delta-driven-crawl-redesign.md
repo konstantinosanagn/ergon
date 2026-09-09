@@ -24,7 +24,7 @@ crawl is too expensive — the chunking is a symptom of the waste, not a fix.
 ## 2. The insight
 
 We already pay for a daily, whole-registry, cheap change signal and throw it away: the **freshness
-sweep** (`src/ergon_tracker/index/freshness.py`, daily, 20 shards) already fetches **every** board's
+sweep** (`src/ergon/index/freshness.py`, daily, 20 shards) already fetches **every** board's
 live id-set (id-only) and computes `removed = stored − live`. It never computes `added = live −
 stored` and never persists the id-set. That id-set is exactly the validator the build needs to skip
 unchanged boards. **Feed the sweep's diff back into the build, and expensive work collapses to the

@@ -64,7 +64,7 @@ DEFAULT_CRAWL = "CC-MAIN-2026-25"
 # Common Crawl asks clients to send a descriptive User-Agent; the bare urllib UA gets throttled
 # (403) quickly on data.commoncrawl.org. A polite UA + a small inter-request delay keeps the
 # harvester well within CC's free-access etiquette.
-_UA = "ergon-tracker/0.1 (+https://github.com/konstantinosanagn/ergon-tracker) coverage-discovery"
+_UA = "ergon/0.1 (+https://github.com/konstantinosanagn/ergon) coverage-discovery"
 _CRAWL_DELAY_S = 1.5
 
 

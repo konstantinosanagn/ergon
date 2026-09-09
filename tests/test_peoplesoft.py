@@ -7,8 +7,8 @@ against a fixture grid, plus token parsing.
 
 from __future__ import annotations
 
-from ergon_tracker.models import RawJob, make_job_id
-from ergon_tracker.providers.peoplesoft import PeopleSoftProvider
+from ergon.models import RawJob, make_job_id
+from ergon.providers.peoplesoft import PeopleSoftProvider
 
 # A trimmed PeopleSoft results grid: two job rows (indices 0,1) across the parallel id-indexed spans,
 # one with a nested markup title and an apostrophe/ampersand.

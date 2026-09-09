@@ -4,7 +4,7 @@ name: drain-detail
 # finishes in ~1 run instead of ~40 daily-cron runs of build-index.yml's unsharded --detail pass).
 #
 # THE CORRECTNESS INVARIANT: politeness is enforced per `_rate_key(host)` (see http.py / the
-# "sharded drain" section of src/ergon_tracker/index/detail.py) -- every rate-bucket lives on
+# "sharded drain" section of src/ergon/index/detail.py) -- every rate-bucket lives on
 # exactly ONE shard by construction, so no two shards independently rate-limit the same collapsed
 # backend. This is exactly as polite as the existing unsharded daily --detail pass: same per-host
 # token-bucket + circuit breaker, same ERGON_DETAIL_CONCURRENCY-governed global cap PER SHARD (not
@@ -302,5 +302,5 @@ jobs:
             gh release upload index-latest $ASSETS --clobber
           else
             gh release create index-latest $ASSETS --title index-latest \
-              --notes "Daily ergon-tracker search-index snapshot."
+              --notes "Daily ergon search-index snapshot."
           fi

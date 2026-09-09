@@ -6,7 +6,7 @@
 
 **Architecture:** An index-driven reconcile pass mirroring the rich ramp. A rotating cursor selects postings lacking a description, a bounded `ERGON_DETAIL_MAX` slice is fetched per run through the EXISTING `AsyncFetcher` (per-host caps, `Retry-After`, circuit breaker), each JD is run through the extractors and DISCARDED (keeping a 300-char snippet + recovered fields), and the results land in a sig-gated `index-detail.sqlite` sidecar that the build merges into the index columns so a re-crawl can't wipe them.
 
-**Tech Stack:** Python 3.10+, async (anyio), sqlite3, the existing `ergon_tracker.http.AsyncFetcher` + `ergon_tracker.enrich.enrich_in_place` + provider registry.
+**Tech Stack:** Python 3.10+, async (anyio), sqlite3, the existing `ergon.http.AsyncFetcher` + `ergon.enrich.enrich_in_place` + provider registry.
 
 ## Global Constraints
 - **Politeness is absolute:** all fetching goes through `AsyncFetcher` (bounded global concurrency + per-host token bucket + `Retry-After` + per-host circuit breaker). Interleave the missing slice across hosts (`build_index._interleave_by_ats`). Never a raw N+1 loop. Per-run cost bounded by `ERGON_DETAIL_MAX` (measured, not guessed).
@@ -16,13 +16,13 @@
 - **`--detail` is MANUAL-ONLY** until the stress gates pass, then joins the daily schedule.
 - **Laptop-safe:** synthetic tests use a FAKE fetcher (offline, deterministic). Real detail fetches run in CI or a bounded controller stress run — never a large local fetch fleet.
 - Branch `tier3-detail-fetcher` (off main, checked out). Commit per task, trailer `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-- Mirror the vectors sidecar's proven shapes: `src/ergon_tracker/index/rich.py` (`_sig`, reconcile), `cache.py` (`RichCache`), the `build-index.yml` paired-publish guard.
+- Mirror the vectors sidecar's proven shapes: `src/ergon/index/rich.py` (`_sig`, reconcile), `cache.py` (`RichCache`), the `build-index.yml` paired-publish guard.
 
 ## File Structure
-- `src/ergon_tracker/index/detail.py` — NEW. Sidecar schema, `DetailRef`, `_sig`, `reconcile_detail_tier`, the build-merge helper. (Units 2+3+4 core.)
-- `src/ergon_tracker/providers/base.py` — add optional `async def fetch_detail(self, ref, fetcher) -> str | None` (base returns `None`).
-- `src/ergon_tracker/providers/{oracle,icims,workday,smartrecruiters}.py` — implement `fetch_detail`. (Unit 1, independent per provider.)
-- `src/ergon_tracker/index/cache.py` — add `DetailCache` (mirrors `RichCache`).
+- `src/ergon/index/detail.py` — NEW. Sidecar schema, `DetailRef`, `_sig`, `reconcile_detail_tier`, the build-merge helper. (Units 2+3+4 core.)
+- `src/ergon/providers/base.py` — add optional `async def fetch_detail(self, ref, fetcher) -> str | None` (base returns `None`).
+- `src/ergon/providers/{oracle,icims,workday,smartrecruiters}.py` — implement `fetch_detail`. (Unit 1, independent per provider.)
+- `src/ergon/index/cache.py` — add `DetailCache` (mirrors `RichCache`).
 - `scripts/build_index.py` — wire the detail reconcile pass + build merge + publish, gated on `--detail`.
 - `.github/workflows/build-index.yml` — download/publish `index-detail.sqlite.gz` + `manifest-detail.json`; `--detail` gate.
 - `tests/test_detail_tier.py`, `tests/test_detail_cache.py`, `tests/test_provider_fetch_detail.py`, `tests/live/test_detail_live.py` (controller-run gate).
@@ -32,7 +32,7 @@
 ### Task 1: Detail sidecar schema + `DetailRef` + `_sig`
 
 **Files:**
-- Create: `src/ergon_tracker/index/detail.py`
+- Create: `src/ergon/index/detail.py`
 - Test: `tests/test_detail_tier.py`
 
 **Interfaces:**
@@ -42,7 +42,7 @@
 ```python
 # tests/test_detail_tier.py
 import sqlite3
-from ergon_tracker.index.detail import DETAIL_SCHEMA, ensure_detail_schema, detail_sig, DetailRef
+from ergon.index.detail import DETAIL_SCHEMA, ensure_detail_schema, detail_sig, DetailRef
 
 def test_schema_and_sig():
     con = sqlite3.connect(":memory:")
@@ -136,14 +136,14 @@ class DetailRef:
 ```
 
 - [ ] **Step 4: Run → PASS.** `uv run pytest tests/test_detail_tier.py -q`
-- [ ] **Step 5: Commit** `git add src/ergon_tracker/index/detail.py tests/test_detail_tier.py && git commit -m "feat(detail): tier-3 sidecar schema + DetailRef + sig ..."`
+- [ ] **Step 5: Commit** `git add src/ergon/index/detail.py tests/test_detail_tier.py && git commit -m "feat(detail): tier-3 sidecar schema + DetailRef + sig ..."`
 
 ---
 
 ### Task 2: `reconcile_detail_tier` pass with an injectable fetcher (synthetic-testable)
 
 **Files:**
-- Modify: `src/ergon_tracker/index/detail.py`
+- Modify: `src/ergon/index/detail.py`
 - Test: `tests/test_detail_tier.py`
 
 **Interfaces:**
@@ -154,7 +154,7 @@ class DetailRef:
 ```python
 # add to tests/test_detail_tier.py
 import anyio
-from ergon_tracker.index.detail import reconcile_detail_tier, open_detail
+from ergon.index.detail import reconcile_detail_tier, open_detail
 # (helper builds a tiny index.sqlite with jobs rows: id, source, description empty, apply_url, content_hash)
 
 def _mk_index(tmp_path, rows):
@@ -212,8 +212,8 @@ def test_reconcile_sig_skips_unchanged(tmp_path):
 ### Task 3: `fetch_detail` provider contract + oracle implementation (mid-size proving source)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/base.py` (add base `fetch_detail` returning `None`)
-- Modify: `src/ergon_tracker/providers/oracle.py` (implement it)
+- Modify: `src/ergon/providers/base.py` (add base `fetch_detail` returning `None`)
+- Modify: `src/ergon/providers/oracle.py` (implement it)
 - Test: `tests/test_provider_fetch_detail.py`
 
 **Interfaces:**
@@ -224,8 +224,8 @@ def test_reconcile_sig_skips_unchanged(tmp_path):
 ```python
 # tests/test_provider_fetch_detail.py
 import anyio
-from ergon_tracker.providers.oracle import OracleProvider
-from ergon_tracker.index.detail import DetailRef
+from ergon.providers.oracle import OracleProvider
+from ergon.index.detail import DetailRef
 
 class _FakeFetcher:
     def __init__(self, payload): self._p = payload
@@ -240,7 +240,7 @@ def test_oracle_fetch_detail_returns_description():
     assert desc and "Full JD" in desc
 
 def test_base_fetch_detail_is_none():
-    from ergon_tracker.providers.base import BaseProvider
+    from ergon.providers.base import BaseProvider
     ref = DetailRef(id="1", source="x", token=None, apply_url=None, listing_url=None, content_sig="s")
     assert anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher({}))) is None
 ```
@@ -257,7 +257,7 @@ def test_base_fetch_detail_is_none():
 ### Task 4: Build merge — apply the sidecar into the index columns (sig-gated)
 
 **Files:**
-- Modify: `src/ergon_tracker/index/detail.py` (add `merge_detail_into_index(index_con, detail_path)`)
+- Modify: `src/ergon/index/detail.py` (add `merge_detail_into_index(index_con, detail_path)`)
 - Test: `tests/test_detail_tier.py`
 
 - [ ] **Step 1: Failing test** — build a tiny index (a posting with empty salary) + a detail sidecar with recovered salary and a MATCHING sig → `merge_detail_into_index` sets the index row's salary; a NON-matching sig → index row untouched (stale sidecar not applied).
@@ -271,7 +271,7 @@ def test_base_fetch_detail_is_none():
 ### Task 5: `DetailCache` + workflow plumbing (publish/download, `--detail` gate)
 
 **Files:**
-- Modify: `src/ergon_tracker/index/cache.py` (add `DetailCache`, mirroring `RichCache`)
+- Modify: `src/ergon/index/cache.py` (add `DetailCache`, mirroring `RichCache`)
 - Modify: `scripts/build_index.py` (wire the reconcile pass + merge, gated on `--detail`; publish `index-detail.sqlite.gz` + `manifest-detail.json`)
 - Modify: `.github/workflows/build-index.yml` (download prev detail sidecar; publish detail assets ONLY paired with their manifest; `--detail` manual-only)
 - Test: `tests/test_detail_cache.py`

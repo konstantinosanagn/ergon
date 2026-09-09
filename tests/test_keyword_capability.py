@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import inspect
 
-from ergon_tracker.providers.base import get_provider, load_builtins, provider_names
+from ergon.providers.base import get_provider, load_builtins, provider_names
 
 # Providers whose remote API supports keyword search (verified in their fetch()).
 # workable_network passes `query=` to the jobs.workable.com network API (server-side filtering).

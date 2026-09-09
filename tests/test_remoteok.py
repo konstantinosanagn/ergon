@@ -10,10 +10,10 @@ import pytest
 import respx
 
 from conftest import load_fixture
-from ergon_tracker import RemoteType
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import SearchQuery
-from ergon_tracker.providers.remoteok import RemoteOKProvider
+from ergon import RemoteType
+from ergon.http import AsyncFetcher
+from ergon.models import SearchQuery
+from ergon.providers.remoteok import RemoteOKProvider
 
 pytestmark = pytest.mark.anyio
 

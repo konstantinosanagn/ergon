@@ -1,4 +1,4 @@
-"""Evaluate ``ergon_tracker.dedup``'s cross-source merge quality: which ``JobPosting`` pairs the
+"""Evaluate ``ergon.dedup``'s cross-source merge quality: which ``JobPosting`` pairs the
 fuzzy title+company blocking considers plausible near-duplicates (``sample_pairs``), and how well
 the REAL ``deduplicate()`` merge decision agrees with a fleet-judged "same role?" label set
 (``score_dedup``).
@@ -20,8 +20,8 @@ from itertools import combinations
 
 from rapidfuzz import fuzz
 
-from ergon_tracker.dedup import deduplicate, normalize_company, normalize_title
-from ergon_tracker.models import JobPosting
+from ergon.dedup import deduplicate, normalize_company, normalize_title
+from ergon.models import JobPosting
 
 __all__ = ["pair_key", "sample_pairs", "predicted_merges", "score_dedup"]
 
@@ -40,7 +40,7 @@ def sample_pairs(
     """Candidate near-duplicate PAIRS: every ``(a, b)`` sharing a normalized company (``dedup.
     normalize_company``) whose normalized titles (``dedup.normalize_title``) clear a
     ``token_sort_ratio`` of ``threshold`` -- the same blocking key + fuzzy gate
-    ``ergon_tracker.dedup.deduplicate`` uses (mirrors its default ``threshold=90.0``), returning
+    ``ergon.dedup.deduplicate`` uses (mirrors its default ``threshold=90.0``), returning
     PAIRS instead of merged clusters so each candidate can be judged independently.
 
     Comparison only ever happens within a company block (never O(n^2) over the whole list),

@@ -380,7 +380,7 @@ jobs:
             gh release upload index-latest $ASSETS --clobber
           else
             gh release create index-latest $ASSETS --title index-latest \
-              --notes "Daily ergon-tracker search-index snapshot."
+              --notes "Daily ergon search-index snapshot."
           fi
           # ATOMICITY PIVOT (Item 6): upload the top-level set manifest LAST, in its OWN call after
           # every other asset is fully up. GitHub Releases are NOT atomic across assets, so a reader
@@ -403,7 +403,7 @@ jobs:
         if: ${{ github.event.inputs.publish != 'false' }}
         # ADDITIVE (does NOT remove the inline --rich embed above -- we validate the sharded
         # embed-vectors.yml path against this baseline before cutting the inline embed). The crawl
-        # captures FULL descriptions to the fresh DB's `fresh_rich` table (src/ergon_tracker/index/
+        # captures FULL descriptions to the fresh DB's `fresh_rich` table (src/ergon/index/
         # rich.py::write_fresh_rich); on disk that DB is `dist/fresh.sqlite` (scripts/build_index.py:
         # `fresh_path = out / "fresh.sqlite"`). Publishing it here lets each embed-vectors shard read
         # the same embed-text source the inline reconcile uses, instead of re-crawling.
@@ -444,7 +444,7 @@ jobs:
             gh release upload index-latest dist/fresh-rich.sqlite.gz --clobber
           else
             gh release create index-latest dist/fresh-rich.sqlite.gz --title index-latest \
-              --notes "Daily ergon-tracker search-index snapshot."
+              --notes "Daily ergon search-index snapshot."
           fi
 
       - name: Upload build artifacts (diagnostics, retained even on failure)

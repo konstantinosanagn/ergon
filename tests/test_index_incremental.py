@@ -1,11 +1,11 @@
-from ergon_tracker.index.build import (
+from ergon.index.build import (
     build_index,
     build_index_incremental,
     merge_incremental,
     read_index_jobs,
 )
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType
+from ergon.index.db import connect
+from ergon.models import JobLevel, JobPosting, Location, RemoteType
 
 
 def _job(sid, company, title, **kw):
@@ -73,7 +73,7 @@ def test_build_incremental_cold_start_no_prev(tmp_path):
 
 
 def test_changed_companies_detects_diffs():
-    from ergon_tracker.index.build import changed_companies
+    from ergon.index.build import changed_companies
 
     prev = [_job("1", "Stripe", "Backend Engineer"), _job("2", "Ramp", "Ramp Engineer")]
     # Stripe gains a new role (changed); Ramp identical (unchanged); Notion is new (changed)

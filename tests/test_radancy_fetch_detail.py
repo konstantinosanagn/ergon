@@ -12,9 +12,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.radancy import RadancyProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.radancy import RadancyProvider
 
 
 class _FakeFetcher:
@@ -128,7 +128,7 @@ def test_base_fetch_detail_is_none() -> None:
 
 
 def test_fetch_detail_recovers_jsonld_location() -> None:
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     page = (
         "<html><body><div class='job-description'>" + ("Full JD body. " * 40) + "</div>"

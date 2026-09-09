@@ -2,7 +2,7 @@
 
 Drives the FULL pipeline -- `reconcile_detail_tier` (fetch + extract + sidecar write) then
 `merge_detail_into_index` (sig-gated apply into the real index columns) -- against a real-schema
-index (`ergon_tracker.index.db.fresh_db`) with many synthetic smartrecruiters postings, through a
+index (`ergon.index.db.fresh_db`) with many synthetic smartrecruiters postings, through a
 FAKE `fetch_detail` that returns canned, deterministically-varied JDs for most refs, raises
 `TimeoutError` for a designated failing subset, and returns `None` (no JD found) for another
 subset. Everything is offline and deterministic: no real network, no wall-clock reads (`now` is
@@ -16,8 +16,8 @@ from collections.abc import Awaitable, Callable
 
 import anyio
 
-from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.detail import (
+from ergon.index.db import fresh_db
+from ergon.index.detail import (
     _tier3_rows,
     merge_detail_into_index,
     open_detail,

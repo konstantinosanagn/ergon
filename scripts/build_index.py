@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.db import SCHEMA_VERSION  # noqa: E402
+from ergon.index.db import SCHEMA_VERSION  # noqa: E402
 
 # Compression level 6 (not gzip's default 9): ~2x faster for ~5% larger output — the right trade for a
 # ~1GB artifact rebuilt daily. Output stays standard gzip (.gz), so the SDK's gunzip is unchanged.
@@ -200,11 +200,11 @@ async def _crawl_network(cap_pages: int) -> list:
     """
     if cap_pages <= 0:
         return []
-    from ergon_tracker.enrich import enrich_in_place
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.index.mapping import enrich_hash
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.base import get_provider, load_builtins
+    from ergon.enrich import enrich_in_place
+    from ergon.http import AsyncFetcher
+    from ergon.index.mapping import enrich_hash
+    from ergon.models import SearchQuery
+    from ergon.providers.base import get_provider, load_builtins
 
     load_builtins()
     provider = get_provider("workable_network")
@@ -238,9 +238,9 @@ async def _fold_network_into_fresh(fresh_path, network_pages: int, build_id: str
     refreshed — otherwise a network company that also had a prior per-board row would be carried
     forward as a stale duplicate.
     """
-    from ergon_tracker.dedup import deduplicate, normalize_company
-    from ergon_tracker.index.build import append_jobs
-    from ergon_tracker.index.db import connect
+    from ergon.dedup import deduplicate, normalize_company
+    from ergon.index.build import append_jobs
+    from ergon.index.db import connect
 
     net = deduplicate(await _crawl_network(network_pages))
     if not net:
@@ -268,8 +268,8 @@ def _apply_freshness(db_path: Path, out: Path) -> int:
     liveness sidecar downloads). NON-FATAL: an absent/malformed sidecar (first run, or every run
     before the sweep workflow ships) must never break the core build.
     """
-    from ergon_tracker.index.build import apply_freshness_expiries
-    from ergon_tracker.index.db import connect
+    from ergon.index.build import apply_freshness_expiries
+    from ergon.index.db import connect
 
     freshness_db = out / "index-freshness.sqlite"
     try:
@@ -288,8 +288,8 @@ def _backfill_board_tokens(db_path: Path) -> int:
     seed registry + verified apply-URL derivation, so the freshness sweep covers ~all boards
     immediately instead of ramping over the ~5-day crawl cycle. NON-FATAL: a hiccup here must never
     break the core build; the crawl still fills board_token the normal way."""
-    from ergon_tracker.index.build import backfill_board_tokens
-    from ergon_tracker.index.db import connect
+    from ergon.index.build import backfill_board_tokens
+    from ergon.index.db import connect
 
     try:
         con = connect(db_path)
@@ -326,7 +326,7 @@ def _build_id() -> str:
 
 def build_and_publish_shards(jobs: list, out: Path, *, build_id: str) -> int:
     """Build per-sector shards from jobs and gzip each for release upload. Returns shard count."""
-    from ergon_tracker.index.build import build_sharded_index
+    from ergon.index.build import build_sharded_index
 
     manifest = build_sharded_index(jobs, out, build_id=build_id)
     for info in manifest["shards"].values():
@@ -336,7 +336,7 @@ def build_and_publish_shards(jobs: list, out: Path, *, build_id: str) -> int:
 
 def build_and_publish_shards_from_db(db_path: Path, out: Path, *, build_id: str) -> int:
     """Memory-bounded shard publish: partition the built index by sector via SQL, gzip each."""
-    from ergon_tracker.index.build import build_sharded_index_from_db
+    from ergon.index.build import build_sharded_index_from_db
 
     manifest = build_sharded_index_from_db(db_path, out, build_id=build_id)
     for info in manifest["shards"].values():
@@ -351,8 +351,8 @@ def build_and_publish_delta(prev_db: Path, curr_db: Path, out: Path, *, build_id
     rows — typically a few % of the file) and applies it locally, instead of the whole index.
     Returns the delta info (or {} when there's no usable prior build).
     """
-    from ergon_tracker.index.build import build_delta
-    from ergon_tracker.index.db import connect
+    from ergon.index.build import build_delta
+    from ergon.index.db import connect
 
     try:
         con = connect(prev_db, read_only=True)
@@ -424,7 +424,7 @@ def _write_vectors_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) 
     """Write ``manifest-vectors.json`` alongside the gz — the exact fields ``RichCache.ensure_fresh``
     reads (schema_version gate, build_id freshness key, sha256 of the RAW bytes). Mirrors the slim
     manifest producer; a field-name drift here silently disables the sidecar for every user."""
-    from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
+    from ergon.index.rich import RICH_SCHEMA_VERSION
 
     (out / "manifest-vectors.json").write_text(
         json.dumps(
@@ -446,7 +446,7 @@ def build_and_publish_rich_incremental(
     main index using the crawl window's ``fresh_rich`` rows (full descriptions captured on disk), then
     gzip-publish ``index-vectors.sqlite.gz`` + ``manifest-vectors.json``. Carried-forward ids keep the
     vectors already in the sidecar, so only new/changed postings re-embed. Needs the ``semantic`` extra."""
-    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+    from ergon.index.rich import reconcile_rich_tier_from_fresh
 
     rich_db = out / "index-vectors.sqlite"
     stats = reconcile_rich_tier_from_fresh(rich_db, db_path, fresh_db_path, build_id=build_id)
@@ -601,7 +601,7 @@ def _liveness_max_boards() -> int | None:
 
 def _liveness_recheck_days() -> int:
     """``ERGON_LIVENESS_RECHECK_DAYS`` (env), default 7 -- see ``liveness.RECHECK_DAYS``."""
-    from ergon_tracker.index.liveness import RECHECK_DAYS
+    from ergon.index.liveness import RECHECK_DAYS
 
     return RECHECK_DAYS
 
@@ -612,7 +612,7 @@ def _write_liveness_manifest(out: Path, *, build_id: str, sha: str, nbytes: int)
     for the recheck-cadence + dead-streak logic to mean anything, so it's published as a release
     asset the same way ``index-detail.sqlite.gz`` is, for the next build to download and carry
     forward as its starting sidecar."""
-    from ergon_tracker.index.liveness import LIVENESS_SCHEMA_VERSION
+    from ergon.index.liveness import LIVENESS_SCHEMA_VERSION
 
     (out / "manifest-liveness.json").write_text(
         json.dumps(
@@ -635,10 +635,10 @@ async def _reconcile_liveness(liveness_db: Path, index_db: Path) -> dict:
     """
     from datetime import datetime, timezone
 
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.index.liveness import _LIVENESS_CONCURRENCY, reconcile_liveness_tier
-    from ergon_tracker.models import SearchQuery, make_job_id
-    from ergon_tracker.providers.base import get_provider, load_builtins
+    from ergon.http import AsyncFetcher
+    from ergon.index.liveness import _LIVENESS_CONCURRENCY, reconcile_liveness_tier
+    from ergon.models import SearchQuery, make_job_id
+    from ergon.providers.base import get_provider, load_builtins
 
     load_builtins()
 
@@ -707,7 +707,7 @@ def _write_detail_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -
     """Write ``manifest-detail.json`` alongside the gz — the exact fields ``DetailCache.ensure_fresh``
     reads (schema_version gate, build_id freshness key, sha256 of the RAW bytes). Mirrors the vectors
     manifest producer; a field-name drift here silently disables the sidecar for every user."""
-    from ergon_tracker.index.detail import DETAIL_SCHEMA_VERSION
+    from ergon.index.detail import DETAIL_SCHEMA_VERSION
 
     (out / "manifest-detail.json").write_text(
         json.dumps(
@@ -733,7 +733,7 @@ def _rebuild_jobs_fts(db_path: Path) -> None:
     ``INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')`` idiom the core build uses
     (``index/build.py``: ``build_index``/``finalize_index``/``build_slim_index``).
     """
-    from ergon_tracker.index.db import connect
+    from ergon.index.db import connect
 
     con = connect(db_path)
     try:
@@ -782,14 +782,14 @@ async def _reconcile_detail(
     """
     from datetime import datetime, timezone
 
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.index.db import connect
-    from ergon_tracker.index.detail import (
+    from ergon.http import AsyncFetcher
+    from ergon.index.db import connect
+    from ergon.index.detail import (
         _DETAIL_CONCURRENCY,
         merge_detail_into_index,
         reconcile_detail_tier,
     )
-    from ergon_tracker.providers.base import get_provider, load_builtins
+    from ergon.providers.base import get_provider, load_builtins
 
     load_builtins()
 
@@ -877,7 +877,7 @@ def _write_jd_manifest(out: Path, *, build_id: str, sha: str, nbytes: int) -> No
     """Write ``manifest-jd.json`` alongside the gz — mirrors ``_write_detail_manifest``: the full-JD
     sidecar is a release asset the NEXT build downloads + carries forward, and the paired manifest is
     what the publish step's paired-asset guard checks before shipping the (large) gz."""
-    from ergon_tracker.index.jd_store import JD_SCHEMA_VERSION
+    from ergon.index.jd_store import JD_SCHEMA_VERSION
 
     (out / "manifest-jd.json").write_text(
         json.dumps(
@@ -903,8 +903,8 @@ def build_and_publish_jd(
     and the ``jobs`` parity gate holds). The sidecar at ``jd_db`` already holds this run's fresh JDs
     (written during the crawl) upserted onto the carried-forward prior; here we only orphan-prune +
     publish. Returns ``({"stored": n, "pruned": p}, gz_bytes)``."""
-    from ergon_tracker.index import jd_store
-    from ergon_tracker.index.db import connect
+    from ergon.index import jd_store
+    from ergon.index.db import connect
 
     idx = connect(db_path, read_only=True)
     try:
@@ -975,7 +975,7 @@ def build_embed_shard_only(index_db: Path, out: Path, *, shard: int, num_shards:
       DISJOINT and ``scripts/merge_vectors_shards.py`` unions them cleanly.
     - Sharding only changes WHICH runner embeds WHICH row; the embedding is deterministic, so the
       merged result is byte-identical to a single unsharded run (proven in test_rich_index.py)."""
-    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+    from ergon.index.rich import reconcile_rich_tier_from_fresh
 
     fresh = out / "fresh-rich.sqlite"  # published by build-index.yml from the crawl's fresh DB
     part = out / f"index-vectors-shard-{shard}.sqlite"
@@ -995,7 +995,7 @@ def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
     Broad keyword/filter queries that need no description hit this (~half the full-file bytes)
     instead of the full single file. Returns the row count.
     """
-    from ergon_tracker.index.build import build_slim_index
+    from ergon.index.build import build_slim_index
 
     slim = out / "index-slim.sqlite"
     n = build_slim_index(db_path, slim, build_id=build_id)
@@ -1017,7 +1017,7 @@ def build_and_publish_slim(db_path: Path, out: Path, *, build_id: str) -> int:
 
 def _count_jobs(db_path: Path) -> int:
     """Row count of an index DB (cheap; avoids loading jobs into memory)."""
-    from ergon_tracker.index.db import connect
+    from ergon.index.db import connect
 
     con = connect(db_path, read_only=True)
     try:
@@ -1028,8 +1028,8 @@ def _count_jobs(db_path: Path) -> int:
 
 def publish_coverage(db_path: Path, out_dir: Path, *, build_id: str) -> dict:
     """Write coverage.json + INDEX_STATUS.md so users/forkers can see index coverage."""
-    from ergon_tracker.index.coverage import compute_coverage, render_status_md
-    from ergon_tracker.index.db import connect
+    from ergon.index.coverage import compute_coverage, render_status_md
+    from ergon.index.db import connect
 
     con = connect(db_path, read_only=True)
     try:
@@ -1104,9 +1104,9 @@ def _last_published_metrics(history_path: Path) -> dict | None:
 
 def _compute_metrics(db_path: Path) -> dict:
     """Reduce a built index to the compact history.jsonl ``metrics`` baseline block (read-only)."""
-    from ergon_tracker.index.coverage import compute_coverage
-    from ergon_tracker.index.db import connect
-    from ergon_tracker.index.metrics_gate import metrics_from_coverage
+    from ergon.index.coverage import compute_coverage
+    from ergon.index.db import connect
+    from ergon.index.metrics_gate import metrics_from_coverage
 
     con = connect(db_path, read_only=True)
     try:
@@ -1124,7 +1124,7 @@ def _emit_metrics_regression(
     ``_compute_metrics``) in the single non-fatal guard, so a failure here can never crash the build
     or change the already-made publish decision. Mirrors ``freshness.check_expiry_alarms``.
     """
-    from ergon_tracker.index.metrics_gate import check_metrics_regression, log_regressions
+    from ergon.index.metrics_gate import check_metrics_regression, log_regressions
 
     report = check_metrics_regression(cur_metrics, prev_metrics, build_id=build_id)
     out.mkdir(parents=True, exist_ok=True)
@@ -1161,7 +1161,7 @@ def _gated_publish(
     only UPDATEs fields, liveness only flips ``status`` — neither adds/removes rows or changes
     source/sector), so writing it at promote time is byte-identical to writing it post-reconcile.
     """
-    from ergon_tracker.index.gates import evaluate_gates, jd_gate_drop_pct_from_env
+    from ergon.index.gates import evaluate_gates, jd_gate_drop_pct_from_env
 
     allow_cold_start = os.environ.get("ERGON_ALLOW_COLD_START", "").lower() in ("1", "true", "yes")
     rep = evaluate_gates(
@@ -1196,7 +1196,7 @@ def _new_boards(registry_items, states: dict, cap: int = 2000) -> list:
     boards become queryable immediately instead of waiting for the window to reach them. The cap
     keeps a cold start (everything unseen) bounded to the window size.
     """
-    from ergon_tracker.index.scheduler import BoardState
+    from ergon.index.scheduler import BoardState
 
     out: list = []
     for key, e in registry_items:
@@ -1325,7 +1325,7 @@ def _registry_window(
     "all non-join boards" (exclude={'join'}) and another "join only" (only={'join'}). Each partition
     is windowed/rotated over its OWN size, so the cursor stays meaningful within it.
     """
-    from ergon_tracker.registry.store import SeedRegistry
+    from ergon.registry.store import SeedRegistry
 
     if max_window is None:
         max_window = int(os.environ.get("ERGON_CRAWL_MAX_WINDOW") or _DEFAULT_MAX_WINDOW)
@@ -1387,25 +1387,25 @@ async def _crawl_due(
     """
     import anyio
 
-    from ergon_tracker.crawl_pool import run_pool
-    from ergon_tracker.crawl_progress import ProgressHeartbeat
-    from ergon_tracker.dedup import deduplicate, normalize_company
-    from ergon_tracker.enrich import enrich_in_place
-    from ergon_tracker.exceptions import RateLimitError
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.index import jd_store
-    from ergon_tracker.index.build import append_jobs
-    from ergon_tracker.index.db import connect, fresh_db
-    from ergon_tracker.index.freshness import (
+    from ergon.crawl_pool import run_pool
+    from ergon.crawl_progress import ProgressHeartbeat
+    from ergon.dedup import deduplicate, normalize_company
+    from ergon.enrich import enrich_in_place
+    from ergon.exceptions import RateLimitError
+    from ergon.http import AsyncFetcher
+    from ergon.index import jd_store
+    from ergon.index.build import append_jobs
+    from ergon.index.db import connect, fresh_db
+    from ergon.index.freshness import (
         DETERMINISTIC_SOURCES,
         content_fingerprint_ids,
         content_version_enabled,
         idset_hash,
     )
-    from ergon_tracker.index.mapping import enrich_hash, full_jd_text
-    from ergon_tracker.index.scheduler import BoardState, due_boards
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.base import get_provider, load_builtins
+    from ergon.index.mapping import enrich_hash, full_jd_text
+    from ergon.index.scheduler import BoardState, due_boards
+    from ergon.models import SearchQuery
+    from ergon.providers.base import get_provider, load_builtins
 
     load_builtins()
 
@@ -1435,7 +1435,7 @@ async def _crawl_due(
     # over the SAME window), and the union of the K shards' slices is exactly the un-sharded window --
     # the parity invariant. Both None => unsharded => identical to today.
     if shard is not None and num_shards is not None:
-        from ergon_tracker.index.freshness_shard import board_shard
+        from ergon.index.freshness_shard import board_shard
 
         window = [
             (k, e) for k, e in window if board_shard(e["ats"], e["token"], num_shards) == shard
@@ -1449,7 +1449,7 @@ async def _crawl_due(
     # cursor, so fresh captures appear in the very next build instead of waiting for the window to
     # rotate to them. Bounded so a cold start (everything unseen) still respects the window size.
     if len(states) > limit_companies:  # past the initial cold-start rotation
-        from ergon_tracker.registry.store import SeedRegistry
+        from ergon.registry.store import SeedRegistry
 
         # Restrict the never-seen pull-in to THIS partition so the non-join crawl never drags in a
         # freshly-added join board (and vice-versa) ahead of the cursor.
@@ -1460,7 +1460,7 @@ async def _crawl_due(
         # R3 map: a never-seen board belongs to exactly one shard too (same host partition), so
         # restrict the pull-in to THIS shard -- else every shard would crawl every new board.
         if shard is not None and num_shards is not None:
-            from ergon_tracker.index.freshness_shard import board_shard
+            from ergon.index.freshness_shard import board_shard
 
             new = [(k, e) for k, e in new if board_shard(e["ats"], e["token"], num_shards) == shard]
         for key, e in new:
@@ -1658,7 +1658,7 @@ async def _crawl_due(
                     if (
                         capture_rich
                     ):  # full descriptions for the rich tier (index keeps only a snippet)
-                        from ergon_tracker.index.rich import write_fresh_rich
+                        from ergon.index.rich import write_fresh_rich
 
                         write_fresh_rich(con, board_jobs)
                     if jd_con is not None:  # full JD text (Item 2): one batched upsert per board
@@ -1809,7 +1809,7 @@ def _load_board_reuse_rows(prev_db, source: str, token: str) -> dict:
     prior row with a NULL ``board_token`` (never re-crawled/backfilled) simply isn't matched here,
     so that posting is enriched fresh -- a yield miss, never a correctness risk. Any read error ->
     ``{}`` (fall back to full enrich for the whole board)."""
-    from ergon_tracker.index.db import connect
+    from ergon.index.db import connect
 
     out: dict = {}
     if prev_db is None or not Path(prev_db).exists():
@@ -1838,7 +1838,7 @@ def _apply_enriched_from_row(job, row) -> None:
     (``normalize_geo`` runs inside enrich and refines city/country); every other stored column comes
     from ``normalize`` and is already identical for an unchanged posting. The full JD body on
     ``job`` is left intact so ``enrich_hash`` recomputes to the SAME value that matched."""
-    from ergon_tracker.index.mapping import from_row
+    from ergon.index.mapping import from_row
 
     prior = from_row(row)
     job.level = prior.level
@@ -1884,8 +1884,8 @@ def _union_fresh_shards(out: Path, dest: Path, num_shards: int) -> int:
     safe regardless). ``fresh_rich`` (captured only under ``--rich``) rides along when a shard has it,
     so the reduce's embed tier reads the same source the single-process crawl would. Returns the
     number of shard DBs merged."""
-    from ergon_tracker.index.build import _JOB_COLS
-    from ergon_tracker.index.db import connect, fresh_db
+    from ergon.index.build import _JOB_COLS
+    from ergon.index.db import connect, fresh_db
 
     fresh_db(dest)
     con = connect(dest)
@@ -1926,7 +1926,7 @@ def _union_jd_shards(out: Path, num_shards: int) -> int:
     are UPSERTED on top so a freshly-crawled JD WINS over the carried copy -- byte-for-byte the
     single-process crawl's ``jd_store.put`` semantics (fresh upsert onto carry-forward). Shard-vs-shard
     ids are disjoint, so the union is order-insensitive. Returns the number of shard sidecars merged."""
-    from ergon_tracker.index import jd_store
+    from ergon.index import jd_store
 
     dest = out / "index-jd.sqlite"
     con = jd_store.open_jd_store(str(dest))
@@ -1973,7 +1973,7 @@ def _run_crawl_map(
 
     import anyio
 
-    from ergon_tracker.index.scheduler import load_state
+    from ergon.index.scheduler import load_state
 
     only_sources, exclude_sources = _crawl_partition()
     state_path = out / "board_state.json"
@@ -2048,7 +2048,7 @@ def _reduce_crawl_shards(
     advanced the SAME cursor over the SAME window; the shard filter is applied AFTER windowing), so any
     present shard's value is authoritative. ``apply_outcome`` is NOT run here -- the caller runs it over
     this merged outcome once the GLOBAL ``changed`` set is known."""
-    from ergon_tracker.index.scheduler import BoardState
+    from ergon.index.scheduler import BoardState
 
     with _phase("crawl-reduce union"):
         merged = _union_fresh_shards(out, fresh_path, num_shards)
@@ -2271,11 +2271,11 @@ def main(argv: list[str]) -> None:
         incremental = True
 
     if incremental:
-        from ergon_tracker.index.build import (
+        from ergon.index.build import (
             build_index_from_fresh_db,
             changed_companies_sql,
         )
-        from ergon_tracker.index.scheduler import apply_outcome, load_state, save_state
+        from ergon.index.scheduler import apply_outcome, load_state, save_state
 
         # Source partition (join isolation): the daily build crawls all non-join boards
         # (ERGON_CRAWL_EXCLUDE_SOURCES=join) in FULL; a separate join shard
@@ -2314,7 +2314,7 @@ def main(argv: list[str]) -> None:
             # recovering JD coverage with zero network. outcome empty + next_cursor==cursor => the
             # crawled_keys/apply_outcome/state-save tail all no-op, leaving board_state + cursor
             # effectively untouched so a later real build resumes cleanly.
-            from ergon_tracker.index.db import fresh_db as _fresh_db
+            from ergon.index.db import fresh_db as _fresh_db
 
             _fresh_db(fresh_path)
             outcome: dict = {}

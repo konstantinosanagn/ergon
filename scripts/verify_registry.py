@@ -30,11 +30,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_registry import seed_lock  # noqa: E402  (reuse the merge lock)
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
 
-SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon" / "registry" / "data" / "seed.json"
 
 
 async def verify_one(

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from ergon_tracker.extract.geo import city_match_terms, city_matches
+from ergon.extract.geo import city_match_terms, city_matches
 
 
 def test_new_york_widens_to_boroughs_and_synonyms():
@@ -36,9 +36,9 @@ def test_non_metro_city_unchanged():
 
 
 def test_index_city_filter_is_metro_aware(tmp_path):
-    from ergon_tracker.index.backend import SqliteIndexBackend
-    from ergon_tracker.index.build import build_index
-    from ergon_tracker.models import JobPosting, Location, SearchQuery
+    from ergon.index.backend import SqliteIndexBackend
+    from ergon.index.build import build_index
+    from ergon.models import JobPosting, Location, SearchQuery
 
     def job(sid, city, raw):
         return JobPosting.create(
@@ -70,7 +70,7 @@ def test_index_city_filter_is_metro_aware(tmp_path):
 
 
 def test_country_alias_resolution():
-    from ergon_tracker.extract.geo import country_match_term, country_matches
+    from ergon.extract.geo import country_match_term, country_matches
 
     assert country_match_term("USA") == "united states"
     assert country_match_term("US") == "united states"
@@ -85,16 +85,16 @@ def test_country_alias_resolution():
 
 
 def test_country_matches_substring_fallback_on_unparsed():
-    from ergon_tracker.extract.geo import country_matches
+    from ergon.extract.geo import country_matches
 
     # country unparsed on the posting but present in raw text -> still matches (index/SDK parity)
     assert country_matches("Germany", None, "Berlin, Germany")
 
 
 def test_index_country_filter_alias_aware(tmp_path):
-    from ergon_tracker.index.backend import SqliteIndexBackend
-    from ergon_tracker.index.build import build_index
-    from ergon_tracker.models import JobPosting, Location, SearchQuery
+    from ergon.index.backend import SqliteIndexBackend
+    from ergon.index.build import build_index
+    from ergon.models import JobPosting, Location, SearchQuery
 
     def job(sid, country, raw):
         return JobPosting.create(

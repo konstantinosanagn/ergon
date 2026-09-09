@@ -8,10 +8,10 @@ import anyio
 import httpx
 import pytest
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.models import JobPosting, Location, RemoteType
-from ergon_tracker.serve.query_app import QueryApp, SearchService
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.models import JobPosting, Location, RemoteType
+from ergon.serve.query_app import QueryApp, SearchService
 
 pytestmark = pytest.mark.anyio
 

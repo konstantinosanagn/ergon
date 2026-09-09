@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from ergon_tracker.index.mapping import from_row, to_row
-from ergon_tracker.models import (
+from ergon.index.mapping import from_row, to_row
+from ergon.models import (
     JobLevel,
     JobPosting,
     Location,
@@ -59,7 +59,7 @@ def test_round_trip_preserves_degree_tri_state():
 
 
 def test_to_row_sets_role_family_and_company_key():
-    from ergon_tracker.dedup import normalize_company, normalize_title
+    from ergon.dedup import normalize_company, normalize_title
 
     row = to_row(_job(), build_id="b1")
     assert row["company_key"] == normalize_company("Stripe")
@@ -94,9 +94,9 @@ def test_dropped_columns_absent_from_schema_and_have_no_readers():
     import sqlite3
     from importlib.resources import files
 
-    from ergon_tracker.index.build import _JOB_COLS, _SLIM_NULL_COLS
+    from ergon.index.build import _JOB_COLS, _SLIM_NULL_COLS
 
-    schema = (files("ergon_tracker.index") / "schema.sql").read_text(encoding="utf-8")
+    schema = (files("ergon.index") / "schema.sql").read_text(encoding="utf-8")
     con = sqlite3.connect(":memory:")
     con.executescript(schema)
     cols = {r[1] for r in con.execute("PRAGMA table_info(jobs)").fetchall()}
@@ -108,8 +108,8 @@ def test_dropped_columns_absent_from_schema_and_have_no_readers():
 
 
 def test_content_hash_stable_and_change_sensitive():
-    from ergon_tracker.index.mapping import content_hash
-    from ergon_tracker.models import JobLevel, JobPosting, Salary
+    from ergon.index.mapping import content_hash
+    from ergon.models import JobLevel, JobPosting, Salary
 
     base = JobPosting.create(
         source="greenhouse",
@@ -145,7 +145,7 @@ def test_enrich_hash_changes_when_jd_body_changes_even_if_content_hash_does_not(
     # The correctness-critical case: enrich_in_place extracts salary/yoe/degree/sector/
     # sponsorship FROM the JD body, so a rewritten body must invalidate the enrich cache even
     # when title/level/location/salary (content_hash's fields) are untouched.
-    from ergon_tracker.index.mapping import content_hash, enrich_hash
+    from ergon.index.mapping import content_hash, enrich_hash
 
     base = _job()
     rewritten = base.model_copy(
@@ -156,7 +156,7 @@ def test_enrich_hash_changes_when_jd_body_changes_even_if_content_hash_does_not(
 
 
 def test_enrich_hash_stable_under_whitespace_and_markup_only_changes():
-    from ergon_tracker.index.mapping import enrich_hash
+    from ergon.index.mapping import enrich_hash
 
     base = _job()
     rewrapped = base.model_copy(
@@ -178,7 +178,7 @@ def test_enrich_hash_stable_under_whitespace_and_markup_only_changes():
 
 
 def test_enrich_hash_equal_for_identical_postings_different_source_id():
-    from ergon_tracker.index.mapping import enrich_hash
+    from ergon.index.mapping import enrich_hash
 
     base = _job()
     same = base.model_copy(update={"source": "lever", "source_job_id": "zzz"})
@@ -186,7 +186,7 @@ def test_enrich_hash_equal_for_identical_postings_different_source_id():
 
 
 def test_enrich_hash_falls_back_to_description_html_when_text_missing():
-    from ergon_tracker.index.mapping import enrich_hash
+    from ergon.index.mapping import enrich_hash
 
     text_only = _job().model_copy(update={"description_html": None})
     html_only = _job().model_copy(
@@ -199,8 +199,8 @@ def test_snippet_falls_back_to_stripped_description_html_when_text_missing():
     """html-only providers (jazzhr + ~15 others) capture the JD in description_html but leave
     description_text None; the snippet must fall back to stripped html so they aren't miscounted
     as no-JD (and needlessly queued for Tier-3 detail). Mirrors enrich's existing html fallback."""
-    from ergon_tracker.index.mapping import to_row
-    from ergon_tracker.models import JobPosting
+    from ergon.index.mapping import to_row
+    from ergon.models import JobPosting
 
     job = JobPosting.create(
         source="jazzhr",
@@ -215,8 +215,8 @@ def test_snippet_falls_back_to_stripped_description_html_when_text_missing():
 
 
 def test_snippet_prefers_description_text_over_html():
-    from ergon_tracker.index.mapping import to_row
-    from ergon_tracker.models import JobPosting
+    from ergon.index.mapping import to_row
+    from ergon.models import JobPosting
 
     job = JobPosting.create(
         source="greenhouse",
@@ -230,8 +230,8 @@ def test_snippet_prefers_description_text_over_html():
 
 
 def test_snippet_none_when_no_description_at_all():
-    from ergon_tracker.index.mapping import to_row
-    from ergon_tracker.models import JobPosting
+    from ergon.index.mapping import to_row
+    from ergon.models import JobPosting
 
     job = JobPosting.create(
         source="greenhouse", source_job_id="1", company="Acme", title="Engineer"

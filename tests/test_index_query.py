@@ -1,7 +1,7 @@
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.query import _match_expr, search_rows
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.build import build_index
+from ergon.index.db import connect
+from ergon.index.query import _match_expr, search_rows
+from ergon.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
 def _job(sid, title, **kw):
@@ -286,7 +286,7 @@ def test_degree_filter_round_trip(tmp_path):
 def test_matches_parity_on_location(tmp_path):
     # The index must filter on the free-text `location` exactly like SearchQuery.matches() —
     # regression for the index silently ignoring `location` (returned non-matching jobs).
-    from ergon_tracker.models import Location
+    from ergon.models import Location
 
     jobs = [
         JobPosting.create(

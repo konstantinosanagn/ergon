@@ -117,10 +117,10 @@ download/cache-hit/absent; router ranks from pre-stored vectors when present and
 behaviour when absent**; and a guard that the serving path never instantiates `VectorIndex`.
 
 ## Deliverables
-- `src/ergon_tracker/index/rich.py` — vectors-only schema; remove `job_text`/`job_text_fts` and all
+- `src/ergon/index/rich.py` — vectors-only schema; remove `job_text`/`job_text_fts` and all
   three FTS-rebuild call sites; `sig` on the vectors row; legacy-schema migration.
-- `src/ergon_tracker/index/cache.py` — `RichCache`.
-- `src/ergon_tracker/index/router.py` — candidate-restricted vector ranking + graceful fallback.
+- `src/ergon/index/cache.py` — `RichCache`.
+- `src/ergon/index/router.py` — candidate-restricted vector ranking + graceful fallback.
 - `scripts/build_index.py` + `.github/workflows/build-index.yml` — publish/download
   `index-vectors.sqlite.gz` (replacing `index-rich.sqlite.gz`).
 - `tests/test_rich_index.py` (adapted) + new tests; `docs/extraction-baseline.md` record.

@@ -10,9 +10,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, SearchQuery
-from ergon_tracker.providers.applicantpro import ApplicantProProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, SearchQuery
+from ergon.providers.applicantpro import ApplicantProProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -96,7 +96,7 @@ async def test_normalize_maps_fields() -> None:
     assert j0.employment_type == EmploymentType.FULL_TIME
     assert j0.apply_url == "https://acme.applicantpro.com/jobs/4080524"
     # structured pay from the list payload (minSalary/maxSalary/payTypeFrame)
-    from ergon_tracker.models import SalaryInterval
+    from ergon.models import SalaryInterval
 
     assert j0.salary is not None
     assert j0.salary.min_amount == 76_000 and j0.salary.max_amount == 92_500

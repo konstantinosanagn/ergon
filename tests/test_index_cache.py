@@ -2,11 +2,11 @@ import gzip
 import hashlib
 import json
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.cache import IndexCache
-from ergon_tracker.index.db import SCHEMA_VERSION
-from ergon_tracker.models import JobPosting
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.index.cache import IndexCache
+from ergon.index.db import SCHEMA_VERSION
+from ergon.models import JobPosting
 
 
 def _publish(remote_dir, tmp_path):
@@ -69,9 +69,9 @@ def test_cache_rejects_future_schema_version(tmp_path):
 def test_shardcache_rejects_future_schema_version(tmp_path):
     import gzip as _gz
 
-    from ergon_tracker.index.build import build_sharded_index
-    from ergon_tracker.index.cache import ShardCache
-    from ergon_tracker.models import SearchQuery
+    from ergon.index.build import build_sharded_index
+    from ergon.index.cache import ShardCache
+    from ergon.models import SearchQuery
 
     src = tmp_path / "build"
     build_sharded_index(
@@ -99,7 +99,7 @@ def test_shardcache_rejects_future_schema_version(tmp_path):
 
 
 def _job(sid, company, title, **kw):
-    from ergon_tracker.models import Location, RemoteType
+    from ergon.models import Location, RemoteType
 
     return JobPosting.create(
         source="greenhouse",
@@ -114,7 +114,7 @@ def _job(sid, company, title, **kw):
 
 def test_cache_applies_delta_instead_of_full_download(tmp_path):
     # Returning user one build behind gets the new state via a small delta, NOT a full re-download.
-    from ergon_tracker.index.build import build_delta, build_index
+    from ergon.index.build import build_delta, build_index
 
     remote = tmp_path / "remote"
     remote.mkdir()
@@ -178,7 +178,7 @@ def test_cache_applies_delta_instead_of_full_download(tmp_path):
     path = cache.ensure_fresh()  # must apply the delta (full file is corrupt)
     assert path is not None
     backend = SqliteIndexBackend(path)
-    from ergon_tracker.models import SearchQuery
+    from ergon.models import SearchQuery
 
     titles = {j.title for j in backend.search(SearchQuery(keywords="engineer", limit=10))}
     assert "Founding Engineer" in titles  # the b2 row arrived via the delta
@@ -187,7 +187,7 @@ def test_cache_applies_delta_instead_of_full_download(tmp_path):
 
 def test_cache_falls_back_to_full_when_delta_base_mismatches(tmp_path):
     # Local is at b1 but the only delta bridges b0->b2: must ignore it and full-download b2.
-    from ergon_tracker.index.build import build_delta, build_index
+    from ergon.index.build import build_delta, build_index
 
     remote = tmp_path / "remote"
     remote.mkdir()
@@ -247,7 +247,7 @@ def test_cache_falls_back_to_full_when_delta_base_mismatches(tmp_path):
     )
     path = cache.ensure_fresh()  # delta base mismatch -> full download of b2
     assert path is not None
-    from ergon_tracker.models import SearchQuery
+    from ergon.models import SearchQuery
 
     titles = {
         j.title for j in SqliteIndexBackend(path).search(SearchQuery(keywords="engineer", limit=10))
@@ -258,14 +258,14 @@ def test_cache_falls_back_to_full_when_delta_base_mismatches(tmp_path):
 def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
     # A user 2 builds behind (b0) catches up to b2 by chaining deltas via deltas.json — no full
     # download. The full file is corrupt so success can ONLY come from the chain.
-    from ergon_tracker.index.build import build_delta, build_index
+    from ergon.index.build import build_delta, build_index
 
     remote = tmp_path / "remote"
     remote.mkdir()
     cache_dir = tmp_path / "cache"
 
     def _job2(sid, company, title):
-        from ergon_tracker.models import Location, RemoteType
+        from ergon.models import Location, RemoteType
 
         return JobPosting.create(
             source="greenhouse",
@@ -360,7 +360,7 @@ def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
     cache = IndexCache(base_url=remote.as_uri(), cache_dir=cache_dir)
     path = cache.ensure_fresh()
     assert path is not None
-    from ergon_tracker.models import SearchQuery
+    from ergon.models import SearchQuery
 
     titles = {
         j.title for j in SqliteIndexBackend(path).search(SearchQuery(keywords="engineer", limit=10))
@@ -372,11 +372,11 @@ def test_cache_applies_delta_chain_when_multiple_builds_behind(tmp_path):
 def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
     # If a chain step fails (corrupt delta), the cached db must stay at its original build (not be
     # half-advanced), so the full-download fallback starts from a clean base.
-    from ergon_tracker.index.build import build_delta, build_index
-    from ergon_tracker.index.db import connect
+    from ergon.index.build import build_delta, build_index
+    from ergon.index.db import connect
 
     def _job2(sid, company, title):
-        from ergon_tracker.models import Location, RemoteType
+        from ergon.models import Location, RemoteType
 
         return JobPosting.create(
             source="greenhouse",
@@ -479,7 +479,7 @@ def test_delta_chain_failure_leaves_local_db_unchanged(tmp_path):
 
 
 def test_cached_index_build_id_reads_manifest(tmp_path):
-    from ergon_tracker.index.cache import cached_index_build_id
+    from ergon.index.cache import cached_index_build_id
 
     assert cached_index_build_id(tmp_path) is None  # nothing cached yet
     (tmp_path / "manifest.json").write_text(json.dumps({"build_id": "build-2026-06-19-7"}))

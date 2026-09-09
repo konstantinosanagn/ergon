@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.db import connect  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
 
 
 async def _fake_crawl_due(
@@ -31,10 +31,10 @@ async def _fake_crawl_due(
     exclude_sources=None,
 ):
     """Write a few jobs straight into the fresh DB (no network), return (outcome, next_cursor)."""
-    from ergon_tracker.index.build import append_jobs
-    from ergon_tracker.index.db import connect as _connect
-    from ergon_tracker.index.db import fresh_db
-    from ergon_tracker.models import JobPosting, Location, RemoteType
+    from ergon.index.build import append_jobs
+    from ergon.index.db import connect as _connect
+    from ergon.index.db import fresh_db
+    from ergon.models import JobPosting, Location, RemoteType
 
     fresh_db(fresh_db_path)
     con = _connect(fresh_db_path)

@@ -7,7 +7,7 @@ Some body-shops expose their board as a server-rendered ``<table>`` instead of a
 
 from __future__ import annotations
 
-from ergon_tracker.providers.apicapture import _parse_html_table, _parse_rss
+from ergon.providers.apicapture import _parse_html_table, _parse_rss
 
 _HTML = """
 <table>

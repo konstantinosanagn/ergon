@@ -6,8 +6,8 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.registry.resolver import Resolution, aresolve, resolve
+from ergon.http import AsyncFetcher
+from ergon.registry.resolver import Resolution, aresolve, resolve
 
 pytestmark = pytest.mark.anyio
 

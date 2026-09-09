@@ -11,9 +11,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.successfactors import SuccessFactorsProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.successfactors import SuccessFactorsProvider
 
 
 class _FakeFetcher:
@@ -154,7 +154,7 @@ def test_base_fetch_detail_is_none() -> None:
 def test_microdata_locations_structured_and_string_variants() -> None:
     from selectolax.parser import HTMLParser
 
-    from ergon_tracker.providers.successfactors import SuccessFactorsProvider as SF
+    from ergon.providers.successfactors import SuccessFactorsProvider as SF
 
     struct = HTMLParser(
         '<div itemprop="jobLocation"><div itemprop="address">'
@@ -224,7 +224,7 @@ def test_fetch_detail_unescapes_double_escaped_apply_url() -> None:
 
 
 def test_unescape_url_handles_single_and_double_escape() -> None:
-    from ergon_tracker.providers.successfactors import _unescape_url
+    from ergon.providers.successfactors import _unescape_url
 
     assert _unescape_url("a?x=1&amp;amp;y=2") == "a?x=1&y=2"  # double-escaped
     assert _unescape_url("a?x=1&amp;y=2") == "a?x=1&y=2"  # single-escaped

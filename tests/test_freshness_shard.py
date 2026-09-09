@@ -1,5 +1,5 @@
 """Stress tests for the freshness-sweep host-sharding partition
-(src/ergon_tracker/index/freshness_shard.py, Phase 3).
+(src/ergon/index/freshness_shard.py, Phase 3).
 
 Everything here is a pure-function test -- no network, no sqlite, no async -- proving the
 drain-detail invariant: every board whose fetch contends on the same politeness bucket
@@ -13,7 +13,7 @@ import hashlib
 
 import pytest
 
-from ergon_tracker.index.freshness_shard import (
+from ergon.index.freshness_shard import (
     CRAWL_MEGAHOST_SHARDS,
     ISOLATED_HOSTS,
     board_host,

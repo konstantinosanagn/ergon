@@ -15,9 +15,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.icims import ICIMSProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.icims import ICIMSProvider
 
 
 class _FakeFetcher:

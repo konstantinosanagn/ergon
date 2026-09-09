@@ -11,8 +11,8 @@ import time
 
 import pytest
 
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.rich import (
+from ergon.index.build import build_index
+from ergon.index.rich import (
     VectorIndex,
     _sig,
     build_rich_tier,
@@ -26,7 +26,7 @@ from ergon_tracker.index.rich import (
     vector_search,
     write_fresh_rich,
 )
-from ergon_tracker.models import JobPosting, Location, RemoteType
+from ergon.models import JobPosting, Location, RemoteType
 
 _VOCAB = ["python", "kubernetes", "sales", "nurse", "finance"]
 _DIM = 384
@@ -110,7 +110,7 @@ def _main_and_fresh(tmp_path, jobs, tag):
 
 
 def test_quantize_roundtrip_preserves_direction():
-    from ergon_tracker.semantic import _cosine
+    from ergon.semantic import _cosine
 
     vec = FAKE._vec("python kubernetes senior engineer")
     scale, blob = quantize_int8(vec)
@@ -219,7 +219,7 @@ except ImportError:
 @pytest.mark.skipif(not _HAS_FASTEMBED, reason="real-model path needs the `semantic` extra")
 def test_real_embedding_end_to_end(tmp_path):
     """The REAL bge-small model: build + vector-rank + quantize fidelity on real text (no fake)."""
-    from ergon_tracker.semantic import _cosine, get_semantic_reranker
+    from ergon.semantic import _cosine, get_semantic_reranker
 
     jobs = [
         _job(
@@ -260,7 +260,7 @@ def test_real_embedding_end_to_end(tmp_path):
 def test_reconcile_from_fresh_cold_then_carryforward(tmp_path):
     import sqlite3
 
-    from ergon_tracker.index.rich import (
+    from ergon.index.rich import (
         reconcile_rich_tier_from_fresh,
         vector_search,
         write_fresh_rich,
@@ -325,7 +325,7 @@ def test_reconcile_from_fresh_carries_sig_and_skips_unchanged(tmp_path):
 def _write_fresh(path, jobs):
     import sqlite3
 
-    from ergon_tracker.index.rich import write_fresh_rich
+    from ergon.index.rich import write_fresh_rich
 
     con = sqlite3.connect(path)
     write_fresh_rich(con, jobs)
@@ -351,7 +351,7 @@ def test_reconcile_from_fresh_chunk_boundaries_match_single_fetch(tmp_path):
     to one big fetch (chunk_size=10_000)."""
     import shutil
 
-    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+    from ergon.index.rich import reconcile_rich_tier_from_fresh
 
     seed = [_job(f"s{i}", f"Role {i}", f"orig desc {i} python") for i in range(10)]
     fresh0 = tmp_path / "fresh0.sqlite"
@@ -395,7 +395,7 @@ def test_reconcile_from_fresh_ramp_cap_converges(tmp_path, capsys):
     the converged state equals a single uncapped run."""
     import shutil
 
-    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+    from ergon.index.rich import reconcile_rich_tier_from_fresh
 
     x0_old = _job("x0", "X0", "old zero")
     x1_old = _job("x1", "X1", "old one")
@@ -443,7 +443,7 @@ def test_reconcile_from_fresh_ramp_cap_converges(tmp_path, capsys):
 def test_reconcile_from_fresh_always_single_process(tmp_path, monkeypatch):
     """The reconcile path must NEVER spawn fastembed worker processes: even on CI with a batch large
     enough that _auto_parallel would fan out (>= _PARALLEL_MIN), every embed call gets parallel=None."""
-    from ergon_tracker.index.rich import _PARALLEL_MIN, reconcile_rich_tier_from_fresh
+    from ergon.index.rich import _PARALLEL_MIN, reconcile_rich_tier_from_fresh
 
     monkeypatch.setenv("CI", "true")  # the env where _auto_parallel would return 0 (all cores)
     n = _PARALLEL_MIN + 100
@@ -463,7 +463,7 @@ def test_reconcile_from_fresh_always_single_process(tmp_path, monkeypatch):
 
 def test_ramp_cap_env_and_ci_defaults(tmp_path, monkeypatch):
     """max_embed_per_run='auto' resolves ERGON_RICH_MAX_EMBED, else 120k on CI, else unlimited."""
-    from ergon_tracker.index.rich import (
+    from ergon.index.rich import (
         _RAMP_DEFAULT_CI,
         _resolve_max_embed,
         reconcile_rich_tier_from_fresh,
@@ -492,7 +492,7 @@ def test_reconcile_from_fresh_handles_missing_capture(tmp_path):
     # fresh DB without a fresh_rich table (capture was off) -> prune-only, no crash
     import sqlite3
 
-    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh
+    from ergon.index.rich import reconcile_rich_tier_from_fresh
 
     a = _job("a", "Eng", "x")
     fresh = tmp_path / "fresh.sqlite"
@@ -586,7 +586,7 @@ def test_backfill_from_index_embeds_unvectored_backlog(tmp_path):
     board rotation. Also covers idempotency + budget + the sig self-upgrade on a later real crawl."""
     import sqlite3
 
-    from ergon_tracker.index.rich import open_rich, reconcile_rich_tier_from_fresh, write_fresh_rich
+    from ergon.index.rich import open_rich, reconcile_rich_tier_from_fresh, write_fresh_rich
 
     jobs = [
         _job("a", "Alpha Engineer", "alpha description here", company="C1"),
@@ -648,7 +648,7 @@ def test_backfill_from_index_embeds_unvectored_backlog(tmp_path):
 def test_backfill_respects_embed_budget(tmp_path):
     import sqlite3
 
-    from ergon_tracker.index.rich import reconcile_rich_tier_from_fresh, write_fresh_rich
+    from ergon.index.rich import reconcile_rich_tier_from_fresh, write_fresh_rich
 
     jobs = [_job(str(i), f"Engineer {i}", f"desc {i}", company=f"C{i}") for i in range(6)]
     main = tmp_path / "m.sqlite"
@@ -680,7 +680,7 @@ def test_sharded_embed_is_byte_identical_to_unsharded(tmp_path):
     import subprocess
     import sys
 
-    from ergon_tracker.index.rich import _shard_of
+    from ergon.index.rich import _shard_of
 
     jobs = [
         _job(f"id{i}", f"Role {i}", f"alpha beta gamma description number {i}") for i in range(50)

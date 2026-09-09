@@ -37,7 +37,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from harvest_tavily import load_key  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
 
 GAP = ROOT / "runs" / "h1b_coverage_gap.json"
 DEFAULT_OUT = ROOT / "runs" / "gap_ats_census.json"

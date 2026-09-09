@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.comp import CompExtractor, parse_salary
-from ergon_tracker.models import Salary, SalaryInterval
+from ergon.extract.base import ExtractInput
+from ergon.extract.comp import CompExtractor, parse_salary
+from ergon.models import Salary, SalaryInterval
 
 EX = CompExtractor()
 

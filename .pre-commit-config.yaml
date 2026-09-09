@@ -28,7 +28,7 @@ repos:
     rev: v2.1.0
     hooks:
       - id: mypy
-        files: ^src/ergon_tracker/
+        files: ^src/ergon/
         args: [--config-file=pyproject.toml]
         additional_dependencies:
           - pydantic>=2.6

@@ -21,7 +21,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-with open(Path(__file__).resolve().parents[2] / "src/ergon_tracker/registry/data/seed.json") as _f:
+with open(Path(__file__).resolve().parents[2] / "src/ergon/registry/data/seed.json") as _f:
     _SEED = json.load(_f)["companies"]
 _H = {"User-Agent": "Mozilla/5.0 (conditional-GET probe)"}
 _SR_PAGE_LIMIT = 100

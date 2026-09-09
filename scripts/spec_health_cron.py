@@ -2,7 +2,7 @@
 
 The self-healing half of Stream B: browser-discovered specs rot when a site changes its API shape.
 This cron replays each spec through the real provider, records ok/fail in the
-:class:`~ergon_tracker.spec_health.SpecHealth` tracker, and writes ``runs/rediscover_queue.json`` =
+:class:`~ergon.spec_health.SpecHealth` tracker, and writes ``runs/rediscover_queue.json`` =
 the specs that have failed ``threshold`` times in a row — the input for a re-discovery pass.
 
 Runs on the index-build cron (after the build). ``check_specs`` is pure over an injected ``fetch``
@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.spec_health import DEFAULT_STALE_THRESHOLD, SpecHealth  # noqa: E402
+from ergon.spec_health import DEFAULT_STALE_THRESHOLD, SpecHealth  # noqa: E402
 
 # Persisted across builds so the consecutive-failure streak survives (the cron downloads+re-uploads
 # it like board_state.json). $ERGON_SPEC_HEALTH points it at the build's dist/ in CI.
@@ -55,9 +55,9 @@ async def check_specs(
 def main() -> None:
     import anyio
 
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.apicapture import ApiCaptureProvider, _load_specs
+    from ergon.http import AsyncFetcher
+    from ergon.models import SearchQuery
+    from ergon.providers.apicapture import ApiCaptureProvider, _load_specs
 
     ap = argparse.ArgumentParser(description="apicapture spec health-check + re-discover queue")
     ap.add_argument("--threshold", type=int, default=DEFAULT_STALE_THRESHOLD)

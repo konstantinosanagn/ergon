@@ -6,11 +6,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.successfactors import SuccessFactorsProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.providers.successfactors import SuccessFactorsProvider
 
 pytestmark = pytest.mark.anyio
 

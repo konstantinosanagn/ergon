@@ -16,9 +16,9 @@ import anyio
 import httpx
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.phenom import PhenomProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.phenom import PhenomProvider
 
 
 class _FakeResponse:

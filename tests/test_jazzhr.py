@@ -8,9 +8,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.jazzhr import JazzHRProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.jazzhr import JazzHRProvider
 
 pytestmark = pytest.mark.anyio
 

@@ -7,10 +7,10 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider, get_provider, load_builtins
-from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider, get_provider, load_builtins
+from ergon.providers.smartrecruiters import SmartRecruitersProvider
 
 
 class _FakeFetcher:

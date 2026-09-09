@@ -37,7 +37,7 @@ the labeling guide says *must* be `unknown`. **No title-guessing rules added** (
 
 ## Stream D — distribution + the agent surface (publish-ready)
 
-- **Packaging:** fixed the wheel double-include bug; `pip install ergon-tracker[mcp,semantic]` verified
+- **Packaging:** fixed the wheel double-include bug; `pip install ergon[mcp,semantic]` verified
   in a clean venv (registry ships + loads, 53 providers, both console scripts). One-line `uvx` onboarding
   + publish runbook in `docs/mcp-quickstart.md`. Added the `[browser]` extra (Tier-2 mint, offline-only).
 - **MCP surface — 9 tools**, several with no competitor equivalent:

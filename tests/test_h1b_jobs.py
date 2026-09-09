@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ergon_tracker import mcp_server
-from ergon_tracker.extract.visa import SponsorIndex, h1b_profile
-from ergon_tracker.models import JobPosting, Location, RemoteType
+from ergon import mcp_server
+from ergon.extract.visa import SponsorIndex, h1b_profile
+from ergon.models import JobPosting, Location, RemoteType
 
 
 def test_sponsor_profile_accessor():
@@ -47,10 +47,8 @@ _PROFILES = {
 
 
 def _patch(monkeypatch, pool):
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: list(pool))
-    monkeypatch.setattr(
-        "ergon_tracker.extract.visa.load_sponsor_index", lambda: _FakeIdx(_PROFILES)
-    )
+    monkeypatch.setattr("ergon.index.router.try_index", lambda q: list(pool))
+    monkeypatch.setattr("ergon.extract.visa.load_sponsor_index", lambda: _FakeIdx(_PROFILES))
 
 
 def test_annotates_and_ranks_by_sponsor_strength(monkeypatch):
@@ -84,7 +82,7 @@ def test_active_within_years_drops_quiet_sponsors(monkeypatch):
 
 
 def test_index_unavailable_is_graceful(monkeypatch):
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: None)
+    monkeypatch.setattr("ergon.index.router.try_index", lambda q: None)
     res = mcp_server.h1b_jobs()
     assert res["count"] == 0 and "index unavailable" in res["note"]
 
@@ -99,6 +97,6 @@ def test_defaults_max_last_seen_age_days_21(monkeypatch):
         captured["q"] = q
         return []
 
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", fake_try_index)
+    monkeypatch.setattr("ergon.index.router.try_index", fake_try_index)
     mcp_server.h1b_jobs()
     assert captured["q"].max_last_seen_age_days == 21

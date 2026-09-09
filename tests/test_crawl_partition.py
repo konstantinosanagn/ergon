@@ -30,9 +30,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.models import JobPosting, RawJob  # noqa: E402
+from ergon.index.build import build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.models import JobPosting, RawJob  # noqa: E402
 
 # A multi-source registry: 4 greenhouse (non-join) boards + 3 join boards.
 _REGISTRY = {
@@ -87,8 +87,8 @@ class _Prov:
 
 
 def _install(monkeypatch):
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     provs = {"greenhouse": _Prov("greenhouse"), "join": _Prov("join")}
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)

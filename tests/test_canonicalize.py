@@ -1,5 +1,5 @@
-from ergon_tracker.canonicalize import aggregate_companies
-from ergon_tracker.models import JobPosting
+from ergon.canonicalize import aggregate_companies
+from ergon.models import JobPosting
 
 
 def _job(company, **kw):

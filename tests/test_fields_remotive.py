@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ergon_tracker.models import RawJob, SalaryInterval
-from ergon_tracker.providers.remotive import RemotiveProvider
+from ergon.models import RawJob, SalaryInterval
+from ergon.providers.remotive import RemotiveProvider
 
 
 def _raw(payload: dict) -> RawJob:

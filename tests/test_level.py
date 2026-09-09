@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.extract.level import infer_level
-from ergon_tracker.models import JobLevel
+from ergon.extract.level import infer_level
+from ergon.models import JobLevel
 
 
 @pytest.mark.parametrize(

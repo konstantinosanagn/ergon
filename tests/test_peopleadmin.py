@@ -11,9 +11,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.peopleadmin import PeopleAdminProvider
+from ergon.http import AsyncFetcher
+from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.providers.peopleadmin import PeopleAdminProvider
 
 pytestmark = pytest.mark.anyio
 

@@ -10,9 +10,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.eightfold import EightfoldProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.eightfold import EightfoldProvider
 
 
 class _FakeFetcher:
@@ -214,7 +214,7 @@ def test_base_fetch_detail_is_none() -> None:
 
 
 def test_eightfold_fetch_detail_recovers_location_string() -> None:
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     payload = {"job_description": "<p>JD.</p>", "location": "Phoenix, AZ USA 85040"}
     ref = DetailRef(

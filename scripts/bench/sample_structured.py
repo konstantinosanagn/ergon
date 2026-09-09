@@ -3,7 +3,7 @@
 Complements the JD crawl (``crawl_corpus.py``, Task 3) with a cheap-to-scale supplement: rows
 sampled directly from the prebuilt index for the fields that need NO job-description text --
 level, geo (country/city), sector, employment_type, remote, recency/posted_at. The index
-(``src/ergon_tracker/index/schema.sql``) never stores the full JD body (only a short ``snippet``,
+(``src/ergon/index/schema.sql``) never stores the full JD body (only a short ``snippet``,
 kept here for context but never fed into ``description_text``), so this corpus can scale to
 10k+ rows for free by reading straight off the ``jobs`` table -- unlike the JD crawl, which is
 bounded by live network fetches.
@@ -25,7 +25,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from ergon_tracker.index.cache import IndexCache
+from ergon.index.cache import IndexCache
 
 from .schema import corpus_row, write_jsonl
 from .strata import allocate

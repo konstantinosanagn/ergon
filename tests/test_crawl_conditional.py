@@ -13,9 +13,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.http import ConditionalResult  # noqa: E402
-from ergon_tracker.index.freshness import idset_hash  # noqa: E402
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
+from ergon.http import ConditionalResult  # noqa: E402
+from ergon.index.freshness import idset_hash  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
 
 
 class _FakeReg:
@@ -53,10 +53,10 @@ class _Fetcher304:
 
 
 def test_crawl_due_304_carries_forward(monkeypatch, tmp_path):
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
-    from ergon_tracker.index.db import connect
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
+    from ergon.index.db import connect
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider304())
@@ -92,7 +92,7 @@ class _Provider200:
     def raws_from_body(self, token, body):
         import json
 
-        from ergon_tracker.models import RawJob
+        from ergon.models import RawJob
 
         data = json.loads(body)
         return [
@@ -108,7 +108,7 @@ class _Provider200:
         ]
 
     def normalize(self, raw):
-        from ergon_tracker.models import JobPosting
+        from ergon.models import JobPosting
 
         return JobPosting.create(
             source="greenhouse",
@@ -137,10 +137,10 @@ class _Fetcher200:
 
 
 def test_crawl_due_200_reuses_body_without_refetch(monkeypatch, tmp_path):
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
-    from ergon_tracker.index.db import connect
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
+    from ergon.index.db import connect
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider200())
@@ -159,7 +159,7 @@ def test_crawl_due_200_reuses_body_without_refetch(monkeypatch, tmp_path):
 
 
 def test_registry_window_rotates_and_wraps(monkeypatch):
-    import ergon_tracker.registry.store as store_mod
+    import ergon.registry.store as store_mod
 
     class _Reg:
         def all(self):  # 5 crawlable boards: t0..t4
@@ -181,7 +181,7 @@ def test_registry_window_rotates_and_wraps(monkeypatch):
 
 
 def test_registry_window_skips_uncrawlable(monkeypatch):
-    import ergon_tracker.registry.store as store_mod
+    import ergon.registry.store as store_mod
 
     class _Reg:
         def all(self):
@@ -201,7 +201,7 @@ def test_registry_window_caps_giant_limit_and_resumes(monkeypatch):
     # A giant --limit-companies must NOT crawl the whole registry as one window: the per-run window
     # is capped and the cursor advances, so a killed run resumes from the next slice instead of
     # re-doing one 58k-style window forever (the CI-timeout failure this fixes).
-    import ergon_tracker.registry.store as store_mod
+    import ergon.registry.store as store_mod
 
     class _Reg:
         def all(self):  # 10 crawlable boards: t0..t9
@@ -228,7 +228,7 @@ def test_registry_window_caps_giant_limit_and_resumes(monkeypatch):
 
 
 def test_registry_window_cap_from_env(monkeypatch):
-    import ergon_tracker.registry.store as store_mod
+    import ergon.registry.store as store_mod
 
     class _Reg:
         def all(self):
@@ -288,7 +288,7 @@ class _LeverBodyEdited:
     def raws_from_body(self, token, body):
         import json
 
-        from ergon_tracker.models import RawJob
+        from ergon.models import RawJob
 
         return [
             RawJob(
@@ -303,7 +303,7 @@ class _LeverBodyEdited:
         ]
 
     def normalize(self, raw):
-        from ergon_tracker.models import JobPosting
+        from ergon.models import JobPosting
 
         return JobPosting.create(
             source="lever",
@@ -341,10 +341,10 @@ def test_delta_body_validator_not_idset_skipped_reprocesses_edit(monkeypatch, tm
     """Edit-safety RESTORED: with the flag on and a MATCHING sidecar+stamp (which would id-set-skip
     a normal deterministic board), a ``validator_covers_body`` board instead falls through to the
     conditional-GET; a 200 re-processes the EDITED body and the fresh, non-stale row is streamed."""
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
-    from ergon_tracker.index.db import connect
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
+    from ergon.index.db import connect
 
     edited_body = b'[{"id": 1, "title": "Staff Engineer", "descriptionPlain": "EDITED JD body"}]'
     cget_calls: list = []
@@ -421,10 +421,10 @@ def test_delta_non_body_validator_still_idset_skips(monkeypatch, tmp_path):
     """CONTRAST: the SAME matching sidecar+stamp on a non-body-validator deterministic provider
     still id-set-skips (edit-blind by design -- catching in-place edits there is A-2's job). The
     conditional-GET must NOT run (the skip returns first)."""
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
-    from ergon_tracker.index.db import connect
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
+    from ergon.index.db import connect
 
     cget_calls: list = []
     monkeypatch.setattr(store_mod, "SeedRegistry", _GreenhouseReg)
@@ -463,10 +463,10 @@ def test_delta_body_validator_304_still_carries_forward(monkeypatch, tmp_path):
     """A ``validator_covers_body`` board whose body did NOT change: it falls through to the
     conditional-GET (proven by the call), the 304 carries prior rows forward, and fetch never
     runs -- the edit-safe path is strictly better, never worse, than the id-set skip."""
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
-    from ergon_tracker.index.db import connect
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
+    from ergon.index.db import connect
 
     cget_calls: list = []
     monkeypatch.setattr(store_mod, "SeedRegistry", _LeverReg)

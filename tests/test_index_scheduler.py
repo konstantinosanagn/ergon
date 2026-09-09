@@ -1,4 +1,4 @@
-from ergon_tracker.index.scheduler import (
+from ergon.index.scheduler import (
     BoardState,
     apply_outcome,
     assign_tier,

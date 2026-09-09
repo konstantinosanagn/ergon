@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from ergon_tracker.registry.store import SeedRegistry
+from ergon.registry.store import SeedRegistry
 
 SUPPORTED_ATS = {
     "greenhouse",
@@ -94,7 +94,7 @@ def test_all_domains_are_clean_shaped(registry: SeedRegistry) -> None:
     (a space, a missing TLD, an ATS host with junk) is a poisoned registry and fails here. This is
     the invariant the domain backfill must never violate: its pre-write gate rejects anything that
     doesn't match ``_DOMAIN_RE``, so a clean run can only ever keep this set clean or shrink it."""
-    from ergon_tracker.registry.store import _normalize_domain
+    from ergon.registry.store import _normalize_domain
 
     non_clean: list[str] = []
     for key, entry in registry.all().items():
@@ -127,7 +127,7 @@ def test_company_keys_are_unique_and_lowercase(registry: SeedRegistry) -> None:
 
 
 def test_resolver_resolves_known_seed_domains(registry: SeedRegistry) -> None:
-    from ergon_tracker.registry.resolver import resolve
+    from ergon.registry.resolver import resolve
 
     # A sample of newly added companies should resolve via the seed by domain.
     samples = {
@@ -176,7 +176,7 @@ def test_demo_boards_excluded_and_purged():
 
 
 def test_live_seed_has_no_demo_boards():
-    from ergon_tracker.registry.store import SeedRegistry
+    from ergon.registry.store import SeedRegistry
 
     r = SeedRegistry().all()
     bad = [

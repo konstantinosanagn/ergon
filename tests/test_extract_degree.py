@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from conftest import load_fixture
-from ergon_tracker.extract import get_extractor
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.degree import DegreeExtractor
-from ergon_tracker.models import DEGREE_LEVELS, DEGREE_ORDER
+from ergon.extract import get_extractor
+from ergon.extract.base import ExtractInput
+from ergon.extract.degree import DegreeExtractor
+from ergon.models import DEGREE_LEVELS, DEGREE_ORDER
 
 
 def _degree(description: str | None) -> tuple[str | None, bool | None]:
@@ -253,8 +253,8 @@ def test_registered_under_name() -> None:
 
 
 def _enriched(fixture: str, title: str):
-    from ergon_tracker.enrich import enrich_in_place
-    from ergon_tracker.models import JobPosting
+    from ergon.enrich import enrich_in_place
+    from ergon.models import JobPosting
 
     job = JobPosting.create(
         source="greenhouse",
@@ -287,8 +287,8 @@ def test_btig_equity_research_real_jd() -> None:
 
 
 def test_enrich_never_overwrites_provider_degree() -> None:
-    from ergon_tracker.enrich import enrich_in_place
-    from ergon_tracker.models import JobPosting
+    from ergon.enrich import enrich_in_place
+    from ergon.models import JobPosting
 
     job = JobPosting.create(
         source="s",
@@ -307,14 +307,14 @@ def test_enrich_never_overwrites_provider_degree() -> None:
 
 
 def _job(**kw: object):
-    from ergon_tracker.models import JobPosting
+    from ergon.models import JobPosting
 
     base = {"source": "s", "source_job_id": "1", "company": "Acme", "title": "Engineer", **kw}
     return JobPosting.create(**base)  # type: ignore[arg-type]
 
 
 def test_max_degree_filter_excludes_even_preferred_advanced_degrees() -> None:
-    from ergon_tracker.models import SearchQuery
+    from ergon.models import SearchQuery
 
     william_blair_like = _job(degree_min="phd_md", degree_required=False)
     bachelor_job = _job(degree_min="bachelor", degree_required=True)
@@ -336,7 +336,7 @@ def test_max_degree_filter_excludes_even_preferred_advanced_degrees() -> None:
 def test_max_degree_rejects_invalid_value() -> None:
     import pydantic
 
-    from ergon_tracker.models import SearchQuery
+    from ergon.models import SearchQuery
 
     with pytest.raises(pydantic.ValidationError):
         SearchQuery(max_degree="postdoc")  # type: ignore[arg-type]

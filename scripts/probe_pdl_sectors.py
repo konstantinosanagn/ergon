@@ -17,11 +17,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.dedup import normalize_company  # noqa: E402
-from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
+from ergon.dedup import normalize_company  # noqa: E402
+from ergon.registry.store import SeedRegistry  # noqa: E402
 
 CROSSWALK_PATH = ROOT / "scripts" / "linkedin_industry_to_sector.json"
-SECTORS_PATH = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "sectors.json"
+SECTORS_PATH = ROOT / "src" / "ergon" / "registry" / "data" / "sectors.json"
 GOLD_PATH = ROOT / "tests" / "fixtures" / "sector_corpus.jsonl"
 
 

@@ -47,7 +47,7 @@ sends `If-None-Match`/`If-Modified-Since` only when validators are provided.
 
 ### Task 2: Provider opt-in `conditional_url(token)`
 
-**Files:** `src/ergon_tracker/providers/base.py` (optional protocol method, default None),
+**Files:** `src/ergon/providers/base.py` (optional protocol method, default None),
 `greenhouse.py`, `lever.py`, `ashby.py`, `smartrecruiters.py`; tests in `tests/test_providers_*`.
 
 - [ ] **Step 1:** Add to the `Provider` protocol an optional `def conditional_url(self, token) ->

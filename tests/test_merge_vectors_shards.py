@@ -9,7 +9,7 @@ import sqlite3
 
 import pytest
 
-from ergon_tracker.index.rich import _ensure_schema
+from ergon.index.rich import _ensure_schema
 
 mvs = pytest.importorskip("scripts.merge_vectors_shards", reason="run from repo root")
 

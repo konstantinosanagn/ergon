@@ -116,9 +116,7 @@ async def main() -> None:
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        print(
-            "needs Playwright: uv pip install ergon-tracker[browser] && playwright install chromium"
-        )
+        print("needs Playwright: uv pip install ergon[browser] && playwright install chromium")
         sys.exit(1)
 
     targets = json.loads(TARGETS.read_text())[args.offset : args.offset + args.limit]

@@ -14,8 +14,8 @@ path -- this script never touches the core index itself.
 Usage:
   uv run python scripts/merge_detail_shards.py --shards-dir dist --out dist/index-detail.sqlite
 
-Reuses ``ergon_tracker.index.detail.open_detail`` for schema (no duplicated DDL) -- that's the
-only dependency on the ``ergon_tracker`` package; otherwise stdlib only (sqlite3, argparse, glob
+Reuses ``ergon.index.detail.open_detail`` for schema (no duplicated DDL) -- that's the
+only dependency on the ``ergon`` package; otherwise stdlib only (sqlite3, argparse, glob
 via ``Path.glob``).
 """
 
@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.index.detail import open_detail  # noqa: E402
+from ergon.index.detail import open_detail  # noqa: E402
 
 _SHARD_GLOB = "index-detail-shard-*.sqlite"
 

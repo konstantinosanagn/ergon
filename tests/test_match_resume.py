@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker import mcp_server
-from ergon_tracker.models import JobPosting, Location, RemoteType
+from ergon import mcp_server
+from ergon.models import JobPosting, Location, RemoteType
 
 
 def _job(title):
@@ -27,9 +27,9 @@ class _FakeReranker:
 
 def test_ranks_by_semantic_fit(monkeypatch):
     pool = [_job("Backend Engineer"), _job("ML Engineer"), _job("Sales Rep")]
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: list(pool))
+    monkeypatch.setattr("ergon.index.router.try_index", lambda q: list(pool))
     monkeypatch.setattr(
-        "ergon_tracker.semantic.get_semantic_reranker",
+        "ergon.semantic.get_semantic_reranker",
         lambda *a, **k: _FakeReranker(
             {"ML Engineer": 0.91, "Backend Engineer": 0.5, "Sales Rep": 0.1}
         ),
@@ -42,12 +42,12 @@ def test_ranks_by_semantic_fit(monkeypatch):
 
 def test_degrades_to_lexical_without_semantic_extra(monkeypatch):
     pool = [_job("Backend Engineer"), _job("Marketing Lead")]
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: list(pool))
+    monkeypatch.setattr("ergon.index.router.try_index", lambda q: list(pool))
 
     def boom(*a, **k):
         raise ImportError("fastembed not installed")
 
-    monkeypatch.setattr("ergon_tracker.semantic.get_semantic_reranker", boom)
+    monkeypatch.setattr("ergon.semantic.get_semantic_reranker", boom)
     res = mcp_server.match_resume(
         resume="senior backend engineer", keywords="backend engineer", limit=5
     )
@@ -56,13 +56,13 @@ def test_degrades_to_lexical_without_semantic_extra(monkeypatch):
 
 
 def test_index_unavailable_is_graceful(monkeypatch):
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: None)
+    monkeypatch.setattr("ergon.index.router.try_index", lambda q: None)
     res = mcp_server.match_resume(resume="anything")
     assert res["count"] == 0 and "index unavailable" in res["note"]
 
 
 def test_empty_pool_and_empty_resume(monkeypatch):
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", lambda q: [])
+    monkeypatch.setattr("ergon.index.router.try_index", lambda q: [])
     assert "loosen" in mcp_server.match_resume(resume="x")["note"]
     assert "provide" in mcp_server.match_resume(resume="   ")["note"]  # short-circuits before index
 
@@ -77,6 +77,6 @@ def test_defaults_max_last_seen_age_days_21(monkeypatch):
         captured["q"] = q
         return []
 
-    monkeypatch.setattr("ergon_tracker.index.router.try_index", fake_try_index)
+    monkeypatch.setattr("ergon.index.router.try_index", fake_try_index)
     mcp_server.match_resume(resume="anything")
     assert captured["q"].max_last_seen_age_days == 21

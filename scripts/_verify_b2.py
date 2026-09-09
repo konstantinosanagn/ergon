@@ -5,9 +5,9 @@ import sys
 import anyio
 
 sys.path.insert(0, "src")
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import SearchQuery
-from ergon_tracker.providers.base import get_provider, load_builtins
+from ergon.http import AsyncFetcher
+from ergon.models import SearchQuery
+from ergon.providers.base import get_provider, load_builtins
 
 load_builtins()
 

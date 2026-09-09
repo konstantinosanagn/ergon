@@ -5,8 +5,8 @@ that the returned count matches exactly the sidecar-matched rows."""
 
 import sqlite3
 
-from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.detail import detail_sig, merge_detail_into_index, open_detail
+from ergon.index.db import fresh_db
+from ergon.index.detail import detail_sig, merge_detail_into_index, open_detail
 
 
 def _mk_real_index(tmp_path, job_rows):

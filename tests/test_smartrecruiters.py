@@ -9,11 +9,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.smartrecruiters import SmartRecruitersProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -173,7 +173,7 @@ async def test_normalize_detects_hybrid() -> None:
 
 
 def test_normalize_remote_flag() -> None:
-    from ergon_tracker.models import RawJob
+    from ergon.models import RawJob
 
     provider = SmartRecruitersProvider()
     payload = {
@@ -196,7 +196,7 @@ async def test_fetch_detail_includes_additional_information_pay_section() -> Non
     # can recover the range (SR was 5.7% salary because this section was dropped).
     import respx
 
-    from ergon_tracker.index.detail import DetailRef
+    from ergon.index.detail import DetailRef
 
     posting = {
         "jobAd": {
@@ -226,7 +226,7 @@ async def test_fetch_detail_includes_additional_information_pay_section() -> Non
     assert body is not None
     assert "$88,000 - $95,000" in body  # the pay section is present
     assert "5+ years" in body  # qualifications still included
-    from ergon_tracker.extract.comp import parse_salary
+    from ergon.extract.comp import parse_salary
 
     sal = parse_salary(body)
     assert sal is not None and sal.min_amount == 88_000 and sal.max_amount == 95_000
@@ -236,7 +236,7 @@ async def test_fetch_detail_recovers_when_job_description_empty() -> None:
     # Measured bug (fixed): ~40% of failed SR postings have an EMPTY jobDescription.text but real
     # content in qualifications/additionalInformation. The parser must NOT bail on an empty
     # jobDescription -- it must return whatever JD-relevant sections carry text.
-    from ergon_tracker.index.detail import DetailRef
+    from ergon.index.detail import DetailRef
 
     posting = {
         "jobAd": {
@@ -269,7 +269,7 @@ async def test_fetch_detail_raises_when_only_company_boilerplate() -> None:
     # 404-vs-transient contract this is NOT a verified soft-404 (the posting still 200s with real
     # data), so it must RAISE (indeterminate/keep), not return None (which would wrongly expire a
     # still-live posting via the freshness sweep's confirm_departed).
-    from ergon_tracker.index.detail import DetailRef
+    from ergon.index.detail import DetailRef
 
     posting = {
         "jobAd": {

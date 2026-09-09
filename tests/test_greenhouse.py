@@ -9,9 +9,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.greenhouse import GreenhouseProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.greenhouse import GreenhouseProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -142,7 +142,7 @@ async def test_normalize_remote_from_metadata_and_location() -> None:
 # boards, ~100% of jobs carry it while ~0% inline it in `content`, so reading metadata is what
 # actually recovers salary. Shapes verified live against boards-api.greenhouse.io/.../sofi.
 
-from ergon_tracker.models import SalaryInterval  # noqa: E402
+from ergon.models import SalaryInterval  # noqa: E402
 
 
 def _sal(md: object):

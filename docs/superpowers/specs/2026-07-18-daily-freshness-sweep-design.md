@@ -49,7 +49,7 @@ NOT hard-delete and must be non-fatal.
   per-request). Fits the 330-min ceiling with wide margin; free on the public repo.
 
 ## Components / files
-- `src/ergon_tracker/index/freshness.py` (new) — the sweep engine: per-board id-set fetch routing,
+- `src/ergon/index/freshness.py` (new) — the sweep engine: per-board id-set fetch routing,
   diff, per-posting-confirm for search-index sources, `status='expired'` writer, sidecar.
 - Provider `list_ids(token, fetcher) -> set[str]` light path (or reuse existing list endpoints with a
   no-enrich flag) on each of the 15 providers; greenhouse `conditional_url` fix.

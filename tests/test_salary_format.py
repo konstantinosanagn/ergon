@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.models import Salary, SalaryInterval
+from ergon.models import Salary, SalaryInterval
 
 
 @pytest.mark.parametrize(

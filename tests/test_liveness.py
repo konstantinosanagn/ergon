@@ -1,4 +1,4 @@
-"""Stress tests for the build-time job-posting LIVENESS pass (src/ergon_tracker/index/liveness.py).
+"""Stress tests for the build-time job-posting LIVENESS pass (src/ergon/index/liveness.py).
 
 Everything here is OFFLINE: `fetch_board`/`fetch_detail` are injected fakes (never real network),
 `now` is injected (no wall-clock reads), matching the pattern already used by
@@ -11,10 +11,10 @@ import sqlite3
 
 import anyio
 
-from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
-from ergon_tracker.index.query import search_rows, whats_new_rows
-from ergon_tracker.models import DetailFetch, SearchQuery
+from ergon.index.db import fresh_db
+from ergon.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
+from ergon.index.query import search_rows, whats_new_rows
+from ergon.models import DetailFetch, SearchQuery
 
 _DAY0 = "2026-07-01T00:00:00+00:00"
 _DAY7 = "2026-07-08T00:00:00+00:00"

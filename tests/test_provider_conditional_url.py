@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ergon_tracker.providers.ashby import AshbyProvider
-from ergon_tracker.providers.base import get_provider, load_builtins
-from ergon_tracker.providers.greenhouse import GreenhouseProvider
-from ergon_tracker.providers.lever import LeverProvider
+from ergon.providers.ashby import AshbyProvider
+from ergon.providers.base import get_provider, load_builtins
+from ergon.providers.greenhouse import GreenhouseProvider
+from ergon.providers.lever import LeverProvider
 
 
 def test_opted_in_providers_return_exact_fetch_url():

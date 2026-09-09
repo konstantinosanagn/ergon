@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **Free · offline · CPU-only · laptop-safe.** No paid APIs, no network at train time beyond the one-time fastembed model download. Heavy work is one-time/offline, never in the daily build.
-- **sklearn appears ONLY under `scripts/`.** `src/ergon_tracker/**` inference is **numpy-only**. Rationale: mypy runs `strict` on `files = ["src/ergon_tracker"]` only; numpy is already `follow_imports = skip`; sklearn is untyped and must never enter the type-checked package.
+- **sklearn appears ONLY under `scripts/`.** `src/ergon/**` inference is **numpy-only**. Rationale: mypy runs `strict` on `files = ["src/ergon"]` only; numpy is already `follow_imports = skip`; sklearn is untyped and must never enter the type-checked package.
 - **No new hard runtime dependency.** numpy is lazy-imported inside functions (the repo's existing pattern, see `index/rich.py`). numpy added to the `dev` extra so CI runs the inference tests; sklearn added to a separate `sector-train` extra.
 - **Memory-bounded embedding is mandatory.** Embed via `SemanticReranker.embed_texts(..., parallel=None)` (single-process — no per-worker model copies; this is the fix for CI OOM run 28070765535, commit `70a74c7`). Every heavy step logs peak RSS + wall time and is stress-tested on a small `--sample` before any full run.
 - **Concurrency is env-gated, laptop-safe by default.** Any worker/`n_jobs` count follows the repo idiom: explicit env var wins → else `max(2, cpu-2)` on CI → else `1` local. New knob: `ERGON_SECTOR_JOBS`.
@@ -21,10 +21,10 @@
 
 ## Key Facts (verified against the codebase)
 
-- **Extractor API:** `SectorExtractor.extract(inp: ExtractInput) -> str | None` (`src/ergon_tracker/extract/sector.py:392`). `ExtractInput` fields used: `company`, `company_key`, `company_domain`, `title` (`src/ergon_tracker/extract/base.py:21-35`).
+- **Extractor API:** `SectorExtractor.extract(inp: ExtractInput) -> str | None` (`src/ergon/extract/sector.py:392`). `ExtractInput` fields used: `company`, `company_key`, `company_domain`, `title` (`src/ergon/extract/base.py:21-35`).
 - **Corpus:** `tests/fixtures/sector_corpus.jsonl`, 699 records, schema `{"company","company_key","domain","sector"|null,"src"}` (`tests/test_sector_recall.py:11,24`). Example: `{"company":"Apple","company_key":"apple","domain":"jobs.apple.com","sector":"Consumer/Lifestyle","src":"real"}`.
-- **Embedder:** `SemanticReranker.embed_texts(texts, *, batch_size=256, parallel=None) -> list[list[float]]` (`src/ergon_tracker/semantic.py:106-118`); `get_semantic_reranker()` memoizes (`:162`). Model `BAAI/bge-small-en-v1.5`, 384-dim float32.
-- **Data artifacts** live in `src/ergon_tracker/registry/data/` and auto-ship (hatchling `packages=["src/ergon_tracker"]`). Runtime load via `importlib.resources.files("ergon_tracker.registry.data") / "<file>"` with `FileNotFoundError`/`ModuleNotFoundError` tolerance + `@lru_cache(maxsize=1)` (pattern: `extract/sector.py:368-386`, `extract/geo.py:449`).
+- **Embedder:** `SemanticReranker.embed_texts(texts, *, batch_size=256, parallel=None) -> list[list[float]]` (`src/ergon/semantic.py:106-118`); `get_semantic_reranker()` memoizes (`:162`). Model `BAAI/bge-small-en-v1.5`, 384-dim float32.
+- **Data artifacts** live in `src/ergon/registry/data/` and auto-ship (hatchling `packages=["src/ergon"]`). Runtime load via `importlib.resources.files("ergon.registry.data") / "<file>"` with `FileNotFoundError`/`ModuleNotFoundError` tolerance + `@lru_cache(maxsize=1)` (pattern: `extract/sector.py:368-386`, `extract/geo.py:449`).
 - **Env-gate idiom** (`index/build.py:788-795`): `env=os.environ.get("ERGON_SHARD_WORKERS"); if env: int(env) elif os.environ.get("CI"): max(2,(os.cpu_count() or 4)-2) else: 1`.
 - **pytest:** `testpaths=["tests"]`, `asyncio_mode="auto"`, `addopts="-ra"`. Run one test: `.venv/bin/pytest tests/test_x.py::test_y -v`.
 - **numpy is NOT a core dep; sklearn is absent.** `.npz`/`np.savez` not yet used anywhere. `requires-python=">=3.10"`.
@@ -34,8 +34,8 @@
 ## File Structure
 
 **Create:**
-- `src/ergon_tracker/extract/sector_features.py` — pure, numpy-lazy feature transforms shared by train + (future) runtime: input-text builder, TLD one-hot, CL2N, feature assembly. One responsibility: turn `(embedding, domain, name, title)` into a model-ready feature vector, deterministically.
-- `src/ergon_tracker/extract/sector_clf.py` — the numpy-only model container + inference: `.npz` save/load and `SectorClassifier.predict()`. One responsibility: reproduce the trained model's decision (logits → calibrated probs → 3-gate abstention) with numpy only.
+- `src/ergon/extract/sector_features.py` — pure, numpy-lazy feature transforms shared by train + (future) runtime: input-text builder, TLD one-hot, CL2N, feature assembly. One responsibility: turn `(embedding, domain, name, title)` into a model-ready feature vector, deterministically.
+- `src/ergon/extract/sector_clf.py` — the numpy-only model container + inference: `.npz` save/load and `SectorClassifier.predict()`. One responsibility: reproduce the trained model's decision (logits → calibrated probs → 3-gate abstention) with numpy only.
 - `scripts/train_sector_classifier.py` — offline trainer (sklearn): embed corpus → CV/`C`-sweep logreg → per-class Platt → centroids → threshold sweep → export `.npz` + `metrics.json`. `--sample` stress mode.
 - `scripts/eval_sector_classifier.py` — benchmark/report: accuracy-at-coverage, macro-F1, per-class F1, risk–coverage table, vs 72.4%/26.7% baseline; optional `--ceiling` deberta zero-shot (dev-only, guarded).
 - `tests/test_sector_features.py` — unit tests for the feature transforms (numpy-only).
@@ -46,7 +46,7 @@
 - `pyproject.toml` — add `sector-train` extra; add `numpy` to `dev`.
 - `docs/extraction-baseline.md` — after the PoC run, record the Stage-1 result + go/no-go (Task 8).
 
-**Deliberately NOT touched in Stage 1:** `src/ergon_tracker/extract/sector.py` (no Tier-2 wiring until Stage 3), `tests/test_sector_recall.py` (the deterministic gate stays intact).
+**Deliberately NOT touched in Stage 1:** `src/ergon/extract/sector.py` (no Tier-2 wiring until Stage 3), `tests/test_sector_recall.py` (the deterministic gate stays intact).
 
 ---
 
@@ -54,7 +54,7 @@
 
 **Files:**
 - Modify: `pyproject.toml:33-52` (extras)
-- Create: `src/ergon_tracker/extract/sector_features.py`
+- Create: `src/ergon/extract/sector_features.py`
 - Test: `tests/test_sector_features.py`
 
 **Interfaces:**
@@ -77,7 +77,7 @@ And append `"numpy>=1.26",` to the `dev = [ ... ]` list (last entry before the c
 # tests/test_sector_features.py
 from __future__ import annotations
 
-from ergon_tracker.extract.sector_features import (
+from ergon.extract.sector_features import (
     TLD_VOCAB,
     build_input_text,
     tld_features,
@@ -109,12 +109,12 @@ def test_tld_features_are_fixed_width_and_grouped() -> None:
 - [ ] **Step 3: Run it to verify it fails**
 
 Run: `.venv/bin/pytest tests/test_sector_features.py -v`
-Expected: FAIL — `ModuleNotFoundError: ergon_tracker.extract.sector_features`.
+Expected: FAIL — `ModuleNotFoundError: ergon.extract.sector_features`.
 
 - [ ] **Step 4: Implement the module (this part of it)**
 
 ```python
-# src/ergon_tracker/extract/sector_features.py
+# src/ergon/extract/sector_features.py
 """Deterministic feature transforms for the sector classifier.
 
 Pure and dependency-light: numpy is imported lazily inside the vector-math helpers (the repo
@@ -181,9 +181,9 @@ Expected: PASS (3 passed).
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-.venv/bin/ruff check src/ergon_tracker/extract/sector_features.py tests/test_sector_features.py
-.venv/bin/ruff format src/ergon_tracker/extract/sector_features.py tests/test_sector_features.py
-git add pyproject.toml src/ergon_tracker/extract/sector_features.py tests/test_sector_features.py
+.venv/bin/ruff check src/ergon/extract/sector_features.py tests/test_sector_features.py
+.venv/bin/ruff format src/ergon/extract/sector_features.py tests/test_sector_features.py
+git add pyproject.toml src/ergon/extract/sector_features.py tests/test_sector_features.py
 git commit -m "feat(sector): feature transforms (input-text + TLD one-hot) + train extra
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 2: CL2N + feature assembly (vector math)
 
 **Files:**
-- Modify: `src/ergon_tracker/extract/sector_features.py`
+- Modify: `src/ergon/extract/sector_features.py`
 - Test: `tests/test_sector_features.py`
 
 **Interfaces:**
@@ -209,7 +209,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```python
 # append to tests/test_sector_features.py
 import numpy as np  # noqa: E402
-from ergon_tracker.extract.sector_features import assemble, cl2n  # noqa: E402
+from ergon.extract.sector_features import assemble, cl2n  # noqa: E402
 
 
 def test_cl2n_centers_then_unit_normalizes() -> None:
@@ -245,7 +245,7 @@ Expected: FAIL — `ImportError: cannot import name 'cl2n'`.
 - [ ] **Step 3: Implement**
 
 ```python
-# append to src/ergon_tracker/extract/sector_features.py
+# append to src/ergon/extract/sector_features.py
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # keep numpy out of the import-time path
@@ -292,7 +292,7 @@ Expected: PASS (6 passed).
 Run: `.venv/bin/mypy` — Expected: no new errors (numpy is `follow_imports=skip`; the quoted annotations avoid an import-time numpy dependency).
 
 ```bash
-git add src/ergon_tracker/extract/sector_features.py tests/test_sector_features.py
+git add src/ergon/extract/sector_features.py tests/test_sector_features.py
 git commit -m "feat(sector): CL2N + feature assembly (embedding + TLD block)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -303,7 +303,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 3: `.npz` model container + numpy-only inference
 
 **Files:**
-- Create: `src/ergon_tracker/extract/sector_clf.py`
+- Create: `src/ergon/extract/sector_clf.py`
 - Test: `tests/test_sector_clf_roundtrip.py`
 
 **Interfaces:**
@@ -326,7 +326,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ergon_tracker.extract.sector_clf import load_sector_model, save_sector_model
+from ergon.extract.sector_clf import load_sector_model, save_sector_model
 
 
 def _tiny_model(tmp_path):
@@ -369,12 +369,12 @@ def test_missing_file_returns_none() -> None:
 - [ ] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/pytest tests/test_sector_clf_roundtrip.py -v`
-Expected: FAIL — `ModuleNotFoundError: ergon_tracker.extract.sector_clf`.
+Expected: FAIL — `ModuleNotFoundError: ergon.extract.sector_clf`.
 
 - [ ] **Step 3: Implement `sector_clf.py`**
 
 ```python
-# src/ergon_tracker/extract/sector_clf.py
+# src/ergon/extract/sector_clf.py
 """Numpy-only sector classifier: load an exported .npz and reproduce its calibrated, abstaining
 decision. No sklearn, no fastembed here — the caller supplies the embedding. Tolerant of a missing
 artifact (returns None), mirroring ``load_sector_index``.
@@ -517,7 +517,7 @@ The meaningful invariant: with abstention disabled and identity Platt, our numpy
 
 ```python
 # append to tests/test_sector_clf_roundtrip.py
-from ergon_tracker.extract.sector_features import assemble, cl2n  # noqa: E402
+from ergon.extract.sector_features import assemble, cl2n  # noqa: E402
 
 
 def test_predicted_class_matches_sklearn(tmp_path) -> None:
@@ -551,10 +551,10 @@ def test_predicted_class_matches_sklearn(tmp_path) -> None:
 
 ```bash
 .venv/bin/pytest tests/test_sector_clf_roundtrip.py -v
-.venv/bin/ruff check src/ergon_tracker/extract/sector_clf.py tests/test_sector_clf_roundtrip.py
-.venv/bin/ruff format src/ergon_tracker/extract/sector_clf.py tests/test_sector_clf_roundtrip.py
+.venv/bin/ruff check src/ergon/extract/sector_clf.py tests/test_sector_clf_roundtrip.py
+.venv/bin/ruff format src/ergon/extract/sector_clf.py tests/test_sector_clf_roundtrip.py
 .venv/bin/mypy
-git add src/ergon_tracker/extract/sector_clf.py tests/test_sector_clf_roundtrip.py
+git add src/ergon/extract/sector_clf.py tests/test_sector_clf_roundtrip.py
 git commit -m "feat(sector): numpy-only .npz model container + inference (calibrated, abstaining)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -644,8 +644,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.extract.sector_features import build_input_text  # noqa: E402
-from ergon_tracker.semantic import get_semantic_reranker  # noqa: E402
+from ergon.extract.sector_features import build_input_text  # noqa: E402
+from ergon.semantic import get_semantic_reranker  # noqa: E402
 
 
 def _peak_rss_mb() -> float:
@@ -838,8 +838,8 @@ def sweep_thresholds(probs, feats, centroids, y_idx, *, target_precision: float)
 def main(argv: list[str]) -> None:
     from sklearn.model_selection import cross_val_predict, StratifiedKFold
     from sklearn.linear_model import LogisticRegression
-    from ergon_tracker.extract.sector_features import assemble, cl2n
-    from ergon_tracker.extract.sector_clf import save_sector_model
+    from ergon.extract.sector_features import assemble, cl2n
+    from ergon.extract.sector_clf import save_sector_model
 
     corpus, out, sample, folds, target = None, ROOT / "dist" / "sector_clf.npz", None, 5, 0.85
     i = 0
@@ -969,7 +969,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
 from scripts.train_sector_classifier import embed_records, load_corpus  # noqa: E402
-from ergon_tracker.extract.sector_clf import load_sector_model  # noqa: E402
+from ergon.extract.sector_clf import load_sector_model  # noqa: E402
 
 BASELINE = {"accuracy_when_covered": 0.724, "coverage": 0.267}
 

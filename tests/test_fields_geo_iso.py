@@ -8,8 +8,8 @@ Stage-1 final-review follow-up: ``normalize_geo`` canonicalizes an already-set
 ("GB" stayed "GB" instead of becoming "United Kingdom"), weakening country filtering.
 """
 
-from ergon_tracker.extract.geo import normalize_geo
-from ergon_tracker.models import Location
+from ergon.extract.geo import normalize_geo
+from ergon.models import Location
 
 
 def test_explicit_country_gb_expands_to_united_kingdom() -> None:

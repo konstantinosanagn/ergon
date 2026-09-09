@@ -203,8 +203,8 @@ def test_dirty_domain_rejected_by_shape_gate(tmp_path, monkeypatch) -> None:
 def test_format_round_trip_loads_and_resolves(tmp_path, monkeypatch, empty_index) -> None:
     """Written file re-parses, a SeedRegistry built over it loads, and a newly-added domain
     resolves via lookup_domain."""
-    from ergon_tracker.registry import store as store_mod
-    from ergon_tracker.registry.store import SeedRegistry
+    from ergon.registry import store as store_mod
+    from ergon.registry.store import SeedRegistry
 
     seed = tmp_path / "seed.json"
     make_seed(

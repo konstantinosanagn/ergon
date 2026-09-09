@@ -1,7 +1,7 @@
 # Expansion Roadmap — going "super extensive" by borrowing from every competitor
 
 > **Goal (2026-06-20):** drop the original self-imposed constraints (free-only / ATS-API-direct /
-> no-browser) where they hold us back, and make `ergon_tracker` the most extensive job-discovery
+> no-browser) where they hold us back, and make `ergon` the most extensive job-discovery
 > system — in *coverage*, *capabilities*, and *distribution* — by taking the best idea from each
 > competitor, direct or indirect.
 >
@@ -67,8 +67,8 @@
 The MCP ecosystem is the distribution surface; we have the server but it's under-leveraged.
 
 ### 2A. Distribution — the real gap (highest-leverage MCP move)
-- **Publish to PyPI** + a one-line MCP config so anyone can `pip install ergon-tracker` and drop
-  `ergon-tracker-mcp` into Claude/Cursor. Today onboarding is *clone + `uv pip install -e`*, which
+- **Publish to PyPI** + a one-line MCP config so anyone can `pip install ergon` and drop
+  `ergon-mcp` into Claude/Cursor. Today onboarding is *clone + `uv pip install -e`*, which
   caps adoption to ~zero — directly undercutting the "MCP is the surface" thesis.
 
 ### 2B. Agent capabilities competitors' MCPs have (that we can do cleanly)

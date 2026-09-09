@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ergon-tracker"
+name = "ergon"
 version = "0.1.0"
 description = "Unified, reliable, typed job-fetching SDK that combines and canonicalizes free job sources (ATS feeds + aggregators)."
 readme = "README.md"
@@ -37,7 +37,7 @@ pandas = ["pandas>=2.2"]
 polars = ["polars>=0.20"]
 mcp = ["mcp>=2.2,<3"]  # 2.x renamed FastMCP -> MCPServer
 semantic = ["fastembed>=0.3"]
-# HTTP QUERY (RFC 10008) search surface — only needed to RUN the server (ergon_tracker.serve.serve);
+# HTTP QUERY (RFC 10008) search surface — only needed to RUN the server (ergon.serve.serve);
 # the ASGI app itself is dependency-light and testable in-process via httpx (a core dep).
 serve = ["uvicorn>=0.30"]
 # Offline-only: the Tier-2 token-mint shell (scripts/token_mint.py). Never on the runtime/request path.
@@ -59,22 +59,22 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/konstantinosanagn/ergon-tracker"
-Source = "https://github.com/konstantinosanagn/ergon-tracker"
+Homepage = "https://github.com/konstantinosanagn/ergon"
+Source = "https://github.com/konstantinosanagn/ergon"
 
 [project.scripts]
-ergon-tracker = "ergon_tracker.cli:app"
-ergon-tracker-mcp = "ergon_tracker.mcp_server:main"
+ergon = "ergon.cli:app"
+ergon-mcp = "ergon.mcp_server:main"
 
 # Third-party providers register here:
-# [project.entry-points."ergon_tracker.providers"]
+# [project.entry-points."ergon.providers"]
 # myats = "my_pkg.provider:MyATSProvider"
 
 [tool.hatch.build.targets.wheel]
 # All data files (registry/data/*.json, index/schema.sql) are git-tracked and live INSIDE the
 # package dir, so `packages` already ships them. A force-include remapping the same paths would
 # double-add them and fail the wheel build ("A second file is being added at the same path").
-packages = ["src/ergon_tracker"]
+packages = ["src/ergon"]
 
 [tool.ruff]
 line-length = 100
@@ -95,7 +95,7 @@ python_version = "3.10"
 strict = true
 warn_unused_ignores = true
 ignore_missing_imports = true
-files = ["src/ergon_tracker"]
+files = ["src/ergon"]
 
 # numpy's bundled stubs (pulled in via pandas/polars) use PEP 695 `type` statements that mypy
 # rejects under python_version 3.10, breaking CI on the 3.12/3.13 matrix. We don't type-check

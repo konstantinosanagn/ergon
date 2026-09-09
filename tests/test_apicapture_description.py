@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import RawJob
-from ergon_tracker.providers.apicapture import ApiCaptureProvider, _load_specs
+from ergon.models import RawJob
+from ergon.providers.apicapture import ApiCaptureProvider, _load_specs
 
 # --- specs newly mapped in this harvest: token -> (description dot-path, marker JD in the fixture).
 # The dot-path MUST equal the value now stored in apicapture.json; the fixture places the marker at

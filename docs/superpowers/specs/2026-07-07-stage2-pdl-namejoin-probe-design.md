@@ -54,7 +54,7 @@ PDL Free dump (name, industry)  ──stream──►  name-join  ──►  cro
   records the source + license in its report.
 
 ### Unit 2 — name-join (parallel, memory-bounded)
-- Build the **target set** once by applying `ergon_tracker.dedup.normalize_company` to the best
+- Build the **target set** once by applying `ergon.dedup.normalize_company` to the best
   available name on each side: the 700-gold uses its display `company` field; the 58k registry uses
   the `seed.json` **key (an ATS slug)**, since seed carries no display name. **Known limitation:**
   normalizing a slug (`acmecorp`) and a display name (`Acme Corp`) can diverge (suffix fusion,
@@ -113,7 +113,7 @@ PDL Free dump (name, industry)  ──stream──►  name-join  ──►  cro
 
 ## Deliverables, dependencies, artifacts
 - **Deps:** none new — stdlib + json (stream lines; no pandas/sklearn). Reuses
-  `ergon_tracker.dedup.normalize_company` and reads `seed.json` / `sectors.json` /
+  `ergon.dedup.normalize_company` and reads `seed.json` / `sectors.json` /
   `tests/fixtures/sector_corpus.jsonl`.
 - **Ships nothing to runtime.** `SectorExtractor` and `sectors.json` are untouched; the probe only
   measures. A gazetteer artifact is produced only later, in the full pipeline, and only on GO.

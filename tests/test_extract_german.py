@@ -7,12 +7,12 @@ and one explicit English regression check per extractor to prove the default pat
 
 from __future__ import annotations
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.comp import CompExtractor, parse_salary
-from ergon_tracker.extract.degree import DegreeExtractor
-from ergon_tracker.extract.yoe import YoeExtractor
-from ergon_tracker.models import JobPosting, SalaryInterval
+from ergon.enrich import enrich_in_place
+from ergon.extract.base import ExtractInput
+from ergon.extract.comp import CompExtractor, parse_salary
+from ergon.extract.degree import DegreeExtractor
+from ergon.extract.yoe import YoeExtractor
+from ergon.models import JobPosting, SalaryInterval
 
 _YOE = YoeExtractor()
 _DEGREE = DegreeExtractor()

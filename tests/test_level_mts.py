@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker.extract.level import infer_level
-from ergon_tracker.models import JobLevel
+from ergon.extract.level import infer_level
+from ergon.models import JobLevel
 
 
 def test_mts_is_ic_level_not_staff() -> None:

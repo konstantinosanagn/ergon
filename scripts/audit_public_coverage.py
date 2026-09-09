@@ -24,12 +24,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from company_resolve import build_key_index, match_keys  # noqa: E402
 
-from ergon_tracker.dedup import normalize_company  # noqa: E402
-from ergon_tracker.index.cache import _default_cache_dir  # noqa: E402
-from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
+from ergon.dedup import normalize_company  # noqa: E402
+from ergon.index.cache import _default_cache_dir  # noqa: E402
+from ergon.registry.store import SeedRegistry  # noqa: E402
 
 SEC_URL = "https://www.sec.gov/files/company_tickers.json"
-_UA = "ergon-tracker research konstantinos.a@tavily.com"  # SEC requires a UA with contact
+_UA = "ergon research konstantinos.a@tavily.com"  # SEC requires a UA with contact
 
 
 def fetch_sec(cache: Path) -> dict[str, str]:

@@ -19,7 +19,7 @@ pydantic, pytest. GitHub Actions for the daily cron.
 ---
 
 ### Task 1: `BoardState` model + persistence
-- Create `src/ergon_tracker/index/scheduler.py` (`BoardState` dataclass/pydantic; `load_state`/`save_state` JSON).
+- Create `src/ergon/index/scheduler.py` (`BoardState` dataclass/pydantic; `load_state`/`save_state` JSON).
 - Test `tests/test_index_scheduler.py`: round-trip load/save; tolerant of missing file (empty).
 
 ### Task 2: Tier policy (pure)

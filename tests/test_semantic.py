@@ -6,8 +6,8 @@ import importlib.util
 
 import pytest
 
-from ergon_tracker.models import JobPosting, Location, SearchQuery
-from ergon_tracker.ranking import rank
+from ergon.models import JobPosting, Location, SearchQuery
+from ergon.ranking import rank
 
 _HAS_FASTEMBED = importlib.util.find_spec("fastembed") is not None
 
@@ -50,7 +50,7 @@ def test_per_call_reranker_reorders_results() -> None:
 
 
 def test_get_semantic_reranker_importable() -> None:
-    from ergon_tracker.semantic import DEFAULT_MODEL, get_semantic_reranker
+    from ergon.semantic import DEFAULT_MODEL, get_semantic_reranker
 
     r = get_semantic_reranker()
     assert r.model_name == DEFAULT_MODEL
@@ -60,7 +60,7 @@ def test_get_semantic_reranker_importable() -> None:
 
 @pytest.mark.skipif(_HAS_FASTEMBED, reason="extra installed; error path only fires without it")
 def test_helpful_error_without_extra() -> None:
-    from ergon_tracker.semantic import get_semantic_reranker
+    from ergon.semantic import get_semantic_reranker
 
-    with pytest.raises(ImportError, match="ergon-tracker\\[semantic\\]"):
+    with pytest.raises(ImportError, match="ergon\\[semantic\\]"):
         get_semantic_reranker().rerank("data", [_job("Data Engineer")])

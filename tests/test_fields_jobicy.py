@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import JobLevel, RawJob
-from ergon_tracker.providers.jobicy import JobicyProvider
+from ergon.models import JobLevel, RawJob
+from ergon.providers.jobicy import JobicyProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

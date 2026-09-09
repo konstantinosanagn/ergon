@@ -53,9 +53,9 @@ from harvest_tokens import (  # noqa: E402
     probe_company,
 )
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import (  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import (  # noqa: E402
     get_provider,
     iter_providers,
     load_builtins,

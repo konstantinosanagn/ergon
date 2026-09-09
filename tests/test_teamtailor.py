@@ -15,9 +15,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.teamtailor import TeamtailorProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.teamtailor import TeamtailorProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -120,7 +120,7 @@ async def test_fetch_empty_or_missing_items() -> None:
 
 
 def test_normalize_company_falls_back_to_token() -> None:
-    from ergon_tracker.models import RawJob
+    from ergon.models import RawJob
 
     raw = RawJob(
         source="teamtailor",

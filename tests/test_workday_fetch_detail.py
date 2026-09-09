@@ -10,9 +10,9 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.workday import WorkdayProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.workday import WorkdayProvider
 
 
 class _FakeFetcher:
@@ -217,7 +217,7 @@ def test_workday_fetch_detail_recovers_structured_location() -> None:
     # The cxs response carries jobPostingInfo.country.descriptor (+ location string) even when the
     # list feed only had a "N Locations" placeholder -> DetailFetch(text, locations) so the merge
     # can fill the index row's NULL country (Workday is ~44k of the whole country gap).
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     payload = {
         "jobPostingInfo": {

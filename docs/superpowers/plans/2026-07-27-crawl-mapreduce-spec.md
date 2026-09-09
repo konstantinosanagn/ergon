@@ -45,7 +45,7 @@ All three: `fail-fast: false` (`drain-detail.yml:78`), per-shard artifact upload
 
 The correctness invariant that makes ANY crawl fan-out safe is **politeness**: `AsyncFetcher`'s per-host token bucket is a per-process structure (`freshness_shard.py:6-12`). If two boards that hit the same real backend land on two different shards, the backend sees up to `NUM_SHARDS`× the intended request rate — a self-inflicted ban.
 
-`src/ergon_tracker/index/freshness_shard.py` already solves this for boards expressed as `(source, board_token)` pairs:
+`src/ergon/index/freshness_shard.py` already solves this for boards expressed as `(source, board_token)` pairs:
 
 - `shard_boards(boards, shard, num_shards)` (`freshness_shard.py:144`) returns only this shard's slice, partitioning so **every board whose fetch contends on the same politeness bucket lands on exactly ONE shard**.
 - The bucket is `board_rate_bucket(source, token)` = `rate_key_for_host(board_host(source, token))` (`freshness_shard.py:109-117`) — the exact string `AsyncFetcher` keys its token bucket on.
@@ -85,7 +85,7 @@ The steps that genuinely need the union are all already reduce-shaped and run on
 
 ## 5. Component changes (files, functions, new args)
 
-### 5.1 `src/ergon_tracker/index/scheduler.py` — one merge helper (new)
+### 5.1 `src/ergon/index/scheduler.py` — one merge helper (new)
 
 Add a pure function (offline-testable, mirrors `load_state`/`save_state`):
 
@@ -144,7 +144,7 @@ No `_fold_network_into_fresh`, no `changed_companies_sql`, no `apply_outcome`, n
 
 ### 5.4 `scripts/merge_crawl_shards.py` — a new merge script (the REDUCE core)
 
-New file, mirroring `merge_freshness_shards.py` structure (ATTACH each shard, `INSERT OR IGNORE`, per-shard resilience, deterministic sorted order, stdlib+`ergon_tracker` importable via the `sys.path` trick at `merge_freshness_shards.py:56-59`).
+New file, mirroring `merge_freshness_shards.py` structure (ATTACH each shard, `INSERT OR IGNORE`, per-shard resilience, deterministic sorted order, stdlib+`ergon` importable via the `sys.path` trick at `merge_freshness_shards.py:56-59`).
 
 ```
 merge_crawl_shards(shard_dir, out_fresh_path, out_jd_path) -> dict
@@ -362,7 +362,7 @@ New test `tests/test_crawl_mapreduce_parity.py`. **Offline, deterministic, no ne
 
 | File | Change |
 |---|---|
-| `src/ergon_tracker/index/scheduler.py` | + `merge_states(prev, shard_states)` (pure) |
+| `src/ergon/index/scheduler.py` | + `merge_states(prev, shard_states)` (pure) |
 | `scripts/build_index.py` | `_crawl_due` gains `shard`/`num_shards` (default None); + `--crawl-shard-only` mode (MAP); + `--crawl-reduce` mode (REDUCE = today's `main()` tail minus the crawl call) |
 | `scripts/merge_crawl_shards.py` | NEW — union K fresh DBs + K JD sidecars (`INSERT OR IGNORE`, per-shard resilience) |
 | `.github/workflows/crawl-mapreduce.yml` | NEW — 20-shard `map` matrix (artifacts) + `reduce` job (release) + `notify` |

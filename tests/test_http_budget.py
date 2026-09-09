@@ -5,7 +5,7 @@ from __future__ import annotations
 import anyio
 import httpx
 
-from ergon_tracker.http import _DEFAULT_PER_HOST_CONCURRENCY, AsyncFetcher
+from ergon.http import _DEFAULT_PER_HOST_CONCURRENCY, AsyncFetcher
 
 
 def _ok_transport() -> httpx.MockTransport:

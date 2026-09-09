@@ -51,8 +51,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 # compose instead of clobbering (imported, never reinvented).
 from build_registry import SEED, seed_lock  # noqa: E402
 
-from ergon_tracker.dedup import normalize_company  # noqa: E402
-from ergon_tracker.registry.store import _normalize_domain  # noqa: E402
+from ergon.dedup import normalize_company  # noqa: E402
+from ergon.registry.store import _normalize_domain  # noqa: E402
 
 DEFAULT_INDEX = Path(
     "/private/tmp/claude-501/-Users-kanagn-Desktop-job-researcher/"

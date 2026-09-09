@@ -6,9 +6,9 @@ import json
 
 from tests.test_rich_index import FAKE, _build_rich, _job
 
-from ergon_tracker.index import router
-from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
-from ergon_tracker.models import SearchQuery
+from ergon.index import router
+from ergon.index.rich import RICH_SCHEMA_VERSION
+from ergon.models import SearchQuery
 
 
 def _publish(remote, tmp_path, jobs):
@@ -28,7 +28,7 @@ def _publish(remote, tmp_path, jobs):
 
 
 def test_vector_rerank_orders_by_cosine(tmp_path, monkeypatch):
-    from ergon_tracker.index.cache import RichCache
+    from ergon.index.cache import RichCache
 
     py = _job("py", "Python Engineer", "python kubernetes")
     nu = _job("nu", "Nurse", "nurse clinical")
@@ -45,7 +45,7 @@ def test_vector_rerank_orders_by_cosine(tmp_path, monkeypatch):
 
 def test_vector_rerank_hybrid_scores_uncovered_pool_members(tmp_path, monkeypatch):
     """Sidecar covers only `py`; `nu` is absent from job_vectors and must still be scored+kept."""
-    from ergon_tracker.index.cache import RichCache
+    from ergon.index.cache import RichCache
 
     py = _job("py", "Python Engineer", "python kubernetes")
     nu = _job("nu", "Nurse", "nurse clinical")
@@ -99,7 +99,7 @@ class _RerankFake:
 def test_vector_rerank_caps_query_time_embeddings(tmp_path, monkeypatch):
     """150 uncovered pool members, sidecar covers none of them -> exactly _UNCOVERED_EMBED_CAP (100)
     query-time embeddings, never all 150 (no regression vs. the pre-change ~100-doc rerank)."""
-    from ergon_tracker.index.cache import RichCache
+    from ergon.index.cache import RichCache
 
     cov = _job("cov", "Covered", "python")
     remote = tmp_path / "remote"
@@ -119,7 +119,7 @@ def test_vector_rerank_caps_query_time_embeddings(tmp_path, monkeypatch):
 def test_vector_rerank_keeps_beyond_cap_uncovered_in_lexical_order(tmp_path, monkeypatch):
     """The 50 uncovered jobs past the cap are NOT dropped and NOT interleaved: they appear after all
     cosine-scored jobs, in their incoming lexical (BM25) order."""
-    from ergon_tracker.index.cache import RichCache
+    from ergon.index.cache import RichCache
 
     cov = _job("cov", "Covered", "python")
     remote = tmp_path / "remote"
@@ -139,8 +139,8 @@ def test_vector_rerank_keeps_beyond_cap_uncovered_in_lexical_order(tmp_path, mon
 def test_serving_never_builds_VectorIndex(tmp_path, monkeypatch):
     """Guard on the LIVE path: a POPULATED sidecar so open_rich/vector_search genuinely execute, with
     VectorIndex patched to raise — the serving path must never construct it (~2.26GB float32)."""
-    import ergon_tracker.index.rich as rich
-    from ergon_tracker.index.cache import RichCache
+    import ergon.index.rich as rich
+    from ergon.index.cache import RichCache
 
     py = _job("py", "Python Engineer", "python kubernetes")
     nu = _job("nu", "Nurse", "nurse clinical")
@@ -169,9 +169,9 @@ def test_try_index_ranked_falls_back_to_query_rerank_when_vector_path_raises(tmp
     """Sidecar PRESENT but the vector path raises -> _vector_rerank returns None (never raises), so the
     query-time rank() rung runs (proven by the reranker reordering PICKME to the top), NOT bare
     lexical order (which would leave PICKME — a description-only keyword hit — last)."""
-    import ergon_tracker.index.rich as rich
-    from ergon_tracker.index.backend import SqliteIndexBackend
-    from ergon_tracker.index.build import build_index
+    import ergon.index.rich as rich
+    from ergon.index.backend import SqliteIndexBackend
+    from ergon.index.build import build_index
 
     jobs = [_job(str(i), f"ML Engineer {i}", "ml", company=f"Co{i}") for i in range(4)]
     jobs.append(_job("p", "PICKME", "ml engineer", company="CoP"))  # keyword only in description
@@ -185,9 +185,7 @@ def test_try_index_ranked_falls_back_to_query_rerank_when_vector_path_raises(tmp
     fake = _RerankFake()
     monkeypatch.setattr(router, "_rich_path", lambda: rich_path)
     monkeypatch.setattr(router, "get_semantic_reranker", lambda: fake)  # synthetic query embed
-    monkeypatch.setattr(
-        "ergon_tracker.semantic.get_semantic_reranker", lambda: fake
-    )  # fallback rank
+    monkeypatch.setattr("ergon.semantic.get_semantic_reranker", lambda: fake)  # fallback rank
 
     def boom(*a, **k):  # noqa: ANN002, ANN003
         raise RuntimeError("vector_search exploded")

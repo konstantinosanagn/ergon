@@ -6,11 +6,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.avature import AvatureProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.providers.avature import AvatureProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -174,7 +174,7 @@ async def test_blocked_tenant_degrades_to_empty() -> None:
 
 def test_job_re_matches_custom_jobdetail_suffix() -> None:
     """Some tenants (Ralph Lauren) use /JobDetailRetail/ etc. — the id regex must still match."""
-    from ergon_tracker.providers.avature import _JOB_RE
+    from ergon.providers.avature import _JOB_RE
 
     assert (
         _JOB_RE.search("/CareersCorporate/JobDetailRetail/Cloud-Architect/46386").group(1)
@@ -189,9 +189,9 @@ async def test_rss_uses_custom_page_name() -> None:
     import httpx
     import respx
 
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.avature import AvatureProvider
+    from ergon.http import AsyncFetcher
+    from ergon.models import SearchQuery
+    from ergon.providers.avature import AvatureProvider
 
     feed = (
         "<rss><channel><item><title><![CDATA[Analyst]]></title>"
@@ -218,9 +218,9 @@ async def test_data_endpoint_full_board() -> None:
     import httpx
     import respx
 
-    from ergon_tracker.http import AsyncFetcher
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.avature import AvatureProvider
+    from ergon.http import AsyncFetcher
+    from ergon.models import SearchQuery
+    from ergon.providers.avature import AvatureProvider
 
     data = {
         "totalCount": 2,

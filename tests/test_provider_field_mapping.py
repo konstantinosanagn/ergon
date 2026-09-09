@@ -4,9 +4,9 @@ Covers fields where the enrichment layer's ``if job.level is JobLevel.UNKNOWN`` 
 means a provider-set value is authoritative and must be mapped correctly at the source.
 """
 
-from ergon_tracker.models import JobLevel
-from ergon_tracker.providers.base import RawJob
-from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
+from ergon.models import JobLevel
+from ergon.providers.base import RawJob
+from ergon.providers.smartrecruiters import SmartRecruitersProvider
 
 
 def _raw(payload):
@@ -40,7 +40,7 @@ def test_smartrecruiters_unknown_level_stays_unknown():
 
 
 def test_jazzhr_maps_experience():
-    from ergon_tracker.providers.jazzhr import JazzHRProvider
+    from ergon.providers.jazzhr import JazzHRProvider
 
     p = JazzHRProvider()
     job = p.normalize(_raw({"title": "Engineer", "experience": "Experienced"}))
@@ -48,7 +48,7 @@ def test_jazzhr_maps_experience():
 
 
 def test_workable_maps_experience():
-    from ergon_tracker.providers.workable import WorkableProvider
+    from ergon.providers.workable import WorkableProvider
 
     p = WorkableProvider()
     job = p.normalize(_raw({"title": "Engineer", "experience": "Entry level"}))
@@ -56,7 +56,7 @@ def test_workable_maps_experience():
 
 
 def test_workable_unknown_experience_stays_unknown():
-    from ergon_tracker.providers.workable import WorkableProvider
+    from ergon.providers.workable import WorkableProvider
 
     p = WorkableProvider()
     job = p.normalize(_raw({"title": "Engineer"}))
@@ -64,8 +64,8 @@ def test_workable_unknown_experience_stays_unknown():
 
 
 def test_join_maps_structured_salary():
-    from ergon_tracker.models import SalaryInterval
-    from ergon_tracker.providers.join import JoinProvider
+    from ergon.models import SalaryInterval
+    from ergon.providers.join import JoinProvider
 
     p = JoinProvider()
     job = p.normalize(
@@ -85,14 +85,14 @@ def test_join_maps_structured_salary():
 
 
 def test_join_no_amount_stays_none():
-    from ergon_tracker.providers.join import JoinProvider
+    from ergon.providers.join import JoinProvider
 
     p = JoinProvider()
     assert p.normalize(_raw({"title": "Eng"})).salary is None
 
 
 def test_personio_promotes_seniority_and_years():
-    from ergon_tracker.providers.personio import PersonioProvider
+    from ergon.providers.personio import PersonioProvider
 
     p = PersonioProvider()
     job = p.normalize(_raw({"name": "Eng", "seniority": "senior", "yearsOfExperience": "1-2"}))
@@ -101,7 +101,7 @@ def test_personio_promotes_seniority_and_years():
 
 
 def test_personio_unknown_seniority_stays_unknown():
-    from ergon_tracker.providers.personio import PersonioProvider
+    from ergon.providers.personio import PersonioProvider
 
     p = PersonioProvider()
     job = p.normalize(_raw({"name": "Eng"}))
@@ -110,7 +110,7 @@ def test_personio_unknown_seniority_stays_unknown():
 
 
 def test_personio_years_range_parsing():
-    from ergon_tracker.providers.personio import _years_range
+    from ergon.providers.personio import _years_range
 
     assert _years_range("lt-1") == (0, 1)
     assert _years_range("1-2") == (1, 2)
@@ -121,7 +121,7 @@ def test_personio_years_range_parsing():
 
 
 def test_breezy_parses_freetext_salary():
-    from ergon_tracker.providers.breezy import BreezyProvider
+    from ergon.providers.breezy import BreezyProvider
 
     p = BreezyProvider()
     job = p.normalize(_raw({"name": "Eng", "salary": "$78,000 / year"}))
@@ -129,7 +129,7 @@ def test_breezy_parses_freetext_salary():
 
 
 def test_breezy_empty_salary_stays_none():
-    from ergon_tracker.providers.breezy import BreezyProvider
+    from ergon.providers.breezy import BreezyProvider
 
     p = BreezyProvider()
     assert p.normalize(_raw({"name": "Eng", "salary": ""})).salary is None
@@ -138,7 +138,7 @@ def test_breezy_empty_salary_stays_none():
 def test_coveo_direct_mode_reads_correct_keys():
     """Direct-mode (UST-style) raw items key description under 'data' and department under
     'obu' — not the proxy-mode 'description'/'category' keys. normalize() must read both."""
-    from ergon_tracker.providers.coveo import CoveoProvider
+    from ergon.providers.coveo import CoveoProvider
 
     p = CoveoProvider()
     job = p.normalize(_raw({"title": "Eng", "data": "<p>Build things.</p>", "obu": "Engineering"}))
@@ -149,7 +149,7 @@ def test_coveo_direct_mode_reads_correct_keys():
 def test_coveo_proxy_mode_still_reads_original_keys():
     """Proxy-mode (SLB-style) raw items key description/department under 'description'/'category'.
     Fixing direct-mode must not regress proxy-mode, and the proxy key must take precedence."""
-    from ergon_tracker.providers.coveo import CoveoProvider
+    from ergon.providers.coveo import CoveoProvider
 
     p = CoveoProvider()
     job = p.normalize(

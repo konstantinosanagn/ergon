@@ -19,7 +19,7 @@ from scripts.bench.parity import (
     sql_accepts,
 )
 
-from ergon_tracker.models import (
+from ergon.models import (
     EmploymentType,
     JobLevel,
     JobPosting,

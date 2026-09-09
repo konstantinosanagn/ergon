@@ -28,10 +28,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from ingest_jobhive_csvs import company_key, load_seed_keys  # noqa: E402
 
-from ergon_tracker.engine import AGGREGATOR_PROVIDERS  # noqa: E402
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import get_provider, iter_providers, load_builtins  # noqa: E402
+from ergon.engine import AGGREGATOR_PROVIDERS  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import get_provider, iter_providers, load_builtins  # noqa: E402
 
 DEFAULT_OUT = ROOT / "scripts" / "candidates_apply_urls.json"
 

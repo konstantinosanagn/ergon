@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.dedup import normalize_company  # noqa: E402
+from ergon.dedup import normalize_company  # noqa: E402
 
 
 def _strip_accents(s: str) -> str:

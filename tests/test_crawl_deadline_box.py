@@ -18,8 +18,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
-from ergon_tracker.models import JobPosting, RawJob  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
+from ergon.models import JobPosting, RawJob  # noqa: E402
 
 
 class _FakeReg:
@@ -69,10 +69,10 @@ class _Fetcher:
 
 
 def test_deadline_box_skips_over_budget_host_only(monkeypatch, tmp_path):
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
-    from ergon_tracker.index.db import connect
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
+    from ergon.index.db import connect
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider())
@@ -98,9 +98,9 @@ def test_deadline_box_skips_over_budget_host_only(monkeypatch, tmp_path):
 
 
 def test_deadline_box_disabled_when_budget_non_positive(monkeypatch, tmp_path):
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider())
@@ -124,9 +124,9 @@ def test_global_crawl_deadline_stops_dispatch(monkeypatch, tmp_path):
     timeout -- the 2026-07-25 JD-sidecar-loss safety net. Distinct from the per-host box (host_budget
     stays 0 here). Deterministic via a monotonic stub that jumps far forward on EVERY call, so the
     deadline is exceeded for every board regardless of how many monotonic() calls precede it."""
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _Provider())

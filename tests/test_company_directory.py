@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.coverage import company_directory
-from ergon_tracker.index.db import connect
-from ergon_tracker.models import JobPosting
+from ergon.index.build import build_index
+from ergon.index.coverage import company_directory
+from ergon.index.db import connect
+from ergon.models import JobPosting
 
 
 def _index_with(tmp_path, jobs):

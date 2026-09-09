@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from token_mint import MintError, extract_token, mint_from_state, summarize  # noqa: E402
 
-from ergon_tracker.token_store import TokenStore  # noqa: E402
+from ergon.token_store import TokenStore  # noqa: E402
 
 _STATE = {
     "cookies": {"_abck": "AKAMAI~SENSOR~VALUE", "ga": "x"},

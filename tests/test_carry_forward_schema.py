@@ -10,10 +10,10 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-from ergon_tracker.dedup import normalize_company
-from ergon_tracker.index.build import build_delta, build_index_from_fresh_db, carry_forward
-from ergon_tracker.index.db import _schema_sql, connect, fresh_db
-from ergon_tracker.models import JobPosting, Location, RemoteType
+from ergon.dedup import normalize_company
+from ergon.index.build import build_delta, build_index_from_fresh_db, carry_forward
+from ergon.index.db import _schema_sql, connect, fresh_db
+from ergon.models import JobPosting, Location, RemoteType
 
 _N = 200
 
@@ -125,7 +125,7 @@ def test_build_delta_older_schema_prev(tmp_path):
 
 def _fresh_db_with_job(path, job, *, build_id) -> None:
     """A fresh-crawl DB (the shape scripts/build_index.py writes via append_jobs) with one job."""
-    from ergon_tracker.index.build import append_jobs
+    from ergon.index.build import append_jobs
 
     fresh_db(path)
     con = connect(path)

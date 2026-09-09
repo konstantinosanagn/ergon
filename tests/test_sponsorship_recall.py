@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.sponsorship import detect_sponsorship
+from ergon.extract.sponsorship import detect_sponsorship
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "sponsorship_corpus.jsonl"
 

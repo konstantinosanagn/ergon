@@ -1,4 +1,4 @@
-# Design: Broad-Discovery Search Index (ergon-tracker)
+# Design: Broad-Discovery Search Index (ergon)
 
 **Date:** 2026-06-18
 **Status:** Approved design → implementation plan next
@@ -9,7 +9,7 @@ across all ATS sources fast — without users getting throttled.
 
 ## 1. Problem & decision
 
-`ergon-tracker` fetches live from 31 providers. Only **4** (adzuna, smartrecruiters, usajobs,
+`ergon` fetches live from 31 providers. Only **4** (adzuna, smartrecruiters, usajobs,
 workday) support server-side keyword search; the other **27** (Greenhouse/Lever/Ashby/…) have
 no keyword API, so a *broad* query ("all senior backend H-1B jobs anywhere") must fetch-then-
 filter thousands of boards. From a user's IP that is slow and gets throttled (boards on a shared
@@ -245,7 +245,7 @@ class IndexBackend(Protocol):
 
 ### `IndexCache` (download/verify/freshness)
 TTL-gated manifest check (≤ once/24h); download gz → **verify sha256** → decompress → atomic
-rename into `~/.cache/ergon-tracker/index.sqlite`; **schema_version gate** → ignore + live
+rename into `~/.cache/ergon/index.sqlite`; **schema_version gate** → ignore + live
 fallback on mismatch; open read-only (`query_only`, `mmap_size`, `cache_size`).
 
 ### Query execution (mirrors `matches()` semantics)
@@ -259,7 +259,7 @@ fallback on mismatch; open read-only (`query_only`, `mmap_size`, `cache_size`).
 
 ### Transparency
 Results carry origin (`source: index|live|hybrid`, `index_date`); a `SourceHealth`-style entry
-`index (built 2026-06-18, N rows)`; CLI shows snapshot date; `ergon-tracker index pull|status`.
+`index (built 2026-06-18, N rows)`; CLI shows snapshot date; `ergon index pull|status`.
 
 ---
 
@@ -282,7 +282,7 @@ Everything correlates on **`build_id`** (logs ↔ `crawl_health` ↔ `manifest` 
   drop; null/enum sanity; schema match; staleness guard. A tripped gate → CI red, `latest`
   untouched (previous good snapshot stays live), `gates.json` records actual-vs-threshold.
 - **Cost tracking:** CI minutes, HTTP requests, Tavily credits, artifact/storage sizes.
-- **SDK logging:** `logging.getLogger("ergon_tracker.index")`, no handlers in lib; MCP surfaces
+- **SDK logging:** `logging.getLogger("ergon.index")`, no handlers in lib; MCP surfaces
   `index_date`/`source`; telemetry local-only, off by default.
 - **Status surface:** generated `INDEX_STATUS.md` from `history.jsonl`; optional auto-filed GitHub
   issue on gate failure.
@@ -326,9 +326,9 @@ Offline + deterministic (fixtures, temp dirs, monkeypatched remote).
 Automated offline tests prove correctness; they do **not** prove the *experience*. Every feature
 must also be exercised **through the actual user-facing surfaces and against live data**, the way
 a user/agent will:
-- **SDK:** `from ergon_tracker import search` — broad query served from a real built index;
+- **SDK:** `from ergon import search` — broad query served from a real built index;
   inspect `source`/`index_date`, ranking, dedup, lifecycle fields, `related_jobs`/`company_jobs`.
-- **CLI:** `ergon-tracker index pull|status`, then `search … ` (broad → index, targeted → live),
+- **CLI:** `ergon index pull|status`, then `search … ` (broad → index, targeted → live),
   confirm the table (incl. salary/sponsor columns), snapshot-date display, `--verbose` logs,
   `ERGON_INDEX=off` fallback.
 - **MCP:** drive `search_jobs` / `list_h1b_sponsors` / `resolve_company` through an actual MCP
@@ -372,9 +372,9 @@ manual dogfood pass through SDK + CLI + MCP on real data, with findings logged.
 
 ## 13. New components (files)
 
-- `src/ergon_tracker/models.py` — add `Company`.
-- `src/ergon_tracker/canonicalize.py` — `aggregate_companies()`.
-- `src/ergon_tracker/index/schema.sql`, `index/mapping.py`, `index/backend.py`
+- `src/ergon/models.py` — add `Company`.
+- `src/ergon/canonicalize.py` — `aggregate_companies()`.
+- `src/ergon/index/schema.sql`, `index/mapping.py`, `index/backend.py`
   (`IndexBackend`, `SqliteIndexBackend`), `index/cache.py` (`IndexCache`), `index/query.py`
   (SearchQuery→SQL).
 - `scripts/build_index.py` (crawler/builder), `scripts/index_state.py` (board_state scheduler).

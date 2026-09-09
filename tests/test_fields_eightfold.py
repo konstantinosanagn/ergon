@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import RawJob
-from ergon_tracker.providers.eightfold import EightfoldProvider
+from ergon.models import RawJob
+from ergon.providers.eightfold import EightfoldProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

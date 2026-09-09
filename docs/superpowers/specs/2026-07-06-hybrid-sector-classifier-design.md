@@ -90,7 +90,7 @@ sees the prior tier's misses.
 ## Dependencies, artifacts, cadence
 - **Deps:** `scikit-learn` (+ dataset tooling) are **train/offline-only** → a `[sector-train]` extra.
   Runtime stays `fastembed` (`semantic` extra) + numpy. **No new runtime hard dep.**
-- **Artifacts** in `src/ergon_tracker/registry/data/`: `sector_gazetteer.json(.gz)` (domain/name →
+- **Artifacts** in `src/ergon/registry/data/`: `sector_gazetteer.json(.gz)` (domain/name →
   sector), `sector_clf.npz` (weights + centroids + thresholds + label list), and a `NOTICE`
   (attribution).
 - **Offline build scripts:** `scripts/build_sector_gazetteer.py`, `scripts/train_sector_classifier.py`.

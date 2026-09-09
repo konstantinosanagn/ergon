@@ -16,9 +16,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_index import build_and_publish_liveness  # noqa: E402
 
-from ergon_tracker.index.db import fresh_db  # noqa: E402
-from ergon_tracker.index.liveness import open_liveness  # noqa: E402
-from ergon_tracker.providers.base import get_provider, load_builtins  # noqa: E402
+from ergon.index.db import fresh_db  # noqa: E402
+from ergon.index.liveness import open_liveness  # noqa: E402
+from ergon.providers.base import get_provider, load_builtins  # noqa: E402
 
 
 def _build_index(path) -> None:

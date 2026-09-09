@@ -27,8 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.base import ExtractInput
-from ergon_tracker.extract.degree import DegreeExtractor
+from ergon.extract.base import ExtractInput
+from ergon.extract.degree import DegreeExtractor
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "degree_corpus.jsonl"
 

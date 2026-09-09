@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.models import JobLevel, RawJob
-from ergon_tracker.providers.themuse import TheMuseProvider
+from ergon.models import JobLevel, RawJob
+from ergon.providers.themuse import TheMuseProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

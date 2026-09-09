@@ -9,7 +9,7 @@ name: freshness-sweep
 # unchanged, so the row_floor publish gate can never trip on this pass).
 #
 # THE CORRECTNESS INVARIANT (same shape as drain-detail.yml's, ported to freshness by
-# `ergon_tracker.index.freshness_shard.shard_boards`): every board's politeness bucket
+# `ergon.index.freshness_shard.shard_boards`): every board's politeness bucket
 # (`rate_key_for_host`, the exact string `AsyncFetcher` keys its per-process token bucket on) hashes
 # to exactly ONE shard, so no two shards independently rate-limit the same collapsed backend.
 # join.com is additionally carved OUT of the hash range entirely and pinned to shard 0 (its
@@ -87,7 +87,7 @@ jobs:
         continue-on-error: true
         env:
           # Belt-and-suspenders env caps on top of the explicit CLI flags below -- see the engine's
-          # own defaults in `ergon_tracker/index/freshness.py` (`_FRESHNESS_CONCURRENCY`,
+          # own defaults in `ergon/index/freshness.py` (`_FRESHNESS_CONCURRENCY`,
           # `_SEARCH_INDEX_BOARD_LIMIT`). The CLI's `--concurrency` already threads through to both
           # `AsyncFetcher` and `sweep_all_boards` explicitly, so these are a documented ceiling, not
           # load-bearing on their own.
@@ -97,7 +97,7 @@ jobs:
           # ERGON_DELTA_CONTENT_VERSION. '1' => the sweep emits the version-FOLDED board fingerprint
           # (id + per-posting content-version) that the build's crawl stamp compares against; the two
           # MUST match, so both files move together (roll back = set BOTH to '' in one commit). Read
-          # inside ergon_tracker/index/freshness.py (content_version_enabled), so setting it here is
+          # inside ergon/index/freshness.py (content_version_enabled), so setting it here is
           # all the sweep needs -- scripts/freshness_sweep.py requires no change.
           ERGON_DELTA_CONTENT_VERSION: "1"
         run: |
@@ -212,7 +212,7 @@ jobs:
             gh release upload index-latest dist/index-freshness.sqlite.gz --clobber
           else
             gh release create index-latest dist/index-freshness.sqlite.gz --title index-latest \
-              --notes "Daily ergon-tracker search-index snapshot."
+              --notes "Daily ergon search-index snapshot."
           fi
 
   # OPERATIONAL ALERTING (GitHub-native, best-effort). Separate job that observes both prior jobs'

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.query import whats_new_rows
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.build import build_index
+from ergon.index.db import connect
+from ergon.index.query import whats_new_rows
+from ergon.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
 def _job(sid, title, **kw):
@@ -81,7 +81,7 @@ def test_mcp_tool_is_registered():
     # the tool must be discoverable by an MCP client
     import anyio
 
-    from ergon_tracker import mcp_server
+    from ergon import mcp_server
 
     names = anyio.run(lambda: _tool_names(mcp_server.mcp))
     assert "whats_new" in names
@@ -113,12 +113,12 @@ def test_mcp_tool_happy_path_end_to_end(tmp_path, monkeypatch):
     con.commit()
     con.close()
 
-    from ergon_tracker.index import cache as cache_mod
+    from ergon.index import cache as cache_mod
 
     monkeypatch.setattr(cache_mod.IndexCache, "ensure_fresh", lambda self: p)
     monkeypatch.setattr(cache_mod, "cached_index_build_id", lambda *a, **k: "b1")
 
-    from ergon_tracker import mcp_server
+    from ergon import mcp_server
 
     res = mcp_server.whats_new(since_days=30, keywords="engineer", limit=10)
     assert res["count"] == 1
@@ -132,8 +132,8 @@ def test_mcp_tool_defaults_max_last_seen_age_days_21(tmp_path, monkeypatch):
     # index-freshness fix: whats_new builds its own SearchQuery and never exposed a
     # max_last_seen_age_days param -> it should default the staleness guard to 21, same as
     # search_jobs, for consistency.
-    from ergon_tracker.index import cache as cache_mod
-    from ergon_tracker.index import query as query_mod
+    from ergon.index import cache as cache_mod
+    from ergon.index import query as query_mod
 
     p = _build(tmp_path, [_job("1", "Engineer")])
     monkeypatch.setattr(cache_mod.IndexCache, "ensure_fresh", lambda self: p)
@@ -148,21 +148,21 @@ def test_mcp_tool_defaults_max_last_seen_age_days_21(tmp_path, monkeypatch):
 
     monkeypatch.setattr(query_mod, "whats_new_rows", spy)
 
-    from ergon_tracker import mcp_server
+    from ergon import mcp_server
 
     mcp_server.whats_new(since_days=7)
     assert captured["q"].max_last_seen_age_days == 21
 
 
 def test_mcp_tool_index_unavailable_is_graceful(monkeypatch):
-    from ergon_tracker.index import cache as cache_mod
+    from ergon.index import cache as cache_mod
 
     monkeypatch.setattr(
         cache_mod.IndexCache,
         "ensure_fresh",
         lambda self: (_ for _ in ()).throw(RuntimeError("offline")),
     )
-    from ergon_tracker import mcp_server
+    from ergon import mcp_server
 
     res = mcp_server.whats_new(since_days=7)
     assert res["count"] == 0 and "unavailable" in res["note"]

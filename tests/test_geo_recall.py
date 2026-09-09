@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.geo import normalize_geo
-from ergon_tracker.models import Location
+from ergon.extract.geo import normalize_geo
+from ergon.models import Location
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "geo_corpus.jsonl"
 

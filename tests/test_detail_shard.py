@@ -12,7 +12,7 @@ import sqlite3
 
 import anyio
 
-from ergon_tracker.index.detail import (
+from ergon.index.detail import (
     MEGAHOST_SHARDS,
     DetailRef,
     _host_for_ref,
@@ -356,7 +356,7 @@ def test_tier3_rows_sql_shard_filter_equals_python_ref_in_shard(tmp_path):
     to shard k -- the SQL push-down (which lets each matrix job load only its ~1/20th instead of all
     ~1M rows) has to be byte-identical to the in-Python assignment, or the drain would silently
     drop/double-count candidates."""
-    from ergon_tracker.index.detail import _tier3_rows
+    from ergon.index.detail import _tier3_rows
 
     SOURCES = ["smartrecruiters", "workday", "oracle", "icims", "workable", "eightfold", "rippling"]
     samples = [

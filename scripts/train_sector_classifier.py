@@ -22,8 +22,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.extract.sector_features import build_input_text  # noqa: E402
-from ergon_tracker.semantic import get_semantic_reranker  # noqa: E402
+from ergon.extract.sector_features import build_input_text  # noqa: E402
+from ergon.semantic import get_semantic_reranker  # noqa: E402
 
 
 def _peak_rss_mb() -> float:
@@ -179,8 +179,8 @@ def main(argv: list[str]) -> None:
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
-    from ergon_tracker.extract.sector_clf import platt_normalize, save_sector_model
-    from ergon_tracker.extract.sector_features import assemble, cl2n
+    from ergon.extract.sector_clf import platt_normalize, save_sector_model
+    from ergon.extract.sector_features import assemble, cl2n
 
     corpus, out, sample, folds, target = None, ROOT / "dist" / "sector_clf.npz", None, 5, 0.85
     i = 0

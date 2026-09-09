@@ -9,12 +9,12 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import RawJob, RemoteType, SearchQuery
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.workday import WorkdayProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import RawJob, RemoteType, SearchQuery
+from ergon.providers.base import BaseProvider
+from ergon.providers.workday import WorkdayProvider
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -410,7 +410,7 @@ _PROBE_FILE = Path(
     "/private/tmp/claude-501/-Users-kanagn-Desktop-job-researcher/"
     "d20c6e7c-0b7f-4b04-a828-a75251378b9c/scratchpad/probe_targets.json"
 )
-_SEED_FILE = Path(__file__).resolve().parents[1] / "src/ergon_tracker/registry/data/seed.json"
+_SEED_FILE = Path(__file__).resolve().parents[1] / "src/ergon/registry/data/seed.json"
 
 
 def _live_tokens(ats: str, n: int = 3) -> list[str]:

@@ -30,11 +30,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.index.freshness import idset_hash  # noqa: E402
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
-from ergon_tracker.models import JobPosting, RawJob  # noqa: E402
+from ergon.index.build import build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.index.freshness import idset_hash  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
+from ergon.models import JobPosting, RawJob  # noqa: E402
 
 _POSTINGS = [("1", "Staff Engineer"), ("2", "Engineering Manager")]
 _TOKEN = "acme"
@@ -118,9 +118,9 @@ def _stable_rows(db: Path):
 
 
 def test_delta_skip_matches_full_crawl(monkeypatch, tmp_path):
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     prov = _Provider()
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
@@ -183,8 +183,8 @@ def test_delta_skip_matches_full_crawl(monkeypatch, tmp_path):
 def test_flag_off_never_skips(monkeypatch, tmp_path):
     """Flag OFF: even with a matching sidecar + stamped fingerprint the board is CRAWLED, not
     skipped -- proving the delta path ships dark (byte-for-byte today's behaviour when off)."""
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     prov = _Provider()
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)

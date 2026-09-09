@@ -1,6 +1,6 @@
 """End-to-end stress test for the freshness-sweep CLI (scripts/freshness_sweep.py, Phase 3).
 
-OFFLINE: ``ergon_tracker.index.freshness.get_provider`` is monkeypatched to fake, in-process
+OFFLINE: ``ergon.index.freshness.get_provider`` is monkeypatched to fake, in-process
 providers -- never real network -- mirroring tests/test_freshness_sweep.py's pattern for the
 underlying engine. Runs the CLI's ``main()`` directly (no subprocess) against a synthetic,
 real-schema index built via ``fresh_db``, and asserts:
@@ -21,9 +21,9 @@ import sqlite3
 import pytest
 import scripts.freshness_sweep as sweep_cli
 
-from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.freshness import idset_hash
-from ergon_tracker.models import RawJob
+from ergon.index.db import fresh_db
+from ergon.index.freshness import idset_hash
+from ergon.models import RawJob
 
 _NOW = "2026-07-18T00:00:00+00:00"
 
@@ -125,9 +125,9 @@ def _providers(by_source: dict[str, _FakeProvider]):
 @pytest.fixture
 def patched_providers(monkeypatch):
     """Returns a setter the test uses to install the fake provider registry; auto-applies to
-    ``ergon_tracker.index.freshness.get_provider`` -- the exact name the engine looks up through
+    ``ergon.index.freshness.get_provider`` -- the exact name the engine looks up through
     (see freshness.py's module docstring: it calls ``get_provider(source).fetch(...)`` directly)."""
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     def _set(by_source: dict[str, _FakeProvider]) -> None:
         monkeypatch.setattr(freshness, "get_provider", _providers(by_source))
@@ -213,7 +213,7 @@ def test_cli_e2e_shard_with_no_matching_boards_writes_empty_sidecar(tmp_path, pa
     idx_path = _build_index(tmp_path, [_job_row("job-alive", source="greenhouse")])
     patched_providers({"greenhouse": _FakeProvider(live_ids=["job-alive"])})
 
-    from ergon_tracker.index.freshness_shard import shard_boards
+    from ergon.index.freshness_shard import shard_boards
 
     num_shards = 8
     winning_shard = next(

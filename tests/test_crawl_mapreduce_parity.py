@@ -32,18 +32,18 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import (  # noqa: E402
+from ergon.index.build import (  # noqa: E402
     build_index_from_fresh_db,
     changed_companies_sql,
 )
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.index.freshness_shard import board_shard  # noqa: E402
-from ergon_tracker.index.scheduler import (  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.index.freshness_shard import board_shard  # noqa: E402
+from ergon.index.scheduler import (  # noqa: E402
     apply_outcome,
     load_state,
     save_state,
 )
-from ergon_tracker.models import JobPosting, RawJob  # noqa: E402
+from ergon.models import JobPosting, RawJob  # noqa: E402
 
 NUM_SHARDS = 4
 _TODAY = "2026-07-26"
@@ -115,8 +115,8 @@ def _get_provider(source: str) -> _Provider:
 
 
 def _install(monkeypatch):
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     _PROVIDERS.clear()
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)

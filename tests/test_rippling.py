@@ -9,9 +9,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.rippling import RipplingProvider
+from ergon.http import AsyncFetcher
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.rippling import RipplingProvider
 
 pytestmark = pytest.mark.anyio
 

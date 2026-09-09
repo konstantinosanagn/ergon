@@ -1,4 +1,4 @@
-from ergon_tracker.models import Company
+from ergon.models import Company
 
 
 def test_company_defaults_and_fields():
@@ -9,6 +9,6 @@ def test_company_defaults_and_fields():
 
 
 def test_company_is_exported():
-    import ergon_tracker.models as m
+    import ergon.models as m
 
     assert "Company" in m.__all__

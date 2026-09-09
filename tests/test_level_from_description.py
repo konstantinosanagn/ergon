@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.extract.level import level_from_description
-from ergon_tracker.models import JobLevel, JobPosting
+from ergon.enrich import enrich_in_place
+from ergon.extract.level import level_from_description
+from ergon.models import JobLevel, JobPosting
 
 
 @pytest.mark.parametrize(

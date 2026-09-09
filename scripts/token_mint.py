@@ -10,7 +10,7 @@ store-write logic is pure and unit-tested.
 
 - ``extract_token(state, cfg)`` — PURE: pull the token out of a captured browser ``state``
   ({cookies, local_storage, session_storage, xhr}) per a small ``extract`` config. Tested.
-- ``mint_from_state(...)`` — PURE: extract, then write to the :class:`~ergon_tracker.token_store.TokenStore`
+- ``mint_from_state(...)`` — PURE: extract, then write to the :class:`~ergon.token_store.TokenStore`
   with the target's TTL/refresh policy. Tested.
 - ``capture_state(url)`` — the browser shell (Playwright, optional import). Loads the page, lets the
   page's JS mint the token, and reads cookies/storage/XHR headers. Not unit-tested (I/O).
@@ -35,7 +35,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.token_store import TokenStore  # noqa: E402
+from ergon.token_store import TokenStore  # noqa: E402
 
 TARGETS_PATH = ROOT / "scripts" / "tier2_mint.json"
 DEFAULT_STORE = ROOT / "runs" / "tier2_tokens.json"
@@ -109,7 +109,7 @@ async def capture_state(
         from playwright.async_api import async_playwright
     except ImportError as exc:  # pragma: no cover - environment-gated, mirrors the semantic extra
         raise MintError(
-            "token minting needs Playwright — `uv pip install ergon-tracker[browser] && "
+            "token minting needs Playwright — `uv pip install ergon[browser] && "
             "playwright install chromium`"
         ) from exc
 

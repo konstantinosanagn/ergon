@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ergon_tracker.http import _rate_key
+from ergon.http import _rate_key
 
 
 def test_shared_backend_subdomains_collapse() -> None:
@@ -49,7 +49,7 @@ def test_two_level_tld() -> None:
 def test_throttle_prone_backends_have_stricter_rate_caps() -> None:
     # Workable/BambooHR/SmartRecruiters threw a 429 storm under the default rate; their per-domain
     # caps must be present and below the AsyncFetcher default (5/s) so a dense window can't burst.
-    from ergon_tracker.http import _DOMAIN_RATE_OVERRIDES
+    from ergon.http import _DOMAIN_RATE_OVERRIDES
 
     for dom in ("workable.com", "bamboohr.com", "smartrecruiters.com"):
         assert dom in _DOMAIN_RATE_OVERRIDES, f"{dom} missing a per-domain rate cap"
@@ -59,7 +59,7 @@ def test_throttle_prone_backends_have_stricter_rate_caps() -> None:
 
 def test_host_limiter_uses_domain_override() -> None:
     # The limiter for a capped backend must reflect the override, not the constructor default.
-    from ergon_tracker.http import _DOMAIN_RATE_OVERRIDES, AsyncFetcher
+    from ergon.http import _DOMAIN_RATE_OVERRIDES, AsyncFetcher
 
     f = AsyncFetcher(per_host_rate=5)
     lim = f._host_limiter("workable.com")
@@ -71,7 +71,7 @@ def test_self_built_client_raises_max_redirects_above_httpx_default() -> None:
     # so the self-built client (the one every provider actually uses in production) must raise
     # its max_redirects, letting a single AsyncFetcher.request/get_text call follow the WHOLE
     # chain internally (one rate-limit token per call, not one per hop; see providers/join.py).
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     f = AsyncFetcher()
     assert f._client.max_redirects == 30
@@ -87,13 +87,13 @@ def test_self_built_client_raises_max_redirects_above_httpx_default() -> None:
 
 
 def test_default_per_host_concurrency_is_eight() -> None:
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     assert AsyncFetcher()._per_host_concurrency == 8
 
 
 def test_per_host_concurrency_configurable_via_constructor() -> None:
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     assert AsyncFetcher(per_host_concurrency=3)._per_host_concurrency == 3
 
@@ -101,7 +101,7 @@ def test_per_host_concurrency_configurable_via_constructor() -> None:
 def test_per_host_concurrency_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
-    import ergon_tracker.http as http_mod
+    import ergon.http as http_mod
 
     monkeypatch.setenv("ERGON_PER_HOST_CONCURRENCY", "2")
     try:
@@ -118,7 +118,7 @@ def test_single_host_never_exceeds_per_host_concurrency_cap() -> None:
     import anyio
     import httpx
 
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     in_flight = 0
     peak = 0
@@ -155,7 +155,7 @@ def test_per_host_cap_does_not_slow_an_already_rate_gated_host() -> None:
     import anyio
     import httpx
 
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.http import AsyncFetcher
 
     async def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"ok": True})
@@ -189,8 +189,8 @@ def test_repeated_429s_never_trip_circuit_breaker() -> None:
     import anyio
     import httpx
 
-    from ergon_tracker.exceptions import RateLimitError
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.exceptions import RateLimitError
+    from ergon.http import AsyncFetcher
 
     async def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(429)
@@ -215,8 +215,8 @@ def test_repeated_5xx_still_trips_circuit_breaker() -> None:
     import anyio
     import httpx
 
-    from ergon_tracker.exceptions import FetchError, TransientHTTPError
-    from ergon_tracker.http import AsyncFetcher
+    from ergon.exceptions import FetchError, TransientHTTPError
+    from ergon.http import AsyncFetcher
 
     async def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(503)
@@ -241,7 +241,7 @@ def test_sr_detail_rate_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
     # (the drain sets it; the daily list-crawl never does, so the crawl stays at the safe 3/s).
     import importlib
 
-    import ergon_tracker.http as http_mod
+    import ergon.http as http_mod
 
     monkeypatch.setenv("ERGON_SR_DETAIL_RATE", "10")
     try:
@@ -257,7 +257,7 @@ def test_sr_detail_rate_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_sr_detail_rate_ignores_bad_env(monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
-    import ergon_tracker.http as http_mod
+    import ergon.http as http_mod
 
     for bad in ("", "abc", "-5", "0"):
         monkeypatch.setenv("ERGON_SR_DETAIL_RATE", bad)
@@ -274,7 +274,7 @@ def test_workable_detail_rate_override_env(monkeypatch: pytest.MonkeyPatch) -> N
     # (the drain sets it; the daily list-crawl never does, so the crawl stays at the safe 3/s).
     import importlib
 
-    import ergon_tracker.http as http_mod
+    import ergon.http as http_mod
 
     monkeypatch.setenv("ERGON_WORKABLE_DETAIL_RATE", "8")
     try:
@@ -292,7 +292,7 @@ def test_all_drain_rate_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     # capacity probes, alongside SR/workable.
     import importlib
 
-    import ergon_tracker.http as http_mod
+    import ergon.http as http_mod
 
     cases = {
         "ERGON_RIPPLING_DETAIL_RATE": (("rippling.com",), 30.0),

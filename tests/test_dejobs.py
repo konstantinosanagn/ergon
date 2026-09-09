@@ -9,11 +9,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.models import RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.dejobs import DEJobsProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.providers.base import BaseProvider
+from ergon.providers.dejobs import DEJobsProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -146,7 +146,7 @@ _PROBE_FILE = Path(
     "/private/tmp/claude-501/-Users-kanagn-Desktop-job-researcher/"
     "d20c6e7c-0b7f-4b04-a828-a75251378b9c/scratchpad/probe_targets.json"
 )
-_SEED_FILE = Path(__file__).resolve().parents[1] / "src/ergon_tracker/registry/data/seed.json"
+_SEED_FILE = Path(__file__).resolve().parents[1] / "src/ergon/registry/data/seed.json"
 
 
 def _live_tokens(ats: str, n: int = 3) -> list[str]:

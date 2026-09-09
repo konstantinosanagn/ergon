@@ -7,7 +7,7 @@ import stat
 import anyio
 import pytest
 
-from ergon_tracker.token_store import TokenStore
+from ergon.token_store import TokenStore
 
 pytestmark = pytest.mark.anyio
 

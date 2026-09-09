@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ergon_tracker.extract.lang import LANG_STOPWORDS, detect_language
+from ergon.extract.lang import LANG_STOPWORDS, detect_language
 
 _ENGLISH_JD = (
     "We are looking for a Senior Software Engineer to join our growing team. You will "

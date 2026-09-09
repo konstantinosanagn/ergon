@@ -14,9 +14,9 @@ import anyio
 import httpx
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.providers.base import BaseProvider
-from ergon_tracker.providers.rippling import RipplingProvider
+from ergon.index.detail import DetailRef
+from ergon.providers.base import BaseProvider
+from ergon.providers.rippling import RipplingProvider
 
 
 class _FakeFetcher:
@@ -318,7 +318,7 @@ def _ref() -> DetailRef:
 
 
 def test_fetch_detail_returns_detailfetch_with_structured_salary() -> None:
-    from ergon_tracker.models import DetailFetch, SalaryInterval
+    from ergon.models import DetailFetch, SalaryInterval
 
     payload = {
         "description": {"role": "<p>Do the thing.</p>"},
@@ -348,7 +348,7 @@ def test_fetch_detail_empty_payrange_is_bare_str() -> None:
 
 
 def test_salary_from_payrange_edge_cases() -> None:
-    from ergon_tracker.models import SalaryInterval
+    from ergon.models import SalaryInterval
 
     P = RipplingProvider._salary_from_payrange
     assert P(None) is None and P([]) is None and P("nope") is None
@@ -379,7 +379,7 @@ def test_salary_from_payrange_edge_cases() -> None:
 
 
 def test_fetch_detail_recovers_worklocations_strings() -> None:
-    from ergon_tracker.models import DetailFetch
+    from ergon.models import DetailFetch
 
     payload = {"description": "<p>Role.</p>", "workLocations": ["London, United Kingdom", ""]}
     res = anyio.run(lambda: RipplingProvider().fetch_detail(_ref(), _FakeFetcher(payload)))
@@ -398,8 +398,8 @@ def test_liveness_keeps_row_when_rippling_confirm_raises_transient(tmp_path) -> 
     provider RAISES instead, and the liveness pass classifies a raise as confirm_errored -> KEEP."""
     import sqlite3
 
-    from ergon_tracker.index.db import fresh_db
-    from ergon_tracker.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
+    from ergon.index.db import fresh_db
+    from ergon.index.liveness import CONFIRM_VIA_DETAIL_SOURCES, reconcile_liveness_tier
 
     assert "rippling" in CONFIRM_VIA_DETAIL_SOURCES
 

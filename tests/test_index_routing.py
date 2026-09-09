@@ -1,7 +1,7 @@
-import ergon_tracker.index.router as router
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.models import JobLevel, JobPosting, SearchQuery
+import ergon.index.router as router
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.models import JobLevel, JobPosting, SearchQuery
 
 
 def test_router_uses_index_for_broad_query(tmp_path, monkeypatch):
@@ -38,8 +38,8 @@ def test_router_returns_none_when_index_unavailable(tmp_path, monkeypatch):
 
 
 def test_router_prefers_sharded_over_single_file(tmp_path, monkeypatch):
-    from ergon_tracker.index.backend import ShardedIndexBackend
-    from ergon_tracker.index.build import build_sharded_index
+    from ergon.index.backend import ShardedIndexBackend
+    from ergon.index.build import build_sharded_index
 
     build_sharded_index(
         [
@@ -157,7 +157,7 @@ def test_router_serves_keyword_from_slim_when_opted_in(tmp_path, monkeypatch):
 def test_slim_never_serves_year_or_semantic_even_when_opted_in(monkeypatch):
     # Year-filtered / semantic queries lack the data in slim (years nulled, no vectors): even under
     # ERGON_INDEX=slim they must fall through to the full index.
-    from ergon_tracker.index.router import _slim_serves
+    from ergon.index.router import _slim_serves
 
     monkeypatch.setenv("ERGON_INDEX", "slim")
     assert _slim_serves(SearchQuery(keywords="eng", max_years=2)) is False
@@ -174,8 +174,8 @@ def test_env_off_disables_index(monkeypatch):
 
 
 def test_try_index_ranked_no_semantic_equals_try_index(tmp_path, monkeypatch):
-    from ergon_tracker.index.backend import SqliteIndexBackend
-    from ergon_tracker.index.build import build_index
+    from ergon.index.backend import SqliteIndexBackend
+    from ergon.index.build import build_index
 
     p = tmp_path / "i.sqlite"
     build_index(
@@ -198,8 +198,8 @@ def test_try_index_ranked_no_semantic_equals_try_index(tmp_path, monkeypatch):
 def test_try_index_ranked_semantic_degrades_gracefully(tmp_path, monkeypatch):
     # semantic=True must still return index results even if the reranker is unavailable (the MCP +
     # engine both rely on this shared path; it must never crash a broad semantic query).
-    from ergon_tracker.index.backend import SqliteIndexBackend
-    from ergon_tracker.index.build import build_index
+    from ergon.index.backend import SqliteIndexBackend
+    from ergon.index.build import build_index
 
     p = tmp_path / "i.sqlite"
     build_index(
@@ -217,7 +217,7 @@ def test_try_index_ranked_semantic_degrades_gracefully(tmp_path, monkeypatch):
     monkeypatch.setattr(router, "_load_backend", lambda: SqliteIndexBackend(p))
     # force the reranker import to fail -> must fall back to lexical, not raise
     monkeypatch.setattr(
-        "ergon_tracker.semantic.get_semantic_reranker",
+        "ergon.semantic.get_semantic_reranker",
         lambda: (_ for _ in ()).throw(RuntimeError("no fastembed")),
     )
     out = router.try_index_ranked(SearchQuery(keywords="ml", semantic=True, limit=10))

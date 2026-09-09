@@ -30,9 +30,9 @@ import anyio
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
 
-SEED = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "seed.json"
+SEED = ROOT / "src" / "ergon" / "registry" / "data" / "seed.json"
 DEFAULT_OUT = ROOT / "scripts" / "candidates_commoncrawl.json"
 
 _COLLINFO = "https://index.commoncrawl.org/collinfo.json"

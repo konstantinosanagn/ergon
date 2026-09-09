@@ -14,8 +14,8 @@ import time
 
 import pytest
 
-from ergon_tracker.crawl_pool import run_pool
-from ergon_tracker.http import AsyncFetcher
+from ergon.crawl_pool import run_pool
+from ergon.http import AsyncFetcher
 
 pytestmark = pytest.mark.live
 
@@ -25,7 +25,7 @@ _JOIN_BUDGET_S = 20.0 * 60.0  # the real-run join cap; here it just exercises th
 
 def _sample_boards() -> list[tuple[str, str]]:
     """Return [(ats, token), ...] -- a few greenhouse + a few join boards, interleaved."""
-    from ergon_tracker.registry.store import SeedRegistry
+    from ergon.registry.store import SeedRegistry
 
     picks: dict[str, list[str]] = {"greenhouse": [], "join": []}
     for e in SeedRegistry().all().values():
@@ -46,8 +46,8 @@ async def test_pool_benchmark_greenhouse_vs_join() -> None:
     if len(boards) < 4:
         pytest.skip("registry has too few greenhouse/join boards to benchmark")
 
-    from ergon_tracker.models import SearchQuery
-    from ergon_tracker.providers.base import get_provider, load_builtins
+    from ergon.models import SearchQuery
+    from ergon.providers.base import get_provider, load_builtins
 
     load_builtins()
 

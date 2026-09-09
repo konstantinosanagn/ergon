@@ -29,19 +29,19 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.index.freshness import (  # noqa: E402
+from ergon.index.build import build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.index.freshness import (  # noqa: E402
     content_fingerprint_ids,
     content_version_enabled,
     idset_hash,
     sweep_boards,
 )
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
-from ergon_tracker.models import JobPosting, RawJob  # noqa: E402
-from ergon_tracker.providers.base import BaseProvider  # noqa: E402
-from ergon_tracker.providers.greenhouse import GreenhouseProvider  # noqa: E402
-from ergon_tracker.providers.recruitee import RecruiteeProvider  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
+from ergon.models import JobPosting, RawJob  # noqa: E402
+from ergon.providers.base import BaseProvider  # noqa: E402
+from ergon.providers.greenhouse import GreenhouseProvider  # noqa: E402
+from ergon.providers.recruitee import RecruiteeProvider  # noqa: E402
 
 _TOKEN = "acme"
 
@@ -116,7 +116,7 @@ def _br_raw(sid: str, lastupdated):
 
 
 def test_brassring_content_version_is_raw_lastupdated():
-    from ergon_tracker.providers.brassring import BrassRingProvider
+    from ergon.providers.brassring import BrassRingProvider
 
     p = BrassRingProvider()
     # Raw served day-granular date; a cross-day edit yields a DIFFERENT token.
@@ -272,7 +272,7 @@ def _today_states(stamp_hash):
 def _sweep_hash(prior_db, prov, monkeypatch):
     """Run the REAL sweep against prior_db with ``prov`` and return the board's published
     idset_hash (what freshness-sweep.yml would write to the sidecar for the build to compare)."""
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     monkeypatch.setattr(freshness, "get_provider", lambda name: prov)
     deltas: dict = {}
@@ -299,8 +299,8 @@ def _reg_for(prov):
 
 
 def _patch(monkeypatch, prov):
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _reg_for(prov))
     monkeypatch.setattr(base_mod, "get_provider", lambda n: prov)

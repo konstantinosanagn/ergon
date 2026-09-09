@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.models import JobPosting, Location, RemoteType, Salary
+from ergon.enrich import enrich_in_place
+from ergon.models import JobPosting, Location, RemoteType, Salary
 
 from .schema import FIELDS
 

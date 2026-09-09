@@ -17,10 +17,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_index as bi  # noqa: E402
 
-from ergon_tracker.index.build import build_index_from_fresh_db  # noqa: E402
-from ergon_tracker.index.db import connect  # noqa: E402
-from ergon_tracker.index.scheduler import BoardState  # noqa: E402
-from ergon_tracker.models import JobPosting  # noqa: E402
+from ergon.index.build import build_index_from_fresh_db  # noqa: E402
+from ergon.index.db import connect  # noqa: E402
+from ergon.index.scheduler import BoardState  # noqa: E402
+from ergon.models import JobPosting  # noqa: E402
 
 
 class _FakeReg:
@@ -55,9 +55,9 @@ class _FetcherNoop:
 
 
 def _patch(monkeypatch):
-    import ergon_tracker.http as http_mod
-    import ergon_tracker.providers.base as base_mod
-    import ergon_tracker.registry.store as store_mod
+    import ergon.http as http_mod
+    import ergon.providers.base as base_mod
+    import ergon.registry.store as store_mod
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeReg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: _ProviderEmpty())
@@ -95,8 +95,8 @@ def test_zero_result_board_drops_its_stale_jobs_on_next_build(monkeypatch, tmp_p
         source="greenhouse", source_job_id="old-1", company="Co", title="Old Role"
     )
     fresh1 = tmp_path / "fresh1.sqlite"
-    from ergon_tracker.index.build import append_jobs
-    from ergon_tracker.index.db import fresh_db
+    from ergon.index.build import append_jobs
+    from ergon.index.db import fresh_db
 
     fresh_db(fresh1)
     con1 = connect(fresh1)
@@ -154,7 +154,7 @@ def test_zero_result_board_drops_stale_jobs_when_registry_key_differs_from_compa
     real prior ``company_key`` via ``(source, board_token)`` from the prior index.
     """
     _patch(monkeypatch)
-    import ergon_tracker.registry.store as store_mod
+    import ergon.registry.store as store_mod
 
     monkeypatch.setattr(store_mod, "SeedRegistry", _FakeRegMismatch)
 
@@ -166,8 +166,8 @@ def test_zero_result_board_drops_stale_jobs_when_registry_key_differs_from_compa
         board_token="stripe",
     )
     fresh1 = tmp_path / "fresh1.sqlite"
-    from ergon_tracker.index.build import append_jobs
-    from ergon_tracker.index.db import fresh_db
+    from ergon.index.build import append_jobs
+    from ergon.index.db import fresh_db
 
     fresh_db(fresh1)
     con1 = connect(fresh1)

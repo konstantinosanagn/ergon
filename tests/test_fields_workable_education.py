@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ergon_tracker.extract.degree import degree_from_ats_vocab
-from ergon_tracker.models import RawJob
-from ergon_tracker.providers.workable import WorkableProvider
+from ergon.extract.degree import degree_from_ats_vocab
+from ergon.models import RawJob
+from ergon.providers.workable import WorkableProvider
 
 
 def _raw(payload: dict[str, Any]) -> RawJob:

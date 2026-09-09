@@ -111,7 +111,7 @@ def cv_risk_coverage(
     from scripts.train_sector_classifier import fit_model
     from sklearn.model_selection import StratifiedKFold
 
-    from ergon_tracker.extract.sector_features import assemble, cl2n
+    from ergon.extract.sector_features import assemble, cl2n
 
     y_arr = np.asarray(y)
     labels_sorted = sorted(set(y_arr))
@@ -215,7 +215,7 @@ def main(argv: list[str]) -> None:
 
     # ── Optional: old train-set scoring (loud warning) ────────────────────────────────────────
     if score_model_path is not None:
-        from ergon_tracker.extract.sector_clf import load_sector_model
+        from ergon.extract.sector_clf import load_sector_model
 
         print()
         print("=" * 70)

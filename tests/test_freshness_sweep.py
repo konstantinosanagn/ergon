@@ -1,4 +1,4 @@
-"""Stress tests for the daily freshness sweep engine (src/ergon_tracker/index/freshness.py).
+"""Stress tests for the daily freshness sweep engine (src/ergon/index/freshness.py).
 
 Everything here is OFFLINE: ``get_provider`` is monkeypatched to a fake in-process provider
 (never real network), ``now`` is injected (no wall-clock reads) -- matching the pattern already
@@ -11,9 +11,9 @@ import sqlite3
 
 import anyio
 
-from ergon_tracker.index.db import fresh_db
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.index.freshness import (
+from ergon.index.db import fresh_db
+from ergon.index.detail import DetailRef
+from ergon.index.freshness import (
     DETERMINISTIC_SOURCES,
     SEARCH_INDEX_SOURCES,
     BoardDelta,
@@ -28,8 +28,8 @@ from ergon_tracker.index.freshness import (
     sweep_boards,
     sweep_search_index_boards,
 )
-from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import DetailFetch, RawJob, SearchQuery
+from ergon.index.query import search_rows
+from ergon.models import DetailFetch, RawJob, SearchQuery
 
 _NOW = "2026-07-18T00:00:00+00:00"
 
@@ -168,7 +168,7 @@ def _raw(source_job_id: str, source: str = "greenhouse") -> RawJob:
 
 
 def test_board_live_ids_extracts_source_job_ids(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     monkeypatch.setattr(
         freshness, "get_provider", lambda name: _FakeProvider([_raw("1"), _raw("2")])
@@ -178,7 +178,7 @@ def test_board_live_ids_extracts_source_job_ids(monkeypatch):
 
 
 def test_board_live_ids_none_when_provider_unknown(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     monkeypatch.setattr(freshness, "get_provider", lambda name: None)
     ids = anyio.run(lambda: board_live_ids("nope", "acme", fetcher=object()))
@@ -186,7 +186,7 @@ def test_board_live_ids_none_when_provider_unknown(monkeypatch):
 
 
 def test_board_live_ids_none_on_fetch_exception(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     monkeypatch.setattr(freshness, "get_provider", lambda name: _FakeProvider(raises=True))
     ids = anyio.run(lambda: board_live_ids("greenhouse", "acme", fetcher=object()))
@@ -194,7 +194,7 @@ def test_board_live_ids_none_on_fetch_exception(monkeypatch):
 
 
 def test_board_live_ids_empty_board_is_empty_set_not_none(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     monkeypatch.setattr(freshness, "get_provider", lambda name: _FakeProvider([]))
     ids = anyio.run(lambda: board_live_ids("greenhouse", "acme", fetcher=object()))
@@ -225,7 +225,7 @@ def _make_get_provider(present: dict[tuple[str, str], set[str] | None]):
 def test_sweep_expires_departed_keeps_live_row_count_unchanged_and_excludes_from_search(
     tmp_path, monkeypatch
 ):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -269,7 +269,7 @@ def test_sweep_expires_departed_keeps_live_row_count_unchanged_and_excludes_from
 
 
 def test_sweep_errored_board_expires_nothing(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
     monkeypatch.setattr(
@@ -289,7 +289,7 @@ def test_sweep_errored_board_expires_nothing(tmp_path, monkeypatch):
 
 
 def test_sweep_excludes_search_index_sources(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
 
@@ -311,7 +311,7 @@ def test_sweep_excludes_search_index_sources(tmp_path, monkeypatch):
 
 
 def test_sweep_mixed_boards_only_sweeps_the_deterministic_one(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -351,7 +351,7 @@ def test_sweep_mixed_boards_only_sweeps_the_deterministic_one(tmp_path, monkeypa
 
 
 def test_sweep_no_active_rows_on_board_still_checks_but_expires_nothing(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
     monkeypatch.setattr(
@@ -378,7 +378,7 @@ def test_sweep_empty_live_set_never_expires_a_whole_board(tmp_path, monkeypatch)
     # must NOT cause every stored active posting on that board to be expired. board_live_ids yields
     # set() (not None) for it, so the safety valve must treat "empty live set + non-empty stored"
     # as undetermined -- counted as errored, expiring nothing.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -408,7 +408,7 @@ def test_sweep_empty_live_set_never_expires_a_whole_board(tmp_path, monkeypatch)
 def test_sweep_job_id_and_source_job_id_spaces_differ_correctly(tmp_path, monkeypatch):
     # jobs.id is the derived/hashed id; job_sources.source_job_id is the raw provider id. The
     # UPDATE must key off jobs.id even though the diff itself happens in source_job_id space.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -439,7 +439,7 @@ def test_sweep_job_id_and_source_job_id_spaces_differ_correctly(tmp_path, monkey
 
 
 def test_sweep_honors_concurrency_cap_and_completes(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     n_boards = 40
     jobs = [_job_row(f"b{i}-job", source_job_id=f"j{i}") for i in range(n_boards)]
@@ -516,7 +516,7 @@ def _ref(job_id: str, *, source: str = "oracle", apply_url: str | None = None) -
 
 
 def test_confirm_departed_true_when_detail_is_none(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     class _P:
         async def fetch_detail(self, ref, fetcher):
@@ -528,7 +528,7 @@ def test_confirm_departed_true_when_detail_is_none(monkeypatch):
 
 
 def test_confirm_departed_false_when_str_detail_has_text(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     class _P:
         async def fetch_detail(self, ref, fetcher):
@@ -540,7 +540,7 @@ def test_confirm_departed_false_when_str_detail_has_text(monkeypatch):
 
 
 def test_confirm_departed_false_when_detailfetch_has_text(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     class _P:
         async def fetch_detail(self, ref, fetcher):
@@ -552,7 +552,7 @@ def test_confirm_departed_false_when_detailfetch_has_text(monkeypatch):
 
 
 def test_confirm_departed_true_when_detailfetch_has_empty_text(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     class _P:
         async def fetch_detail(self, ref, fetcher):
@@ -564,7 +564,7 @@ def test_confirm_departed_true_when_detailfetch_has_empty_text(monkeypatch):
 
 
 def test_confirm_departed_none_on_exception(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     class _P:
         async def fetch_detail(self, ref, fetcher):
@@ -576,7 +576,7 @@ def test_confirm_departed_none_on_exception(monkeypatch):
 
 
 def test_confirm_departed_none_when_provider_unknown(monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     monkeypatch.setattr(freshness, "get_provider", lambda name: None)
     verdict = anyio.run(lambda: confirm_departed(_ref("x", source="nope"), fetcher=object()))
@@ -615,7 +615,7 @@ def test_search_index_bulk_relist_confirms_candidates_oracle_style(tmp_path, mon
     # 3 active rows; bulk-list returns only 1 -> 2 candidates (reshuffled-list false positives).
     # fetch_detail says candidate A is LIVE, candidate B is DEAD -> only B expires, A stays active,
     # row count unchanged.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -655,7 +655,7 @@ def test_search_index_bulk_relist_confirms_candidates_oracle_style(tmp_path, mon
 
 
 def test_search_index_bulk_relist_no_candidates_skips_confirm(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
 
@@ -691,7 +691,7 @@ def test_search_index_bulk_relist_no_candidates_skips_confirm(tmp_path, monkeypa
 
 
 def test_search_index_bulk_relist_board_error_derives_no_candidates(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
     monkeypatch.setattr(
@@ -719,7 +719,7 @@ def test_search_index_bulk_relist_board_error_derives_no_candidates(tmp_path, mo
 
 def test_search_index_per_posting_confirm_icims_style(tmp_path, monkeypatch):
     # No bulk relist for icims/eightfold -- every stored active id is confirmed directly.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -761,7 +761,7 @@ def test_search_index_per_posting_confirm_icims_style(tmp_path, monkeypatch):
 
 
 def test_search_index_per_posting_confirm_eightfold_style(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -799,7 +799,7 @@ def test_search_index_per_posting_confirm_eightfold_style(tmp_path, monkeypatch)
 
 
 def test_search_index_per_posting_board_limit_bounds_candidates(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     n = 10
     jobs = [_job_row(f"ic-{i}", source="icims", source_job_id=str(i)) for i in range(n)]
@@ -836,7 +836,7 @@ def test_search_index_per_posting_board_limit_bounds_candidates(tmp_path, monkey
 
 
 def test_search_index_confirm_error_keeps_row_active(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("sr-a", source="smartrecruiters", source_job_id="1")])
 
@@ -872,7 +872,7 @@ def test_search_index_confirm_error_keeps_row_active(tmp_path, monkeypatch):
 
 
 def test_search_index_sweep_excludes_deterministic_sources(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("gh-a", source="greenhouse", source_job_id="1")])
 
@@ -898,7 +898,7 @@ def test_search_index_sweep_excludes_deterministic_sources(tmp_path, monkeypatch
 def test_sweep_all_boards_composes_phase0_and_phase1_without_cross_calling(tmp_path, monkeypatch):
     # greenhouse (deterministic) departs on a single list-miss, with NO fetch_detail confirm.
     # oracle (search-index) only reaches fetch_detail for its own candidate.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -985,8 +985,8 @@ def test_every_search_index_source_provider_overrides_fetch_detail():
     # fetch_detail returning None. BaseProvider's default fetch_detail ALWAYS returns None, so a
     # source in SEARCH_INDEX_SOURCES whose provider does NOT override fetch_detail would confirm
     # EVERY candidate as dead -> mass false-expiry. Every search-index source must override it.
-    from ergon_tracker.providers import get_provider, load_builtins
-    from ergon_tracker.providers.base import BaseProvider
+    from ergon.providers import get_provider, load_builtins
+    from ergon.providers.base import BaseProvider
 
     load_builtins()
     for source in sorted(SEARCH_INDEX_SOURCES):
@@ -1001,7 +1001,7 @@ def test_sweep_partial_fetch_guard_skips_a_suspicious_mass_departure(tmp_path, m
     # A sizeable board whose (non-empty) live set is missing MOST of its stored ids looks like a
     # truncated/partial fetch, not real churn -- the fraction guard must treat it as undetermined
     # (errored), expiring nothing, rather than wipe the un-fetched tail.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     jobs = [_job_row(f"gh-{i}", source="greenhouse", source_job_id=str(i)) for i in range(40)]
     idx = _build_index(tmp_path, jobs)
@@ -1026,7 +1026,7 @@ def test_sweep_partial_fetch_guard_exempts_small_boards(tmp_path, monkeypatch):
     # Small boards legitimately churn hard in percentage terms (3 of 4 closing) -- the fraction
     # guard is size-gated and must NOT fire below the minimum board size, so real departures on a
     # tiny board are still expired.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     jobs = [_job_row(f"gh-{i}", source="greenhouse", source_job_id=str(i)) for i in range(4)]
     idx = _build_index(tmp_path, jobs)
@@ -1050,7 +1050,7 @@ def test_sweep_partial_fetch_guard_exempts_small_boards(tmp_path, monkeypatch):
 
 
 def test_search_index_confirm_honors_concurrency_cap(tmp_path, monkeypatch):
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     n = 20
     jobs = [_job_row(f"ef-{i}", source="eightfold", source_job_id=str(i)) for i in range(n)]
@@ -1162,7 +1162,7 @@ def test_added_ids_empty_stored_returns_whole_live_set():
 def test_sweep_records_delta_with_added_and_hash_on_genuine_change(tmp_path, monkeypatch):
     # A deterministic board that both DROPPED a stored id (departs) and GAINED a new one (added):
     # the delta must carry the added id and the fingerprint of the FULL live set.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,
@@ -1202,7 +1202,7 @@ def test_sweep_records_delta_with_added_and_hash_on_genuine_change(tmp_path, mon
 def test_sweep_records_delta_even_when_board_unchanged(tmp_path, monkeypatch):
     # A determinable board with ZERO adds and ZERO departures still records a delta -- the build
     # needs a current fingerprint to diff, and an empty added set is the "no new work" signal.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
     monkeypatch.setattr(
@@ -1226,7 +1226,7 @@ def test_sweep_records_delta_even_when_board_unchanged(tmp_path, monkeypatch):
 def test_sweep_without_deltas_collector_is_unchanged(tmp_path, monkeypatch):
     # Omitting board_deltas (the default) leaves the removed-side behavior byte-identical and simply
     # produces no signal -- zero regression.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")]
@@ -1248,7 +1248,7 @@ def test_sweep_without_deltas_collector_is_unchanged(tmp_path, monkeypatch):
 def test_sweep_emits_no_delta_on_none_fetch(tmp_path, monkeypatch):
     # An errored board fetch (None) must emit NO delta -- a bogus fingerprint here would make the
     # build wrongly skip re-crawling the board.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(tmp_path, [_job_row("gh-a", source_job_id="1")])
     monkeypatch.setattr(
@@ -1269,7 +1269,7 @@ def test_sweep_emits_no_delta_on_none_fetch(tmp_path, monkeypatch):
 def test_sweep_emits_no_delta_on_empty_while_stored_fetch(tmp_path, monkeypatch):
     # An empty live set while we still hold active postings is indistinguishable from a swallowed
     # transient failure -- the same valve that blocks a mass-expiry must ALSO block a delta.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path, [_job_row("gh-a", source_job_id="1"), _job_row("gh-b", source_job_id="2")]
@@ -1296,7 +1296,7 @@ def test_sweep_emits_no_delta_when_fraction_guard_trips(tmp_path, monkeypatch):
     # A sizeable board whose (non-empty) live set is missing MOST of its stored ids looks like a
     # TRUNCATED fetch -- the fraction guard makes it undetermined, and a truncated live set must NOT
     # emit an idset_hash (it would be the fingerprint of a partial set) or a phantom added set.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     jobs = [_job_row(f"gh-{i}", source_job_id=str(i)) for i in range(40)]
     idx = _build_index(tmp_path, jobs)
@@ -1326,7 +1326,7 @@ def test_sweep_all_boards_records_delta_for_deterministic_not_search_index(tmp_p
     # A greenhouse (deterministic) board and an oracle (search-index) board both change. Only the
     # deterministic one gets a delta -- oracle's list reshuffles/paginates, so its single-fetch
     # id-set is not a trustworthy fingerprint and must never be emitted.
-    import ergon_tracker.index.freshness as freshness
+    import ergon.index.freshness as freshness
 
     idx = _build_index(
         tmp_path,

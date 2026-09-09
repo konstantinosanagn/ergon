@@ -10,11 +10,11 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker.exceptions import TransientHTTPError
-from ergon_tracker.http import AsyncFetcher
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import EmploymentType, RemoteType, SearchQuery, make_job_id
-from ergon_tracker.providers.eightfold import EightfoldProvider
+from ergon.exceptions import TransientHTTPError
+from ergon.http import AsyncFetcher
+from ergon.index.detail import DetailRef
+from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.providers.eightfold import EightfoldProvider
 
 pytestmark = pytest.mark.anyio
 

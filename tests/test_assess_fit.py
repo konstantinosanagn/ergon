@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker import mcp_server
-from ergon_tracker.extract.skills import extract_skills
+from ergon import mcp_server
+from ergon.extract.skills import extract_skills
 
 
 def test_skills_special_chars_and_boundaries():

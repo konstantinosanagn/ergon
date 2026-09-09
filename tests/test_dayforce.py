@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ergon_tracker.models import RawJob
-from ergon_tracker.providers.dayforce import DayforceProvider
+from ergon.models import RawJob
+from ergon.providers.dayforce import DayforceProvider
 
 
 def test_matches_unified_and_legacy_hosts() -> None:

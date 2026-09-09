@@ -4,12 +4,12 @@ import gzip
 import hashlib
 import json
 
-import ergon_tracker.index.router as router
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.index.cache import IndexCache
-from ergon_tracker.index.db import SCHEMA_VERSION
-from ergon_tracker.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
+import ergon.index.router as router
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.index.cache import IndexCache
+from ergon.index.db import SCHEMA_VERSION
+from ergon.models import JobLevel, JobPosting, Location, RemoteType, SearchQuery
 
 
 def _jobs():

@@ -26,7 +26,7 @@ fuzzy dupes. Acceptable for a broad-discovery index at scale; documented.
 
 ### Task 1: `append_jobs(con, jobs, *, build_id)` — incremental insert  [build side]
 
-**Files:** `src/ergon_tracker/index/build.py`, `tests/test_index_streaming.py`
+**Files:** `src/ergon/index/build.py`, `tests/test_index_streaming.py`
 
 - [ ] Insert a batch of JobPostings (+ job_sources) into an open connection via `INSERT OR
   IGNORE` (dedup on `id`). Reuse `to_row`. Return # rows actually inserted.

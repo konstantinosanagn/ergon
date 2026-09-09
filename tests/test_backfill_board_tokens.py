@@ -6,13 +6,13 @@ active rows. Registry maps are injected here for a deterministic offline test.""
 
 from __future__ import annotations
 
-from ergon_tracker.index.build import (
+from ergon.index.build import (
     _default_url_parsers,
     _derive_token_from_url,
     backfill_board_tokens,
 )
-from ergon_tracker.index.db import connect, fresh_db
-from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES, SEARCH_INDEX_SOURCES
+from ergon.index.db import connect, fresh_db
+from ergon.index.freshness import DETERMINISTIC_SOURCES, SEARCH_INDEX_SOURCES
 
 
 def _insert(

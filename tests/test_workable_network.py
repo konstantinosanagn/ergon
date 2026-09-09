@@ -6,9 +6,9 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker import EmploymentType, RemoteType
-from ergon_tracker.models import SearchQuery
-from ergon_tracker.providers.workable_network import WorkableNetworkProvider
+from ergon import EmploymentType, RemoteType
+from ergon.models import SearchQuery
+from ergon.providers.workable_network import WorkableNetworkProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -48,7 +48,7 @@ async def test_fetch_paginates_with_cursor_only_after_first_page() -> None:
     with respx.mock:
         respx.get(API).mock(side_effect=responder)
         async with httpx.AsyncClient() as _c:
-            from ergon_tracker.http import AsyncFetcher
+            from ergon.http import AsyncFetcher
 
             async with AsyncFetcher(per_host_rate=100) as f:
                 raws = await WorkableNetworkProvider().fetch(
@@ -65,7 +65,7 @@ async def test_fetch_respects_limit() -> None:
     page1 = {"jobs": [_job("1"), _job("2"), _job("3")], "nextPageToken": "TOK"}
     with respx.mock:
         respx.get(API).mock(return_value=httpx.Response(200, json=page1))
-        from ergon_tracker.http import AsyncFetcher
+        from ergon.http import AsyncFetcher
 
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await WorkableNetworkProvider().fetch("", SearchQuery(limit=2), f)
@@ -77,7 +77,7 @@ async def test_fetch_stops_when_page_adds_no_new_ids() -> None:
     page = {"jobs": [_job("1")], "nextPageToken": "SAME"}
     with respx.mock:
         route = respx.get(API).mock(return_value=httpx.Response(200, json=page))
-        from ergon_tracker.http import AsyncFetcher
+        from ergon.http import AsyncFetcher
 
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await WorkableNetworkProvider().fetch("", SearchQuery(), f)
@@ -91,7 +91,7 @@ async def test_normalize_maps_fields() -> None:
     rj_list_page = {"jobs": [_job("42")], "nextPageToken": None}
     with respx.mock:
         respx.get(API).mock(return_value=httpx.Response(200, json=rj_list_page))
-        from ergon_tracker.http import AsyncFetcher
+        from ergon.http import AsyncFetcher
 
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await prov.fetch("", SearchQuery(), f)

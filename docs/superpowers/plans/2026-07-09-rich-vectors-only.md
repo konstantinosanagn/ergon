@@ -28,7 +28,7 @@
 - `_embed_rows_into(con, rows: list[tuple[str,str]], *, reranker, batch, single_process)` (`rich.py:265-304`) writes `INSERT OR REPLACE INTO job_vectors(id, scale, vec)`; `quantize_int8` → 384-byte blob.
 - `write_fresh_rich` captures `(id, sig, description, embed_text)`; `FRESH_RICH_SCHEMA` at `rich.py:244-247`.
 - `vector_search(con, query_vec, *, limit=50, candidate_ids=None) -> list[tuple[str, float]]` (`rich.py:529-568`) — **cosine, sorted desc**, `WHERE id IN (...)` when `candidate_ids` given; **ids absent from `job_vectors` are silently dropped**; does NOT preserve candidate order. `open_rich(path)` (`:504-507`) opens read-only.
-- **`SlimCache`** (`cache.py:262-311`) is the template: `__init__(base_url=None, cache_dir=None, repo=_REPO, tag=_TAG)` then `ensure_fresh() -> Path | None`; fetches `manifest-slim.json` (build_id + sha256 + schema_version), compares `build_id`, `gzip.decompress`, sha256-verifies, atomic `tmp.replace`. Constants: `_REPO`, `_TAG="index-latest"`, `_DEFAULT_BASE`, `_default_cache_dir() -> ~/.cache/ergon-tracker` (`:28-34`). Caches are constructed **per call** (`SlimCache().ensure_fresh()` in `router._load_slim`, `:39`).
+- **`SlimCache`** (`cache.py:262-311`) is the template: `__init__(base_url=None, cache_dir=None, repo=_REPO, tag=_TAG)` then `ensure_fresh() -> Path | None`; fetches `manifest-slim.json` (build_id + sha256 + schema_version), compares `build_id`, `gzip.decompress`, sha256-verifies, atomic `tmp.replace`. Constants: `_REPO`, `_TAG="index-latest"`, `_DEFAULT_BASE`, `_default_cache_dir() -> ~/.cache/ergon` (`:28-34`). Caches are constructed **per call** (`SlimCache().ensure_fresh()` in `router._load_slim`, `:39`).
 - **`router.try_index_ranked`** (`router.py:82-104`): `want = query.limit or 20`; `pool = try_index(query.model_copy(update={"limit": max(want * 10, 200)})) or indexed`; `indexed = rank(pool, query.keywords, reranker=get_semantic_reranker())[:want]`.
 - `rank(jobs, query, *, reranker)` (`ranking.py:131-140`) expects `Reranker.rerank(query, jobs) -> list[float]` (`:89-93`) and only reranks the lexical top-100. `SemanticReranker.rerank` returns **cosine** scores; `embed_query(q) -> list[float]` (`semantic.py:155-159`). So `vector_search`'s cosine and `rerank`'s cosine are on the **same scale** — mergeable.
 - **Cache tests use no network** (`tests/test_index_cache.py:33-40`): publish gz + manifest into a `tmp_path` dir, pass `base_url=remote.as_uri()` (`file://`), `cache_dir=tmp_path/"cache"`.
@@ -36,14 +36,14 @@
 
 ## File Structure
 
-**Modify:** `src/ergon_tracker/index/rich.py` (schema, reconcile, migration; delete `job_text`/FTS/`fulltext_search`), `src/ergon_tracker/index/cache.py` (add `RichCache`), `src/ergon_tracker/index/router.py` (hybrid vector rerank), `scripts/build_index.py` (publish `index-vectors.sqlite.gz` + `manifest-vectors.json`), `.github/workflows/build-index.yml` (download/upload names), `tests/test_rich_index.py` (adapt).
+**Modify:** `src/ergon/index/rich.py` (schema, reconcile, migration; delete `job_text`/FTS/`fulltext_search`), `src/ergon/index/cache.py` (add `RichCache`), `src/ergon/index/router.py` (hybrid vector rerank), `scripts/build_index.py` (publish `index-vectors.sqlite.gz` + `manifest-vectors.json`), `.github/workflows/build-index.yml` (download/upload names), `tests/test_rich_index.py` (adapt).
 **Create:** `tests/test_rich_cache.py`, `tests/test_router_vectors.py`.
 
 ---
 
 ## Task 1: Vectors-only schema — drop `job_text` + FTS
 
-**Files:** Modify `src/ergon_tracker/index/rich.py`; Modify `tests/test_rich_index.py`
+**Files:** Modify `src/ergon/index/rich.py`; Modify `tests/test_rich_index.py`
 
 **Interfaces:**
 - Produces: `RICH_SCHEMA` (vectors-only), `RICH_SCHEMA_VERSION: int = 3`, `_embed_rows_into(con, rows: list[tuple[str, str, str]], *, reranker, batch, single_process=False) -> tuple[int, str]` where each row is `(id, sig, embed_text)`, `_delete_ids(con, ids)` (vectors only). **Removes:** `job_text`, `job_text_fts`, `idx_job_text_sig`, `_upsert_text`, `fulltext_search`, and all three FTS-rebuild call sites.
@@ -163,10 +163,10 @@ Expected: PASS. The preserved invariants — `test_reconcile_from_fresh_chunk_bo
 - [ ] **Step 5: Lint, type, commit**
 
 ```bash
-.venv/bin/ruff check src/ergon_tracker/index/rich.py tests/test_rich_index.py
-.venv/bin/ruff format src/ergon_tracker/index/rich.py tests/test_rich_index.py
+.venv/bin/ruff check src/ergon/index/rich.py tests/test_rich_index.py
+.venv/bin/ruff format src/ergon/index/rich.py tests/test_rich_index.py
 .venv/bin/mypy
-git add src/ergon_tracker/index/rich.py tests/test_rich_index.py
+git add src/ergon/index/rich.py tests/test_rich_index.py
 git commit -m "feat(rich): vectors-only sidecar — drop job_text + FTS (removes the O(total-rows) rebuild)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -176,7 +176,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 2: Legacy-schema migration (runs on the runner)
 
-**Files:** Modify `src/ergon_tracker/index/rich.py`; Modify `tests/test_rich_index.py`
+**Files:** Modify `src/ergon/index/rich.py`; Modify `tests/test_rich_index.py`
 
 **Interfaces:**
 - Consumes: `RICH_SCHEMA`, `RICH_SCHEMA_VERSION` (Task 1).
@@ -258,10 +258,10 @@ Expected: PASS (all, including the new migration test).
 - [ ] **Step 5: Commit**
 
 ```bash
-.venv/bin/ruff check src/ergon_tracker/index/rich.py tests/test_rich_index.py
-.venv/bin/ruff format src/ergon_tracker/index/rich.py tests/test_rich_index.py
+.venv/bin/ruff check src/ergon/index/rich.py tests/test_rich_index.py
+.venv/bin/ruff format src/ergon/index/rich.py tests/test_rich_index.py
 .venv/bin/mypy
-git add src/ergon_tracker/index/rich.py tests/test_rich_index.py
+git add src/ergon/index/rich.py tests/test_rich_index.py
 git commit -m "feat(rich): in-place legacy->vectors-only migration (preserves the 360k embeddings)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -271,7 +271,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 3: `RichCache`
 
-**Files:** Modify `src/ergon_tracker/index/cache.py`; Create `tests/test_rich_cache.py`
+**Files:** Modify `src/ergon/index/cache.py`; Create `tests/test_rich_cache.py`
 
 **Interfaces:**
 - Produces: `class RichCache` with `__init__(self, base_url=None, cache_dir=None, repo=_REPO, tag=_TAG)` and `ensure_fresh(self) -> Path | None`. Assets: `manifest-vectors.json` + `index-vectors.sqlite.gz`; local `index-vectors.sqlite` + `manifest-vectors.json`.
@@ -286,8 +286,8 @@ import gzip
 import hashlib
 import json
 
-from ergon_tracker.index.cache import RichCache
-from ergon_tracker.index.rich import RICH_SCHEMA_VERSION, open_rich, vector_search
+from ergon.index.cache import RichCache
+from ergon.index.rich import RICH_SCHEMA_VERSION, open_rich, vector_search
 from tests.test_rich_index import FAKE, _build_rich, _job
 
 
@@ -403,10 +403,10 @@ Expected: PASS (3 new + existing cache tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-.venv/bin/ruff check src/ergon_tracker/index/cache.py tests/test_rich_cache.py
-.venv/bin/ruff format src/ergon_tracker/index/cache.py tests/test_rich_cache.py
+.venv/bin/ruff check src/ergon/index/cache.py tests/test_rich_cache.py
+.venv/bin/ruff format src/ergon/index/cache.py tests/test_rich_cache.py
 .venv/bin/mypy
-git add src/ergon_tracker/index/cache.py tests/test_rich_cache.py
+git add src/ergon/index/cache.py tests/test_rich_cache.py
 git commit -m "feat(rich): RichCache for the vectors sidecar (mirrors SlimCache; absence is a non-event)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -416,7 +416,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 4: Wire the router — hybrid vector rerank
 
-**Files:** Modify `src/ergon_tracker/index/router.py`; Create `tests/test_router_vectors.py`
+**Files:** Modify `src/ergon/index/router.py`; Create `tests/test_router_vectors.py`
 
 **Interfaces:**
 - Consumes: `RichCache.ensure_fresh()` (Task 3), `open_rich`, `vector_search` (`rich.py`), `get_semantic_reranker`, `SemanticReranker.embed_query/rerank`.
@@ -436,9 +436,9 @@ import json
 
 import pytest
 
-from ergon_tracker.index import router
-from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
-from ergon_tracker.models import SearchQuery
+from ergon.index import router
+from ergon.index.rich import RICH_SCHEMA_VERSION
+from ergon.models import SearchQuery
 from tests.test_rich_index import FAKE, _build_rich, _job
 
 
@@ -453,7 +453,7 @@ def _publish(remote, tmp_path, jobs):
 
 
 def test_vector_rerank_orders_by_cosine(tmp_path, monkeypatch):
-    from ergon_tracker.index.cache import RichCache
+    from ergon.index.cache import RichCache
 
     py = _job("py", "Python Engineer", "python kubernetes")
     nu = _job("nu", "Nurse", "nurse clinical")
@@ -470,7 +470,7 @@ def test_vector_rerank_orders_by_cosine(tmp_path, monkeypatch):
 
 def test_vector_rerank_hybrid_scores_uncovered_pool_members(tmp_path, monkeypatch):
     """Sidecar covers only `py`; `nu` is absent from job_vectors and must still be scored+kept."""
-    from ergon_tracker.index.cache import RichCache
+    from ergon.index.cache import RichCache
 
     py = _job("py", "Python Engineer", "python kubernetes")
     nu = _job("nu", "Nurse", "nurse clinical")
@@ -493,7 +493,7 @@ def test_vector_rerank_returns_none_without_sidecar(tmp_path, monkeypatch):
 
 
 def test_serving_never_builds_VectorIndex(monkeypatch):
-    import ergon_tracker.index.rich as rich
+    import ergon.index.rich as rich
 
     def boom(*a, **k):  # noqa: ANN002, ANN003
         raise AssertionError("VectorIndex must never be built in the serving path (~2.26GB float32)")
@@ -577,10 +577,10 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-.venv/bin/ruff check src/ergon_tracker/index/router.py tests/test_router_vectors.py
-.venv/bin/ruff format src/ergon_tracker/index/router.py tests/test_router_vectors.py
+.venv/bin/ruff check src/ergon/index/router.py tests/test_router_vectors.py
+.venv/bin/ruff format src/ergon/index/router.py tests/test_router_vectors.py
 .venv/bin/mypy
-git add src/ergon_tracker/index/router.py tests/test_router_vectors.py
+git add src/ergon/index/router.py tests/test_router_vectors.py
 git commit -m "feat(rich): router ranks from pre-stored vectors (hybrid; one query embedding, clean fallback)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -600,7 +600,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 In both `build_and_publish_rich` (`:305-319`) and `build_and_publish_rich_incremental` (`:322-334`), change `rich_db = out / "index-rich.sqlite"` → `out / "index-vectors.sqlite"`, gzip to `out / "index-vectors.sqlite.gz"`, and after gzipping write the manifest (mirroring the slim manifest):
 
 ```python
-    from ergon_tracker.index.rich import RICH_SCHEMA_VERSION
+    from ergon.index.rich import RICH_SCHEMA_VERSION
 
     sha, nbytes = _gzip_file(rich_db, out / "index-vectors.sqlite.gz")
     (out / "manifest-vectors.json").write_text(

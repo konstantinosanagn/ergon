@@ -11,10 +11,10 @@ from __future__ import annotations
 import anyio
 import pytest
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import JobPosting
-from ergon_tracker.providers.ukg import UKGProvider
+from ergon.enrich import enrich_in_place
+from ergon.index.detail import DetailRef
+from ergon.models import JobPosting
+from ergon.providers.ukg import UKGProvider
 
 _DETAIL_URL = (
     "https://recruiting.ultipro.com/ACME1000/JobBoard/"

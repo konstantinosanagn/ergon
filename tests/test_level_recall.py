@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.level import infer_level
+from ergon.extract.level import infer_level
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "level_corpus.jsonl"
 

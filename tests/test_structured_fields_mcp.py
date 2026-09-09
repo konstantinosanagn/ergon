@@ -1,6 +1,6 @@
 """End-to-end real-serving-path stress test (Task 12 of the structured-field-recovery plan).
 
-The whole Stage-1 design rests on ONE invariant: ``enrich_in_place`` (``ergon_tracker.enrich``)
+The whole Stage-1 design rests on ONE invariant: ``enrich_in_place`` (``ergon.enrich``)
 must PRESERVE provider-set structured fields (level/salary/degree/years) rather than overwrite
 them with a text-extractor guess. Its guards are:
 
@@ -21,16 +21,16 @@ field actually changes filter results, not just that it survives in isolation.
 
 from __future__ import annotations
 
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.models import JobLevel, SearchQuery
-from ergon_tracker.providers.base import RawJob
-from ergon_tracker.providers.breezy import BreezyProvider
-from ergon_tracker.providers.jazzhr import JazzHRProvider
-from ergon_tracker.providers.join import JoinProvider
-from ergon_tracker.providers.personio import PersonioProvider
-from ergon_tracker.providers.recruitee import RecruiteeProvider
-from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
-from ergon_tracker.providers.workable import WorkableProvider
+from ergon.enrich import enrich_in_place
+from ergon.models import JobLevel, SearchQuery
+from ergon.providers.base import RawJob
+from ergon.providers.breezy import BreezyProvider
+from ergon.providers.jazzhr import JazzHRProvider
+from ergon.providers.join import JoinProvider
+from ergon.providers.personio import PersonioProvider
+from ergon.providers.recruitee import RecruiteeProvider
+from ergon.providers.smartrecruiters import SmartRecruitersProvider
+from ergon.providers.workable import WorkableProvider
 
 
 def _raw(source: str, payload: dict, *, source_job_id: str = "1", company: str = "Co") -> RawJob:

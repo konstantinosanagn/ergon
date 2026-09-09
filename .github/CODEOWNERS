@@ -5,6 +5,6 @@
 /.github/dependabot.yml @konstantinosanagn
 
 # The publish gates and the client-side download trust boundary.
-/src/ergon_tracker/index/gates.py @konstantinosanagn
-/src/ergon_tracker/index/cache.py @konstantinosanagn
+/src/ergon/index/gates.py @konstantinosanagn
+/src/ergon/index/cache.py @konstantinosanagn
 /scripts/build_index.py @konstantinosanagn

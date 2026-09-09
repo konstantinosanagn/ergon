@@ -6,13 +6,13 @@
 
 **Architecture:** One offline script, `scripts/probe_pdl_sectors.py`, in four isolated units: acquisition (download→gitignored scratch, or `--dump PATH`), a parallel memory-bounded streaming name-join (env-gated `ProcessPoolExecutor`), a static LinkedIn-industry→27 crosswalk, and measurement/verdict. Ships nothing to runtime; `SectorExtractor` and `sectors.json` are untouched.
 
-**Tech Stack:** Python ≥3.10, stdlib only (json, gzip, concurrent.futures, resource, urllib) + the existing `ergon_tracker.dedup.normalize_company` and `ergon_tracker.registry.store.SeedRegistry`. No new dependency. pytest (`asyncio_mode=auto`, `pythonpath=["."]`).
+**Tech Stack:** Python ≥3.10, stdlib only (json, gzip, concurrent.futures, resource, urllib) + the existing `ergon.dedup.normalize_company` and `ergon.registry.store.SeedRegistry`. No new dependency. pytest (`asyncio_mode=auto`, `pythonpath=["."]`).
 
 ## Global Constraints
 
 - **Free · offline · CPU-only · laptop-safe.** No paid APIs. The only network is the one-time dataset download (decoupled via `--dump PATH`). Heavy work is one-time, streamed, memory-bounded.
 - **No new dependency.** stdlib + json; stream lines, never load a frame or the whole file. numpy/pandas/sklearn NOT used.
-- **Nothing ships to runtime.** `src/ergon_tracker/extract/sector.py` and `src/ergon_tracker/registry/data/sectors.json` are NOT modified. The probe only measures. No multi-GB file is committed (scratch is gitignored).
+- **Nothing ships to runtime.** `src/ergon/extract/sector.py` and `src/ergon/registry/data/sectors.json` are NOT modified. The probe only measures. No multi-GB file is committed (scratch is gitignored).
 - **Concurrency is env-gated, laptop-safe by default** (repo idiom, mirrors `ERGON_SHARD_WORKERS`): `ERGON_PROBE_WORKERS` explicit int → else `max(2, (os.cpu_count() or 4) - 2)` on CI → else `1` local.
 - **Memory-bounded streaming:** peak memory is O(target-set + in-flight chunks + matches), never O(dump). The main process never holds more than a bounded number of pending chunks.
 - **Stress-test before any full run:** a `--sample N` mode + a synthetic memory-watch test must pass first; every heavy step logs peak-RSS + wall-time and fails fast over a laptop budget.
@@ -21,10 +21,10 @@
 
 ## Key Facts (verified against the codebase)
 
-- `normalize_company(company: str) -> str` (`src/ergon_tracker/dedup.py:123-132`): lowercases, `&`→`and`, strips punctuation via `[^a-z0-9]+`, drops legal-suffix stopwords (`inc, llc, ltd, gmbh, corp, co, company, plc, ag, sa, holdings, the, …`), returns space-joined tokens. `"Acme, Inc."`→`"acme"`; `"Kirkland & Ellis"`→`"kirkland and ellis"`. Note the registry slug `"kirklandandellisllp"`→`"kirklandandellisllp"` (fused, no split) — so slug-vs-display can diverge; registry match rate is conservative (expected, per spec).
-- `SeedRegistry().all() -> dict[str, dict]` (`src/ergon_tracker/registry/store.py:103-105`): `{company_key: {"ats","token","domain"?}}`. **No display-name field** — registry side joins on the slug key.
-- `sectors.json` (`src/ergon_tracker/registry/data/sectors.json`): `{"_meta":…, "companies": {key: {"sector": str|null, "domain": str|null}}}`. "Currently covered" = key with non-null `sector`.
-- Script path idiom (`scripts/merge_sectors.py:14-19`): `ROOT = Path(__file__).resolve().parents[1]`; read `ROOT/"src"/"ergon_tracker"/"registry"/"data"/"seed.json"` via `json.loads(p.read_text())`.
+- `normalize_company(company: str) -> str` (`src/ergon/dedup.py:123-132`): lowercases, `&`→`and`, strips punctuation via `[^a-z0-9]+`, drops legal-suffix stopwords (`inc, llc, ltd, gmbh, corp, co, company, plc, ag, sa, holdings, the, …`), returns space-joined tokens. `"Acme, Inc."`→`"acme"`; `"Kirkland & Ellis"`→`"kirkland and ellis"`. Note the registry slug `"kirklandandellisllp"`→`"kirklandandellisllp"` (fused, no split) — so slug-vs-display can diverge; registry match rate is conservative (expected, per spec).
+- `SeedRegistry().all() -> dict[str, dict]` (`src/ergon/registry/store.py:103-105`): `{company_key: {"ats","token","domain"?}}`. **No display-name field** — registry side joins on the slug key.
+- `sectors.json` (`src/ergon/registry/data/sectors.json`): `{"_meta":…, "companies": {key: {"sector": str|null, "domain": str|null}}}`. "Currently covered" = key with non-null `sector`.
+- Script path idiom (`scripts/merge_sectors.py:14-19`): `ROOT = Path(__file__).resolve().parents[1]`; read `ROOT/"src"/"ergon"/"registry"/"data"/"seed.json"` via `json.loads(p.read_text())`.
 - Gold fixture `tests/fixtures/sector_corpus.jsonl`: `{"company","company_key","domain","sector"|null,"src"}`, 699 rows.
 - `.gitignore` scratch idiom (`:40-46`): `scripts/.h1b_cache/`, `scripts/.sector_wd_*.json`.
 
@@ -234,7 +234,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Test: `tests/test_probe_pdl_sectors.py`
 
 **Interfaces:**
-- Consumes: `normalize_company` (from `ergon_tracker.dedup`), `SeedRegistry` (from `ergon_tracker.registry.store`).
+- Consumes: `normalize_company` (from `ergon.dedup`), `SeedRegistry` (from `ergon.registry.store`).
 - Produces:
   - `norm(name: str) -> str` — `normalize_company` wrapper returning `""` for falsy/empty input.
   - `load_crosswalk(path=CROSSWALK_PATH) -> dict[str, str]`.
@@ -298,11 +298,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon_tracker.dedup import normalize_company  # noqa: E402
-from ergon_tracker.registry.store import SeedRegistry  # noqa: E402
+from ergon.dedup import normalize_company  # noqa: E402
+from ergon.registry.store import SeedRegistry  # noqa: E402
 
 CROSSWALK_PATH = ROOT / "scripts" / "linkedin_industry_to_sector.json"
-SECTORS_PATH = ROOT / "src" / "ergon_tracker" / "registry" / "data" / "sectors.json"
+SECTORS_PATH = ROOT / "src" / "ergon" / "registry" / "data" / "sectors.json"
 GOLD_PATH = ROOT / "tests" / "fixtures" / "sector_corpus.jsonl"
 
 

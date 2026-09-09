@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from ergon_tracker.extract.skills import extract_skills
+from ergon.extract.skills import extract_skills
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "skills_corpus.jsonl"
 

@@ -6,10 +6,10 @@ import httpx
 import pytest
 import respx
 
-from ergon_tracker import JobPosting, Location, RemoteType, Salary, SearchQuery
-from ergon_tracker.dedup import deduplicate
-from ergon_tracker.engine import run_search
-from ergon_tracker.http import AsyncFetcher
+from ergon import JobPosting, Location, RemoteType, Salary, SearchQuery
+from ergon.dedup import deduplicate
+from ergon.engine import run_search
+from ergon.http import AsyncFetcher
 
 pytestmark = pytest.mark.anyio
 

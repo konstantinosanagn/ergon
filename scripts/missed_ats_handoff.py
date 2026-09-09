@@ -29,9 +29,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from harvest_tokens import company_key, name_match  # noqa: E402
 
-from ergon_tracker.http import AsyncFetcher  # noqa: E402
-from ergon_tracker.models import SearchQuery  # noqa: E402
-from ergon_tracker.providers.base import iter_providers, load_builtins  # noqa: E402
+from ergon.http import AsyncFetcher  # noqa: E402
+from ergon.models import SearchQuery  # noqa: E402
+from ergon.providers.base import iter_providers, load_builtins  # noqa: E402
 
 REPORT = ROOT / "runs" / "browser_queue_triage.json"
 OUT = ROOT / "scripts" / "cand_missed_ats.json"

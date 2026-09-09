@@ -11,7 +11,7 @@ Usage:
   python scripts/measure_detail_coverage.py <index.sqlite> [--sources smartrecruiters,workday]
 
 Read-only: opens the index via sqlite3's URI `mode=ro` and never writes to it. Stdlib only
-(sqlite3, argparse) -- no runtime dependency on the `ergon_tracker` package.
+(sqlite3, argparse) -- no runtime dependency on the `ergon` package.
 """
 
 from __future__ import annotations

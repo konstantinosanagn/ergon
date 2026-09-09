@@ -89,7 +89,7 @@ PDL dump (name, industry)  ──►  probe name-join (REUSED)  ──►  ALLOW
 - **Create:** `scripts/sector_pdl.py`, `scripts/sector_pdl.json` (committed, ~1,000–1,500 entries),
   `tests/test_sector_pdl.py`.
 - **Modify:** `scripts/merge_sectors.py` (add pdl source + gap-fill priority),
-  `src/ergon_tracker/registry/data/sectors.json` (the merged result — the shipped runtime win),
+  `src/ergon/registry/data/sectors.json` (the merged result — the shipped runtime win),
   `tests/test_sector_recall.py` (ratchet `COVERAGE_GATE`).
 - **Record:** `docs/extraction-baseline.md` — new sector coverage/accuracy + that pdl is a gated,
   gap-fill source.

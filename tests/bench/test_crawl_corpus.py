@@ -18,7 +18,7 @@ from scripts.bench.crawl_corpus import (
     trim_to_row_budget,
 )
 
-from ergon_tracker.models import (
+from ergon.models import (
     EmploymentType,
     JobPosting,
     Location,
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.anyio
 
 
 class _StubRegistry:
-    """Tiny synthetic stand-in for ``ergon_tracker.registry.store.SeedRegistry`` -- only needs
+    """Tiny synthetic stand-in for ``ergon.registry.store.SeedRegistry`` -- only needs
     ``.all()`` to match ``select_targets``'s structural (Protocol) contract."""
 
     def __init__(self, companies: dict[str, dict[str, Any]]) -> None:

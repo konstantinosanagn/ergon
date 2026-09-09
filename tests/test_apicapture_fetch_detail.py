@@ -16,9 +16,9 @@ from typing import Any
 import anyio
 import pytest
 
-from ergon_tracker.index.detail import DetailRef
-from ergon_tracker.models import DetailFetch, SalaryInterval
-from ergon_tracker.providers.apicapture import (
+from ergon.index.detail import DetailRef
+from ergon.models import DetailFetch, SalaryInterval
+from ergon.providers.apicapture import (
     ApiCaptureProvider,
     _build_detail_request,
     _load_specs,
@@ -1004,7 +1004,7 @@ def test_tatacs_transient_5xx_raises() -> None:
 
 
 def test_new_detail_kinds_registered() -> None:
-    from ergon_tracker.providers.apicapture import _DETAIL_EXTRACTORS
+    from ergon.providers.apicapture import _DETAIL_EXTRACTORS
 
     for kind in ("json", "json_ld", "css", "html_sections", "graphql", "relay_json"):
         assert kind in _DETAIL_EXTRACTORS
@@ -1016,8 +1016,8 @@ def test_new_detail_kinds_registered() -> None:
 def test_apicapture_is_drain_only_not_liveness_confirm() -> None:
     from scripts.build_index import _TIER3_DETAIL_SOURCES
 
-    from ergon_tracker.index.freshness import DETERMINISTIC_SOURCES
-    from ergon_tracker.index.liveness import CONFIRM_VIA_DETAIL_SOURCES
+    from ergon.index.freshness import DETERMINISTIC_SOURCES
+    from ergon.index.liveness import CONFIRM_VIA_DETAIL_SOURCES
 
     # Wired for the Tier-3 JD drain...
     assert "apicapture" in _TIER3_DETAIL_SOURCES

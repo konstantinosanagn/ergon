@@ -7,7 +7,7 @@ from harvest_commoncrawl import load_seed_keys
 from harvest_tokens import _core
 
 sk = set(load_seed_keys())
-with open("src/ergon_tracker/registry/data/seed.json") as fh:
+with open("src/ergon/registry/data/seed.json") as fh:
     seed = json.load(fh)["companies"]
 with open("runs/giants.json") as fh:
     giants = json.load(fh)["uncovered_top"]

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from ergon_tracker.index.build import build_index_streaming
-from ergon_tracker.index.db import connect
-from ergon_tracker.index.query import search_rows
-from ergon_tracker.models import JobPosting, Location, RemoteType, SearchQuery
+from ergon.index.build import build_index_streaming
+from ergon.index.db import connect
+from ergon.index.query import search_rows
+from ergon.models import JobPosting, Location, RemoteType, SearchQuery
 
 NOW = datetime.now(timezone.utc)
 
@@ -72,7 +72,7 @@ def test_no_orphans_and_fts_consistent(tmp_path):
 def test_purge_returns_count(tmp_path):
     # _purge_ancient returns how many it dropped (used for build logging). Set up via the non-purging
     # build_index, then call _purge_ancient directly.
-    from ergon_tracker.index.build import _purge_ancient, build_index
+    from ergon.index.build import _purge_ancient, build_index
 
     p = tmp_path / "i.sqlite"
     build_index(

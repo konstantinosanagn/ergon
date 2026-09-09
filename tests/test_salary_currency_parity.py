@@ -3,9 +3,9 @@ drops EUR/GBP postings but keeps unknown-currency ones."""
 
 from __future__ import annotations
 
-from ergon_tracker.index.backend import SqliteIndexBackend
-from ergon_tracker.index.build import build_index
-from ergon_tracker.models import JobPosting, Salary, SearchQuery
+from ergon.index.backend import SqliteIndexBackend
+from ergon.index.build import build_index
+from ergon.models import JobPosting, Salary, SearchQuery
 
 
 def _job(sid, title, *, lo, hi, cur):

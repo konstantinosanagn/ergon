@@ -6,7 +6,7 @@
 
 **Architecture:** Each provider's `normalize()` maps a structured field it already downloads onto the `JobPosting`. The enrichment layer (`enrich_in_place`) already guards every field ("existing values are never overwritten": `if job.level is JobLevel.UNKNOWN`, `if job.salary is None`, …), so a provider-set structured value wins and the text extractors only fill gaps — **no changes to `enrich.py` are needed**. A shared `level_from_ats_vocab()` maps each ATS's seniority vocabulary to the `JobLevel` enum. Every mapping ships with a **populated-fill live gate** (asserts the field is *populated*, not merely present) and is stress-tested through the real MCP path at the end.
 
-**Tech Stack:** Python 3.10+, pydantic models, pytest, httpx (live gates), the existing `ergon_tracker.extract` parsers (`comp.parse_salary`, `level`).
+**Tech Stack:** Python 3.10+, pydantic models, pytest, httpx (live gates), the existing `ergon.extract` parsers (`comp.parse_salary`, `level`).
 
 ## Global Constraints
 
@@ -23,9 +23,9 @@
 
 ## File Structure
 
-- `src/ergon_tracker/extract/level.py` — add `level_from_ats_vocab()` (shared vocab→JobLevel mapper).
-- `src/ergon_tracker/providers/{smartrecruiters,jazzhr,workable,join,breezy,personio}.py` — map structured fields in `normalize()`.
-- `src/ergon_tracker/providers/{coveo,lever,paycom,taleobe}.py` — correctness-bug fixes.
+- `src/ergon/extract/level.py` — add `level_from_ats_vocab()` (shared vocab→JobLevel mapper).
+- `src/ergon/providers/{smartrecruiters,jazzhr,workable,join,breezy,personio}.py` — map structured fields in `normalize()`.
+- `src/ergon/providers/{coveo,lever,paycom,taleobe}.py` — correctness-bug fixes.
 - `tests/live/conftest.py` — the `live` marker + skip logic (new).
 - `tests/live/test_provider_fields_live.py` — populated-fill gates (new).
 - `tests/test_provider_field_mapping.py` — synthetic-payload unit tests for each `normalize()` change (new).
@@ -36,7 +36,7 @@
 ### Task 1: Shared `level_from_ats_vocab()` mapper + live-test harness
 
 **Files:**
-- Modify: `src/ergon_tracker/extract/level.py`
+- Modify: `src/ergon/extract/level.py`
 - Create: `tests/live/conftest.py`
 - Test: `tests/test_level_vocab.py`
 
@@ -49,8 +49,8 @@
 ```python
 # tests/test_level_vocab.py
 import pytest
-from ergon_tracker.extract.level import level_from_ats_vocab
-from ergon_tracker.models import JobLevel
+from ergon.extract.level import level_from_ats_vocab
+from ergon.models import JobLevel
 
 @pytest.mark.parametrize("raw,expected", [
     ("Entry Level", JobLevel.ENTRY),
@@ -82,7 +82,7 @@ Expected: FAIL with `ImportError: cannot import name 'level_from_ats_vocab'`
 
 - [ ] **Step 3: Implement the mapper**
 
-Add to `src/ergon_tracker/extract/level.py` (near `level_from_years`):
+Add to `src/ergon/extract/level.py` (near `level_from_years`):
 
 ```python
 # ATS "seniority/experience-level" vocabularies -> JobLevel. Ordered longest-key-first at match
@@ -147,7 +147,7 @@ Expected: PASS; live dir collects 0 or shows skips.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ergon_tracker/extract/level.py tests/test_level_vocab.py tests/live/conftest.py
+git add src/ergon/extract/level.py tests/test_level_vocab.py tests/live/conftest.py
 git commit -m "feat(extract): level_from_ats_vocab mapper + live-test harness
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -158,7 +158,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 2: SmartRecruiters `experienceLevel` → level (largest single win, ~150k)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/smartrecruiters.py` (`normalize`, ~line 143)
+- Modify: `src/ergon/providers/smartrecruiters.py` (`normalize`, ~line 143)
 - Test: `tests/test_provider_field_mapping.py` (new), `tests/live/test_provider_fields_live.py` (new)
 
 **Interfaces:**
@@ -172,7 +172,7 @@ import json, httpx, pytest
 from pathlib import Path
 
 _SEED = json.load(open(Path(__file__).resolve().parents[2] /
-    "src/ergon_tracker/registry/data/seed.json"))["companies"]
+    "src/ergon/registry/data/seed.json"))["companies"]
 _H = {"User-Agent": "Mozilla/5.0 (populated-fill gate)"}
 
 def _tokens(ats, n):
@@ -206,9 +206,9 @@ Expected: PASS (populated ≥ 80%). If it FAILS, stop — the field is not the w
 
 ```python
 # tests/test_provider_field_mapping.py
-from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
-from ergon_tracker.providers.base import RawJob
-from ergon_tracker.models import JobLevel
+from ergon.providers.smartrecruiters import SmartRecruitersProvider
+from ergon.providers.base import RawJob
+from ergon.models import JobLevel
 
 def _raw(payload):
     return RawJob(source_job_id="1", company="Co", url="http://x", token="co", payload=payload)
@@ -232,7 +232,7 @@ Expected: FAIL — `job.level` is UNKNOWN because normalize doesn't set it yet.
 
 - [ ] **Step 5: Map the field in `normalize()`**
 
-In `src/ergon_tracker/providers/smartrecruiters.py`, add the import near the top:
+In `src/ergon/providers/smartrecruiters.py`, add the import near the top:
 
 ```python
 from ..extract.level import level_from_ats_vocab
@@ -254,7 +254,7 @@ Expected: PASS (both cases)
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/smartrecruiters.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
+git add src/ergon/providers/smartrecruiters.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
 git commit -m "feat(smartrecruiters): map experienceLevel -> JobLevel (~150k postings)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -265,12 +265,12 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 3: jazzhr `<experience>` → level (~59k)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/jazzhr.py` (`normalize` + confirm the XML parse keeps `experience`)
+- Modify: `src/ergon/providers/jazzhr.py` (`normalize` + confirm the XML parse keeps `experience`)
 - Test: append to `tests/test_provider_field_mapping.py`, `tests/live/test_provider_fields_live.py`
 
 - [ ] **Step 1: Confirm `experience` reaches `raw.payload`**
 
-Run: `grep -nE "experience|_row_to_dict|findtext|\.tag" src/ergon_tracker/providers/jazzhr.py`
+Run: `grep -nE "experience|_row_to_dict|findtext|\.tag" src/ergon/providers/jazzhr.py`
 If the XML→dict parse does not already capture the `<experience>` element into the payload dict, add it there (mirror how `<type>`/`<department>` are captured) as the first change. The live gate in Step 2 tells you which case you're in.
 
 - [ ] **Step 2: Write + run the populated-fill live gate**
@@ -301,7 +301,7 @@ Expected: PASS (≥80%). Stop if it fails.
 ```python
 # append to tests/test_provider_field_mapping.py
 def test_jazzhr_maps_experience():
-    from ergon_tracker.providers.jazzhr import JazzHRProvider
+    from ergon.providers.jazzhr import JazzHRProvider
     p = JazzHRProvider()
     job = p.normalize(_raw({"title": "Engineer", "experience": "Experienced"}))
     assert job.level is JobLevel.MID
@@ -329,7 +329,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/jazzhr.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
+git add src/ergon/providers/jazzhr.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
 git commit -m "feat(jazzhr): map <experience> -> JobLevel (~59k postings)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -340,7 +340,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 4: workable `experience` → level (~45k)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/workable.py` (`normalize`, ~line 111)
+- Modify: `src/ergon/providers/workable.py` (`normalize`, ~line 111)
 - Test: append to both test files
 
 Note: workable `education` (→ degree) is deferred to Task 10 — its vocabulary and fill need their own verification and a separate `degree_from_ats_vocab` mapper. This task does the verified level win only.
@@ -374,7 +374,7 @@ Expected: PASS (≥55%; measured ~62%). Stop if it fails.
 ```python
 # append to tests/test_provider_field_mapping.py
 def test_workable_maps_experience():
-    from ergon_tracker.providers.workable import WorkableProvider
+    from ergon.providers.workable import WorkableProvider
     p = WorkableProvider()
     job = p.normalize(_raw({"title": "Engineer", "experience": "Entry level"}))
     assert job.level is JobLevel.ENTRY
@@ -402,7 +402,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/workable.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
+git add src/ergon/providers/workable.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
 git commit -m "feat(workable): map experience bucket -> JobLevel (~45k postings)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -413,7 +413,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 5: join structured salary (`salaryAmountFrom/To`, ~15–27k)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/join.py` (`normalize`, replace `salary=None`)
+- Modify: `src/ergon/providers/join.py` (`normalize`, replace `salary=None`)
 - Test: append to both test files
 
 Context (verified): amounts are in the `__NEXT_DATA__` blob in minor units (÷100), present even when `settings.showSalary` is `false`. `salaryFrequency` is `PER_YEAR`/`PER_MONTH`/etc.
@@ -455,8 +455,8 @@ Expected: PASS (≥30%; measured 35–62%). Stop if it fails.
 ```python
 # append to tests/test_provider_field_mapping.py
 def test_join_maps_structured_salary():
-    from ergon_tracker.providers.join import JoinProvider
-    from ergon_tracker.models import SalaryInterval
+    from ergon.providers.join import JoinProvider
+    from ergon.models import SalaryInterval
     p = JoinProvider()
     job = p.normalize(_raw({"title": "Eng", "salaryAmountFrom": 18000000,
                             "salaryAmountTo": 32000000, "salaryCurrency": "USD",
@@ -466,7 +466,7 @@ def test_join_maps_structured_salary():
     assert job.salary.currency == "USD" and job.salary.interval is SalaryInterval.YEAR
 
 def test_join_no_amount_stays_none():
-    from ergon_tracker.providers.join import JoinProvider
+    from ergon.providers.join import JoinProvider
     p = JoinProvider()
     assert p.normalize(_raw({"title": "Eng"})).salary is None
 ```
@@ -478,7 +478,7 @@ Expected: FAIL (salary None).
 
 - [ ] **Step 4: Add a salary builder + map it**
 
-In `src/ergon_tracker/providers/join.py`, add near the top:
+In `src/ergon/providers/join.py`, add near the top:
 
 ```python
 from ..models import Salary, SalaryInterval
@@ -501,7 +501,7 @@ def _salary(p: dict) -> Salary | None:
     )
 ```
 
-(If `SalaryInterval` has no `DAY` member, drop the `PER_DAY` entry — check `from ergon_tracker.models import SalaryInterval; list(SalaryInterval)`.)
+(If `SalaryInterval` has no `DAY` member, drop the `PER_DAY` entry — check `from ergon.models import SalaryInterval; list(SalaryInterval)`.)
 
 Replace `salary=None,  # amounts not exposed in the list blob` in `normalize()` with:
 
@@ -517,7 +517,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/join.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
+git add src/ergon/providers/join.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
 git commit -m "feat(join): map structured salary amounts (~20k boards; incl showSalary=false)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -528,7 +528,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 6: breezy free-text salary (~11k)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/breezy.py` (`normalize`, replace `salary=None`)
+- Modify: `src/ergon/providers/breezy.py` (`normalize`, replace `salary=None`)
 - Test: append to both test files
 
 Context: breezy's feed carries `salary` as a free-text string (`"$78,000 / year"`, `"$1,400 – $1,800 / week"`); `comp.parse_salary` already parses these (verified). Empty string on many boards → `None`.
@@ -561,13 +561,13 @@ Expected: PASS (≥30%; measured ~38%). Stop if it fails.
 ```python
 # append to tests/test_provider_field_mapping.py
 def test_breezy_parses_freetext_salary():
-    from ergon_tracker.providers.breezy import BreezyProvider
+    from ergon.providers.breezy import BreezyProvider
     p = BreezyProvider()
     job = p.normalize(_raw({"name": "Eng", "salary": "$78,000 / year"}))
     assert job.salary is not None and job.salary.min_amount == 78000.0
 
 def test_breezy_empty_salary_stays_none():
-    from ergon_tracker.providers.breezy import BreezyProvider
+    from ergon.providers.breezy import BreezyProvider
     p = BreezyProvider()
     assert p.normalize(_raw({"name": "Eng", "salary": ""})).salary is None
 ```
@@ -599,7 +599,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/breezy.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
+git add src/ergon/providers/breezy.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
 git commit -m "feat(breezy): parse the free-text salary the feed already carries (~11k)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -610,14 +610,14 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 7: personio `seniority` → level + `yearsOfExperience` → years (~8k; already in `raw`, unpromoted)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/personio.py` (`normalize`)
+- Modify: `src/ergon/providers/personio.py` (`normalize`)
 - Test: append to both test files
 
 Context: the provider docstring already documents `<seniority>` and `<yearsOfExperience>` and `_position_to_dict` captures them into `raw`; `normalize` never promotes them. `yearsOfExperience` is a string range like `"1-2"` / `"lt-1"` / `"5-10"`.
 
 - [ ] **Step 1: Confirm the payload keys**
 
-Run: `ERGON_LIVE_TESTS=1 uv run python -c "import json,httpx; s=json.load(open('src/ergon_tracker/registry/data/seed.json'))['companies']; t=[e['token'] for e in s.values() if isinstance(e,dict) and e.get('ats')=='personio' and e.get('token')][0]; import ergon_tracker.providers.personio as m; print(t)"`
+Run: `ERGON_LIVE_TESTS=1 uv run python -c "import json,httpx; s=json.load(open('src/ergon/registry/data/seed.json'))['companies']; t=[e['token'] for e in s.values() if isinstance(e,dict) and e.get('ats')=='personio' and e.get('token')][0]; import ergon.providers.personio as m; print(t)"`
 Then inspect one live payload's keys for `seniority` / `yearsOfExperience` (use the provider's own fetch or the documented XML endpoint). Confirm the exact key spelling before writing the map.
 
 - [ ] **Step 2: Write + run the populated-fill live gate**
@@ -626,7 +626,7 @@ Then inspect one live payload's keys for `seniority` / `yearsOfExperience` (use 
 # append to tests/live/test_provider_fields_live.py
 @pytest.mark.live
 def test_personio_seniority_populated():
-    from ergon_tracker.providers.personio import PersonioProvider
+    from ergon.providers.personio import PersonioProvider
     import anyio
     prov = PersonioProvider()
     tot = filled = 0
@@ -652,7 +652,7 @@ Expected: PASS. Stop if it fails.
 ```python
 # append to tests/test_provider_field_mapping.py
 def test_personio_promotes_seniority_and_years():
-    from ergon_tracker.providers.personio import PersonioProvider
+    from ergon.providers.personio import PersonioProvider
     p = PersonioProvider()
     job = p.normalize(_raw({"name": "Eng", "seniority": "senior", "yearsOfExperience": "1-2"}))
     assert job.level is JobLevel.SENIOR
@@ -714,7 +714,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/personio.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
+git add src/ergon/providers/personio.py tests/test_provider_field_mapping.py tests/live/test_provider_fields_live.py
 git commit -m "feat(personio): promote seniority + yearsOfExperience already in raw (~8k)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -725,14 +725,14 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 8: Correctness bug — coveo direct-mode drops description + department
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/coveo.py` (`normalize` / direct-mode branch)
+- Modify: `src/ergon/providers/coveo.py` (`normalize` / direct-mode branch)
 - Test: append to `tests/test_provider_field_mapping.py`
 
 Context: direct-mode (UST-style) raw items key the description under `data` and the department under `obu`, but `normalize()` reads `description`/`category`, so both silently normalize to `None` despite being 99.5–100% present.
 
 - [ ] **Step 1: Confirm the direct-mode key names**
 
-Run: `grep -nE "obu|\bdata\b|category|description|def normalize|direct" src/ergon_tracker/providers/coveo.py | head -25`
+Run: `grep -nE "obu|\bdata\b|category|description|def normalize|direct" src/ergon/providers/coveo.py | head -25`
 Confirm the direct-mode branch and the actual raw keys (`obu`, `data`) vs what `normalize` reads. Read `scratchpad/inventory-E.md` (coveo section) for the exact field names the agent captured.
 
 - [ ] **Step 2: Write the failing synthetic test**
@@ -740,7 +740,7 @@ Confirm the direct-mode branch and the actual raw keys (`obu`, `data`) vs what `
 ```python
 # append to tests/test_provider_field_mapping.py
 def test_coveo_direct_mode_reads_correct_keys():
-    from ergon_tracker.providers.coveo import CoveoProvider  # confirm class name
+    from ergon.providers.coveo import CoveoProvider  # confirm class name
     p = CoveoProvider()
     # direct-mode raw shape: description under 'data', department under 'obu'
     job = p.normalize(_raw({"title": "Eng", "data": "<p>Build things.</p>", "obu": "Engineering"}))
@@ -765,7 +765,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/coveo.py tests/test_provider_field_mapping.py
+git add src/ergon/providers/coveo.py tests/test_provider_field_mapping.py
 git commit -m "fix(coveo): direct-mode read description from 'data', department from 'obu'
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -776,7 +776,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 9: Correctness bugs — lever `country`, paycom teaser flag, taleobe location
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/{lever,paycom,taleobe}.py`
+- Modify: `src/ergon/providers/{lever,paycom,taleobe}.py`
 - Test: append to `tests/test_provider_field_mapping.py`
 
 Read `scratchpad/inventory-{A,C,D}.md` for the exact fields before editing each.
@@ -787,7 +787,7 @@ Write a failing test asserting a lever payload with top-level `country: "US"` yi
 
 ```python
 def test_lever_maps_country_iso():
-    from ergon_tracker.providers.lever import LeverProvider
+    from ergon.providers.lever import LeverProvider
     p = LeverProvider()
     job = p.normalize(_raw({"text": "Eng", "categories": {"location": "Remote"}, "country": "US"}))
     assert any(l.country for l in job.locations)
@@ -795,7 +795,7 @@ def test_lever_maps_country_iso():
 
 - [ ] **Step 2: paycom — flag the truncated description as a teaser, not full JD**
 
-paycom's `description_html` is a hard 153-char preview. Write a test asserting the mapped description is not treated as complete: set a marker so downstream/extraction does not assume full text. Minimal correct fix: stop populating `description_text`/`description_html` from the truncated field (leave them `None`) so paycom is honestly classified as JD-less (Tier-3), OR store it in `raw` only. Choose the option that matches how other snippet-only sources are handled (check `grep -n "snippet\|teaser\|truncat" src/ergon_tracker/providers/*.py`). Add a test pinning the chosen behavior.
+paycom's `description_html` is a hard 153-char preview. Write a test asserting the mapped description is not treated as complete: set a marker so downstream/extraction does not assume full text. Minimal correct fix: stop populating `description_text`/`description_html` from the truncated field (leave them `None`) so paycom is honestly classified as JD-less (Tier-3), OR store it in `raw` only. Choose the option that matches how other snippet-only sources are handled (check `grep -n "snippet\|teaser\|truncat" src/ergon/providers/*.py`). Add a test pinning the chosen behavior.
 
 - [ ] **Step 3: taleobe — fix the location mis-tag**
 
@@ -809,7 +809,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/ergon_tracker/providers/lever.py src/ergon_tracker/providers/paycom.py src/ergon_tracker/providers/taleobe.py tests/test_provider_field_mapping.py
+git add src/ergon/providers/lever.py src/ergon/providers/paycom.py src/ergon/providers/taleobe.py tests/test_provider_field_mapping.py
 git commit -m "fix(providers): lever country ISO, paycom teaser honesty, taleobe location
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -820,8 +820,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 10: Aggregator + tail structured fields (themuse, jobicy, himalayas, usajobs, workable education)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/{themuse,jobicy,himalayas,usajobs,workable}.py`
-- Create: `degree_from_ats_vocab` in `src/ergon_tracker/extract/degree.py`
+- Modify: `src/ergon/providers/{themuse,jobicy,himalayas,usajobs,workable}.py`
+- Create: `degree_from_ats_vocab` in `src/ergon/extract/degree.py`
 - Test: append to both test files
 
 Each sub-step follows the identical pattern: **live populated-fill gate → synthetic unit test → map in `normalize()` → green → (batched commit)**. Read `scratchpad/inventory-E.md` for exact field names/values per source.
@@ -839,7 +839,7 @@ Each sub-step follows the identical pattern: **live populated-fill gate → synt
 ### Task 11: Tail salary + geo (phenom, teamtailor, applicantpro, remotive, recruitee, ceipal, eightfold)
 
 **Files:**
-- Modify: `src/ergon_tracker/providers/{phenom,teamtailor,applicantpro,remotive,recruitee,ceipal,eightfold}.py`
+- Modify: `src/ergon/providers/{phenom,teamtailor,applicantpro,remotive,recruitee,ceipal,eightfold}.py`
 - Test: append to both test files
 
 Same pattern per source (live gate → unit test → map → green). Note the **verified** fill rates — do not over-claim:
@@ -871,10 +871,10 @@ This is the required real-MCP validation: build a small index from synthetic-but
 
 ```python
 # tests/test_structured_fields_mcp.py
-from ergon_tracker.providers.smartrecruiters import SmartRecruitersProvider
-from ergon_tracker.providers.base import RawJob
-from ergon_tracker.enrich import enrich_in_place
-from ergon_tracker.models import JobLevel
+from ergon.providers.smartrecruiters import SmartRecruitersProvider
+from ergon.providers.base import RawJob
+from ergon.enrich import enrich_in_place
+from ergon.models import JobLevel
 
 def _raw(payload, src="smartrecruiters"):
     return RawJob(source_job_id="1", company="Co", url="http://x", token="co", payload=payload)
@@ -888,7 +888,7 @@ def test_smartrecruiters_level_survives_enrichment():
     assert job.level is JobLevel.ENTRY  # provider value preserved end-to-end
 
 def test_breezy_salary_survives_enrichment():
-    from ergon_tracker.providers.breezy import BreezyProvider
+    from ergon.providers.breezy import BreezyProvider
     job = BreezyProvider().normalize(_raw({"name": "Eng", "salary": "$78,000 / year"}, "breezy"))
     enrich_in_place(job)
     assert job.salary is not None and job.salary.min_amount == 78000.0
@@ -901,11 +901,11 @@ Expected: PASS (mappings from Tasks 2–11 are in place; enrichment guards prese
 
 - [ ] **Step 3: Write the live coverage-measurement script**
 
-`scripts/measure_field_coverage.py` — reads the local cached index (`~/.cache/ergon-tracker/index.sqlite`), computes level/salary/degree populated-coverage per source, and prints a before/after table. This is the real-index check to run after a rebuild ships the mappings (documents the actual coverage lift, e.g. smartrecruiters level 0%→~100%, index-wide level 43%→~55%+). Not a unit test — an operator tool.
+`scripts/measure_field_coverage.py` — reads the local cached index (`~/.cache/ergon/index.sqlite`), computes level/salary/degree populated-coverage per source, and prints a before/after table. This is the real-index check to run after a rebuild ships the mappings (documents the actual coverage lift, e.g. smartrecruiters level 0%→~100%, index-wide level 43%→~55%+). Not a unit test — an operator tool.
 
 ```python
 import sqlite3, os
-c = sqlite3.connect(os.path.expanduser("~/.cache/ergon-tracker/index.sqlite"))
+c = sqlite3.connect(os.path.expanduser("~/.cache/ergon/index.sqlite"))
 def cov(where):
     n = c.execute(f"SELECT COUNT(*) FROM jobs WHERE {where} AND expired_at IS NULL").fetchone()[0]
     tot = c.execute("SELECT COUNT(*) FROM jobs WHERE expired_at IS NULL").fetchone()[0]
