@@ -395,7 +395,9 @@ async def _run_pipeline(
     the others. Bounded memory: the stream buffers at most ``concurrency`` results, and each worker
     holds its limiter slot until it hands off, so at most ~``concurrency`` results are ever live —
     never the whole window."""
-    send, recv = anyio.create_memory_object_stream(max_buffer_size=concurrency)
+    send, recv = anyio.create_memory_object_stream[tuple[DetailRef, str | DetailFetch | None]](
+        max_buffer_size=concurrency
+    )
     limiter = anyio.CapacityLimiter(concurrency)
 
     async def producer() -> None:
