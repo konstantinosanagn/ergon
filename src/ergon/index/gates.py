@@ -27,6 +27,13 @@ _DEF_JD_MAX_DROP_PCT = 15.0
 # a re-crawl legitimately lands lower (2026-09-09: 76.0% vs a 93.39% baseline, with 316,859 rows
 # not yet in the detail sidecar) and would otherwise be blocked for drain lag, not data loss.
 _DEF_JD_HEALTHY_PCT = 70.0
+# Max fraction of ACTIVE rows a single build may lose. row_floor counts every row including
+# expired, and every expiry path flips `status` in place rather than deleting, so a 100% expiry
+# leaves COUNT(*) unchanged and row_floor cannot see it -- by construction. jd_coverage is a ratio
+# over active, so a uniform expiry can even improve it. This is the gate that watches the count
+# the expiry paths actually move. 0.90 tolerates ordinary daily churn (observed: ~0.2%/day) while
+# catching the shape of a mass expiry.
+_DEF_ACTIVE_MIN_RATIO = 0.90
 
 
 def jd_gate_drop_pct_from_env() -> float:
@@ -115,6 +122,35 @@ def _jd_gate_result(
         False,
         f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct}, "
         f"below healthy floor {jd_healthy_pct})",
+    )
+
+
+def evaluate_active_floor(
+    db_path: Path | str,
+    *,
+    prev_active: int | None = None,
+    min_ratio: float = _DEF_ACTIVE_MIN_RATIO,
+) -> GateResult:
+    """Block a build that lost too large a share of its ACTIVE rows.
+
+    MUST be evaluated on the FINAL artifact, after the liveness pass has flipped statuses — that
+    pass is the one that expires rows, so gating before it measures the wrong database.
+
+    No baseline (first build, or missing history) passes: like row_floor's cold start, an absent
+    basis is not evidence of loss.
+    """
+    con = connect(db_path, read_only=True)
+    try:
+        active = con.execute("SELECT COUNT(*) FROM jobs WHERE status='active'").fetchone()[0]
+    finally:
+        con.close()
+    if not prev_active:
+        return GateResult("active_row_floor", True, f"{active} active (no baseline)")
+    floor = int(prev_active * min_ratio)
+    return GateResult(
+        "active_row_floor",
+        active >= floor,
+        f"{active} active (floor {floor}, prev {prev_active}, min_ratio {min_ratio})",
     )
 
 
