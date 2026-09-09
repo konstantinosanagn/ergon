@@ -1,0 +1,10 @@
+* @konstantinosanagn
+
+# Workflow edits grant contents:write and can publish to the production release.
+/.github/workflows/ @konstantinosanagn
+/.github/dependabot.yml @konstantinosanagn
+
+# The publish gates and the client-side download trust boundary.
+/src/ergon_tracker/index/gates.py @konstantinosanagn
+/src/ergon_tracker/index/cache.py @konstantinosanagn
+/scripts/build_index.py @konstantinosanagn

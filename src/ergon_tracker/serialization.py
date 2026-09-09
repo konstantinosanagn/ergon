@@ -3,10 +3,27 @@ QUERY surface so both return an identical wire shape (one source of truth, no dr
 
 from __future__ import annotations
 
+import unicodedata
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .models import JobPosting
+
+_MAX_TEXT = 300
+
+
+def _clean(value: str | None) -> str | None:
+    """Normalize a crawled free-text field before it crosses a tool/API boundary.
+
+    title/company/location come from third-party job boards, so they are attacker-controlled.
+    MCP clients feed them straight into an LLM context, where newlines and control characters
+    let a posting forge structure ("\\n\\nSYSTEM: ..."). Strip those and bound the length.
+    """
+    if value is None:
+        return None
+    text = "".join(" " if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") else c for c in value)
+    text = " ".join(text.split())
+    return text[:_MAX_TEXT].rstrip() if len(text) > _MAX_TEXT else text
 
 
 def job_to_dict(job: JobPosting) -> dict[str, Any]:
@@ -20,12 +37,12 @@ def job_to_dict(job: JobPosting) -> dict[str, Any]:
             "interval": job.salary.interval.value if job.salary.interval else None,
         }
     return {
-        "company": job.company,
-        "title": job.title,
-        "location": job.locations[0].as_text() if job.locations else None,
+        "company": _clean(job.company),
+        "title": _clean(job.title),
+        "location": _clean(job.locations[0].as_text()) if job.locations else None,
         "remote": job.remote.value,
         "level": job.level.value,
-        "sector": job.sector,
+        "sector": _clean(job.sector),
         "employment_type": job.employment_type.value,
         "salary": salary,
         "years_min": job.years_experience_min,
