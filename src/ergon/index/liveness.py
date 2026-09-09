@@ -25,8 +25,9 @@ for search-index-style boards):
   Stage 2 (confirm): a candidate on a source whose provider implements a real ``fetch_detail``
   (``CONFIRM_VIA_DETAIL_SOURCES`` -- their list APIs reshuffle/paginate non-deterministically,
   measured 50-100% list-miss false-positive rates) is confirmed via a per-posting detail fetch
-  instead of trusting the list miss: an explicit failure (``fetch_detail``'s contract is
-  non-raising -- ``None``/empty means dead) flips it immediately; a successful detail fetch means
+  instead of trusting the list miss: a returned ``None`` (``fetch_detail``'s contract: ``None``
+  means CONFIRMED GONE -- a real 404/410 or verified soft-404 -- while any transient/indeterminate
+  condition RAISES and is caught as a failed check, never a death) flips it; a successful fetch means
   the list miss was a false positive, and the row is left alive. Sources WITHOUT a ``fetch_detail``
   (proven 0-5% list false-positive rate) instead require ``dead_streak >= 2`` -- two consecutive
   WEEKLY misses -- before flipping, as transient-blip insurance (a board glitch on one crawl must

@@ -281,22 +281,28 @@ class WorkableProvider(BaseProvider):
 
     async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
         """Fetch one posting's full JD via the board-bulk memo cache (Tier-3 recovery, see
-        module docstring).
+                module docstring).
 
-        The shortcode is parsed from ``ref.apply_url`` (falling back to ``ref.listing_url``).
-        A cache hit (this shortcode already resolved by an earlier call — either directly, or as
-        a sibling on a board already bulk-fetched this run) returns immediately with NO network
-        call. On a miss, the board slug is taken from ``ref.token`` when present, else resolved
-        via one redirect hop (see :meth:`_resolve_token`); the whole board is then bulk-fetched
-        ONCE (see :meth:`_fetch_board`), priming the cache for every sibling posting on it before
-        this posting's (now-cached) description is returned. Concurrent siblings for OTHER
-        postings on the SAME board AWAIT that one in-flight fetch via a per-slug ``anyio.Lock``
-        (see :data:`_board_locks`) instead of racing it — without the lock, a sibling could see
-        the slug already "claimed" and read the cache before the fetch that claimed it had
-        actually populated anything, permanently returning ``None`` for the rest of the run.
+                The shortcode is parsed from ``ref.apply_url`` (falling back to ``ref.listing_url``).
+                A cache hit (this shortcode already resolved by an earlier call — either directly, or as
+                a sibling on a board already bulk-fetched this run) returns immediately with NO network
+                call. On a miss, the board slug is taken from ``ref.token`` when present, else resolved
+                via one redirect hop (see :meth:`_resolve_token`); the whole board is then bulk-fetched
+                ONCE (see :meth:`_fetch_board`), priming the cache for every sibling posting on it before
+                this posting's (now-cached) description is returned. Concurrent siblings for OTHER
+                postings on the SAME board AWAIT that one in-flight fetch via a per-slug ``anyio.Lock``
+                (see :data:`_board_locks`) instead of racing it — without the lock, a sibling could see
+                the slug already "claimed" and read the cache before the fetch that claimed it had
+                actually populated anything, permanently returning ``None`` for the rest of the run.
 
-        Non-raising: any unparseable URL, failed hop, or failed/malformed board fetch returns
-        ``None``, never an exception."""
+        RETURN/RAISE CONTRACT (see BaseProvider.fetch_detail): a returned ``None`` EXPIRES A LIVE
+                INDEX ROW, so it is returned in exactly ONE case — the board was fetched SUCCESSFULLY and
+                this shortcode was absent from it, which is real evidence the posting is gone. The bare
+                ``_desc_by_shortcode.get(shortcode)`` this used to end on could not tell that apart from
+                "the board fetch failed", so one timeout expired every posting on the board. An
+                unparseable URL, an unresolvable slug, a failed/malformed board fetch, or an exhausted
+                retry budget now RAISE. workable is in DETERMINISTIC_SOURCES, so genuine departures are
+                caught by the freshness sweep's membership check regardless."""
         slug: str | None = None
         shortcode: str | None = None
         for url in (ref.apply_url, ref.listing_url):
@@ -314,15 +320,19 @@ class WorkableProvider(BaseProvider):
                 if shortcode:
                     break
         if not shortcode:
-            return None
+            raise RuntimeError(f"workable detail: no shortcode derivable from {ref!s}")
 
         if shortcode in _desc_by_shortcode:
-            return _desc_by_shortcode[shortcode]
+            cached = _desc_by_shortcode[shortcode]
+            if cached:
+                return cached
+            # Present on a fetched board but with an empty description: alive, no JD to give.
+            raise RuntimeError(f"workable detail: posting {shortcode} has no description")
 
         if not slug:
             slug = ref.token or await self._resolve_token(shortcode, fetcher)
         if not slug:
-            return None
+            raise RuntimeError(f"workable detail: could not resolve board slug for {shortcode}")
 
         # Concurrent siblings for OTHER postings on this SAME board must AWAIT the in-flight
         # fetch rather than each independently deciding to start (or skip) one -- a bare
@@ -340,7 +350,17 @@ class WorkableProvider(BaseProvider):
             ):
                 await self._fetch_board(slug, fetcher)
 
-        return _desc_by_shortcode.get(shortcode)
+        # The ONLY evidence that expires a row: the board came back clean and this posting was
+        # not on it. If the fetch failed (slug never entered _fetched_board_slugs), we know
+        # nothing about this posting and must NOT report it dead.
+        if slug not in _fetched_board_slugs:
+            raise RuntimeError(f"workable detail: board {slug} unavailable; {shortcode} unknown")
+        cached = _desc_by_shortcode.get(shortcode)
+        if cached:
+            return cached
+        if shortcode in _desc_by_shortcode:
+            raise RuntimeError(f"workable detail: posting {shortcode} has no description")
+        return None  # fetched board, posting absent -> confirmed gone
 
     @staticmethod
     async def _fetch_board(slug: str, fetcher: AsyncFetcher) -> None:

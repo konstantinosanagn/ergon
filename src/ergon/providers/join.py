@@ -293,31 +293,37 @@ class JoinProvider(BaseProvider):
         bool flag, not content — never read for JD text. Fetched via plain ``fetcher.get_text``:
         the shared client's ``max_redirects=30`` (see http.py) is comfortably above join's
         22-23-hop evergreen-repost redirect chains, so the whole chain resolves inside that one
-        rate-limited call. Non-raising: any unparseable URL, fetch failure (including exceeding
-        the redirect cap), non-JSON payload, or shape mismatch (including a truthy non-dict at
-        ``job``) returns ``None``, never an exception."""
+        rate-limited call. RETURN/RAISE CONTRACT (see BaseProvider.fetch_detail): ``None`` is returned ONLY on a real
+        HTTP 404/410, because a returned ``None`` EXPIRES A LIVE INDEX ROW. Everything else —
+        an unbuildable URL, a timeout, a 5xx/429, exceeding the redirect cap, a non-JSON payload,
+        a shape mismatch, or a 200 with no JD text — RAISES. join is in DETERMINISTIC_SOURCES, so
+        genuine departures are caught by the freshness sweep's board-membership check; this
+        per-posting confirm exists only to avoid list-reshuffle false positives, so it must never
+        be the thing that decides a posting is dead."""
         url: str | None = None
         for candidate in (ref.apply_url, ref.listing_url):
             if candidate and _JOB_DETAIL_RE.search(candidate):
                 url = candidate
                 break
         if url is None:
-            return None
+            raise RuntimeError(f"join detail: no derivable detail URL for {ref!s}")
         try:
             html = await fetcher.get_text(url)
-        except Exception:
-            return None
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code in (404, 410):
+                return None
+            raise
         state = _parse_initial_state(html)
         job = state.get("job")
         if not isinstance(job, dict):
-            return None
+            raise RuntimeError(f"join detail: unparseable __NEXT_DATA__ job blob for {ref!s}")
         schema_description = job.get("schemaDescription")
         if isinstance(schema_description, str) and schema_description.strip():
             return schema_description
         description = job.get("description")
         if isinstance(description, str) and description.strip():
             return description
-        return None
+        raise RuntimeError(f"join detail: 200 with no JD text for {ref!s}")
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

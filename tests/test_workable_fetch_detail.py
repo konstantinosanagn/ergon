@@ -28,6 +28,10 @@ from ergon.providers.workable import (
     _reset_workable_cache,
 )
 
+# fetch_detail's contract: an INDETERMINATE condition raises rather than returning None,
+# because a returned None expires a live index row.
+_INDETERMINATE = (RuntimeError, httpx.HTTPError, OSError, ValueError)
+
 _SHORTLINK = "https://apply.workable.com/j/516863E6FD"
 _SHORTLINK_2 = "https://apply.workable.com/j/AAAAAAAAAA"
 _REDIRECT_TARGET = "https://apply.workable.com/jobrack/j/516863E6FD"
@@ -271,43 +275,43 @@ def test_workable_fetch_detail_falls_back_to_listing_url() -> None:
     assert desc == "<p>Fallback JD via listing_url...</p>"
 
 
-def test_workable_fetch_detail_missing_description_is_none() -> None:
+def test_workable_fetch_detail_missing_description_raises() -> None:
     fetcher = _FakeFetcher(
         redirects={_SHORTLINK: "/jobrack/j/516863E6FD"},
         board_payloads={_BOARD_URL: _board_payload({"shortcode": "516863E6FD"})},
     )
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
-def test_workable_fetch_detail_empty_description_is_none() -> None:
+def test_workable_fetch_detail_empty_description_raises() -> None:
     fetcher = _FakeFetcher(
         redirects={_SHORTLINK: "/jobrack/j/516863E6FD"},
         board_payloads={_BOARD_URL: _board_payload(_job("516863E6FD", "   "))},
     )
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
-def test_workable_fetch_detail_non_dict_board_payload_is_none() -> None:
+def test_workable_fetch_detail_non_dict_board_payload_raises() -> None:
     fetcher = _FakeFetcher(
         redirects={_SHORTLINK: "/jobrack/j/516863E6FD"},
         board_payloads={_BOARD_URL: ["not", "a", "dict"]},
     )
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
-def test_workable_fetch_detail_non_list_jobs_is_none() -> None:
+def test_workable_fetch_detail_non_list_jobs_raises() -> None:
     fetcher = _FakeFetcher(
         redirects={_SHORTLINK: "/jobrack/j/516863E6FD"},
         board_payloads={_BOARD_URL: {"name": "Jobrack", "jobs": "not-a-list"}},
     )
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
-def test_workable_fetch_detail_non_str_description_is_none() -> None:
+def test_workable_fetch_detail_non_str_description_raises() -> None:
     # ``description`` truthy but not a string must not raise (the SmartRecruiters regression).
     fetcher = _FakeFetcher(
         redirects={_SHORTLINK: "/jobrack/j/516863E6FD"},
@@ -317,8 +321,8 @@ def test_workable_fetch_detail_non_str_description_is_none() -> None:
             )
         },
     )
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
 def test_workable_fetch_detail_shortcode_absent_from_board_is_none() -> None:
@@ -333,37 +337,37 @@ def test_workable_fetch_detail_shortcode_absent_from_board_is_none() -> None:
     assert fetcher.board_fetch_count[_BOARD_URL] == 1
 
 
-def test_workable_fetch_detail_board_fetch_failure_is_none() -> None:
+def test_workable_fetch_detail_board_fetch_failure_raises() -> None:
     fetcher = _FakeFetcher(
         redirects={_SHORTLINK: "/jobrack/j/516863E6FD"},
         board_payloads={_BOARD_URL: _board_payload(_job("516863E6FD", "<p>JD.</p>"))},
         board_raises=frozenset({_BOARD_URL}),
     )
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
-def test_workable_fetch_detail_missing_redirect_location_is_none() -> None:
+def test_workable_fetch_detail_missing_redirect_location_raises() -> None:
     # Redirect hop returns no Location header -> slug can't be resolved -> None, never raises.
     fetcher = _FakeFetcher(redirects={_SHORTLINK: None})
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=_SHORTLINK), fetcher))
 
 
-def test_workable_fetch_detail_unparseable_url_is_none() -> None:
+def test_workable_fetch_detail_unparseable_url_raises() -> None:
     fetcher = _FakeFetcher()
-    desc = anyio.run(
-        lambda: WorkableProvider().fetch_detail(
-            _ref(apply_url="https://example.com/not-a-workable-url"), fetcher
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(
+            lambda: WorkableProvider().fetch_detail(
+                _ref(apply_url="https://example.com/not-a-workable-url"), fetcher
+            )
         )
-    )
-    assert desc is None
 
 
-def test_workable_fetch_detail_no_urls_is_none() -> None:
+def test_workable_fetch_detail_no_urls_raises() -> None:
     fetcher = _FakeFetcher()
-    desc = anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=None), fetcher))
-    assert desc is None
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(_ref(apply_url=None), fetcher))
 
 
 def test_base_fetch_detail_is_none() -> None:
@@ -403,7 +407,12 @@ def test_workable_fetch_detail_concurrent_same_board_siblings_await_not_race() -
     results: list[str | None] = [None] * n
 
     async def _worker(i: int) -> None:
-        results[i] = await WorkableProvider().fetch_detail(refs[i], fetcher)
+        # A dead board must raise for every sibling; record the type so the assert below can
+        # prove none of them silently produced the row-expiring None.
+        try:
+            results[i] = await WorkableProvider().fetch_detail(refs[i], fetcher)
+        except _INDETERMINATE:
+            results[i] = "raised"
 
     async def _run() -> None:
         async with anyio.create_task_group() as tg:
@@ -442,10 +451,11 @@ def test_workable_fetch_detail_board_fails_once_then_recovers_for_siblings() -> 
     ref1 = _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE01", id_="1")
     ref2 = _ref(apply_url=f"https://apply.workable.com/{slug}/j/CODE02", id_="2")
 
-    # This posting triggers the board's first (failing) bulk fetch -> None, but the board must
-    # NOT be poisoned as "fetched" -- a sibling gets to retry it.
-    desc1 = anyio.run(lambda: WorkableProvider().fetch_detail(ref1, fetcher))
-    assert desc1 is None
+    # This posting triggers the board's first (failing) bulk fetch. It RAISES -- a failed board
+    # fetch is not evidence the posting is gone -- and the board must NOT be poisoned as
+    # "fetched", so a sibling gets to retry it.
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: WorkableProvider().fetch_detail(ref1, fetcher))
 
     # A sibling posting on the SAME board retries the fetch -> succeeds this time -> recovers.
     desc2 = anyio.run(lambda: WorkableProvider().fetch_detail(ref2, fetcher))
@@ -473,10 +483,11 @@ def test_workable_fetch_detail_board_always_fails_bounded_reattempts_not_infinit
     ]
 
     for ref in refs:
-        desc = anyio.run(lambda r=ref: WorkableProvider().fetch_detail(r, fetcher))
-        assert desc is None
+        # RAISES, never None: an unreachable board is no evidence these postings are gone.
+        with pytest.raises(_INDETERMINATE):
+            anyio.run(lambda r=ref: WorkableProvider().fetch_detail(r, fetcher))
 
-    # Every sibling gets None, but the board is only ever re-attempted up to the bound -- not
+    # Every sibling raises, but the board is only ever re-attempted up to the bound -- not
     # once per sibling -- so it's treated as known-failed and stops being re-hammered.
     assert fetcher.board_fetch_count[board_url] == _MAX_BOARD_FETCH_ATTEMPTS
 
@@ -499,7 +510,12 @@ def test_workable_fetch_detail_board_always_fails_bounded_under_concurrency() ->
     results: list[str | None] = [None] * n
 
     async def _worker(i: int) -> None:
-        results[i] = await WorkableProvider().fetch_detail(refs[i], fetcher)
+        # A dead board must raise for every sibling; record the type so the assert below can
+        # prove none of them silently produced the row-expiring None.
+        try:
+            results[i] = await WorkableProvider().fetch_detail(refs[i], fetcher)
+        except _INDETERMINATE:
+            results[i] = "raised"
 
     async def _run() -> None:
         async with anyio.create_task_group() as tg:
@@ -508,5 +524,5 @@ def test_workable_fetch_detail_board_always_fails_bounded_under_concurrency() ->
 
     anyio.run(_run)
 
-    assert results == [None] * n
+    assert results == ["raised"] * n, "a dead board must never yield None (that expires rows)"
     assert fetcher.board_fetch_count[board_url] <= _MAX_BOARD_FETCH_ATTEMPTS
