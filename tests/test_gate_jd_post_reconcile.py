@@ -86,10 +86,15 @@ def test_a_genuine_collapse_still_fails_after_the_merge(tmp_path: Path) -> None:
 
 
 def test_partial_merge_below_threshold_still_fails(tmp_path: Path) -> None:
-    """A merge that only partly recovers must not be enough to wave a real regression through."""
+    """A merge that only partly recovers must not be enough to wave a real regression through.
+
+    Recovers to 60% — over the 15pt relative limit AND under the absolute healthy floor, so
+    neither rule lets it through. (70% would now pass on the floor, which is intended: that is a
+    healthy index, not a collapse.)
+    """
     db = tmp_path / "partial.sqlite"
     _index(db, active=100, with_jd=40)
-    _merge_detail(db, upto=70)  # 70% vs a 93% baseline = 23pt drop, over the 15pt limit
+    _merge_detail(db, upto=60)
 
     assert not evaluate_jd_coverage(db, prev_jd_pct=93.0).passed
 
@@ -133,3 +138,47 @@ def test_empty_index_does_not_divide_by_zero(tmp_path: Path) -> None:
     res = evaluate_jd_coverage(db, prev_jd_pct=93.0)
     assert not res.passed  # 0% against a 93% baseline is a collapse, not a pass
     assert "0.0%" in res.detail
+
+
+# --- the absolute healthy floor ---------------------------------------------------------------
+# The relative rule compares a FRESH full crawl against a MATURED carry-forward baseline, which is
+# not like-for-like: on 2026-09-09 a real re-crawl landed at 76.0% vs a 93.39% baseline with
+# 316,859 rows not yet in the detail sidecar, and was blocked for drain lag rather than data loss.
+# The floor says a high ABSOLUTE coverage cannot be a collapse. Both historical incidents bottomed
+# far below it, so the protection is unchanged.
+
+
+def test_full_recrawl_dip_passes_on_the_absolute_floor(tmp_path: Path) -> None:
+    """The exact production shape that was blocked: 76% against a 93.39% baseline."""
+    db = tmp_path / "recrawl76.sqlite"
+    _index(db, active=1000, with_jd=760)
+    res = evaluate_jd_coverage(db, prev_jd_pct=93.39)
+    assert res.passed
+    assert "healthy floor" in res.detail
+
+
+def test_the_2026_07_26_collapse_is_still_blocked(tmp_path: Path) -> None:
+    """The incident the gate exists for: 85.18% -> 47.59%. Far below the floor; still fails."""
+    db = tmp_path / "collapse.sqlite"
+    _index(db, active=1000, with_jd=476)
+    assert not evaluate_jd_coverage(db, prev_jd_pct=85.18).passed
+
+
+def test_just_below_the_floor_fails(tmp_path: Path) -> None:
+    """The floor is a real boundary, not a rubber stamp."""
+    db = tmp_path / "below.sqlite"
+    _index(db, active=1000, with_jd=699)  # 69.9%
+    assert not evaluate_jd_coverage(db, prev_jd_pct=93.39).passed
+
+
+def test_exactly_at_the_floor_passes(tmp_path: Path) -> None:
+    db = tmp_path / "at.sqlite"
+    _index(db, active=1000, with_jd=700)  # 70.0%
+    assert evaluate_jd_coverage(db, prev_jd_pct=93.39).passed
+
+
+def test_the_floor_does_not_mask_a_collapse_from_a_low_baseline(tmp_path: Path) -> None:
+    """A build already below the floor gets no escape hatch — the relative rule governs."""
+    db = tmp_path / "lowbase.sqlite"
+    _index(db, active=1000, with_jd=400)  # 40% against a 76% baseline
+    assert not evaluate_jd_coverage(db, prev_jd_pct=76.0).passed

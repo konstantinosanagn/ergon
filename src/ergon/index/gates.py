@@ -21,6 +21,12 @@ from .db import SCHEMA_VERSION, connect
 # drain refilling 40->76->85 always INCREASES coverage, so it never trips) while still catching a
 # collapse (the 2026-07-27 76%->40% incident, a 36pt drop).
 _DEF_JD_MAX_DROP_PCT = 15.0
+# Absolute coverage that is self-evidently NOT a collapse, whatever the relative drop says. The
+# 2026-07-26 incident bottomed at 40-47%, so this floor still blocks it by a wide margin. It exists
+# because the relative rule compares a FRESH full crawl against a MATURED carry-forward baseline:
+# a re-crawl legitimately lands lower (2026-09-09: 76.0% vs a 93.39% baseline, with 316,859 rows
+# not yet in the detail sidecar) and would otherwise be blocked for drain lag, not data loss.
+_DEF_JD_HEALTHY_PCT = 70.0
 
 
 def jd_gate_drop_pct_from_env() -> float:
@@ -64,7 +70,13 @@ class GateReport:
         )
 
 
-def _jd_gate_result(con: Any, *, prev_jd_pct: float | None, jd_max_drop_pct: float) -> GateResult:
+def _jd_gate_result(
+    con: Any,
+    *,
+    prev_jd_pct: float | None,
+    jd_max_drop_pct: float,
+    jd_healthy_pct: float = _DEF_JD_HEALTHY_PCT,
+) -> GateResult:
     """JD-coverage regression check against an OPEN connection.
 
     ``with_jd``/``active`` mirror coverage.compute_coverage exactly, so this jd_pct is the same
@@ -84,10 +96,25 @@ def _jd_gate_result(con: Any, *, prev_jd_pct: float | None, jd_max_drop_pct: flo
     if prev_jd_pct is None:
         return GateResult("jd_coverage", True, f"{jd_pct}% (no baseline)")
     drop = prev_jd_pct - jd_pct
+    if drop <= jd_max_drop_pct:
+        return GateResult(
+            "jd_coverage",
+            True,
+            f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct})",
+        )
+    # Over the relative limit, but high enough in absolute terms that this cannot be a collapse.
+    if jd_pct >= jd_healthy_pct:
+        return GateResult(
+            "jd_coverage",
+            True,
+            f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt over max "
+            f"{jd_max_drop_pct}, but >= healthy floor {jd_healthy_pct})",
+        )
     return GateResult(
         "jd_coverage",
-        drop <= jd_max_drop_pct,
-        f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct})",
+        False,
+        f"{jd_pct}% (baseline {prev_jd_pct}%, drop {drop:+.2f}pt, max {jd_max_drop_pct}, "
+        f"below healthy floor {jd_healthy_pct})",
     )
 
 
@@ -96,11 +123,17 @@ def evaluate_jd_coverage(
     *,
     prev_jd_pct: float | None = None,
     jd_max_drop_pct: float = _DEF_JD_MAX_DROP_PCT,
+    jd_healthy_pct: float = _DEF_JD_HEALTHY_PCT,
 ) -> GateResult:
     """Standalone JD-coverage gate, for the POST-reconcile check on the artifact being shipped."""
     con = connect(db_path, read_only=True)
     try:
-        return _jd_gate_result(con, prev_jd_pct=prev_jd_pct, jd_max_drop_pct=jd_max_drop_pct)
+        return _jd_gate_result(
+            con,
+            prev_jd_pct=prev_jd_pct,
+            jd_max_drop_pct=jd_max_drop_pct,
+            jd_healthy_pct=jd_healthy_pct,
+        )
     finally:
         con.close()
 
