@@ -87,3 +87,15 @@ scripts/ladder_input.txt
 runs/tier2_tokens.json
 *tier2_tokens.json
 scripts/ladder_input_al.txt
+
+# Docs are not tracked. Only the quickstart README links to is kept.
+# NOTE the pattern: `docs/` (trailing slash) excludes the DIRECTORY, and git cannot re-include a
+# file whose parent directory is excluded — the negation below would silently do nothing and
+# mcp-quickstart.md would vanish too. `docs/*` excludes the CONTENTS, which keeps the negation live.
+docs/*
+!docs/mcp-quickstart.md
+
+# Agent/session scratch that has leaked into repos before.
+.superpowers/
+.claude/
+scratchpad/

@@ -257,8 +257,7 @@ async def _fold_network_into_fresh(fresh_path, network_pages: int, build_id: str
 
 def _apply_freshness(db_path: Path, out: Path) -> int:
     """Carry forward a prior daily freshness-sweep's expiries onto the just-built (not-yet-
-    published) index db -- Phase 2 of the freshness sweep (docs/superpowers/specs/2026-07-18-daily-
-    freshness-sweep-design.md). Called BEFORE the gated publish (and, transitively, before
+    published) index db -- Phase 2 of the daily freshness sweep. Called BEFORE the gated publish (and, transitively, before
     shards/slim/delta are derived) so every downstream artifact inherits the expiries, mirroring how
     the detail/liveness sidecars are consumed.
 

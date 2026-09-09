@@ -448,8 +448,7 @@ def carry_forward(con: object, prev_db_path: Path | str, crawled_keys: set[str])
 def apply_freshness_expiries(con: object, freshness_db_path: Path | str) -> int:
     """Carry forward a prior daily freshness-sweep's expiries onto the just-built index.
 
-    Phase 2 of the daily freshness sweep (docs/superpowers/specs/2026-07-18-daily-freshness-sweep-
-    design.md): the sweep runs as a SEPARATE daily workflow that checks board membership and
+    Phase 2 of the daily freshness sweep: the sweep runs as a SEPARATE daily workflow that checks board membership and
     publishes departed-posting ids to a gzipped SQLite sidecar, ``index-freshness.sqlite.gz``,
     downloaded + gunzipped alongside the detail/liveness sidecars before each build. Pinned sidecar
     contract (the sweep's writer, a later phase, matches this exactly): one table

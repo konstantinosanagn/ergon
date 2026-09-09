@@ -6,7 +6,7 @@ enrichment step. Geo is handled by a per-location normalizer (``geo.py``) since 
 ``Location`` objects rather than returning a single posting-level value.
 
 This package is the seam where rules can later be swapped for trained models per field
-(see docs/superpowers/specs/2026-06-16-field-extraction-nlp-design.md).
+(see the field-extraction design).
 """
 
 from __future__ import annotations

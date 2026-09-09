@@ -1,5 +1,5 @@
 """Host-sharding partition for the daily freshness sweep (Phase 3, standalone CLI companion to
-``freshness.py``; see ``docs/superpowers/specs/2026-07-18-daily-freshness-sweep-design.md``).
+``freshness.py``).
 
 WHY: the design's approved workflow shape is a 20-way GitHub Actions matrix, one process per
 shard, each running ``scripts/freshness_sweep.py`` against a slice of the ~58k-board registry.

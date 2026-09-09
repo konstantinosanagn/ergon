@@ -2,7 +2,7 @@
 
     GATE: this consumes ONLY companies the ATS-Exhaustion Ladder proved exhausted
     (`browser_queue.json`). Never point it at a company without a complete exhaustion log.
-    See docs/superpowers/specs/2026-06-21-browser-discovery-design.md.
+    See the browser-discovery design.
 
 The design splits cleanly into two halves so the hard logic is pure + tested and the browser is a
 thin, swappable shell:

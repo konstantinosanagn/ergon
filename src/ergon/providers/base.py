@@ -142,8 +142,7 @@ class Provider(Protocol):
         ...
 
     async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
-        """Cheap page-1 total-count CHANGE-CANDIDATE signal (delta-driven crawl redesign, see
-        ``docs/superpowers/specs/2026-07-19-delta-driven-crawl-redesign.md`` sec 5). Every
+        """Cheap page-1 total-count CHANGE-CANDIDATE signal (delta-driven crawl redesign). Every
         registered provider satisfies this via ``BaseProvider``'s default (unsupported ->
         ``None``) or an override; declared here so callers that resolve a provider through
         ``get_provider`` can call it without an unchecked ``getattr``. See
@@ -257,7 +256,7 @@ class BaseProvider:
 
     async def board_count(self, token: str, fetcher: AsyncFetcher) -> int | None:
         """Cheap page-1 total-count CHANGE-CANDIDATE signal for the delta-driven crawl redesign
-        (see ``docs/superpowers/specs/2026-07-19-delta-driven-crawl-redesign.md`` sec 5).
+        (delta-driven crawl redesign).
 
         The daily freshness sweep already fingerprints DETERMINISTIC/bulk-JD sources with an
         id-set hash, but SEARCH-INDEX / paginating sources expose no such cheap validator. Several

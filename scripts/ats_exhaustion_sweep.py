@@ -6,7 +6,7 @@ A company becomes "browser-eligible" ONLY after every autonomous rung is logged 
 
     THE GATE: never assume a board needs a browser. The browser subsystem consumes ONLY the
     `browser_queue.json` this script emits (`ats_exhausted == true`). See
-    docs/superpowers/plans/2026-06-21-ats-exhaustion-ladder.md.
+    the ATS-exhaustion ladder plan.
 
 Ladder rungs this runner executes autonomously (no WebSearch / no manual / no browser):
   0  registry hit            — already in seed.json? (skip; already captured)
