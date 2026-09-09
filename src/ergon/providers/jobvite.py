@@ -32,6 +32,7 @@ from urllib.parse import urlsplit
 import httpx
 from selectolax.parser import HTMLParser, Node
 
+from ..exceptions import ProviderError
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
@@ -77,8 +78,9 @@ class JobviteProvider(BaseProvider):
             return []
         try:
             html = await fetcher.get_text(_VIEWALL.format(company=company))
-        except Exception:
-            return []  # network/HTTP failure (or wrong tenant) — degrade gracefully
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("jobvite", f"the board fetch failed for {token!r}") from exc
 
         limit = query.limit
         raws: list[RawJob] = []

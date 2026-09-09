@@ -11,6 +11,7 @@ import httpx
 import pytest
 import respx
 
+from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
 from ergon.models import RemoteType, SearchQuery, make_job_id
 from ergon.providers.peopleadmin import PeopleAdminProvider
@@ -92,12 +93,14 @@ async def test_fetch_honors_limit() -> None:
     assert len(raws) == 1
 
 
-async def test_fetch_network_error_returns_empty() -> None:
+async def test_fetch_raises_on_network_error() -> None:
+    """A failed fetch must RAISE, not return []. An empty list reads as "board is empty"
+    to the crawl and the liveness/freshness passes, which expires every row on it."""
     with respx.mock:
         respx.get(FEED_URL).mock(side_effect=httpx.ConnectError("boom"))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await PeopleAdminProvider().fetch("unmc", SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await PeopleAdminProvider().fetch("unmc", SearchQuery(), f)
 
 
 # --- normalize --------------------------------------------------------------

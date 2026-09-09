@@ -35,6 +35,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import ProviderError
 from ..models import JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -131,7 +132,8 @@ class PeopleSoftProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         t = self._parse_token(token)
         if not (t["host"] and t["site"]):
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("peoplesoft", f"unparseable token {token!r}")
         from curl_cffi.requests import AsyncSession
 
         psc = (
@@ -162,8 +164,9 @@ class PeopleSoftProvider(BaseProvider):
                     if len(nrows) <= len(rows):
                         break
                     html, rows = nxt, nrows
-            except Exception:
-                return []
+            except Exception as exc:
+                # never []: an empty list reads as "board is empty" and expires live rows.
+                raise ProviderError("peoplesoft", f"the board fetch failed for {token!r}") from exc
 
         bu = t["bu_filter"].lower()
         out: list[RawJob] = []

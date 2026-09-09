@@ -27,6 +27,7 @@ import base64
 import json
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import ProviderError
 from ..models import JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -86,8 +87,9 @@ class ZwayamProvider(BaseProvider):
                 "POST", _CONFIG, files={"companyUrl": (None, company_url)}, headers=headers
             )
             comp = (cfg.json().get("responseObject") or {}).get("company") or {}
-        except Exception:
-            return []
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("zwayam", f"the board fetch failed for {token!r}") from exc
         company_id = comp.get("id")
         if company_id is None:
             return []

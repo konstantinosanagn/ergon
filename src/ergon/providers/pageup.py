@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import ProviderError
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -96,8 +97,9 @@ class PageUpProvider(BaseProvider):
         url = f"https://{_HOST}/{tid}/{section}/{locale}/rss"
         try:
             text = await fetcher.get_text(url, headers={"User-Agent": _UA, "Accept": "*/*"})
-        except Exception:
-            return []
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("pageup", f"the board fetch failed for {token!r}") from exc
         limit = query.limit
         seen: set[str] = set()
         raws: list[RawJob] = []

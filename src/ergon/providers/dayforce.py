@@ -30,6 +30,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+from ..exceptions import ProviderError
 from ..models import JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -113,11 +114,15 @@ class DayforceProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         ns, board, company = self._parse(token)
         if not ns:
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("dayforce", f"unparseable token {token!r}")
         try:
             from playwright.async_api import async_playwright
-        except ImportError:
-            return []  # browser lane unavailable -> degrade gracefully
+        except ImportError as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError(
+                "dayforce", f"the browser lane is unavailable for {token!r}"
+            ) from exc
         limit = query.limit
         posts: list[dict[str, Any]] = []
         async with async_playwright() as p:

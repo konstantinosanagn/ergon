@@ -14,6 +14,7 @@ import httpx
 import pytest
 import respx
 
+from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
 from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
 from ergon.providers.personio import PersonioProvider
@@ -117,12 +118,14 @@ async def test_normalize_remote_office_and_intern() -> None:
     assert job.description_text is None
 
 
-async def test_fetch_malformed_xml_returns_empty() -> None:
+async def test_fetch_raises_on_malformed_xml() -> None:
+    """A failed fetch must RAISE, not return []. An empty list reads as "board is empty"
+    to the crawl and the liveness/freshness passes, which expires every row on it."""
     with respx.mock:
         respx.get(FEED_URL).mock(return_value=httpx.Response(200, text="<not-xml"))
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await PersonioProvider().fetch("personio", SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await PersonioProvider().fetch("personio", SearchQuery(), f)
 
 
 async def test_normalize_maps_structured_salary_information() -> None:

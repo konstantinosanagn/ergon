@@ -53,6 +53,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from selectolax.parser import HTMLParser
 
+from ..exceptions import ProviderError
 from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
 from .base import BaseProvider, register
 
@@ -135,16 +136,19 @@ class BrassRingProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         host, pid, sid = self._split(token)
         if not (host and pid and sid):
-            return []
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("brassring", f"token {token!r} is not host/pid/sid")
 
         # Step A — bootstrap: cookies + anti-forgery token + tenant field map.
         try:
             html = await fetcher.get_text(_HOME.format(host=host, pid=pid, sid=sid))
-        except Exception:
-            return []
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("brassring", f"the board fetch failed for {token!r}") from exc
         rft, cookie_value = self._bootstrap_tokens(html)
         if not rft:
-            return []  # no CSRF token -> the list POST can't succeed
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("brassring", f"no CSRF token for {token!r}")
         fields = self._field_map(html)
         company = self._company(html, pid)
 

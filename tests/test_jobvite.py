@@ -6,6 +6,7 @@ import httpx
 import pytest
 import respx
 
+from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
 from ergon.models import RemoteType, SearchQuery, make_job_id
 from ergon.providers.jobvite import JobviteProvider
@@ -84,11 +85,13 @@ async def test_fetch_respects_limit() -> None:
     assert len(raws) == 1
 
 
-async def test_dead_tenant_returns_empty() -> None:
+async def test_dead_tenant_raises() -> None:
+    """A failed fetch must RAISE, not return []. An empty list reads as "board is empty"
+    to the crawl and the liveness/freshness passes, which expires every row on it."""
     with respx.mock as respx_mock:
         respx_mock.get(url__startswith="https://jobs.jobvite.com/nope/jobs/viewall").mock(
             return_value=httpx.Response(404, html="not found")
         )
         async with AsyncFetcher(per_host_rate=100) as f:
-            raws = await JobviteProvider().fetch("nope", SearchQuery(), f)
-    assert raws == []
+            with pytest.raises(ProviderError):
+                await JobviteProvider().fetch("nope", SearchQuery(), f)

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import ProviderError
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -80,10 +81,12 @@ class TeslaProvider(BaseProvider):
                     },
                 )
                 if resp.status_code != 200:
-                    return []
+                    # never []: an empty list reads as "board is empty" and expires live rows.
+                    raise ProviderError("tesla", f"non-200 from the board for {token!r}")
                 data = resp.json()
-            except Exception:
-                return []
+            except Exception as exc:
+                # never []: an empty list reads as "board is empty" and expires live rows.
+                raise ProviderError("tesla", f"the board fetch failed for {token!r}") from exc
         return self._raws_from_state(data, token, query.limit)
 
     @staticmethod

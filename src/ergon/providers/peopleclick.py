@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import ProviderError
 from ..models import JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -69,8 +70,9 @@ class PeopleClickProvider(BaseProvider):
                 f"{_BASE}/api/{client}/external/site/getJobs",
                 headers={**hdr, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
             )
-        except Exception:
-            return []
+        except Exception as exc:
+            # never []: an empty list reads as "board is empty" and expires live rows.
+            raise ProviderError("peopleclick", f"the board fetch failed for {token!r}") from exc
         jobs = data.get("jobList") if isinstance(data, dict) else None
         if not isinstance(jobs, list):
             return []
