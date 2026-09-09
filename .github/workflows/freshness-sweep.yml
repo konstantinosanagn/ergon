@@ -61,10 +61,10 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install package
         run: uv venv && uv pip install -e "."
@@ -117,7 +117,7 @@ jobs:
         # no file here -- if-no-files-found: warn covers that, same as drain-detail.yml/
         # embed-vectors.yml). Turns a hard shard failure into incremental progress, not a lost run.
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: freshness-shard-${{ matrix.shard }}
           path: dist/index-freshness-shard-${{ matrix.shard }}.sqlite
@@ -129,10 +129,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
         run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
@@ -146,7 +146,7 @@ jobs:
         # hard-failing because the full set of NUM_SHARDS isn't present. if-no-artifact-found: warn
         # covers the (unlikely) all-shards-failed case too; the explicit count-and-guard below turns
         # that into one clear failure message rather than a confusing downstream error.
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: freshness-shard-*
           path: dist/shards
@@ -174,7 +174,7 @@ jobs:
         # a missing file (merge crashed before writing it) is ignored, never fails the workflow.
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: freshness-expiry-alarm
           path: dist/expiry_alarm.json
@@ -229,11 +229,11 @@ jobs:
       contents: read
       issues: write   # notify_ops.py opens/comments the alert issue
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download expiry-alarm signal (best-effort; absent if the merge didn't produce one)
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: freshness-expiry-alarm
           path: dist

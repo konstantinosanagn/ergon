@@ -87,7 +87,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free up disk space (reclaim the ~40GB of preinstalled toolchains we never use)
         # The megahost shards (SR shard 0 especially) stage several multi-GB SQLite files on the
@@ -116,7 +116,7 @@ jobs:
           free -h
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install package
         run: uv venv && uv pip install -e "."
@@ -199,7 +199,7 @@ jobs:
         # keyed on fetched_at (an unpruned/partial shard's carried-over stale rows can never clobber
         # another shard's fresher rows). Turns a hard shard failure into incremental progress.
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: detail-shard-${{ matrix.shard }}
           path: dist/index-detail-shard-${{ matrix.shard }}.sqlite
@@ -211,10 +211,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
         run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
@@ -229,7 +229,7 @@ jobs:
         # warn` covers the (unlikely) all-shards-failed case too: instead of erroring the step, it
         # warns and leaves dist/shards empty, and the explicit count-and-guard step below turns
         # that into one clear failure message rather than a confusing downstream error.
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: detail-shard-*
           path: dist/shards

@@ -55,17 +55,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install package
         # [semantic] pulls fastembed (the embedding model runtime). Same install line as build-index.yml.
         run: uv venv && uv pip install -e ".[semantic]"
 
       - name: Cache fastembed model (read/write -- populate once for the matrix)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/fastembed
           key: fastembed-BAAI-bge-small-en-v1.5
@@ -93,7 +93,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free up disk space (reclaim the ~40GB of preinstalled toolchains we never use)
         # The shards stage several multi-GB SQLite files on the ~20GB root disk at once -- the
@@ -110,7 +110,7 @@ jobs:
           echo "after:"; df -h /
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install package
         # [semantic] pulls fastembed for the embedding pass. Same install line as build-index.yml.
@@ -120,7 +120,7 @@ jobs:
         # actions/cache/restore@v4 (NOT the read/write actions/cache@v4): the shards must never write
         # this cache. 20 matrix jobs racing to save the same key is the write-contention gotcha the
         # upstream warm-cache job exists to avoid. Restore-only = guaranteed hit, zero save churn.
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/fastembed
           key: fastembed-BAAI-bge-small-en-v1.5
@@ -167,7 +167,7 @@ jobs:
         # partial it committed up to the failure -- turns a hard shard failure into incremental progress.
         # if-no-files-found: warn covers the "nothing to embed yet" early-exit above.
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vectors-shard-${{ matrix.shard }}
           path: dist/index-vectors-shard-${{ matrix.shard }}.sqlite
@@ -179,10 +179,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
         run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
@@ -196,7 +196,7 @@ jobs:
         # if-no-files-found: warn) -- this must merge the shards that DID finish rather than hard-failing
         # because the full set of NUM_SHARDS isn't present. if-no-artifact-found: warn covers the
         # (unlikely) all-shards-failed case; the count-and-guard below turns that into one clear failure.
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: vectors-shard-*
           path: dist/shards

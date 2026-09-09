@@ -67,7 +67,7 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free up disk space (reclaim the ~40GB of preinstalled toolchains we never use)
         # The full-crawl fresh DB + its JD sidecar + the downloaded prior index stage several multi-GB
@@ -93,7 +93,7 @@ jobs:
           free -h
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install package
         run: uv venv && uv pip install -e "."
@@ -135,7 +135,7 @@ jobs:
         # !cancelled() so a shard that fails LATE still uploads whatever partial fresh DB it committed
         # (append_jobs commits per 20k-row batch) -- the reduce's INSERT OR IGNORE union folds it in.
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: crawl-map-${{ matrix.shard }}
           path: |
@@ -160,7 +160,7 @@ jobs:
       group: build-index
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free up disk space (the reduce stages the K partials + prior index + unioned fresh DB)
         continue-on-error: true
@@ -183,7 +183,7 @@ jobs:
           free -h
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Ensure pigz (parallel gzip for the publish phase; Python gzip is the fallback)
         run: command -v pigz || sudo apt-get update && sudo apt-get install -y pigz
@@ -192,7 +192,7 @@ jobs:
         run: uv venv && uv pip install -e "."
 
       - name: Download whatever map-shard artifacts exist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: crawl-map-*
           path: dist
@@ -288,7 +288,7 @@ jobs:
       # index -- without ever touching the production release. Runs regardless of the publish input.
       - name: Upload reduce output for inspection (dry-run validation)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reduce-output
           path: |

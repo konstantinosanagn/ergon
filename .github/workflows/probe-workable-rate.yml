@@ -40,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
       - name: Install package
         run: uv venv && uv pip install -e "."
       - name: Download + gunzip the published index (for real workable board slugs)
@@ -63,7 +63,7 @@ jobs:
             --max-inflight 40 --cooldown 5 | tee dist/probe-result.txt
       - name: Upload probe result
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: workable-probe-result
           path: dist/probe-result.txt
