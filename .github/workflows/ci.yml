@@ -41,6 +41,13 @@ jobs:
             echo "untrack with: git rm --cached <path>"
             exit 1
           fi
+      - name: scripts/local stays untracked
+        run: |
+          leaked=$(git ls-files scripts/local || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::scripts/local/ is local-only tooling and must not be tracked"
+            echo "$leaked"; exit 1
+          fi
       - name: Type check
         run: uv run mypy
       - name: Test
