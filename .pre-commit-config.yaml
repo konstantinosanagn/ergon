@@ -16,7 +16,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        files: ^\.github/
+        files: ^(\.github/|\.pre-commit-config\.yaml$)
       - id: check-toml
       - id: check-merge-conflict
       - id: check-case-conflict
@@ -36,9 +36,19 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-tracked-local-scripts
+        name: scripts/local must not be tracked
+        entry: >-
+          bash -c 'l=$(git ls-files scripts/local || true); [ -z "$l" ] ||
+          { echo "tracked local scripts"; echo "$l"; exit 1; }'
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: no-tracked-docs
         name: docs must not be tracked (only mcp-quickstart.md)
-        entry: bash -c 'l=$(git ls-files docs | grep -v "^docs/mcp-quickstart.md$" || true); [ -z "$l" ] || { echo "tracked docs:"; echo "$l"; echo "untrack: git rm --cached <path>"; exit 1; }'
+        entry: >-
+          bash -c 'l=$(git ls-files docs | grep -v "^docs/mcp-quickstart.md$" || true);
+          [ -z "$l" ] || { echo "tracked docs (untrack with git rm --cached)"; echo "$l"; exit 1; }'
         language: system
         pass_filenames: false
         always_run: true
