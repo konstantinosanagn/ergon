@@ -16,17 +16,13 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Typing :: Typed",
 ]
-# UPPER BOUNDS ARE DELIBERATE. Every floor below was written once and then left to drift; by
-# 2026-09 four deps had silently crossed a MAJOR (stamina 24->26, hishel 0.x->1.x, rich 13->15,
-# mcp 1->2) and only the local .venv's install date kept CI green. mcp 2.0 finally broke it for
-# real (FastMCP -> MCPServer), and because nothing pinned it the breakage was invisible until a
-# fresh resolve. A `<next-major` cap turns "silent rot" into "a deliberate, reviewable bump".
+# Upper bounds are deliberate: bare floors let four deps cross a major unnoticed.
 # Raise a cap when you migrate, not before.
 dependencies = [
   "httpx[http2]>=0.27,<1",
   "anyio>=4.3,<5",
   "aiolimiter>=1.1,<2",
-  "stamina>=24.2",          # CalVer (YY.MINOR) — a numeric cap would block next year's release
+  "stamina>=24.2",          # CalVer — a numeric cap would block next year's release
   "pydantic>=2.6,<3",
   "hishel>=0.0.30,<2",
   "selectolax>=0.3.21,<1",
@@ -39,9 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 pandas = ["pandas>=2.2"]
 polars = ["polars>=0.20"]
-# mcp 2.x renamed FastMCP -> MCPServer and moved mcp.server.fastmcp -> mcp.server.mcpserver.
-# mcp_server.py targets the 2.x API, so 2.2 is a hard floor; <3 so the next rename is a choice.
-mcp = ["mcp>=2.2,<3"]
+mcp = ["mcp>=2.2,<3"]  # 2.x renamed FastMCP -> MCPServer
 semantic = ["fastembed>=0.3"]
 # HTTP QUERY (RFC 10008) search surface — only needed to RUN the server (ergon_tracker.serve.serve);
 # the ASGI app itself is dependency-light and testable in-process via httpx (a core dep).
@@ -60,8 +54,8 @@ dev = [
   "mypy==2.1.0",    # PINNED for the same reproducibility reason: a floating type-checker surprises CI with new errors.
   "openpyxl>=3.1",
   "numpy>=1.26",
-  "pip-audit>=2.7",  # local `pip-audit` — same known-CVE scan the CI `audit` job runs
-  "pre-commit>=3.7", # local gates: `pre-commit install` once, see .pre-commit-config.yaml
+  "pip-audit>=2.7",
+  "pre-commit>=3.7",
 ]
 
 [project.urls]

@@ -4,12 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # DRIFT CANARY. The repo can sit for weeks with no commit; a push/PR-only CI therefore proves
-  # nothing about whether the code still builds against current dependencies. mcp 2.0 shipped
-  # 2026-07-28, one day after the last commit, and would have gone unnoticed until whoever
-  # pushed next hit four red legs with zero tests run. A weekly full-matrix run surfaces that
-  # within 7 days instead. (Note: scheduled runs do NOT count as repo activity for GitHub's
-  # 60-day workflow auto-disable — that still needs a real commit or a manual re-enable.)
+  # Weekly run catches dependency drift in quiet periods; push/PR alone can go months.
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
   workflow_dispatch:
@@ -31,10 +26,7 @@ jobs:
         run: uv venv --python ${{ matrix.python-version }}
       - name: Install
         run: uv pip install -e ".[dev,pandas,polars,mcp]"
-      # scripts/ is 22.7k LOC and includes build_index.py, the entire production build — it was
-      # outside both gates until now. Both commands already pass on it clean, so this costs
-      # nothing and closes the gap. (mypy still covers src/ only: scripts/ needs ~470 annotations
-      # before it can be added — tracked, not silently skipped.)
+      # mypy covers src/ only; scripts/ needs ~470 annotations first.
       - name: Lint
         run: uv run ruff check src tests scripts
       - name: Format check
@@ -44,12 +36,7 @@ jobs:
       - name: Test
         run: uv run pytest --cov=ergon_tracker --cov-report=term-missing
 
-  # Known-CVE scan over the resolved dependency tree. pip-audit (PyPA/Trail of Bits) checks the
-  # PyPI Advisory DB + OSV. Free, no account, no token.
-  #
-  # It also runs on a weekly cron, NOT only on push: a new advisory against a dependency you
-  # already have is the common case, and this repo can go weeks without a commit — a PR-only
-  # gate would never fire in that window.
+  # Known-CVE scan (PyPI Advisory DB + OSV).
   audit:
     name: dependency audit
     runs-on: ubuntu-latest
@@ -64,14 +51,7 @@ jobs:
       - name: pip-audit
         run: |
           uv pip install pip-audit
-          # NO --strict, deliberately. --strict also fails when a package cannot be audited, and
-          # ergon-tracker itself is unpublished on PyPI, so it is permanently unauditable and
-          # --strict failed 100% of the time regardless of whether any CVE existed. (--skip-editable
-          # does not help: a skipped editable is still a skip.) Auditing the exported lockfile via
-          # `-r` avoids that, but pip-audit's -r mode builds a throwaway venv and was not verifiable
-          # here, so it is not worth the flakiness. Without --strict the step still FAILS on any
-          # known advisory, which is the signal we actually want; the unpublished local package
-          # shows up as a harmless "skipped" note.
-          # If a finding is ever accepted, add `--ignore-vuln GHSA-xxxx` here WITH a reason —
-          # never silence the whole step.
+          # No --strict: it also fails on unauditable packages, and this project is
+          # unpublished. Still fails on any known advisory. Accept a finding with
+          # --ignore-vuln GHSA-xxxx, never by silencing the step.
           uv run pip-audit --progress-spinner off
