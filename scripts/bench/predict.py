@@ -1,7 +1,7 @@
 """Extractor runner: reconstruct a JobPosting from a corpus row, run the REAL enrichment
 pipeline, and read back the extractor's value for every field in ``scripts.bench.schema.FIELDS``.
 
-Output vocabulary mirrors the fleet/human rubric in ``docs/extraction-labeling-guide.md``:
+Output vocabulary mirrors the fleet/human rubric in the extraction labeling guide:
 level -> str (JobLevel.value, e.g. "senior"), sector -> str|None (title-case label, e.g.
 "Software/SaaS"), country/city -> str|None, remote -> bool, employment_type -> str
 (EmploymentType.value), salary -> {"min","max","currency","interval"}|None, yoe ->

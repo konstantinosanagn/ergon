@@ -3,7 +3,7 @@
     GATE: only for companies the ATS-Exhaustion Ladder proved exhausted AND that JS-mint a token
     (Akamai sensor cookie, ADP-RM myjobstoken, Dayforce/Paylocity JWT). The browser runs OFFLINE
     (this cron), never on the user request path. See the Tier-2 section of
-    docs/superpowers/specs/2026-06-21-browser-discovery-design.md.
+    the browser-discovery design.
 
 Same split as the rest of Stream B: the browser is a thin, swappable shell; the token-extraction +
 store-write logic is pure and unit-tested.

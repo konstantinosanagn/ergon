@@ -31,6 +31,16 @@ jobs:
         run: uv run ruff check src tests scripts
       - name: Format check
         run: uv run ruff format --check src tests scripts
+      # .gitignore is advisory: `git add -f` walks straight past it. This is the enforcement.
+      - name: No tracked docs
+        run: |
+          leaked=$(git ls-files docs | grep -v '^docs/mcp-quickstart.md$' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::docs are not tracked; only docs/mcp-quickstart.md is allowed"
+            echo "$leaked"
+            echo "untrack with: git rm --cached <path>"
+            exit 1
+          fi
       - name: Type check
         run: uv run mypy
       - name: Test

@@ -33,3 +33,12 @@ repos:
         additional_dependencies:
           - pydantic>=2.6
           - types-requests
+
+  - repo: local
+    hooks:
+      - id: no-tracked-docs
+        name: docs must not be tracked (only mcp-quickstart.md)
+        entry: bash -c 'l=$(git ls-files docs | grep -v "^docs/mcp-quickstart.md$" || true); [ -z "$l" ] || { echo "tracked docs:"; echo "$l"; echo "untrack: git rm --cached <path>"; exit 1; }'
+        language: system
+        pass_filenames: false
+        always_run: true

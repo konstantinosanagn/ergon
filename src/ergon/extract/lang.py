@@ -1,7 +1,7 @@
 """Language detection for job-description text (stdlib-only stopword heuristic).
 
 No language-detection library is in the dependency tree, and the project is dependency-
-conscious (see ``docs/superpowers/specs/2026-07-13-multilingual-extraction-spec.md``), so this
+conscious (see the multilingual-extraction spec), so this
 uses a small closed-vocabulary stopword heuristic instead: tokenize the first ~500 chars of the
 text, count how many tokens fall in each language's function-word set, and pick the language
 with the highest count. English is both the default and the tiebreak — a language only wins when

@@ -1,8 +1,6 @@
 # Search Index — build & dogfood log
 
-Per-run notes for the broad-discovery search index (spec:
-`docs/superpowers/specs/2026-06-18-search-index-design.md`; M1 plan:
-`docs/superpowers/plans/2026-06-18-search-index-m1.md`).
+Per-run notes for the broad-discovery search index.
 
 > **This is a historical build log from the M1/M2 bring-up (2026-06-18).** It is not kept
 > current per-build. For live index scale/coverage see `INDEX_STATUS.md` and the GitHub Release

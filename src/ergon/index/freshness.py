@@ -20,7 +20,7 @@ un-paginated dump, so a missing id is a REAL departure with no false-positive ri
 the full board list -- including PHASE 1's search-index sources -- was always safe by
 construction.
 
-PHASE 1 SCOPE (see docs/superpowers/specs/2026-07-18-daily-freshness-sweep-design.md):
+PHASE 1 SCOPE:
 ``SEARCH_INDEX_SOURCES`` -- ``{oracle, smartrecruiters, successfactors, icims, eightfold}`` --
 whose list APIs reshuffle/paginate non-deterministically (mirrors ``liveness.py``'s
 ``CONFIRM_VIA_DETAIL_SOURCES`` finding, measured 50-100% list-miss false-positive rates). A

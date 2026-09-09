@@ -1,7 +1,6 @@
 name: freshness-sweep
 
-# Daily sharded board-freshness sweep (docs/superpowers/specs/2026-07-18-daily-freshness-sweep-
-# design.md). Re-verifies that every stored ACTIVE posting still exists on its board at least once
+# Daily sharded board-freshness sweep. Re-verifies that every stored ACTIVE posting still exists on its board at least once
 # a day by checking BOARDS, not postings (~25x fewer requests than a full re-crawl), fetching id
 # sets only (no JD/enrich/dedup/insert). Confirmed-departed ids are written to a small
 # `index-freshness.sqlite` sidecar and published; the next daily build-index.yml run carries them

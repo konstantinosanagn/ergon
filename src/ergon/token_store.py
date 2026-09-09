@@ -4,7 +4,7 @@ Some boards mint a short-lived session token/cookie in JavaScript (Akamai sensor
 ``myjobstoken``, Dayforce/Paylocity JWTs). We cannot forge these headlessly, but we don't have to:
 a browser mints one **on the offline cron**, we cache it with a TTL, and the cheap curl_cffi replay
 reuses it until it expires or a request 401/403s — then we re-mint. The browser never touches the
-user request path (see docs/superpowers/specs/2026-06-21-browser-discovery-design.md, Tier 2).
+user request path (see the browser-discovery design, Tier 2).
 
 This module is the **pure, tested core**: persistence + TTL + single-flight refresh + refresh-on-status
 + staleness, with an **injected clock** (deterministic tests) and an **injected mint callback** (the

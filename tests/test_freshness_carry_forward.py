@@ -1,5 +1,5 @@
-"""Phase 2 of the daily freshness sweep (docs/superpowers/specs/2026-07-18-daily-freshness-sweep-
-design.md): the daily build_index must carry forward expiries a prior freshness-sweep run wrote to
+"""Phase 2 of the daily freshness sweep (the design spec (untracked)
+): the daily build_index must carry forward expiries a prior freshness-sweep run wrote to
 a published ``index-freshness.sqlite`` sidecar, so a full rebuild never resurrects a posting the
 sweep already confirmed departed its board.
 

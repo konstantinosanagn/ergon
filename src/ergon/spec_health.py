@@ -3,7 +3,7 @@
 Browser-discovered apicapture specs and Tier-2 token specs can rot silently when a site changes its
 API shape or rotates a token format. This file-backed tracker records each spec's replay outcomes so a
 cron can spot the rot: **N consecutive failures → the spec is stale → re-queue it for discovery**
-(see docs/superpowers/specs/2026-06-21-browser-discovery-design.md, "spec health + self-healing").
+(see the browser-discovery design, "spec health + self-healing").
 
 Pure, offline-testable (like ``index.scheduler``): no network, no clock dependence for the core
 decision (``consecutive_failures``); an optional ``now`` string is stored only for observability.
