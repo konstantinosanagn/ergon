@@ -159,7 +159,12 @@ def test_delta_skip_matches_full_crawl(monkeypatch, tmp_path):
     delta_fresh.parent.mkdir(parents=True)
     _write_sidecar(delta_fresh.parent / "index-freshness.sqlite", "greenhouse", _TOKEN, fingerprint)
     s_delta = {
-        "greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN, idset_hash=fingerprint)
+        "greenhouse|acme": BoardState(
+            provider="greenhouse",
+            token=_TOKEN,
+            idset_hash=fingerprint,
+            last_content_crawled=bi._today(),
+        )
     }
     prov.fetch_calls = 0
     out_delta, delta_keys = _crawl(s_delta, delta_fresh, prov, "today")

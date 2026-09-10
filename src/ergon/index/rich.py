@@ -50,6 +50,21 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 
+def _require_embedding_model(con: sqlite3.Connection, reranker: SemanticReranker | None) -> None:
+    """Never mix embedding spaces during an incremental reconciliation."""
+    if not _has_schema(con) or not con.execute("SELECT 1 FROM job_vectors LIMIT 1").fetchone():
+        return
+    from ..semantic import get_semantic_reranker
+
+    model = (reranker or get_semantic_reranker()).model_name
+    stored = rich_meta(con).get("model")
+    if stored != model:
+        raise ValueError(
+            f"Vector model mismatch: stored={stored!r}, requested={model!r}. "
+            "Build a separate sidecar with the new model before publishing it."
+        )
+
+
 def _sig(job: JobPosting) -> str:
     """Change signal for the RICH tier: content_hash (title/level/location/salary) PLUS the description.
 
@@ -158,6 +173,7 @@ def reconcile_rich_tier(
 
     con = sqlite3.connect(str(rich_path))
     try:
+        _require_embedding_model(con, reranker)
         _ensure_schema(con)  # migrates a legacy (sig-less) sidecar in place before the SELECT below
         have = dict(con.execute("SELECT id, sig FROM job_vectors"))
         orphans = [i for i in have if i not in live_ids]
@@ -167,12 +183,17 @@ def reconcile_rich_tier(
         # so a description-only edit re-embeds too); carried-forward ids keep their stored vector.
         rebuild = [j for j in fresh_jobs if j.id in live_ids and have.get(j.id) != _sig(j)]
         _delete_ids(con, [j.id for j in rebuild])  # clear stale rows before re-inserting
-        _embed_rows_into(
+        dim, model = _embed_rows_into(
             con,
             [(j.id, _sig(j), _job_text(j)) for j in rebuild],
             reranker=reranker,
             batch=batch,
         )
+        if dim:
+            con.executemany(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
+                [("dim", str(dim)), ("model", model)],
+            )
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('build_id', ?)", (build_id,))
         con.commit()
 
@@ -419,6 +440,7 @@ def reconcile_rich_tier_from_fresh(
 
     con = sqlite3.connect(str(rich_path))
     try:
+        _require_embedding_model(con, reranker)
         _ensure_schema(con)  # fresh DB -> create; legacy (sig-less) sidecar -> migrate in place
         # id→sig for every row already in the sidecar. Held in memory by design: ~150MB at 1.4M rows
         # (two short strings each) buys O(1) new/changed detection per fresh row (see docstring).

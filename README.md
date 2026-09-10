@@ -40,6 +40,12 @@ uv venv && uv pip install -e ".[mcp]"     # or: python -m venv .venv && pip inst
 
 Extras: `[mcp]` (agent server), `[semantic]` (NL embedding search), `[pandas]`/`[polars]` (DataFrame export).
 
+Search correctness and update revalidation are covered by the [offline evaluation](EVALUATION.md).
+Index queries with `semantic=True` expand ML/machine learning candidates in either direction;
+semantic ranking still operates on lexical candidates. Explicit C++/C# queries preserve those
+identifiers before limiting results, including on existing snapshots. Switching embedding models
+requires a separate vector-sidecar build; incompatible stored vectors fall back to query-time reranking.
+
 ## Use it
 
 ### SDK
