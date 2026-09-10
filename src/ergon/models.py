@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from .textnorm import fold
+
 __all__ = [
     "RemoteType",
     "EmploymentType",
@@ -451,7 +453,10 @@ class SearchQuery(BaseModel):
                     [job.title, job.department, job.company, job.description_text or ""],
                 )
             ).lower()
-            if not all(tok in haystack for tok in self.keywords.lower().split()):
+            # Folded on both sides so an accented query matches accented content, and so this
+            # agrees with the index path (which gets the same folding free from FTS5).
+            folded = fold(haystack)
+            if not all(fold(tok) in folded for tok in self.keywords.split()):
                 return False
 
         if self.location:

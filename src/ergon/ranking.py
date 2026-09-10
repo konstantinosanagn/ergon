@@ -25,12 +25,11 @@ By default no reranker is registered and ranking is pure lexical BM25.
 from __future__ import annotations
 
 import math
-import re
 from collections import Counter
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from .models import JobPosting
+from .models import JobPosting
+from .textnorm import tokenize
 
 __all__ = ["rank", "score_text", "Reranker", "register_reranker"]
 
@@ -46,11 +45,10 @@ _FIELD_WEIGHTS: tuple[tuple[str, float], ...] = (
     ("description_text", 1.0),
 )
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
 
 def _tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(text.lower())
+    """Shared with the client-side filter and (in spirit) the FTS path — see textnorm."""
+    return tokenize(text)
 
 
 def _field_tokens(job: JobPosting, field: str) -> list[str]:

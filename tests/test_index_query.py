@@ -1,3 +1,5 @@
+import sqlite3
+
 from ergon.index.build import build_index
 from ergon.index.db import connect
 from ergon.index.query import _match_expr, search_rows
@@ -138,17 +140,22 @@ def test_last_seen_staleness_guard(tmp_path):
 
 
 def test_match_expr_one_and_two_tokens_unchanged():
-    # 1-2 token queries keep the historical AND-of-quoted-tokens semantics exactly.
+    """1-2 terms keep the historical AND-of-quoted-terms SHAPE.
+
+    Terms are no longer lowercased or stripped here: they go through raw inside quotes and FTS5
+    tokenizes the contents with the table's own tokenizer. Asserting the literal expression string
+    is what let the ASCII-only bug survive, so the behavioural test below is the real guard.
+    """
     assert _match_expr("engineer") == '"engineer"'
-    assert _match_expr("Software Engineer!") == '"software" AND "engineer"'
+    assert _match_expr("Software Engineer!") == '"Software" AND "Engineer!"'
     assert _match_expr("") == ""
-    assert _match_expr('"""') == ""  # no alphanumeric tokens -> empty (filter-only path)
+    assert _match_expr('"""') == ""  # nothing searchable -> empty (caller returns no rows)
 
 
 def test_match_expr_three_plus_tokens_phrase_or_near():
     # 3-4 tokens: exact phrase OR same-column NEAR group; every token individually quoted.
     assert _match_expr("Equity Research Associate") == (
-        '("equity research associate") OR (NEAR("equity" "research" "associate", 10))'
+        '("Equity Research Associate") OR (NEAR("Equity" "Research" "Associate", 10))'
     )
     # 4 tokens still stays phrase-OR-NEAR (the measured precision sweet spot) -- no any-token arm.
     assert _match_expr("senior backend distributed systems") == (
@@ -321,3 +328,80 @@ def test_matches_parity_on_location(tmp_path):
         sql_ids = {r["id"] for r in search_rows(con, q)}
         match_ids = {j.id for j in jobs if q.matches(j)}
         assert sql_ids == match_ids, f"location parity broke for {q.location!r}"
+
+
+# --- behavioural guards: what the expression MATCHES, not what it looks like ------------------
+
+
+def _fts(bodies: list[str]) -> sqlite3.Connection:
+    con = sqlite3.connect(":memory:")
+    con.execute(
+        'CREATE VIRTUAL TABLE t USING fts5(body, tokenize="porter unicode61 remove_diacritics 2")'
+    )
+    con.executemany("INSERT INTO t(body) VALUES (?)", [(b,) for b in bodies])
+    return con
+
+
+def _hits(con: sqlite3.Connection, keywords: str) -> int:
+    expr = _match_expr(keywords)
+    if not expr:
+        return 0
+    return con.execute("SELECT COUNT(*) FROM t WHERE t MATCH ?", (expr,)).fetchone()[0]
+
+
+def test_accented_query_matches_the_indexed_form() -> None:
+    """The index stores `ingenieur` (remove_diacritics 2). Every casing/accenting must find it.
+
+    Previously `[a-z0-9]+` shredded `Ingénieur` into ("ing", "nieur") and matched nothing —
+    107,924 active rows carry non-ASCII titles.
+    """
+    con = _fts(["Ingénieur logiciel senior"])
+    for q in ("Ingénieur", "ingénieur", "INGÉNIEUR", "ingenieur", "Ingenieur"):
+        assert _hits(con, q) == 1, q
+
+
+def test_non_latin_query_matches_rather_than_returning_everything() -> None:
+    con = _fts(["エンジニア", "инженер", "软件工程师"])
+    assert _hits(con, "エンジニア") == 1
+    assert _hits(con, "инженер") == 1
+    assert _hits(con, "软件工程师") == 1
+
+
+def test_stemming_still_applies_through_the_quoted_term() -> None:
+    """`Oberflächenbeschichter` stems to `oberflachenbeschicht`; passing the term raw gets that."""
+    con = _fts(["Oberflächenbeschichter gesucht"])
+    assert _hits(con, "Oberflächenbeschichter") == 1
+
+
+def test_punctuation_in_a_term_is_tokenized_not_shredded() -> None:
+    con = _fts(["Senior Software Engineer"])
+    assert _hits(con, "Software Engineer!") == 1
+    assert _hits(con, "software, engineer.") == 1
+
+
+def test_fts_operators_in_user_input_stay_literal() -> None:
+    """Injection safety: inside a quoted term the only special char is `"`, and it is doubled.
+
+    The property is that an operator never ACTS as an operator — not that hostile input matches
+    nothing. `engineer*` legitimately matches a doc containing "engineer", because FTS5 tokenizes
+    the `*` away inside the quotes; that is the tokenizer working, not a prefix query.
+    """
+    con = _fts(["Senior Software Engineer", "totally unrelated pastry chef"])
+
+    # 1. No hostile input may raise an FTS5 syntax error.
+    for hostile in ('a" OR t MATCH "b', "engineer*", "NEAR(a b)", "^title", "engineer AND x", '"'):
+        expr = _match_expr(hostile)
+        if expr:
+            con.execute("SELECT COUNT(*) FROM t WHERE t MATCH ?", (expr,)).fetchone()
+
+    # 2. A break-out must be a SINGLE term — terms are whitespace-split, so multi-word FTS syntax
+    #    can never arrive as one term. `zzz"OR"engineer` is the real attack shape: without quote
+    #    doubling it becomes `"zzz"OR"engineer"`, i.e. phrase-OR-phrase, and matches the engineer
+    #    row. Escaped it is one literal string and matches nothing.
+    probe = 'zzz"OR"engineer'
+    escaped = _match_expr(probe)
+    assert escaped == '"zzz""OR""engineer"'
+    assert con.execute("SELECT COUNT(*) FROM t WHERE t MATCH ?", (escaped,)).fetchone()[0] == 0
+    # and the unescaped form really would have matched — so the assert above is load-bearing
+    unescaped = '"zzz"OR"engineer"'
+    assert con.execute("SELECT COUNT(*) FROM t WHERE t MATCH ?", (unescaped,)).fetchone()[0] == 1
