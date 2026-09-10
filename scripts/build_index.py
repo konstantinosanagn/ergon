@@ -1411,7 +1411,7 @@ async def _crawl_due(
         idset_hash,
     )
     from ergon.index.mapping import enrich_hash, full_jd_text
-    from ergon.index.scheduler import BoardState, due_boards
+    from ergon.index.scheduler import BoardState, content_crawl_due, due_boards
     from ergon.models import SearchQuery
     from ergon.providers.base import get_provider, load_builtins
 
@@ -1526,6 +1526,7 @@ async def _crawl_due(
         regkey, e = boards[bkey]
         provider = get_provider(e["ats"])
         state = states[bkey]
+        revalidate_content = content_crawl_due(state, _today())
         # Global crawl-phase deadline: once the whole crawl has run past its wall-clock budget, stop
         # dispatching NEW boards so the build+publish phases always run before the CI job timeout.
         # Same carry-forward semantics as the per-host box below (pop -> BoardState untouched -> stays
@@ -1547,24 +1548,13 @@ async def _crawl_due(
         if host and fetcher.is_over_budget(host, host_budget):
             outcome.pop(bkey, None)
             return
-        # Sub-phase B (delta-driven crawl): skip an UNCHANGED deterministic board entirely. If the
-        # most-recent sweep published an idset_hash for this board AND it equals the fingerprint we
-        # stamped the last time we crawled it, the board's membership has not moved -> carry its
-        # prior rows forward exactly like a 304, with no fetch/normalize/enrich. SAFE by
-        # construction: skip ONLY on a present-AND-matching hash; a missing/None hash on either side
-        # never skips, so a wrong skip is impossible (worst case a real change is delayed one cycle,
-        # which the next sweep+build catch). Deterministic sources only -- the sweep emits no hash
-        # for search-index sources (their list reshuffles), so they are never in sidecar_hashes.
-        #
-        # EXCEPTION -- ``validator_covers_body`` providers (lever/ashby/teamtailor/personio): their
-        # conditional_url validates the WHOLE board body INCLUDING the JD, so their ETag/304 already
-        # catches an in-place edit that the id-set hash (membership-only) is blind to. Skipping them
-        # here would suppress that stronger, edit-safe signal, so we let them fall through to the
-        # conditional-GET below (a 304 there still carries forward; a 200 re-processes the edit).
+        # Membership equality is reusable only until content revalidation is due.
+        # Whole-body validators always run because they detect in-place edits.
         if (
             delta_crawl
             and e["ats"] in DETERMINISTIC_SOURCES
             and not getattr(provider, "validator_covers_body", False)
+            and not revalidate_content
         ):
             sweep_hash = sidecar_hashes.get((e["ats"], e["token"]))
             if sweep_hash and state.idset_hash and sweep_hash == state.idset_hash:
@@ -1577,8 +1567,15 @@ async def _crawl_due(
         curl = provider.conditional_url(e["token"])
         try:
             if curl:
+                force_body = (
+                    delta_crawl
+                    and revalidate_content
+                    and not getattr(provider, "validator_covers_body", False)
+                )
                 res = await fetcher.conditional_get(
-                    curl, etag=state.etag, last_modified=state.last_modified
+                    curl,
+                    etag=None if force_body else state.etag,
+                    last_modified=None if force_body else state.last_modified,
                 )
                 if res.not_modified:
                     outcome[bkey]["not_modified"] = True
@@ -1623,10 +1620,12 @@ async def _crawl_due(
                 else {}
             )
             board_jobs: list = []
+            normalized_complete = True
             for raw in raws:
                 try:
                     job = provider.normalize(raw)
                 except Exception:  # noqa: BLE001
+                    normalized_complete = False
                     continue
                 if e.get("domain") and not job.company_domain:
                     job.company_domain = e["domain"]
@@ -1699,6 +1698,8 @@ async def _crawl_due(
                     outcome[bkey]["companies"].update(prior_keys)
                 else:
                     outcome[bkey]["companies"].add(regkey)
+            if normalized_complete:
+                state.last_content_crawled = _today()
         except Exception:  # noqa: BLE001 - one bad board never sinks the crawl
             outcome[bkey]["error"] = True
             outcome[bkey]["companies"].clear()  # not "crawled" -> prev jobs carry forward

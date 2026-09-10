@@ -560,6 +560,7 @@ def test_reconcile_from_fresh_migrates_legacy_sidecar_preserves_vectors(tmp_path
         (a.id, legacy_sig, a.description_text),
     )
     con.execute("INSERT INTO job_vectors(id, scale, vec) VALUES(?, ?, ?)", (a.id, 0.5, legacy_vec))
+    con.execute("INSERT INTO meta VALUES('model', ?)", (FAKE.model_name,))
     con.commit()
     con.close()
 

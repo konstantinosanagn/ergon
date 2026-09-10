@@ -71,6 +71,8 @@ class _CountingReranker:
     """Wraps FAKE and counts how many jobs are embedded at QUERY TIME (embed_jobs), so a test can
     assert the uncovered-embed cap is honoured."""
 
+    model_name = FAKE.model_name
+
     def __init__(self) -> None:
         self.embedded = 0
 
@@ -85,6 +87,8 @@ class _CountingReranker:
 class _RerankFake:
     """Query embed via FAKE; ``rerank`` forces the PICKME job to the top so a test can prove the
     query-time ``rank()`` fallback actually ran (bare lexical order would leave PICKME last)."""
+
+    model_name = FAKE.model_name
 
     def embed_query(self, q):  # noqa: ANN001, ANN201
         return FAKE.embed_query(q)

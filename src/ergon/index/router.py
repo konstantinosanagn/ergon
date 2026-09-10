@@ -119,12 +119,19 @@ def _vector_rerank(
         return None
     try:
         from ..semantic import _cosine
-        from .rich import open_rich, vector_search
+        from .rich import open_rich, rich_meta, vector_search
 
         reranker = get_semantic_reranker()
         qvec = reranker.embed_query(query.keywords or "")
         con = open_rich(path)
         try:
+            meta = rich_meta(con)
+            if not meta.get("model") or meta["model"] != getattr(reranker, "model_name", None):
+                log.warning("stored vector model differs from query model; reranking current text")
+                return None
+            if int(meta.get("dim", 0)) != len(qvec):
+                log.warning("stored vector dimension differs from query; reranking current text")
+                return None
             scored = dict(
                 vector_search(con, qvec, limit=len(pool), candidate_ids=[j.id for j in pool])
             )

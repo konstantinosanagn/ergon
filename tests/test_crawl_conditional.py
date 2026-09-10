@@ -378,6 +378,7 @@ def test_delta_body_validator_not_idset_skipped_reprocesses_edit(monkeypatch, tm
         etag='W/"old"',
         next_due="2000-01-01",
         idset_hash=fingerprint,
+        last_content_crawled=bi._today(),
     )
     states = {bs.key: bs}
 
@@ -449,6 +450,7 @@ def test_delta_non_body_validator_still_idset_skips(monkeypatch, tmp_path):
         etag='W/"old"',
         next_due="2000-01-01",
         idset_hash=fingerprint,
+        last_content_crawled=bi._today(),
     )
     states = {bs.key: bs}
 
@@ -493,6 +495,7 @@ def test_delta_body_validator_304_still_carries_forward(monkeypatch, tmp_path):
         etag='W/"old"',
         next_due="2000-01-01",
         idset_hash=fingerprint,
+        last_content_crawled=bi._today(),
     )
     states = {bs.key: bs}
 

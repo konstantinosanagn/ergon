@@ -40,6 +40,7 @@ class BoardState:
     token: str
     sector: str | None = None
     last_crawled: str | None = None
+    last_content_crawled: str | None = None
     last_changed: str | None = None
     etag: str | None = None
     last_modified: str | None = None
@@ -61,6 +62,17 @@ class BoardState:
 
 def _d(iso: str) -> date:
     return date.fromisoformat(iso)
+
+
+def content_crawl_due(state: BoardState, today: str) -> bool:
+    """Membership checks cannot extend the weekly content revalidation interval."""
+    if not state.last_content_crawled:
+        return True
+    try:
+        age = (_d(today) - _d(state.last_content_crawled)).days
+    except ValueError:
+        return True
+    return age < 0 or age >= COLD_INTERVAL
 
 
 def _days_between(a: str, b: str) -> int:
