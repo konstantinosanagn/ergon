@@ -23,7 +23,12 @@ import httpx
 import stamina
 from aiolimiter import AsyncLimiter
 
-from .exceptions import FetchError, RateLimitError, TransientHTTPError
+from .exceptions import (
+    CircuitOpenError,
+    FetchError,
+    RateLimitError,
+    TransientHTTPError,
+)
 
 __all__ = ["AsyncFetcher", "ConditionalResult", "DEFAULT_HEADERS"]
 
@@ -208,7 +213,7 @@ class _CircuitBreaker:
 
     def check(self, host: str) -> None:
         if self._open_until and time.monotonic() < self._open_until:
-            raise FetchError(f"circuit open for {host} (cooling down)")
+            raise CircuitOpenError(f"circuit open for {host} (cooling down)")
 
     def record_success(self) -> None:
         self._failures = 0

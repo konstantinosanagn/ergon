@@ -110,10 +110,8 @@ async def test_providers_that_bypass_the_client_use_it() -> None:
         # The CALL, not the word — a comment mentioning host_slot must not satisfy this. (My
         # first version checked `"host_slot" in src` and a mutation that deleted the wrapper but
         # left its comment still passed.)
-        if drives_own_transport and "fetcher.host_slot(" not in src:
+        if drives_own_transport and ".host_slot(" not in src:
             offenders.append(p.name)
-    # schemaorg/apicapture run multi-tier escalation ladders with several independent spans and
-    # are tracked separately; everything else must be wrapped.
-    assert set(offenders) <= {"schemaorg.py", "apicapture.py"}, (
+    assert offenders == [], (
         f"provider(s) reaching a third party outside AsyncFetcher without host_slot: {offenders}"
     )

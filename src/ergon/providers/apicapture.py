@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
+from ..exceptions import CircuitOpenError
 from ..extract.comp import coerce_amount
 from ..models import (
     DetailFetch,
@@ -844,16 +845,41 @@ def _tls_session() -> Any:
     return _TLS_SESSION
 
 
-async def _tls_request(req: _DetailReq) -> _DetailResp:
+class _Walled(Exception):
+    """Carries a bot-wall response out of a ``host_slot`` so the breaker records the failure."""
+
+    def __init__(self, resp: Any) -> None:
+        super().__init__(f"blocked with {getattr(resp, 'status_code', '?')}")
+        self.resp = resp
+
+
+async def _tls_request(req: _DetailReq, fetcher: AsyncFetcher) -> _DetailResp:
     """Send ``req`` through the reused curl_cffi session (tls-impersonate escalation for a bot-wall
-    block). Awaits curl_cffi's async API -- no blocking I/O."""
+    block). Awaits curl_cffi's async API -- no blocking I/O.
+
+    Wrapped in ``fetcher.host_slot`` because this session bypasses the shared client entirely: an
+    escalation lane must still be rate-limited, breaker-governed and budget-accounted, or the
+    heavier transport becomes a way to out-run the politeness the ordinary path enforces.
+    """
     session = _tls_session()
-    if req.method == "POST":
-        r = await session.post(
-            req.url, json=req.json_body, headers=req.headers, allow_redirects=req.follow_redirects
-        )
-    else:
-        r = await session.get(req.url, headers=req.headers, allow_redirects=req.follow_redirects)
+    try:
+        async with fetcher.host_slot(req.url):
+            if req.method == "POST":
+                r = await session.post(
+                    req.url,
+                    json=req.json_body,
+                    headers=req.headers,
+                    allow_redirects=req.follow_redirects,
+                )
+            else:
+                r = await session.get(
+                    req.url, headers=req.headers, allow_redirects=req.follow_redirects
+                )
+            # host_slot only counts raised failures, so carry a bot-wall status out as one.
+            if r.status_code in _JD_BLOCK_STATUS:
+                raise _Walled(r)
+    except _Walled as walled:
+        return _resp_of(walled.resp)
     return _resp_of(r)
 
 
@@ -913,13 +939,15 @@ class ApiCaptureProvider(BaseProvider):
             kwargs["json"] = req.json_body
         try:
             raw = await fetcher.request(req.method, req.url, **kwargs)
+        except CircuitOpenError:
+            raise  # "stop touching this host" must not be the trigger for a heavier transport
         except Exception:
             if req.tier == "tls":
-                return await _tls_request(req)
+                return await _tls_request(req, fetcher)
             raise
         resp = _resp_of(raw)
         if req.tier == "tls" and resp.status_code in _JD_BLOCK_STATUS:
-            return await _tls_request(req)
+            return await _tls_request(req, fetcher)
         return resp
 
     @staticmethod

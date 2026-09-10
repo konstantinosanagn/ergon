@@ -46,6 +46,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
+from ..exceptions import CircuitOpenError
 from ..models import (
     EmploymentType,
     JobPosting,
@@ -164,6 +165,8 @@ class _DualFetch:
         blocked = False
         try:
             return await self._f.get_text(url, headers=_BROWSER_HEADERS)
+        except CircuitOpenError:
+            raise  # "stop touching this host" must not be the trigger for a heavier transport
         except Exception as exc:
             blocked = _is_block(exc)
         # HTTP/1.1 + browser-UA fallback (bypasses HTTP/2-fingerprint WAFs, e.g. dexian.com).
@@ -174,8 +177,9 @@ class _DualFetch:
                 self._h1 = httpx.AsyncClient(
                     http2=False, follow_redirects=True, timeout=20.0, headers=_BROWSER_HEADERS
                 )
-            r = await self._h1.get(url)
-            r.raise_for_status()
+            async with self._f.host_slot(url):
+                r = await self._h1.get(url)
+                r.raise_for_status()  # inside the slot, so a block records a breaker failure
             text: str = r.text
             return text
         except Exception as exc:
@@ -192,8 +196,9 @@ class _DualFetch:
 
         if self._cc is None:
             self._cc = AsyncSession(impersonate="chrome124", timeout=20, verify=False)
-        rc = await self._cc.get(url)
-        rc.raise_for_status()
+        async with self._f.host_slot(url):
+            rc = await self._cc.get(url)
+            rc.raise_for_status()
         cc_text: str = rc.text
         return cc_text
 

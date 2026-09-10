@@ -28,6 +28,17 @@ class FetchError(ErgonError):
     """A network/HTTP fetch failed in a non-retryable way (or after exhausting retries)."""
 
 
+class CircuitOpenError(FetchError):
+    """The per-host circuit breaker refused the call; the host is cooling down.
+
+    Distinct from a generic FetchError because it means something different to a caller with a
+    fallback lane: a 403 says "this transport is blocked, try a heavier one", while THIS says
+    "stop touching this host at all". Providers with an escalation ladder (schemaorg, apicapture)
+    must re-raise it rather than escalate — otherwise the breaker firing is what CAUSES the
+    bypass, and the harder the host pushes back the harder we hit it.
+    """
+
+
 class TransientHTTPError(FetchError):
     """A retryable server-side HTTP error (5xx). Used to drive the retry loop."""
 
