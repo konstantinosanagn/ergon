@@ -58,11 +58,14 @@ res = search("backend", country="Germany", level="senior", salary_min=80000, rem
 
 # New-grad, precise: SWE, ≤2 stated years, NYC metro, USD ≥ $140k, posted in the last 30 days:
 from datetime import datetime, timedelta, timezone
+
 res = search(
     "software engineer",
-    city="New York",                             # matches NYC boroughs / "New York City" / "NYC"
-    max_years=2, include_unknown_years=False,    # only roles that state ≤ 2 years
-    salary_min=140_000, salary_currency="USD",   # USD only
+    city="New York",  # matches NYC boroughs / "New York City" / "NYC"
+    max_years=2,
+    include_unknown_years=False,  # only roles that state ≤ 2 years
+    salary_min=140_000,
+    salary_currency="USD",  # USD only
     employment_type="full_time",
     posted_after=datetime.now(timezone.utc) - timedelta(days=30),
     limit=20,
@@ -79,6 +82,7 @@ Async is first-class:
 
 ```python
 from ergon import AsyncErgon, SearchQuery
+
 async with AsyncErgon() as et:
     res = await et.search(SearchQuery(keywords="data scientist", remote=True, limit=25))
 ```
