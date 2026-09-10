@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any
 
@@ -12,9 +13,39 @@ from ..textnorm import has_word_chars, split_terms
 # index: NEAR-10 kept 88-98% of AND-recall on genuine multi-word titles while excluding the
 # cross-field scatter matches; NEAR-5 excluded the same junk but lost a few more legit hits.
 _NEAR_WINDOW = 10
+_ML_ALIAS = re.compile(r"\b(?:ml|machine\s+learning)\b", re.IGNORECASE)
+_IDENTIFIER = re.compile(r"(?<!\w)c(?:\+\+|#)(?![+#])", re.IGNORECASE)
 
 
-def _match_expr(keywords: str) -> str:
+def _query_match(q: SearchQuery) -> str:
+    """Expand a bounded ML alias only for opt-in semantic candidate retrieval."""
+    if not q.keywords:
+        return ""
+    variants = [q.keywords]
+    if q.semantic and _ML_ALIAS.search(q.keywords):
+        variants.extend(_ML_ALIAS.sub(alias, q.keywords) for alias in ("ML", "machine learning"))
+    allow_any = len(split_terms(q.keywords)) >= 5
+    expressions = list(dict.fromkeys(_match_expr(v, allow_any=allow_any) for v in variants))
+    return expressions[0] if len(expressions) == 1 else " OR ".join(f"({e})" for e in expressions)
+
+
+def _identifier_constraint(con: sqlite3.Connection, q: SearchQuery, where: list[str]) -> None:
+    """Preserve explicit C++/C# literals on legacy FTS indexes, before applying LIMIT."""
+    identifiers = {m.group().lower() for m in _IDENTIFIER.finditer(q.keywords or "")}
+    if not identifiers:
+        return
+    patterns = [
+        re.compile(r"(?<!\w)" + re.escape(t) + r"(?![+#])", re.IGNORECASE) for t in identifiers
+    ]
+
+    def matches(*fields: str | None) -> bool:
+        return all(any(p.search(f or "") for f in fields) for p in patterns)
+
+    con.create_function("ergon_identifiers_match", 4, matches, deterministic=True)
+    where.append("ergon_identifiers_match(j.title, j.company, j.department, j.snippet)")
+
+
+def _match_expr(keywords: str, *, allow_any: bool = True) -> str:
     """Build an injection-safe FTS5 MATCH expression for ``keywords``.
 
     Terms are whitespace-split and passed through RAW inside double quotes, with any inner quote
@@ -46,7 +77,7 @@ def _match_expr(keywords: str) -> str:
         return " AND ".join(f'"{t}"' for t in toks)  # quoted = no FTS5 syntax injection
     phrase = '"' + " ".join(toks) + '"'  # one quoted phrase: terms in exact order
     near = "NEAR(" + " ".join(f'"{t}"' for t in toks) + f", {_NEAR_WINDOW})"
-    if len(toks) <= 4:
+    if len(toks) <= 4 or not allow_any:
         return f"({phrase}) OR ({near})"
     # 5+ tokens is a keyword BAG (a pasted sentence / long natural query), NOT a title -- e.g.
     # "software engineer AI ML GPU systems infrastructure". NEAR(all-N, 10) requires every token
@@ -196,6 +227,7 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
 
 def search_rows(con: sqlite3.Connection, q: SearchQuery) -> list[sqlite3.Row]:
     where, params = _where(q)
+    _identifier_constraint(con, q, where)
     limit = q.limit or 1000
     # Three cases, and the middle one used to be wrong. No keywords at all -> filter-only, no
     # keyword constraint (correct). Keywords that contain something searchable -> the FTS path.
@@ -205,7 +237,7 @@ def search_rows(con: sqlite3.Connection, q: SearchQuery) -> list[sqlite3.Row]:
     # arbitrary unrelated jobs, silently, before the tokenizer was fixed.
     if q.keywords and not has_word_chars(q.keywords):
         return []
-    match = _match_expr(q.keywords) if q.keywords else ""
+    match = _query_match(q)
     if match:
         sql = (
             "SELECT j.* FROM jobs j JOIN jobs_fts f ON j.rowid = f.rowid "
@@ -232,6 +264,7 @@ def whats_new_rows(
     ``status='active'``), so every search filter (keywords, location, level, sector, salary, visa, …)
     composes with the recency cutoff. No competitor MCP exposes a real diff feed; this is ours."""
     where, params = _where(q)
+    _identifier_constraint(con, q, where)
     if include_changed:
         where = [*where, "(j.first_seen >= ? OR j.updated_at >= ?)"]
         params = [*params, since_iso, since_iso]
@@ -242,7 +275,7 @@ def whats_new_rows(
     order = "ORDER BY j.first_seen DESC, j.posted_at DESC"
     if q.keywords and not has_word_chars(q.keywords):
         return []  # same rule as search_rows: nothing searchable -> no results, not all results
-    match = _match_expr(q.keywords) if q.keywords else ""
+    match = _query_match(q)
     if match:
         sql = (
             "SELECT j.* FROM jobs j JOIN jobs_fts f ON j.rowid = f.rowid "

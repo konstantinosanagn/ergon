@@ -265,7 +265,12 @@ def _build_prior_index(tmp_path, prov, *, build_id="prior"):
 def _today_states(stamp_hash):
     """A fresh (due) 'today' BoardState seeded with the prior crawl's stamped fingerprint."""
     return {
-        "greenhouse|acme": BoardState(provider="greenhouse", token=_TOKEN, idset_hash=stamp_hash)
+        "greenhouse|acme": BoardState(
+            provider="greenhouse",
+            token=_TOKEN,
+            idset_hash=stamp_hash,
+            last_content_crawled=bi._today(),
+        )
     }
 
 
