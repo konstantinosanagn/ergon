@@ -4,9 +4,10 @@ keyed by posting id with a sig for re-crawl-safe carry-forward. The JD text itse
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import sqlite3
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -182,6 +183,7 @@ def _ref_in_shard(ref: DetailRef, shard: int, num_shards: int) -> bool:
 # --- reconcile pass ----------------------------------------------------------------------------
 
 RETRY_CAP = 3  # bounded retries for a ref whose fetch keeps failing (never re-fetched forever)
+log = logging.getLogger(__name__)
 # In-flight Tier-3 fetches. Raised 8 -> 24 (env-tunable via ERGON_DETAIL_CONCURRENCY) to drain the
 # highest-volume sources (Workday 37% of the index across ~2,228 independent tenant hosts,
 # SmartRecruiters 10.5%, Greenhouse 9%) in weeks not months. Politeness is enforced BELOW this by
@@ -246,7 +248,10 @@ def _tier3_rows(
     the likely trigger of the SR megahost shard's late OOM. The caller still re-checks
     ``_ref_in_shard`` as a cheap belt-and-suspenders on the (now small) result."""
     params: list[Any] = []
-    normal = "(snippet IS NULL OR TRIM(snippet) = '')"
+    normal = (
+        "(snippet IS NULL OR TRIM(snippet) = '') AND status = 'active' "
+        "AND (apply_url IS NOT NULL OR listing_url IS NOT NULL OR board_token IS NOT NULL)"
+    )
     if sources:
         placeholders = ",".join("?" for _ in sources)
         normal += f" AND source IN ({placeholders})"
@@ -260,7 +265,7 @@ def _tier3_rows(
             params.extend(sources)
         if loc_sources:
             lph = ",".join("?" for _ in loc_sources)
-            where += f" OR (source IN ({lph}) AND city IS NULL AND country IS NULL)"
+            where += f" OR (source IN ({lph}) AND status = 'active' AND city IS NULL AND country IS NULL)"
             params.extend(loc_sources)
         sql = f"SELECT {_JOBS_COLUMNS} FROM jobs WHERE ({where})"
     else:
@@ -384,20 +389,21 @@ async def _run_pipeline(
     window: list[DetailRef],
     fetch_detail: Callable[[DetailRef], Awaitable[str | DetailFetch | None]],
     concurrency: int,
-    handle: Callable[[DetailRef, str | DetailFetch | None], None],
+    handle: Callable[[DetailRef, str | DetailFetch | None | Exception], None],
 ) -> None:
     """Fetch the window concurrently AND run ``handle`` (the CPU-bound enrich+record step) on each
     result AS IT ARRIVES, from a single consumer — so extraction CPU (~4.5ms/JD) overlaps the
     network waits of the in-flight fetches instead of running as a blocking phase after every fetch
     completes (which added ~40% to per-window wall time at high concurrency). ``handle`` runs
     serially in one coroutine, so it's safe for the shared sqlite connection; a failing fetch
-    (exception or ``None``) is passed through as ``None``, never raised — one bad host must not abort
+    is passed through as the exception itself (a ``None`` return is the provider's own verdict),
+    never raised — one bad host must not abort
     the others. Bounded memory: the stream buffers at most ``concurrency`` results, and each worker
     holds its limiter slot until it hands off, so at most ~``concurrency`` results are ever live —
     never the whole window."""
-    send, recv = anyio.create_memory_object_stream[tuple[DetailRef, str | DetailFetch | None]](
-        max_buffer_size=concurrency
-    )
+    send, recv = anyio.create_memory_object_stream[
+        tuple[DetailRef, str | DetailFetch | None | Exception]
+    ](max_buffer_size=concurrency)
     limiter = anyio.CapacityLimiter(concurrency)
 
     async def producer() -> None:
@@ -406,9 +412,9 @@ async def _run_pipeline(
             async def worker(ref: DetailRef) -> None:
                 async with limiter:
                     try:
-                        res = await fetch_detail(ref)
-                    except Exception:
-                        res = None
+                        res: str | DetailFetch | None | Exception = await fetch_detail(ref)
+                    except Exception as exc:
+                        res = exc
                     await send.send((ref, res))  # backpressure: blocks if the consumer lags
 
             for ref in window:
@@ -476,6 +482,21 @@ def _record_attempt(det_con: sqlite3.Connection, ref: DetailRef) -> None:
         "attempts = CASE WHEN job_detail.sig = excluded.sig THEN job_detail.attempts + 1 ELSE 1 END, "
         "sig = excluded.sig",
         (ref.id, ref.content_sig),
+    )
+
+
+def _record_gone(det_con: sqlite3.Connection, ref: DetailRef, fetched_at: str) -> None:
+    """Retire a posting the provider confirmed has nothing to fetch (``None`` / empty body).
+
+    Writes ``fetched_at`` so ``_eligible`` stops selecting it and ``reset_detail_attempts`` (which
+    only touches ``attempts``) cannot revive it; a changed sig still re-queues it. Recovered
+    fields are left alone.
+    """
+    det_con.execute(
+        "INSERT INTO job_detail(id, sig, fetched_at, attempts) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET sig = excluded.sig, fetched_at = excluded.fetched_at, "
+        "attempts = excluded.attempts",
+        (ref.id, ref.content_sig, fetched_at, RETRY_CAP),
     )
 
 
@@ -743,17 +764,22 @@ async def reconcile_detail_tier(
         _save_cursor(det_con, next_cursor)
         det_con.commit()
 
-        counts = {"fetched": 0, "failed": 0}
+        counts = {"fetched": 0, "failed": 0, "gone": 0}
+        reasons: Counter[tuple[str, str]] = Counter()
 
-        def handle(ref: DetailRef, result: str | DetailFetch | None) -> None:
+        def handle(ref: DetailRef, result: str | DetailFetch | None | Exception) -> None:
+            if isinstance(result, Exception):  # transient: keep the retry budget ticking
+                _record_attempt(det_con, ref)
+                counts["failed"] += 1
+                reasons[(ref.source, type(result).__name__)] += 1
+                return
+            # A DetailFetch may carry a structured salary; seed it before enrich so it wins.
+            text, pre_salary, pre_locations = _detail_parts(result)
+            if not text:  # the provider's own verdict: nothing there, stop retrying
+                _record_gone(det_con, ref, now())
+                counts["gone"] += 1
+                return
             try:
-                # fetch_detail may return a bare str (JD text) or a DetailFetch carrying a
-                # STRUCTURED salary alongside the text (e.g. rippling's payRangeDetails). Seed the
-                # posting with that salary BEFORE enrich so the text extractors — which only fill a
-                # still-empty field — prefer the structured range over re-parsing it from prose.
-                text, pre_salary, pre_locations = _detail_parts(result)
-                if not text:
-                    raise ValueError("fetch_detail returned no description")
                 job = JobPosting.create(
                     source=ref.source,
                     source_job_id=ref.id,
@@ -767,15 +793,23 @@ async def reconcile_detail_tier(
                 snippet = (html_to_text(text) or "")[:300]
                 _record_success(det_con, ref, job, snippet, now())
                 counts["fetched"] += 1
-            except Exception:
+            except Exception as exc:
                 _record_attempt(det_con, ref)
                 counts["failed"] += 1
+                reasons[(ref.source, type(exc).__name__)] += 1
 
         # Fetch + enrich pipelined: enrich CPU overlaps the in-flight fetches' network waits (was a
         # blocking post-fetch phase ~40% of wall time). handle() runs serially -> sqlite-safe.
         await _run_pipeline(window, fetch_detail, _DETAIL_CONCURRENCY, handle)
         fetched = counts["fetched"]
         failed = counts["failed"]
+        if failed:
+            top = ", ".join(f"{s}:{e}={n}" for (s, e), n in reasons.most_common(8))
+            log.warning("detail: %d transient failure(s) this pass — %s", failed, top)
+        if counts["gone"]:
+            log.info(
+                "detail: %d posting(s) confirmed gone, retired from the backlog", counts["gone"]
+            )
         det_con.commit()
 
         if sharded:
@@ -798,7 +832,7 @@ async def reconcile_detail_tier(
             and _eligible(ref.id, ref.content_sig, existing_after)
         )
 
-        stats = {"fetched": fetched, "failed": failed, "missing": missing}
+        stats = {"fetched": fetched, "failed": failed, "gone": counts["gone"], "missing": missing}
         if location_backfill:
             # Only surfaced in backfill mode so the ordinary drain/daily return stays byte-identical
             # (existing callers/tests assert the exact 3-key dict).

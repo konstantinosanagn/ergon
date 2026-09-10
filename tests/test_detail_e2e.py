@@ -18,6 +18,7 @@ import anyio
 
 from ergon.index.db import fresh_db
 from ergon.index.detail import (
+    RETRY_CAP,
     _tier3_rows,
     merge_detail_into_index,
     open_detail,
@@ -131,7 +132,7 @@ def test_good_rows_recover_salary_years_degree_into_index(tmp_path):
     fetch = _make_fetcher(failing_ids=set(), none_ids=set(), calls=calls)
 
     stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW))
-    assert stats == {"fetched": n, "failed": 0, "missing": 0}
+    assert stats == {"fetched": n, "failed": 0, "gone": 0, "missing": 0}
 
     con = sqlite3.connect(idx)
     merged = merge_detail_into_index(con, det)
@@ -168,18 +169,26 @@ def test_failing_and_none_rows_marked_attempts_and_not_merged(tmp_path):
     stats = anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW))
     # non-fatal: all 6 refs were attempted despite 3 dead ones.
     assert stats["fetched"] == len(good_ids)
-    assert stats["failed"] == len(failing_ids) + len(none_ids)
-    # failing/none refs stay in the backlog (unspent retry budget); good ones drop out.
-    assert stats["missing"] == len(failing_ids) + len(none_ids)
+    assert stats["failed"] == len(failing_ids)
+    assert stats["gone"] == len(none_ids)
+    # failing refs stay in the backlog (unspent retry budget); None is the provider's verdict
+    # that the posting is gone, so those retire; good ones drop out.
+    assert stats["missing"] == len(failing_ids)
     assert set(calls) == {_row_id(i) for i in range(n)}
 
     det_con = open_detail(det)
-    for i in failing_ids | none_ids:
+    for i in failing_ids:
         attempts, fetched_at = det_con.execute(
             "SELECT attempts, fetched_at FROM job_detail WHERE id = ?", (_row_id(i),)
         ).fetchone()
         assert attempts == 1
         assert fetched_at is None
+    for i in none_ids:
+        attempts, fetched_at = det_con.execute(
+            "SELECT attempts, fetched_at FROM job_detail WHERE id = ?", (_row_id(i),)
+        ).fetchone()
+        assert attempts == RETRY_CAP
+        assert fetched_at == _NOW
     for i in good_ids:
         attempts, fetched_at = det_con.execute(
             "SELECT attempts, fetched_at FROM job_detail WHERE id = ?", (_row_id(i),)
@@ -219,7 +228,7 @@ def test_max_details_cap_holds_when_universe_exceeds_it(tmp_path):
             det, idx, fetch_detail=fetch, max_details=cap, now=lambda: _NOW
         )
     )
-    assert stats == {"fetched": cap, "failed": 0, "missing": n - cap}
+    assert stats == {"fetched": cap, "failed": 0, "gone": 0, "missing": n - cap}
     assert len(calls) == cap
     assert len(set(calls)) == cap  # no duplicate fetch in a single windowed run
 
@@ -236,13 +245,13 @@ def test_second_reconcile_run_skips_already_fetched_refs(tmp_path):
     stats1 = anyio.run(
         lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW)
     )
-    assert stats1 == {"fetched": n, "failed": 0, "missing": 0}
+    assert stats1 == {"fetched": n, "failed": 0, "gone": 0, "missing": 0}
     assert len(calls) == n
 
     stats2 = anyio.run(
         lambda: reconcile_detail_tier(det, idx, fetch_detail=fetch, now=lambda: _NOW)
     )
-    assert stats2 == {"fetched": 0, "failed": 0, "missing": 0}
+    assert stats2 == {"fetched": 0, "failed": 0, "gone": 0, "missing": 0}
     assert len(calls) == n  # no new calls on the second, unchanged-sig pass
 
 
@@ -347,7 +356,7 @@ def test_merge_only_pass_fetches_nothing_but_merges_drained_sidecar_identically(
     dstats = anyio.run(
         lambda: reconcile_detail_tier(det, idx_drain, fetch_detail=drain_fetch, now=lambda: _NOW)
     )
-    assert dstats == {"fetched": n, "failed": 0, "missing": 0}
+    assert dstats == {"fetched": n, "failed": 0, "gone": 0, "missing": 0}
     assert len(drain_calls) == n  # the DRAIN did the fetching
 
     # 2. CONTROL: a freshly-built core index, merge the drained sidecar directly (no inline pass).

@@ -77,7 +77,7 @@ def _mk_index(tmp_path, rows):
     c.execute(
         "CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
         "listing_url TEXT, content_hash TEXT, snippet TEXT, "
-        "salary_min REAL, salary_max REAL, years_min INTEGER)"
+        "salary_min REAL, salary_max REAL, years_min INTEGER, status TEXT DEFAULT 'active')"
     )
     c.executemany(
         "INSERT INTO jobs (id,source,apply_url,content_hash,snippet) VALUES (?,?,?,?,?)", rows
@@ -479,7 +479,7 @@ def test_reconcile_recovers_structured_location_and_merges_country(tmp_path):
         "listing_url TEXT, content_hash TEXT, title TEXT, level TEXT, snippet TEXT, "
         "salary_min REAL, salary_max REAL, salary_currency TEXT, salary_interval TEXT, "
         "years_min INTEGER, years_max INTEGER, degree_min TEXT, degree_required INTEGER, "
-        "sponsorship_offered INTEGER, city TEXT, country TEXT, location TEXT)"
+        "sponsorship_offered INTEGER, city TEXT, country TEXT, location TEXT, status TEXT DEFAULT 'active')"
     )
     c.execute(
         "INSERT INTO jobs (id,source,apply_url,content_hash,title,level,snippet,location) "
@@ -556,7 +556,7 @@ def _mk_index_loc(tmp_path, rows):
     c.execute(
         "CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
         "listing_url TEXT, content_hash TEXT, snippet TEXT, city TEXT, country TEXT, "
-        "salary_min REAL, salary_max REAL, years_min INTEGER)"
+        "salary_min REAL, salary_max REAL, years_min INTEGER, status TEXT DEFAULT 'active')"
     )
     c.executemany(
         "INSERT INTO jobs (id,source,apply_url,content_hash,snippet,city,country) "
@@ -816,7 +816,7 @@ def test_dead_row_abandoned_after_retry_cap_across_runs(tmp_path):
 
     async def always_fail(ref):
         calls.append(ref.id)
-        return None  # dead posting -> no description -> _record_attempt
+        raise TimeoutError("dead host")  # transient failure -> _record_attempt
 
     for _ in range(RETRY_CAP + 3):  # run several extra passes past the cap
         anyio.run(
@@ -831,3 +831,28 @@ def test_dead_row_abandoned_after_retry_cap_across_runs(tmp_path):
     assert (
         len(calls) == RETRY_CAP
     )  # attempted RETRY_CAP times then abandoned (pre-fix: RETRY_CAP+3)
+
+
+def test_confirmed_gone_row_is_attempted_once(tmp_path):
+    # ``None`` is the provider's own verdict that the posting is gone: no retry budget to spend.
+    from ergon.index.detail import RETRY_CAP
+
+    idx = _mk_index(tmp_path, [("gone", "oracle", "http://x/gone", "h", None)])
+    det = str(tmp_path / "detail.sqlite")
+    calls = []
+
+    async def confirmed_gone(ref):
+        calls.append(ref.id)
+        return None
+
+    for _ in range(RETRY_CAP + 3):
+        anyio.run(
+            lambda: reconcile_detail_tier(
+                det,
+                idx,
+                fetch_detail=confirmed_gone,
+                max_details=10,
+                now=lambda: "2026-07-15T00:00:00Z",
+            )
+        )
+    assert len(calls) == 1

@@ -182,7 +182,7 @@ def _mk_index(tmp_path, rows):
     c = sqlite3.connect(p)
     c.execute(
         "CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
-        "listing_url TEXT, content_hash TEXT, snippet TEXT, "
+        "listing_url TEXT, content_hash TEXT, snippet TEXT, status TEXT DEFAULT 'active', "
         "salary_min REAL, salary_max REAL, years_min INTEGER)"
     )
     c.executemany(
@@ -249,7 +249,9 @@ def test_reconcile_non_sharded_path_is_unaffected_by_shard_default(tmp_path):
             det_b, idx, fetch_detail=fake, now=lambda: "t", shard=None, num_shards=None
         )
     )
-    assert stats_default == stats_explicit_none == {"fetched": 5, "failed": 0, "missing": 0}
+    assert (
+        stats_default == stats_explicit_none == {"fetched": 5, "failed": 0, "gone": 0, "missing": 0}
+    )
     con_a = open_detail(det_a)
     con_b = open_detail(det_b)
     got_a = con_a.execute("SELECT id FROM job_detail ORDER BY id").fetchall()
@@ -373,12 +375,12 @@ def test_tier3_rows_sql_shard_filter_equals_python_ref_in_shard(tmp_path):
         ("rippling", None),  # no url -> source bucket fallback
     ]
     rows = [
-        (str(i), src, None, url, None, f"h{i}", None) for i, (src, url) in enumerate(samples * 12)
+        (str(i), src, "tok", url, None, f"h{i}", None) for i, (src, url) in enumerate(samples * 12)
     ]
     con = sqlite3.connect(tmp_path / "idx.sqlite")
     con.execute(
         "CREATE TABLE jobs (id TEXT, source TEXT, board_token TEXT, apply_url TEXT, "
-        "listing_url TEXT, content_hash TEXT, snippet TEXT)"
+        "listing_url TEXT, content_hash TEXT, snippet TEXT, status TEXT DEFAULT 'active')"
     )
     con.executemany(
         "INSERT INTO jobs (id,source,board_token,apply_url,listing_url,content_hash,snippet) "
