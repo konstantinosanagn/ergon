@@ -1,7 +1,7 @@
 name: drain-detail
 
 # Sharded parallel Tier-3 JD-detail drain (~990k postings across a 20-job matrix so the drain
-# finishes in ~1 run instead of ~40 daily-cron runs of build-index.yml's unsharded --detail pass).
+# finishes in ~1 run instead of ~40 runs of build-index.yml's unsharded --detail pass).
 #
 # THE CORRECTNESS INVARIANT: politeness is enforced per `_rate_key(host)` (see http.py / the
 # "sharded drain" section of src/ergon/index/detail.py) -- every rate-bucket lives on
@@ -27,6 +27,10 @@ name: drain-detail
 on:
   workflow_dispatch:
     inputs:
+      reset_attempts:
+        description: "Reset attempts=0 on every empty-snippet sidecar row before draining (one-off rescue after a parser fix; defeats RETRY_CAP, so off by default)."
+        type: boolean
+        default: false
       detail_max:
         description: "Per-shard Tier-3 detail fetch budget (ERGON_DETAIL_MAX). Big by design -- each shard should drain its ENTIRE slice in one run, not a small window."
         default: "200000"
@@ -57,16 +61,11 @@ on:
       location_backfill:
         description: "Set to 1 to ALSO re-fetch already-drained rows on the location-capable sources (workday/oracle/successfactors/eightfold/radancy/rippling/bamboohr/jobvite) that still lack a city/country -- rows drained before their location wiring existed. Preserves recovered salary (fetched_at re-queue, never DELETE). Leave empty for a normal drain."
         default: ""
-  # Daily sharded drain. 09:30 UTC is deliberately OFF build-index.yml's 04:17 slot, but R1 no longer
-  # RELIES on that offset for correctness: the `concurrency: group: drain-detail` below is disjoint
-  # from build-index's group, so the two may overlap freely (drain owns the detail sidecar outright).
-  # The design is safe by construction -- one politeness bucket per shard, each drain-only rate probed
-  # to its 429 knee, Workable's ~4 req/s single-host tail (~3.2h) the long pole, comfortably under the
-  # 350-min timeout.
-  # WATCH the FIRST scheduled run for 429s / gateway 5xx (esp. the Workable + SmartRecruiters
-  # megahost shards): if a shard's failure rate climbs, dial its ERGON_*_DETAIL_RATE default down.
-  schedule:
-    - cron: "30 9 * * *"
+  # Chained to build-index: the drain can only fill JD for rows that have been PUBLISHED, so it
+  # must run after the publish, never on an independent clock that races it.
+  workflow_run:
+    workflows: [build-index]
+    types: [completed]
 
 permissions:
   contents: write   # to publish the combined detail sidecar as a release asset (merge job)
@@ -81,6 +80,7 @@ env:
 jobs:
   drain:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 350   # under the 6h hosted-runner ceiling
     strategy:
       fail-fast: false     # one shard's failure (dead host, runner OOM, etc.) must not cancel the other 19
@@ -141,6 +141,7 @@ jobs:
           [ -f dist/index-detail.sqlite ] && cp dist/index-detail.sqlite "dist/index-detail-shard-${{ matrix.shard }}.sqlite" || true
 
       - name: Rescue RETRY_CAP-stuck empty-snippet rows (reset attempts=0)
+        if: ${{ github.event.inputs.reset_attempts == 'true' }}
         # R1: rows that burned their whole retry budget under the OLD (buggy) SmartRecruiters/Oracle
         # detail parser sit stuck at attempts>=RETRY_CAP with an EMPTY snippet, so `_eligible` never
         # re-selects them even though the FIXED parser would now recover them. Zero `attempts` on
@@ -163,8 +164,8 @@ jobs:
           # DRAIN-ONLY SmartRecruiters rate raise 3 -> 10 req/s (see http._sr_rate_override). The
           # detail API live-probed clean at 10/s sustained; at 3/s SR's 152k backlog is ~14h (never
           # finishes one run), at 10/s it's ~4.2h (fits). R1 moved this workflow to its own concurrency
-          # group, so it may now overlap build-index in principle; in practice the 09:30 cron sits ~5h
-          # after build-index's 04:17 slot, which finishes well inside its timeout, so the daily
+          # group, so it may overlap build-index in principle; in practice this workflow is chained
+          # to build-index's completion, so the daily
           # list-crawl (storm-safe 3/s, doesn't set this env) is normally done before this starts. A
           # long-overrunning manual/backfill build is the only overlap window -- watch host 429s there.
           ERGON_SR_DETAIL_RATE: "${{ github.event.inputs.sr_detail_rate || '40' }}"
@@ -207,7 +208,7 @@ jobs:
 
   merge:
     needs: drain
-    if: ${{ !cancelled() }}   # a timed-out/failed shard must not skip the merge -- the other 19 shards' work still needs publishing (see FIX 1 note at the top of this file); only a manual cancellation of the whole run skips this
+    if: ${{ !cancelled() && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}  # a timed-out shard must not skip the merge; a skipped drain must
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

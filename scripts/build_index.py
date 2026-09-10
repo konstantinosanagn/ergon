@@ -2232,7 +2232,7 @@ def main(argv: list[str]) -> None:
         stats = build_detail_shard_only(db, out, shard=shard, num_shards=num_shards)
         print(
             f"detail shard {shard}/{num_shards}: fetched={stats['fetched']} "
-            f"failed={stats['failed']} missing={stats['missing']} -> "
+            f"failed={stats['failed']} gone={stats.get('gone', 0)} missing={stats['missing']} -> "
             f"{out / f'index-detail-shard-{shard}.sqlite'}"
         )
         return
@@ -2517,7 +2517,8 @@ def main(argv: list[str]) -> None:
                 )
                 print(
                     f"  + detail tier (fetched={dstats['fetched']} failed={dstats['failed']} "
-                    f"missing={dstats['missing']} merged={dstats['merged']}) -> "
+                    f"gone={dstats.get('gone', 0)} missing={dstats['missing']} "
+                    f"merged={dstats['merged']}) -> "
                     "merged into core (sidecar owned by drain-detail.yml)"
                 )
             except Exception as exc:  # noqa: BLE001 - never let the detail tier break the core build
