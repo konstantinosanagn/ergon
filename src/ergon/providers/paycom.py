@@ -118,7 +118,9 @@ class PaycomProvider(BaseProvider):
         )
         captured: dict[str, str] = {}
         posts: list[dict[str, Any]] = []
-        async with async_playwright() as p:
+        # Out-of-band lane (curl_cffi / browser): no fetcher.request, so host_slot applies
+        # the per-host rate limit, breaker and budget accounting the crawl relies on.
+        async with fetcher.host_slot(portal), async_playwright() as p:
             browser = await p.chromium.launch()
             try:
                 ctx = await browser.new_context(user_agent=_UA)

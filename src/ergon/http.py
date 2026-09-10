@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 import time
 from collections import defaultdict
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
@@ -325,6 +327,38 @@ class AsyncFetcher:
         try:
             async with self._limiter, self._host_concurrency_limiter(key), self._host_limiter(key):
                 return await self._request_with_retries(method, url, host, breaker, **kwargs)
+        finally:
+            self._host_busy_seconds[key] += time.monotonic() - started
+
+    @asynccontextmanager
+    async def host_slot(self, url: str) -> AsyncIterator[None]:
+        """Apply the per-host guards to a lane that fetches OUT OF BAND of this client.
+
+        A provider that drives a headless browser (dayforce) never calls ``request``, so it used
+        to touch a third-party host with no rate limit, no circuit breaker and no budget
+        accounting — invisible to ``slowest_hosts`` and to the crawl's deadline-box. Wrapping the
+        out-of-band work in this gives it the same treatment: breaker check on entry, per-host
+        rate token, per-host in-flight cap, and wall-clock/attempt accounting.
+
+        The GLOBAL limiter is deliberately NOT taken. A browser session runs for tens of seconds;
+        holding one of the few global slots for that long would starve the ordinary HTTP crawl,
+        and the global cap exists to bound total in-flight HTTP work, which this is not.
+        """
+        host = urlsplit(url).netloc
+        key = _rate_key(host)
+        breaker = self._breakers[key]
+        breaker.check(key)
+        started = time.monotonic()
+        self._host_first_seen.setdefault(key, started)
+        self._host_request_count[key] += 1
+        try:
+            async with self._host_concurrency_limiter(key), self._host_limiter(key):
+                try:
+                    yield
+                except Exception:
+                    breaker.record_failure()
+                    raise
+                breaker.record_success()
         finally:
             self._host_busy_seconds[key] += time.monotonic() - started
 
