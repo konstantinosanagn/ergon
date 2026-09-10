@@ -125,7 +125,11 @@ class DayforceProvider(BaseProvider):
             ) from exc
         limit = query.limit
         posts: list[dict[str, Any]] = []
-        async with async_playwright() as p:
+        # The browser lane never calls fetcher.request, so without this it would touch a third
+        # party with no rate limit, no circuit breaker and no budget accounting — and stay
+        # invisible to slowest_hosts and the crawl's deadline-box. host_slot applies the same
+        # per-host guards around out-of-band work.
+        async with fetcher.host_slot(f"{_BASE}/{ns}/{board}"), async_playwright() as p:
             browser = await p.chromium.launch()
             try:
                 ctx = await browser.new_context(user_agent=_UA)

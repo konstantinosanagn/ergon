@@ -141,7 +141,12 @@ class PeopleSoftProvider(BaseProvider):
             "HRS_HRAM_FL.HRS_CG_SEARCH_FL.GBL"
         )
         hdr = {"User-Agent": _UA}
-        async with AsyncSession(impersonate="chrome124", verify=False, timeout=45) as s:
+        # Out-of-band lane (curl_cffi / browser): no fetcher.request, so host_slot applies
+        # the per-host rate limit, breaker and budget accounting the crawl relies on.
+        async with (
+            fetcher.host_slot(psc),
+            AsyncSession(impersonate="chrome124", verify=False, timeout=45) as s,
+        ):
             try:
                 # Portal warm-up seeds session cookies (required by some tenants, harmless elsewhere).
                 with contextlib.suppress(Exception):

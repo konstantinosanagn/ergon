@@ -65,7 +65,12 @@ class TeslaProvider(BaseProvider):
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         from curl_cffi.requests import AsyncSession
 
-        async with AsyncSession(impersonate="chrome124", verify=False, timeout=45) as s:
+        # Out-of-band lane (curl_cffi / browser): no fetcher.request, so host_slot applies
+        # the per-host rate limit, breaker and budget accounting the crawl relies on.
+        async with (
+            fetcher.host_slot(_PRIME_URL),
+            AsyncSession(impersonate="chrome124", verify=False, timeout=45) as s,
+        ):
             try:
                 # Prime: the careers page sets the WAF-clearance cookies the API call needs.
                 await s.get(
