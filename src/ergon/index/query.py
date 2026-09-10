@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from typing import Any
 
 from ..models import DEGREE_ORDER, SearchQuery
-
-_TOKEN = re.compile(r"[a-z0-9]+")
+from ..textnorm import has_word_chars, split_terms
 
 # Window (in tokens) for the NEAR group used on 3+-token queries. Measured on the real 1.4M-job
 # index: NEAR-10 kept 88-98% of AND-recall on genuine multi-word titles while excluding the
@@ -19,9 +17,18 @@ _NEAR_WINDOW = 10
 def _match_expr(keywords: str) -> str:
     """Build an injection-safe FTS5 MATCH expression for ``keywords``.
 
-    Tokens are extracted with ``[a-z0-9]+`` and individually double-quoted, so no FTS5 syntax
-    (operators, parens, quotes, NEAR) can ever be injected — only quoted alphanumeric tokens
-    appear inside the expression.
+    Terms are whitespace-split and passed through RAW inside double quotes, with any inner quote
+    doubled. Two consequences, both deliberate:
+
+    * No FTS5 syntax (operators, parens, quotes, NEAR, ``*``, ``^``) can be injected — inside a
+      quoted string the only special character is ``"``, and doubling it makes the rest literal.
+      Verified: ``a" OR t MATCH "b`` matches as a literal, not as an operator.
+    * SQLite tokenizes the quoted contents ITSELF, with the table's own
+      ``porter unicode61 remove_diacritics 2``. So ``"Ingénieur"`` finds the stored ``ingenieur``
+      and ``"Oberflächenbeschichter"`` finds the stemmed ``oberflachenbeschicht``, for free. The
+      previous ``[a-z0-9]+`` extraction shredded those into fragments that match nothing, and
+      produced NO tokens at all for CJK/Cyrillic/Greek. Do not reimplement the tokenizer here:
+      a naive NFKD fold turns ``エンジニア`` into ``エンシニア``.
 
     * 1-2 tokens: ``"a" AND "b"`` — unchanged historical semantics.
     * 3+ tokens: ``("a b c") OR (NEAR("a" "b" "c", 10))`` — exact phrase OR an order-insensitive
@@ -34,10 +41,10 @@ def _match_expr(keywords: str) -> str:
       phrase kept only 19-90% (too strict). The OR'd phrase arm contributes extra bm25 weight,
       so exact-phrase hits rank above proximity-only hits.
     """
-    toks = _TOKEN.findall(keywords.lower())
+    toks = [t.replace('"', '""') for t in split_terms(keywords)]
     if len(toks) <= 2:
         return " AND ".join(f'"{t}"' for t in toks)  # quoted = no FTS5 syntax injection
-    phrase = '"' + " ".join(toks) + '"'  # one quoted phrase: tokens in exact order
+    phrase = '"' + " ".join(toks) + '"'  # one quoted phrase: terms in exact order
     near = "NEAR(" + " ".join(f'"{t}"' for t in toks) + f", {_NEAR_WINDOW})"
     if len(toks) <= 4:
         return f"({phrase}) OR ({near})"
@@ -190,9 +197,14 @@ def _where(q: SearchQuery) -> tuple[list[str], list[Any]]:
 def search_rows(con: sqlite3.Connection, q: SearchQuery) -> list[sqlite3.Row]:
     where, params = _where(q)
     limit = q.limit or 1000
-    # Branch on the *expanded* match expr: keywords with no alphanumeric tokens (e.g. '"""'
-    # or pure punctuation) yield "" — taking the FTS path then would `MATCH ''` and raise an
-    # FTS5 syntax error, so fall through to the filter-only path (no keyword constraint).
+    # Three cases, and the middle one used to be wrong. No keywords at all -> filter-only, no
+    # keyword constraint (correct). Keywords that contain something searchable -> the FTS path.
+    # Keywords that contain NOTHING searchable (pure punctuation) -> zero results: the user asked
+    # for something, so falling through to filter-only and returning the newest rows answers a
+    # question they did not ask. That fall-through is what made a CJK/Cyrillic query return
+    # arbitrary unrelated jobs, silently, before the tokenizer was fixed.
+    if q.keywords and not has_word_chars(q.keywords):
+        return []
     match = _match_expr(q.keywords) if q.keywords else ""
     if match:
         sql = (
@@ -228,6 +240,8 @@ def whats_new_rows(
         params = [*params, since_iso]
     limit = q.limit or 100
     order = "ORDER BY j.first_seen DESC, j.posted_at DESC"
+    if q.keywords and not has_word_chars(q.keywords):
+        return []  # same rule as search_rows: nothing searchable -> no results, not all results
     match = _match_expr(q.keywords) if q.keywords else ""
     if match:
         sql = (
