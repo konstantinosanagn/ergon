@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ..models import JobPosting, Provenance, SearchQuery
 from .build import sector_slug
+from .cache import safe_shard_name
 from .db import SCHEMA_VERSION, connect
 from .mapping import from_row
 from .query import search_rows
@@ -116,7 +117,12 @@ class ShardedIndexBackend:
             targets = [s["file"] for s in shards.values()]
 
         results: list[JobPosting] = []
-        for fname in targets:
+        for raw_name in targets:
+            # Same untrusted manifest as the write side (cache.safe_shard_name): reject rather
+            # than open whatever path the manifest names.
+            fname = safe_shard_name(raw_name)
+            if fname is None:
+                continue
             be = SqliteIndexBackend(self.dir / fname)
             if be.available():
                 results.extend(be.search(query))

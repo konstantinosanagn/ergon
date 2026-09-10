@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -128,6 +129,52 @@ def _asset_fetcher(base_url: str, repo: str, tag: str) -> Callable[[str], bytes]
     return lambda name: _get(f"{base_url}/{name}")
 
 
+# Asset names arrive from a DOWNLOADED manifest, i.e. from whoever can write the release. Joining
+# one straight onto a local path is an arbitrary file write: `{"file": "../../../.zshrc"}` was
+# verified to replace a victim file with attacker-controlled bytes, and `_ensure_shard` returned
+# True. The sha256 beside it authorizes nothing — payload and hash come from the SAME manifest, so
+# an attacker controls both sides of that comparison.
+#
+# Shard files are generated as f"shard-{sector_slug}.sqlite" (index/build.py) and slugs are
+# [a-z0-9-]. Anything else is rejected outright rather than sanitized: there is no legitimate
+# reason for a shard name to contain a separator.
+_SAFE_SHARD = re.compile(r"^shard-[a-z0-9]+(?:-[a-z0-9]+)*\.sqlite$")
+_SAFE_ASSET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def safe_asset_name(name: object) -> str | None:
+    """A manifest-supplied RELEASE ASSET name, or None if it could traverse.
+
+    Weaker than :func:`safe_shard_name` because delta assets carry build ids
+    (``index-delta-build-2026-09-08-184.sqlite.gz``) — but a name is only ever one path segment,
+    so a separator, a parent ref or a leading slash is always wrong. Without this,
+    ``f"{base_url}/{name}"`` in the anonymous fetcher lets a manifest point the download at some
+    other path on the host.
+    """
+    if not isinstance(name, str) or not name or len(name) > 200:
+        return None
+    if "/" in name or "\\" in name or "\x00" in name or name.startswith("."):
+        return None
+    if not _SAFE_ASSET.match(name):
+        return None
+    return name
+
+
+def safe_shard_name(name: object) -> str | None:
+    """The manifest-supplied shard filename, or None if it is not a plain, expected component."""
+    if not isinstance(name, str) or not _SAFE_SHARD.match(name):
+        return None
+    return name
+
+
+def _within(base: Path, child: Path) -> bool:
+    """Belt-and-braces: the resolved target must still sit inside ``base``."""
+    try:
+        return child.resolve().is_relative_to(base.resolve())
+    except (OSError, ValueError):
+        return False
+
+
 class IndexCache:
     def __init__(
         self,
@@ -237,8 +284,12 @@ class IndexCache:
             shutil.copyfile(self.db_path, work)
             total = 0
             for step in chain:
+                step_name = safe_asset_name(step.get("file"))
+                if step_name is None:
+                    log.warning("rejecting delta step with an unsafe name: %r", step.get("file"))
+                    return None
                 try:
-                    raw = gzip.decompress(fetch(step["file"]))
+                    raw = gzip.decompress(fetch(step_name))
                 except Exception as exc:  # noqa: BLE001
                     log.warning("chain delta download failed (%s); full download", exc)
                     return None
@@ -480,11 +531,18 @@ class ShardCache:
         self.manifest_path = self.dir / "shards.json"
 
     def _ensure_shard(self, info: dict[str, Any], fetch: Callable[[str], bytes]) -> bool:
-        dest = self.dir / info["file"]
+        name = safe_shard_name(info.get("file"))
+        if name is None:
+            log.warning("rejecting shard with an unsafe filename: %r", info.get("file"))
+            return False
+        dest = self.dir / name
+        if not _within(self.dir, dest):
+            log.warning("rejecting shard escaping the cache dir: %r", info.get("file"))
+            return False
         if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() == info["sha256"]:
             return True  # already cached for this build
         try:
-            raw = gzip.decompress(fetch(info["file"] + ".gz"))
+            raw = gzip.decompress(fetch(name + ".gz"))
         except Exception as exc:  # noqa: BLE001
             log.warning("shard download failed (%s)", exc)
             return False
