@@ -248,7 +248,11 @@ def _write_sidecar(
 
 
 async def _detect_departed(
-    index_path: Path, boards: list[tuple[str, str]], *, concurrency: int
+    index_path: Path,
+    boards: list[tuple[str, str]],
+    *,
+    concurrency: int,
+    deadline: float | None = None,
 ) -> tuple[
     dict[str, dict[str, int]],
     list[tuple[str, str, str | None]],
@@ -286,6 +290,7 @@ async def _detect_departed(
                     boards,
                     dst,
                     fetcher,
+                    deadline=deadline,
                     concurrency=concurrency,
                     board_deltas=deltas,
                     now=lambda: datetime.now(timezone.utc).isoformat(),
@@ -330,6 +335,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--num-shards", type=int, default=1, help="Total number of shards (default 1)."
     )
     parser.add_argument(
+        "--deadline-minutes",
+        type=float,
+        default=0.0,
+        help="Stop dispatching boards after this many minutes and write what was determined; "
+        "0 = no deadline. Set it under the job timeout so a slow shard never loses its work.",
+    )
+    parser.add_argument(
         "--concurrency",
         type=int,
         default=32,
@@ -366,10 +378,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[freshness] no boards on this shard; wrote empty sidecar -> {args.out}")
         return 0
 
+    import logging
+    import time
+
     import anyio
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+    deadline = time.monotonic() + args.deadline_minutes * 60 if args.deadline_minutes > 0 else None
+    if deadline is not None:
+        print(
+            f"[freshness] deadline: {args.deadline_minutes:g} min; unswept boards stay undetermined"
+        )
     stats, departed, deltas = anyio.run(
-        lambda: _detect_departed(args.index, this_shard, concurrency=args.concurrency)
+        lambda: _detect_departed(
+            args.index, this_shard, concurrency=args.concurrency, deadline=deadline
+        )
     )
     _log_stats(stats)
     delta_rows = _delta_rows(deltas)

@@ -255,7 +255,13 @@ def test_sweep_expires_departed_keeps_live_row_count_unchanged_and_excludes_from
     )
     con.close()
 
-    assert stats["greenhouse"] == {"checked": 1, "departed": 1, "expired": 1, "errored": 0}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 1,
+        "expired": 1,
+        "errored": 0,
+        "deadline_skipped": 0,
+    }
     assert _job_status(idx, "gh-c") == ("expired", "departed_board")
     assert _job_status(idx, "gh-a") == ("active", None)
     assert _job_status(idx, "gh-b") == ("active", None)
@@ -283,7 +289,13 @@ def test_sweep_errored_board_expires_nothing(tmp_path, monkeypatch):
     )
     con.close()
 
-    assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 1}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 0,
+        "expired": 0,
+        "errored": 1,
+        "deadline_skipped": 0,
+    }
     assert _job_status(idx, "gh-a") == ("active", None)
     assert _count_jobs(idx) == before
 
@@ -369,7 +381,13 @@ def test_sweep_no_active_rows_on_board_still_checks_but_expires_nothing(tmp_path
     )
     con.close()
 
-    assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 0}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 0,
+        "expired": 0,
+        "errored": 0,
+        "deadline_skipped": 0,
+    }
     assert _job_status(idx, "gh-a") == ("active", None)
 
 
@@ -400,7 +418,13 @@ def test_sweep_empty_live_set_never_expires_a_whole_board(tmp_path, monkeypatch)
     )
     con.close()
 
-    assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 1}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 0,
+        "expired": 0,
+        "errored": 1,
+        "deadline_skipped": 0,
+    }
     assert _job_status(idx, "gh-a") == ("active", None)  # NOT expired
     assert _job_status(idx, "gh-b") == ("active", None)  # NOT expired
 
@@ -686,6 +710,7 @@ def test_search_index_bulk_relist_no_candidates_skips_confirm(tmp_path, monkeypa
         "confirmed_alive": 0,
         "unconfirmed": 0,
         "errored": 0,
+        "deadline_skipped": 0,
     }
     assert _job_status(idx, "sr-a") == ("active", None)
 
@@ -935,7 +960,13 @@ def test_sweep_all_boards_composes_phase0_and_phase1_without_cross_calling(tmp_p
     con.close()
 
     assert set(stats.keys()) == {"greenhouse", "oracle"}
-    assert stats["greenhouse"] == {"checked": 1, "departed": 1, "expired": 1, "errored": 0}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 1,
+        "expired": 1,
+        "errored": 0,
+        "deadline_skipped": 0,
+    }
     assert stats["oracle"]["candidates"] == 1
     assert stats["oracle"]["expired"] == 1
     assert detail_calls == ["or-a"]  # fetch_detail only ever called for the search-index candidate
@@ -1017,7 +1048,13 @@ def test_sweep_partial_fetch_guard_skips_a_suspicious_mass_departure(tmp_path, m
     )
     con.close()
 
-    assert stats["greenhouse"] == {"checked": 1, "departed": 0, "expired": 0, "errored": 1}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 0,
+        "expired": 0,
+        "errored": 1,
+        "deadline_skipped": 0,
+    }
     assert _job_status(idx, "gh-0") == ("active", None)  # nothing expired
     assert _job_status(idx, "gh-39") == ("active", None)
 
@@ -1186,7 +1223,13 @@ def test_sweep_records_delta_with_added_and_hash_on_genuine_change(tmp_path, mon
     con.close()
 
     # removed-side path is UNCHANGED by the delta feature
-    assert stats["greenhouse"] == {"checked": 1, "departed": 1, "expired": 1, "errored": 0}
+    assert stats["greenhouse"] == {
+        "checked": 1,
+        "departed": 1,
+        "expired": 1,
+        "errored": 0,
+        "deadline_skipped": 0,
+    }
     assert _job_status(idx, "gh-b") == ("expired", "departed_board")
 
     # added-side signal
