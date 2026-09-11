@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import time
 from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -237,7 +237,11 @@ class AsyncFetcher:
         retries: int = 3,
         cache: bool = False,
         client: httpx.AsyncClient | None = None,
+        rate_overrides: Mapping[str, tuple[float, float]] | None = None,
     ) -> None:
+        # Per-INSTANCE (domain -> (rate, period)) caps, layered over the process-wide table, so
+        # one process can hold a storm-safe list fetcher and a faster detail-only fetcher.
+        self._rate_overrides: dict[str, tuple[float, float]] = dict(rate_overrides or {})
         self._limiter = anyio.CapacityLimiter(concurrency)
         self._host_limiters: dict[str, AsyncLimiter] = {}
         self._host_concurrency_limiters: dict[str, anyio.CapacityLimiter] = {}
@@ -295,8 +299,8 @@ class AsyncFetcher:
     def _host_limiter(self, key: str) -> AsyncLimiter:
         limiter = self._host_limiters.get(key)
         if limiter is None:
-            rate, period = _DOMAIN_RATE_OVERRIDES.get(
-                key, (self._per_host_rate, self._per_host_period)
+            rate, period = self._rate_overrides.get(
+                key, _DOMAIN_RATE_OVERRIDES.get(key, (self._per_host_rate, self._per_host_period))
             )
             limiter = AsyncLimiter(rate, period)
             self._host_limiters[key] = limiter

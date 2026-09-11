@@ -253,6 +253,7 @@ async def _detect_departed(
     *,
     concurrency: int,
     deadline: float | None = None,
+    confirm_rates: dict[str, float] | None = None,
 ) -> tuple[
     dict[str, dict[str, int]],
     list[tuple[str, str, str | None]],
@@ -285,12 +286,17 @@ async def _detect_departed(
         try:
             _copy_boards_into(dst, src, boards)
             deltas: dict[tuple[str, str], BoardDelta] = {}
-            async with AsyncFetcher(concurrency=concurrency) as fetcher:
+            overrides = {d: (r, 1.0) for d, r in (confirm_rates or {}).items()}
+            async with (
+                AsyncFetcher(concurrency=concurrency) as fetcher,
+                AsyncFetcher(concurrency=concurrency, rate_overrides=overrides) as confirmer,
+            ):
                 stats = await sweep_all_boards(
                     boards,
                     dst,
                     fetcher,
                     deadline=deadline,
+                    confirm_fetcher=confirmer,
                     concurrency=concurrency,
                     board_deltas=deltas,
                     now=lambda: datetime.now(timezone.utc).isoformat(),
@@ -342,6 +348,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "0 = no deadline. Set it under the job timeout so a slow shard never loses its work.",
     )
     parser.add_argument(
+        "--sr-confirm-rate",
+        type=float,
+        default=40.0,
+        help="req/s for smartrecruiters per-posting CONFIRM fetches, on a separate fetcher so the "
+        "list relist keeps its storm-safe 3/s. The drain runs the same detail endpoint at 40 "
+        "(probed clean to 76). 0 = same cap as the list.",
+    )
+    parser.add_argument(
         "--concurrency",
         type=int,
         default=32,
@@ -391,7 +405,13 @@ def main(argv: list[str] | None = None) -> int:
         )
     stats, departed, deltas = anyio.run(
         lambda: _detect_departed(
-            args.index, this_shard, concurrency=args.concurrency, deadline=deadline
+            args.index,
+            this_shard,
+            concurrency=args.concurrency,
+            deadline=deadline,
+            confirm_rates={"smartrecruiters.com": args.sr_confirm_rate}
+            if args.sr_confirm_rate > 0
+            else None,
         )
     )
     _log_stats(stats)
