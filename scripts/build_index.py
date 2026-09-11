@@ -1076,6 +1076,51 @@ def _last_published_rows(history_path: Path) -> int | None:
     return best
 
 
+_JD_BASELINE_WINDOW = 30
+_ACTIVE_BASELINE_WINDOW = 7
+
+
+def _published_metrics_rows(history_path: Path) -> list[dict]:
+    """``metrics`` blocks of every successfully published build, oldest first; malformed skipped."""
+    if not history_path.exists():
+        return []
+    rows: list[dict] = []
+    for line in history_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        metrics = rec.get("metrics")
+        if rec.get("published") and isinstance(metrics, dict) and metrics:
+            rows.append(metrics)
+    return rows
+
+
+def _gate_baselines(history_path: Path) -> dict[str, float | int | None]:
+    """High-water marks for the publish gates, NOT the last build's values.
+
+    A one-directional gate anchored on the last publish is a ratchet: publishing at 72% after a
+    93% baseline re-anchored it at 72%, and a 4pt/day slide then passed indefinitely. Best jd_pct
+    over the last 30 published builds; best active_jobs over the last 7 (a mass expiry is a
+    single-day event, and a genuine slow decline should not block for a month).
+    """
+    rows = _published_metrics_rows(history_path)
+    jd = [
+        m["jd_pct"]
+        for m in rows[-_JD_BASELINE_WINDOW:]
+        if isinstance(m.get("jd_pct"), (int, float))
+    ]
+    act = [
+        m["active_jobs"]
+        for m in rows[-_ACTIVE_BASELINE_WINDOW:]
+        if isinstance(m.get("active_jobs"), int)
+    ]
+    return {"jd_pct": max(jd) if jd else None, "active_jobs": max(act) if act else None}
+
+
 def _last_published_metrics(history_path: Path) -> dict | None:
     """Compact ``metrics`` block of the most recent SUCCESSFULLY published build, else None.
 
@@ -2312,6 +2357,7 @@ def main(argv: list[str]) -> None:
         # Metrics baseline for the product-metric regression tripwire (read BEFORE this build's
         # record is appended, so it's the genuine PREVIOUS build, never this one).
         prev_metrics = _last_published_metrics(out / "history.jsonl")
+        gate_base = _gate_baselines(out / "history.jsonl")  # high-water marks, see _gate_baselines
         # Streaming crawl over a rotating window: jobs stream to fresh.sqlite as boards complete.
         fresh_path = out / "fresh.sqlite"
         if reconcile_only:
@@ -2424,10 +2470,9 @@ def main(argv: list[str]) -> None:
             build_id=build_id,
             prev_row_count=prev_row_count,
             last_known_rows=last_known_rows,
-            # JD-coverage gate baseline: the last published build's jd_pct (same history.jsonl
-            # `published` row the metrics tripwire uses). A collapse vs this now BLOCKS the publish;
-            # a recovery build (climbing coverage) passes. None (first build) -> gate is a no-op pass.
-            prev_jd_pct=(prev_metrics or {}).get("jd_pct"),
+            prev_jd_pct=gate_base[
+                "jd_pct"
+            ],  # a collapse BLOCKS; a recovery passes; None = first build
             publish_core=False,
             include_jd=False,  # JD is merged in below; gating it here is unsatisfiable
             publish_cov=False,  # coverage must describe the reconciled artifact
@@ -2553,14 +2598,12 @@ def main(argv: list[str]) -> None:
 
             jd_res = evaluate_jd_coverage(
                 db,
-                prev_jd_pct=(prev_metrics or {}).get("jd_pct"),
+                prev_jd_pct=gate_base["jd_pct"],
                 jd_max_drop_pct=jd_gate_drop_pct_from_env(),
             )
             # Also post-reconcile, and for the same reason: the liveness pass above is what
             # expires rows, so this has to run after it. row_floor cannot see an expiry at all.
-            active_res = evaluate_active_floor(
-                db, prev_active=(prev_metrics or {}).get("active_jobs")
-            )
+            active_res = evaluate_active_floor(db, prev_active=gate_base["active_jobs"])
             gates_path = out / "gates.json"
             try:
                 gj = json.loads(gates_path.read_text())

@@ -34,6 +34,9 @@ on:
                            # host (the R1 disjoint-groups residual). Clear of embed (06:00)/drain (09:30).
   workflow_dispatch:
     inputs:
+      deadline_minutes:
+        description: "Per-shard wall-clock budget (--deadline-minutes). Under the 180-min job timeout so a slow shard still writes its sidecar; unswept boards stay undetermined."
+        default: "150"
       concurrency:
         description: "Per-shard in-flight board-fetch concurrency (--concurrency, also sets ERGON_FRESHNESS_CONCURRENCY as a belt-and-suspenders cap on the underlying engine). Matches the engine's own built-in default; raise only after a live smoke measures headroom."
         default: "32"
@@ -108,7 +111,8 @@ jobs:
             --index dist/index.sqlite \
             --out "dist/index-freshness-shard-${{ matrix.shard }}.sqlite" \
             --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} \
-            --concurrency "${{ github.event.inputs.concurrency || '32' }}"
+            --concurrency "${{ github.event.inputs.concurrency || '32' }}" \
+            --deadline-minutes "${{ github.event.inputs.deadline_minutes || '150' }}"
 
       - name: Upload shard sidecar artifact
         # !cancelled() so a shard that FAILS mid-sweep still uploads whatever it wrote (the CLI

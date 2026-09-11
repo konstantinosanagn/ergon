@@ -62,6 +62,7 @@ import hashlib
 import logging
 import os
 import sqlite3
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -71,6 +72,8 @@ import anyio
 from ..models import DetailFetch, SearchQuery
 from ..providers.base import get_provider
 from .detail import DetailRef
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
@@ -434,6 +437,34 @@ def _expire_job_ids(con: sqlite3.Connection, job_ids: list[str], expired_at: str
         )
 
 
+def _past(deadline: float | None) -> bool:
+    return deadline is not None and time.monotonic() >= deadline
+
+
+class _Progress:
+    """Periodic progress line so a shard that stalls says where; totals summed over sources."""
+
+    def __init__(self, total: int, every: float = 60.0) -> None:
+        self.total, self.every, self.done = total, every, 0
+        self.t0 = self.last = time.monotonic()
+
+    def tick(self, counts: dict[str, dict[str, int]]) -> None:
+        self.done += 1
+        now = time.monotonic()
+        if now - self.last < self.every and self.done != self.total:
+            return
+        self.last = now
+        keys = ("checked", "errored", "expired", "deadline_skipped")
+        tot = {k: sum(c.get(k, 0) for c in counts.values()) for k in keys}
+        log.info(
+            "[freshness] %d/%d boards in %.0fs: checked=%d errored=%d expired=%d deadline_skipped=%d",
+            self.done,
+            self.total,
+            now - self.t0,
+            *(tot[k] for k in keys),
+        )
+
+
 async def sweep_boards(
     boards: Iterable[tuple[str, str]],
     con: sqlite3.Connection,
@@ -443,6 +474,8 @@ async def sweep_boards(
     concurrency: int = _FRESHNESS_CONCURRENCY,
     board_deltas: dict[tuple[str, str], BoardDelta] | None = None,
     now: Callable[[], str],
+    deadline: float | None = None,
+    progress: _Progress | None = None,
 ) -> dict[str, dict[str, int]]:
     """The Phase-0 sweep: for each ``(source, token)`` in ``boards`` whose ``source`` is in
     ``deterministic_sources``, fetch the board's current live id-set, diff it against this
@@ -489,7 +522,8 @@ async def sweep_boards(
     stored = _stored_active_by_board(con, sources_in_play)
 
     counts: dict[str, dict[str, int]] = {
-        s: {"checked": 0, "departed": 0, "expired": 0, "errored": 0} for s in sources_in_play
+        s: {"checked": 0, "departed": 0, "expired": 0, "errored": 0, "deadline_skipped": 0}
+        for s in sources_in_play
     }
 
     write_lock = anyio.Lock()
@@ -500,7 +534,20 @@ async def sweep_boards(
     fold = content_version_enabled()
 
     async def process(source: str, token: str) -> None:
+        try:
+            await _process(source, token)
+        finally:
+            if progress is not None:
+                progress.tick(counts)
+
+    async def _skip(source: str) -> None:  # past the deadline: undetermined, never "empty"
+        async with write_lock:
+            counts[source]["deadline_skipped"] += 1
+
+    async def _process(source: str, token: str) -> None:
         async with limiter:
+            if _past(deadline):
+                return await _skip(source)
             raws = await board_live_raws(source, token, fetcher)
         # PURE ids for the membership diff (departed/added) -- id-only by contract. ``None`` on a
         # failed fetch or a malformed raw (mirrors the old ``board_live_ids`` guard), which the
@@ -653,6 +700,7 @@ def _new_search_index_counts(sources: Iterable[str]) -> dict[str, dict[str, int]
             "confirmed_alive": 0,
             "unconfirmed": 0,
             "errored": 0,
+            "deadline_skipped": 0,
         }
         for s in sources
     }
@@ -669,6 +717,8 @@ async def sweep_search_index_boards(
     concurrency: int = _FRESHNESS_CONCURRENCY,
     board_active_id_limit: int = _SEARCH_INDEX_BOARD_LIMIT,
     now: Callable[[], str],
+    deadline: float | None = None,
+    progress: _Progress | None = None,
 ) -> dict[str, dict[str, int]]:
     """The Phase-1 sweep: for each ``(source, token)`` in ``boards`` whose ``source`` is in
     ``search_index_sources``, find CANDIDATE departures and confirm each one via the provider's
@@ -731,7 +781,7 @@ async def sweep_search_index_boards(
 
     async def confirm_and_record(source: str, ref: DetailRef, job_id: str) -> None:
         async with limiter:
-            verdict = await confirm_departed(ref, fetcher)
+            verdict = None if _past(deadline) else await confirm_departed(ref, fetcher)
         async with write_lock:
             if verdict is None:
                 counts[source]["unconfirmed"] += 1
@@ -741,10 +791,26 @@ async def sweep_search_index_boards(
             else:
                 counts[source]["confirmed_alive"] += 1
 
+    async def _skip(source: str) -> None:  # past the deadline: undetermined, never "empty"
+        async with write_lock:
+            counts[source]["deadline_skipped"] += 1
+
+    async def _ticked(fn: Callable[[str, str], Any], source: str, token: str) -> None:
+        try:
+            await fn(source, token)
+        finally:
+            if progress is not None:
+                progress.tick(counts)
+
     async def process_bulk_relist(source: str, token: str) -> None:
+        await _ticked(_bulk_relist, source, token)
+
+    async def _bulk_relist(source: str, token: str) -> None:
         rows = stored.get((source, token), [])
         by_sid = {str(r["source_job_id"]): r for r in rows}
         async with limiter:
+            if _past(deadline):
+                return await _skip(source)
             live_ids = await board_live_ids(source, token, fetcher)
         async with write_lock:
             counts[source]["checked"] += 1
@@ -762,7 +828,12 @@ async def sweep_search_index_boards(
                 tg.start_soon(confirm_and_record, source, DetailRef.from_row(row), str(row["id"]))
 
     async def process_per_posting(source: str, token: str) -> None:
+        await _ticked(_per_posting, source, token)
+
+    async def _per_posting(source: str, token: str) -> None:
         rows = stored.get((source, token), [])
+        if _past(deadline):
+            return await _skip(source)
         async with write_lock:
             counts[source]["checked"] += 1
         # Deterministic bound: a board with more stored active ids than the limit only gets its
@@ -801,6 +872,7 @@ async def sweep_all_boards(
     board_active_id_limit: int = _SEARCH_INDEX_BOARD_LIMIT,
     board_deltas: dict[tuple[str, str], BoardDelta] | None = None,
     now: Callable[[], str],
+    deadline: float | None = None,
 ) -> dict[str, dict[str, int]]:
     """Compose a full sweep run: Phase-0 ``sweep_boards`` (deterministic, single-miss expiry) AND
     Phase-1 ``sweep_search_index_boards`` (candidate + per-posting confirm) over the SAME board
@@ -819,6 +891,8 @@ async def sweep_all_boards(
     exists to uphold. The build gets a delta exactly where the live set is a full, un-paginated dump.
     """
     boards = list(boards)
+    progress = _Progress(total=len(boards))
+    boards = list(boards)
     det_stats = await sweep_boards(
         boards,
         con,
@@ -827,6 +901,8 @@ async def sweep_all_boards(
         concurrency=concurrency,
         board_deltas=board_deltas,
         now=now,
+        deadline=deadline,
+        progress=progress,
     )
     search_stats = await sweep_search_index_boards(
         boards,
@@ -836,6 +912,8 @@ async def sweep_all_boards(
         concurrency=concurrency,
         board_active_id_limit=board_active_id_limit,
         now=now,
+        deadline=deadline,
+        progress=progress,
     )
     return {**det_stats, **search_stats}
 
