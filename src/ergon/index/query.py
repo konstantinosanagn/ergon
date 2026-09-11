@@ -25,7 +25,9 @@ def _query_match(q: SearchQuery) -> str:
     if q.semantic and _ML_ALIAS.search(q.keywords):
         variants.extend(_ML_ALIAS.sub(alias, q.keywords) for alias in ("ML", "machine learning"))
     allow_any = len(split_terms(q.keywords)) >= 5
-    expressions = list(dict.fromkeys(_match_expr(v, allow_any=allow_any) for v in variants))
+    expressions = list(  # an expanded variant never gets the any-word bag, whatever its length
+        dict.fromkeys(_match_expr(v, allow_any=allow_any and v == q.keywords) for v in variants)
+    )
     return expressions[0] if len(expressions) == 1 else " OR ".join(f"({e})" for e in expressions)
 
 

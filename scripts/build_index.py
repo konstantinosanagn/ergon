@@ -1620,12 +1620,10 @@ async def _crawl_due(
                 else {}
             )
             board_jobs: list = []
-            normalized_complete = True
             for raw in raws:
                 try:
                     job = provider.normalize(raw)
                 except Exception:  # noqa: BLE001
-                    normalized_complete = False
                     continue
                 if e.get("domain") and not job.company_domain:
                     job.company_domain = e["domain"]
@@ -1698,8 +1696,8 @@ async def _crawl_due(
                     outcome[bkey]["companies"].update(prior_keys)
                 else:
                     outcome[bkey]["companies"].add(regkey)
-            if normalized_complete:
-                state.last_content_crawled = _today()
+            # A 200 body was processed; one bad raw is not a board failure.
+            state.last_content_crawled = _today()
         except Exception:  # noqa: BLE001 - one bad board never sinks the crawl
             outcome[bkey]["error"] = True
             outcome[bkey]["companies"].clear()  # not "crawled" -> prev jobs carry forward
