@@ -15,10 +15,22 @@ from ergon.index.scheduler import (
 )
 
 
-@pytest.mark.parametrize("stamp", [None, "bad-date", "2026-09-11", "2026-09-03"])
+@pytest.mark.parametrize("stamp", ["bad-date", "2026-09-11", "2026-09-03"])
 def test_unverified_or_old_content_is_due(stamp):
     state = BoardState(provider="greenhouse", token="acme", last_content_crawled=stamp)
     assert content_crawl_due(state, "2026-09-10")
+
+
+def _first_due_day(state, start="2026-09-10"):
+    """The day within the next interval on which an unstamped board's revalidation falls."""
+    from datetime import date, timedelta
+
+    d0 = date.fromisoformat(start)
+    return next(
+        (d0 + timedelta(days=i)).isoformat()
+        for i in range(8)
+        if content_crawl_due(state, (d0 + timedelta(days=i)).isoformat())
+    )
 
 
 def test_membership_checks_do_not_refresh_content_clock(tmp_path):
@@ -41,7 +53,10 @@ def test_crawl_revalidates_unchanged_membership(monkeypatch, tmp_path, stamp, ca
     monkeypatch.setattr(store_mod, "SeedRegistry", _Reg)
     monkeypatch.setattr(base_mod, "get_provider", lambda n: prov)
     monkeypatch.setattr(base_mod, "load_builtins", lambda: None)
-    monkeypatch.setattr(bi, "_today", lambda: "2026-09-10")
+    today = "2026-09-10"
+    if stamp is None:  # an unstamped board is due on its staggered day, not on every day
+        today = _first_due_day(BoardState(provider="greenhouse", token="acme"))
+    monkeypatch.setattr(bi, "_today", lambda: today)
     monkeypatch.setenv("ERGON_DELTA_CRAWL", "1")
     fingerprint = idset_hash({p[0] for p in _POSTINGS})
     _write_sidecar(tmp_path / "index-freshness.sqlite", "greenhouse", "acme", fingerprint)
@@ -51,7 +66,7 @@ def test_crawl_revalidates_unchanged_membership(monkeypatch, tmp_path, stamp, ca
     out, _ = anyio.run(bi._crawl_due, 10, {state.key: state}, tmp_path / "fresh.sqlite", "eval")
     assert prov.fetch_calls == calls
     assert out[state.key]["not_modified"] is (calls == 0)
-    assert state.last_content_crawled == ("2026-09-10" if calls else stamp)
+    assert state.last_content_crawled == (today if calls else stamp)
 
 
 def test_failed_fetch_does_not_refresh_content_clock(monkeypatch, tmp_path):

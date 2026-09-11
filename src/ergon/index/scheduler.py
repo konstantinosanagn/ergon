@@ -9,6 +9,7 @@ throttle-proofing.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
@@ -65,14 +66,23 @@ def _d(iso: str) -> date:
 
 
 def content_crawl_due(state: BoardState, today: str) -> bool:
-    """Membership checks cannot extend the weekly content revalidation interval."""
+    """Membership checks cannot extend the weekly content revalidation interval.
+
+    A board with no stamp yet (legacy state) is due on ONE day of the interval, chosen by a stable
+    hash of its key, so the first revalidation is spread across the week instead of forcing a
+    full-body fetch of every eligible board on the same day.
+    """
     if not state.last_content_crawled:
-        return True
+        return _stagger(state.key) == _d(today).toordinal() % COLD_INTERVAL
     try:
         age = (_d(today) - _d(state.last_content_crawled)).days
     except ValueError:
         return True
     return age < 0 or age >= COLD_INTERVAL
+
+
+def _stagger(key: str) -> int:
+    return int(hashlib.sha1(key.encode("utf-8")).hexdigest(), 16) % COLD_INTERVAL
 
 
 def _days_between(a: str, b: str) -> int:
