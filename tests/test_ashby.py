@@ -53,12 +53,12 @@ async def test_normalize_full_field_mapping() -> None:
 
     jobs = [_provider().normalize(r) for r in raws]
 
-    # Job 0: remote FullTime with annual USD salary.
+    # Job 0: hybrid FullTime with annual USD salary (isRemote is true, workplaceType Hybrid).
     sec = jobs[0]
     assert sec.source == "ashby"
     assert sec.company == "ramp"
     assert sec.title == "Security Engineer, Cloud"
-    assert sec.remote is RemoteType.REMOTE
+    assert sec.remote is RemoteType.HYBRID
     assert sec.employment_type is EmploymentType.FULL_TIME
     assert sec.department == "Engineering"
     assert sec.apply_url == (
@@ -76,14 +76,14 @@ async def test_normalize_full_field_mapping() -> None:
     assert loc.region == "NY"
     assert loc.country == "USA"
     assert loc.raw == "New York, NY (HQ)"
-    assert loc.is_remote is True
+    assert loc.is_remote is False
     assert sec.raw == raws[0].payload
     assert sec.description_html and sec.description_text
 
     # Job 1: internship → INTERNSHIP, monthly salary interval.
     intern = jobs[1]
     assert intern.employment_type is EmploymentType.INTERNSHIP
-    assert intern.remote is RemoteType.REMOTE
+    assert intern.remote is RemoteType.HYBRID
     assert intern.salary is not None
     assert intern.salary.interval is SalaryInterval.MONTH
     assert intern.salary.min_amount == 11700
@@ -108,6 +108,32 @@ def test_normalize_missing_fields_default_to_unknown() -> None:
     assert job.posted_at is None
     assert job.locations == []
     assert job.department is None
+
+
+@pytest.mark.parametrize(
+    "payload, expected, loc_remote",
+    [
+        ({"workplaceType": "Hybrid", "isRemote": True}, RemoteType.HYBRID, False),
+        ({"workplaceType": "Remote", "isRemote": True}, RemoteType.REMOTE, True),
+        ({"workplaceType": "OnSite", "isRemote": False}, RemoteType.ONSITE, False),
+        ({"workplaceType": "On Site", "isRemote": True}, RemoteType.ONSITE, False),
+        ({"isRemote": True}, RemoteType.REMOTE, True),
+        ({"isRemote": False}, RemoteType.ONSITE, False),
+        ({"workplaceType": "Somewhere new", "isRemote": True}, RemoteType.REMOTE, True),
+    ],
+)
+def test_workplace_type_beats_the_is_remote_boolean(payload, expected, loc_remote) -> None:  # noqa: ANN001
+    from ergon.models import RawJob
+
+    raw = RawJob(
+        source="ashby",
+        source_job_id="x2",
+        company="acme",
+        payload={"title": "Eng", "location": "Berlin", **payload},
+    )
+    job = _provider().normalize(raw)
+    assert job.remote is expected
+    assert job.locations[0].is_remote is loc_remote
 
 
 def _query():  # type: ignore[no-untyped-def]

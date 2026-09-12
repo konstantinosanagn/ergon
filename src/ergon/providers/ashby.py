@@ -38,6 +38,12 @@ _EMPLOYMENT: dict[str, EmploymentType] = {
     "temporary": EmploymentType.TEMPORARY,
 }
 
+_WORKPLACE: dict[str, RemoteType] = {
+    "remote": RemoteType.REMOTE,
+    "hybrid": RemoteType.HYBRID,
+    "onsite": RemoteType.ONSITE,
+}
+
 _INTERVAL: dict[str, SalaryInterval] = {
     "1 year": SalaryInterval.YEAR,
     "1 month": SalaryInterval.MONTH,
@@ -111,7 +117,7 @@ class AshbyProvider(BaseProvider):
             description_html=p.get("descriptionHtml"),
             department=p.get("department"),
             locations=self._locations(p),
-            remote=self._remote(p.get("isRemote")),
+            remote=self._remote(p),
             employment_type=self._employment(p.get("employmentType")),
             salary=self._salary(p.get("compensation")),
             apply_url=p.get("applyUrl") or p.get("jobUrl"),
@@ -121,7 +127,12 @@ class AshbyProvider(BaseProvider):
         )
 
     @staticmethod
-    def _remote(is_remote: bool | None) -> RemoteType:
+    def _remote(p: dict[str, Any]) -> RemoteType:
+        # workplaceType carries the hybrid/remote split; isRemote is true for hybrid roles too.
+        kind = _WORKPLACE.get(str(p.get("workplaceType") or "").replace(" ", "").lower())
+        if kind is not None:
+            return kind
+        is_remote = p.get("isRemote")
         if is_remote is None:
             return RemoteType.UNKNOWN
         return RemoteType.REMOTE if is_remote else RemoteType.ONSITE
@@ -134,7 +145,7 @@ class AshbyProvider(BaseProvider):
 
     @staticmethod
     def _locations(p: dict[str, Any]) -> list[Location]:
-        is_remote = bool(p.get("isRemote"))
+        is_remote = AshbyProvider._remote(p) is RemoteType.REMOTE
         postal = (p.get("address") or {}).get("postalAddress") or {}
         loc = Location(
             city=postal.get("addressLocality"),
