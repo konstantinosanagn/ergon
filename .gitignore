@@ -80,6 +80,10 @@ scripts/ladder_input_al.txt
 # mcp-quickstart.md would vanish too. `docs/*` excludes the CONTENTS, which keeps the negation live.
 docs/*
 !docs/mcp-quickstart.md
+!docs/superpowers/
+docs/superpowers/*
+!docs/superpowers/specs/
+!docs/superpowers/plans/
 
 # Agent/session scratch that has leaked into repos before.
 .superpowers/
