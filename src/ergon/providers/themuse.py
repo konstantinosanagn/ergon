@@ -15,6 +15,7 @@ empty ``token``. To satisfy ``query.limit`` we fetch multiple pages **concurrent
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +24,15 @@ import httpx
 from selectolax.parser import HTMLParser
 
 from ..extract.level import level_from_ats_vocab
-from ..models import EmploymentType, JobLevel, JobPosting, Location, RawJob, RemoteType
+from ..models import (
+    DetailFetch,
+    EmploymentType,
+    JobLevel,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+)
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -47,7 +56,40 @@ _EMPLOYMENT_MAP = {
     "internship": EmploymentType.INTERNSHIP,
     "intern": EmploymentType.INTERNSHIP,
     "temporary": EmploymentType.TEMPORARY,
+    # The detail page's own label renders "OTHER" for anything outside its taxonomy -- a real
+    # statement ("we looked, it is none of the above"), so it maps to OTHER rather than UNKNOWN.
+    "other": EmploymentType.OTHER,
 }
+
+# The list payload's ``levels[].name`` vocabulary is the documented ``level`` query-param set
+# (https://www.themuse.com/developers/api/v2): Entry Level / Mid Level / Senior Level /
+# Management / Internship. Only "Internship" also states an EMPLOYMENT type; the rest say nothing
+# about it, so they are deliberately absent here (missing key -> UNKNOWN).
+_LEVEL_EMPLOYMENT: dict[str, EmploymentType] = {
+    "internship": EmploymentType.INTERNSHIP,
+}
+
+# The public landing page renders a labelled "Employment Type: <value>" line in its <main> text
+# (the list JSON has no employment-type field -- its ``type`` is a posting-SOURCE flag, see
+# ``_employment_type``). The value is one or two words; a greedy 2-word capture may swallow the
+# next label's first word, so ``_employment_from_text`` retries with just the first word.
+_EMPLOYMENT_LABEL_RE = re.compile(
+    r"Employment\s*Type\s*:\s*([A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*)?)", re.I
+)
+
+
+def _employment_from_text(text: str | None) -> EmploymentType | None:
+    """The detail page's labelled employment type, or ``None`` when absent/unrecognised (``None``
+    means "nothing recovered", so the reconcile leaves the posting's own value alone)."""
+    m = _EMPLOYMENT_LABEL_RE.search(text or "")
+    if not m:
+        return None
+    phrase = " ".join(m.group(1).split())
+    for candidate in (phrase.lower(), phrase.split()[0].lower()):
+        hit = _EMPLOYMENT_MAP.get(candidate)
+        if hit is not None:
+            return hit
+    return None
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -146,7 +188,7 @@ class TheMuseProvider(BaseProvider):
             payload=job,
         )
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch:
         """Fetch one posting's full JD via its public landing page (Tier-3 recovery).
 
         ``ref.apply_url``/``ref.listing_url`` are both the SAME public
@@ -176,7 +218,10 @@ class TheMuseProvider(BaseProvider):
         returning ``None`` on this unverified signal risks mass-false-expiring boards like IBM's.
         This provider therefore still recovers JD text for Tier-3 detail drain (the ALIVE path is
         solid), but should NOT be added to freshness's ``_BULK_RELIST_CONFIRM_SOURCES`` unless/until
-        a per-posting numeric id becomes derivable from ``DetailRef``."""
+        a per-posting numeric id becomes derivable from ``DetailRef``.
+
+        Returns a :class:`DetailFetch` (rather than the bare JD string) when the page also renders
+        its labelled ``Employment Type:`` line, so the reconcile can seed that field."""
         url = ref.apply_url or ref.listing_url
         if not url:
             raise RuntimeError(f"themuse detail: no derivable detail URL for {ref!s}")
@@ -202,7 +247,12 @@ class TheMuseProvider(BaseProvider):
             text = body.text(separator=" ", strip=True) if body is not None else None
         if not text or len(text) < self._DETAIL_MIN_LEN:
             raise RuntimeError(f"themuse detail: no extractable JD text for {ref!s}")
-        return text
+        # This page is the ONLY place The Muse states an employment type (the list JSON has none);
+        # returned structurally so the reconcile seeds it instead of re-guessing from prose.
+        employment_type = _employment_from_text(text)
+        if employment_type is None:
+            return text
+        return DetailFetch(text=text, employment_type=employment_type)
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
@@ -216,7 +266,7 @@ class TheMuseProvider(BaseProvider):
             description_html=p.get("contents"),
             locations=self._locations(p),
             remote=self._remote(p),
-            employment_type=self._employment_type(p.get("type")),
+            employment_type=self._employment_type(p),
             department=self._department(p),
             level=self._level(p),
             apply_url=apply_url,
@@ -250,11 +300,26 @@ class TheMuseProvider(BaseProvider):
                 return RemoteType.REMOTE
         return RemoteType.UNKNOWN
 
-    @staticmethod
-    def _employment_type(value: str | None) -> EmploymentType:
-        if not value:
-            return EmploymentType.UNKNOWN
-        return _EMPLOYMENT_MAP.get(value.strip().lower(), EmploymentType.UNKNOWN)
+    @classmethod
+    def _employment_type(cls, p: dict[str, Any]) -> EmploymentType:
+        """Employment type from the LIST payload.
+
+        ``type`` is read first but is really a posting-SOURCE flag (live-observed value:
+        "external"), so it almost always falls through -- then the documented ``levels[]``
+        vocabulary supplies the one level value that also states an employment type
+        ("Internship"). Nothing recognised -> UNKNOWN, and the Tier-3 detail page's labelled
+        "Employment Type:" line is the last resort (see :meth:`fetch_detail`)."""
+        value = p.get("type")
+        if isinstance(value, str) and value.strip():
+            hit = _EMPLOYMENT_MAP.get(value.strip().lower())
+            if hit is not None:
+                return hit
+        for level in p.get("levels") or []:
+            name = level.get("name") if isinstance(level, dict) else None
+            hit = _LEVEL_EMPLOYMENT.get(name.strip().lower()) if isinstance(name, str) else None
+            if hit is not None:
+                return hit
+        return EmploymentType.UNKNOWN
 
     @staticmethod
     def _department(p: dict[str, Any]) -> str | None:

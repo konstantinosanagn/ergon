@@ -61,6 +61,11 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
 
 
+def _text(value: Any) -> str | None:
+    """A non-empty string field, else None -- never trips on an unexpected non-string shape."""
+    return value.strip() or None if isinstance(value, str) else None
+
+
 def _domain(website: str | None) -> str | None:
     if not website:
         return None
@@ -136,6 +141,7 @@ class WorkableNetworkProvider(BaseProvider):
             company_domain=_domain(website),
             title=(p.get("title") or "").strip(),
             description_html=p.get("description"),
+            department=_text(p.get("department")),
             locations=self._locations(p),
             remote=_WORKPLACE.get(str(p.get("workplace") or "").lower(), RemoteType.UNKNOWN),
             employment_type=_EMP.get(

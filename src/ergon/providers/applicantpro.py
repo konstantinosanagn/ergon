@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ..extract.comp import coerce_amount
@@ -59,10 +60,56 @@ _EMPLOYMENT = {
 }
 
 
-def _employment(value: str | None) -> EmploymentType:
+def _employment(*values: str | None) -> EmploymentType:
+    """First recognised label wins. The list carries BOTH ``classification`` and ``employmentType``
+    and they disagree: ``classification`` is often a tenant-specific label this table can't map
+    ("Exempt", a department name), while ``employmentType`` holds the real "Full Time"/"Part Time"
+    — so an unmappable first value must fall through instead of shadowing the second."""
+    for value in values:
+        if value:
+            hit = _EMPLOYMENT.get(value.strip().lower())
+            if hit is not None:
+                return hit
+    return EmploymentType.UNKNOWN
+
+
+# ``workplaceType`` -> our enum (live-observed value: "Onsite"; the field's other two settings are
+# the remote/hybrid counterparts). Unknown/absent -> UNKNOWN.
+_WORKPLACE: dict[str, RemoteType] = {
+    "onsite": RemoteType.ONSITE,
+    "on-site": RemoteType.ONSITE,
+    "on site": RemoteType.ONSITE,
+    "in-person": RemoteType.ONSITE,
+    "remote": RemoteType.REMOTE,
+    "fully remote": RemoteType.REMOTE,
+    "hybrid": RemoteType.HYBRID,
+}
+
+
+def _remote(value: str | None) -> RemoteType:
     if not value:
-        return EmploymentType.UNKNOWN
-    return _EMPLOYMENT.get(value.strip().lower(), EmploymentType.UNKNOWN)
+        return RemoteType.UNKNOWN
+    return _WORKPLACE.get(value.strip().lower(), RemoteType.UNKNOWN)
+
+
+# ``startDateRef`` is a pre-rendered display date ("Aug 14, 2026"); ISO is accepted too in case a
+# tenant emits it. Naive (no timezone in the payload to honour).
+_DATE_FORMATS = ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d")
+
+
+def _posted_at(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 # payTypeFrame ("per year"/"per hour"/…) -> canonical interval. payType ("Hourly"/"Salary") is a
@@ -164,17 +211,26 @@ class ApplicantProProvider(BaseProvider):
             fetched_at=raw.fetched_at,
             apply_url=raw.url or f"https://{sub}.applicantpro.com/jobs/{raw.source_job_id}",
             locations=[location] if location else [],
-            remote=RemoteType.UNKNOWN,
-            employment_type=_employment(p.get("classification") or p.get("employmentType")),
+            remote=_remote(p.get("workplaceType")),
+            employment_type=_employment(p.get("classification"), p.get("employmentType")),
             department=(p.get("orgTitle") or "").strip() or None,
             salary=_salary(p),
+            posted_at=_posted_at(p.get("startDateRef")),
             raw=p,
         )
 
     @staticmethod
     def _location(p: dict[str, Any]) -> Location | None:
         city = (p.get("city") or "").strip() or None
-        region = (p.get("state") or p.get("stateAbbreviation") or "").strip() or None
+        # The live payload names these "stateName"/"abbreviation"; the first two keys are kept as
+        # a fallback for tenants that emit them.
+        region = (
+            p.get("state")
+            or p.get("stateAbbreviation")
+            or p.get("stateName")
+            or p.get("abbreviation")
+            or ""
+        ).strip() or None
         country = (p.get("iso3") or p.get("countryAbbreviation") or "").strip() or None
         if not any((city, region, country)):
             return None

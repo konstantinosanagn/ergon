@@ -13,6 +13,7 @@ Covers two evidence-based fixes (see scratchpad inventory-C.md paycom section):
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from ergon.models import EmploymentType, RawJob
@@ -85,3 +86,22 @@ def test_blank_description_stays_none() -> None:
     raw = _raw({"jobId": 6, "jobTitle": "No Description", "description": "   "})
     job = PaycomProvider().normalize(raw)
     assert job.description_html is None
+
+
+def test_posted_on_maps_to_posted_at() -> None:
+    """``postedOn`` is one of the search endpoint's 8 keys but was never read."""
+    cases = {
+        "2026-08-14T00:00:00Z": datetime(2026, 8, 14, tzinfo=timezone.utc),
+        "2026-08-14": datetime(2026, 8, 14),
+        "08/14/2026": datetime(2026, 8, 14),
+    }
+    for value, expected in cases.items():
+        raw = _raw({"jobId": 7, "jobTitle": "Dated", "postedOn": value})
+        assert PaycomProvider().normalize(raw).posted_at == expected
+
+
+def test_posted_on_empty_or_unparseable_stays_none() -> None:
+    """This client sends "" for postedOn; a junk value is likewise never guessed at."""
+    for value in ("", "   ", "sometime last week", 20260814):
+        raw = _raw({"jobId": 8, "jobTitle": "Undated", "postedOn": value})
+        assert PaycomProvider().normalize(raw).posted_at is None

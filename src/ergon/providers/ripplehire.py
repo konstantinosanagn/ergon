@@ -25,6 +25,9 @@ import json as _json
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from ..extract.base import ExtractInput
+from ..extract.level import level_from_years
+from ..extract.yoe import YoeExtractor
 from ..models import JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -37,6 +40,7 @@ __all__ = ["RippleHireProvider"]
 _URL = "https://{firm}.ripplehire.com/candidate/candidatejobsearch"
 _PAGE = 50
 _MAX_PAGES = 200
+_YOE = YoeExtractor()
 
 
 @register("ripplehire")
@@ -128,6 +132,11 @@ class RippleHireProvider(BaseProvider):
             locations.append(Location(raw=loc, is_remote=is_remote))
             if is_remote:
                 remote = RemoteType.REMOTE
+        # jobReqExp is a free-text years-of-experience string (e.g. "6 - 10 Years"), not a
+        # seniority word -- run it through the shared years extractor, then derive a coarse
+        # level from the resulting range (mirrors the title-less-JD fallback in enrich.py).
+        experience = str(p.get("experience") or "").strip() or None
+        years_min, years_max = _YOE.extract(ExtractInput(title="", description_text=experience))
         return JobPosting.create(
             source=self.name,
             source_job_id=raw.source_job_id,
@@ -137,4 +146,8 @@ class RippleHireProvider(BaseProvider):
             apply_url=raw.url,
             locations=locations,
             remote=remote,
+            level=level_from_years(years_min, years_max),
+            years_experience_min=years_min,
+            years_experience_max=years_max,
+            department=str(p.get("client") or "").strip() or None,
         )

@@ -53,7 +53,6 @@ from ..models import (
     Location,
     RawJob,
     RemoteType,
-    Salary,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -400,15 +399,21 @@ class SchemaOrgProvider(BaseProvider):
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
         locations = self._jsonld_locations(p.get("jobLocation"))
-        remote = (
-            RemoteType.REMOTE if any(loc.is_remote for loc in locations) else RemoteType.UNKNOWN
-        )
+        # jobLocationType=="TELECOMMUTE" is the structured signal; a jobLocation present
+        # alongside it does NOT imply hybrid (schema.org pairs TELECOMMUTE with an anchor
+        # office address by convention), so it never downgrades this. Text substring match on
+        # the address (e.g. a "Remote" city) is the fallback when no jobLocationType is given.
+        remote = self.jsonld_remote(p)
+        if remote is RemoteType.UNKNOWN and any(loc.is_remote for loc in locations):
+            remote = RemoteType.REMOTE
 
         emp = p.get("employmentType")
         if isinstance(emp, list):
             emp = emp[0] if emp else None
         et = (_clean(emp) or "").upper().replace("-", "_").replace(" ", "_")
         employment = _EMPLOYMENT.get(et, EmploymentType.UNKNOWN)
+
+        years_min, years_max = self.jsonld_years(p)
 
         return JobPosting.create(
             source=self.name,
@@ -421,7 +426,10 @@ class SchemaOrgProvider(BaseProvider):
             remote=remote,
             employment_type=employment,
             department=_clean(p.get("occupationalCategory")),
-            salary=self._jsonld_salary(p),
+            salary=self.jsonld_salary(p),
+            years_experience_min=years_min,
+            years_experience_max=years_max,
+            degree_min=self.jsonld_degree_min(p),
             posted_at=_parse_date(p.get("datePosted")),
             updated_at=None,
             description_html=_clean(p.get("description")),
@@ -450,39 +458,3 @@ class SchemaOrgProvider(BaseProvider):
                 )
             )
         return out
-
-    @staticmethod
-    def _jsonld_salary(p: dict[str, Any]) -> Salary | None:
-        base = p.get("baseSalary")
-        if not isinstance(base, dict):
-            return None
-        currency = _clean(base.get("currency"))
-        value = base.get("value")
-        lo: Any = None
-        hi: Any = None
-        if isinstance(value, dict):
-            lo = value.get("minValue")
-            hi = value.get("maxValue")
-            single = value.get("value")
-            if lo is None and hi is None and single is not None:
-                lo = hi = single
-        elif isinstance(value, (int, float)):
-            lo = hi = value
-
-        def _num(v: Any) -> float | None:
-            if isinstance(v, bool):
-                return None
-            if isinstance(v, (int, float)) and v > 0:
-                return float(v)
-            if isinstance(v, str):
-                try:
-                    f = float(v.replace(",", ""))
-                except ValueError:
-                    return None
-                return f if f > 0 else None
-            return None
-
-        lo_n, hi_n = _num(lo), _num(hi)
-        if lo_n is None and hi_n is None:
-            return None
-        return Salary(min_amount=lo_n, max_amount=hi_n, currency=currency)

@@ -140,3 +140,52 @@ def test_fetch_detail_recovers_jsonld_location() -> None:
     res = anyio.run(lambda: RadancyProvider().fetch_detail(_ref(), _FakeFetcher(page)))
     assert isinstance(res, DetailFetch)
     assert res.locations[0].city == "Eden Prairie" and res.locations[0].country == "United States"
+
+
+def test_fetch_detail_recovers_jsonld_employment_type_and_salary_range() -> None:
+    """The same JSON-LD block also carries employmentType/baseSalary on some tenants (audit
+    quick-win) -- both must be read into the returned DetailFetch."""
+    from ergon.models import DetailFetch, EmploymentType, SalaryInterval
+
+    page = (
+        "<html><body><div class='job-description'>" + ("Full JD body. " * 40) + "</div>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","employmentType":"Full time",'
+        '"baseSalary":{"@type":"MonetaryAmount","currency":"USD","value":{'
+        '"@type":"QuantitativeValue","minValue":50000,"maxValue":65000,"unitText":"YEAR"}}}'
+        "</script></body></html>"
+    )
+    res = anyio.run(lambda: RadancyProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.employment_type is EmploymentType.FULL_TIME
+    assert res.salary is not None
+    assert res.salary.min_amount == 50000.0 and res.salary.max_amount == 65000.0
+    assert res.salary.currency == "USD"
+    assert res.salary.interval is SalaryInterval.YEAR
+
+
+def test_fetch_detail_jsonld_salary_single_value_and_empty_keys_ignored() -> None:
+    from ergon.models import DetailFetch
+
+    # A single `value` (no min/max range) still maps; empty baseSalary keys (the common case per
+    # the audit's live sample) yield no salary at all rather than an empty-shell Salary.
+    page = (
+        "<html><body><div class='job-description'>" + ("Full JD body. " * 40) + "</div>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","baseSalary":{"@type":"MonetaryAmount","currency":"USD",'
+        '"value":{"@type":"QuantitativeValue","value":22,"unitText":"HOUR"}}}'
+        "</script></body></html>"
+    )
+    res = anyio.run(lambda: RadancyProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.salary is not None
+    assert res.salary.min_amount == 22.0 and res.salary.max_amount == 22.0
+
+    empty_page = (
+        "<html><body><div class='job-description'>" + ("Full JD body. " * 40) + "</div>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","employmentType":"","baseSalary":{"currency":"","value":{}}}'
+        "</script></body></html>"
+    )
+    empty_res = anyio.run(lambda: RadancyProvider().fetch_detail(_ref(), _FakeFetcher(empty_page)))
+    assert isinstance(empty_res, str)  # nothing structured recovered -> plain text, as before

@@ -11,6 +11,7 @@ import anyio
 import pytest
 
 from ergon.index.detail import DetailRef
+from ergon.models import EmploymentType, RemoteType
 from ergon.providers.base import BaseProvider
 from ergon.providers.workday import WorkdayProvider
 
@@ -258,6 +259,79 @@ def test_workday_fetch_detail_no_location_stays_bare_str() -> None:
         )
     )
     assert res == "<p>JD only.</p>"
+
+
+def test_workday_fetch_detail_maps_remote_type_and_time_type() -> None:
+    from ergon.models import DetailFetch
+
+    payload = {
+        "jobPostingInfo": {
+            "jobDescription": "<p>Full JD.</p>",
+            "remoteType": "Hybrid",
+            "timeType": "Full time",
+        }
+    }
+    ref = DetailRef(
+        id="1",
+        source="workday",
+        token=None,
+        apply_url="https://calix.wd1.myworkdayjobs.com/external/job/Remote---USA/Role_R-1",
+        listing_url=None,
+        content_sig="s",
+    )
+    res = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert res.remote is RemoteType.HYBRID
+    assert res.employment_type is EmploymentType.FULL_TIME
+
+
+@pytest.mark.parametrize(
+    "remote_type,expected",
+    [
+        ("Remote", RemoteType.REMOTE),
+        ("Hybrid", RemoteType.HYBRID),
+        ("Flex", RemoteType.HYBRID),  # Workday's own hybrid variant
+        ("Onsite", RemoteType.ONSITE),
+        ("Something Else", None),
+        (None, None),
+    ],
+)
+def test_workday_remote_type_mapping(remote_type: str | None, expected: RemoteType | None) -> None:
+    assert WorkdayProvider._remote_type(remote_type) == expected
+
+
+@pytest.mark.parametrize(
+    "time_type,expected",
+    [
+        ("Full time", EmploymentType.FULL_TIME),
+        ("Part time", EmploymentType.PART_TIME),
+        ("Fixed Term", EmploymentType.TEMPORARY),
+        ("Casual", None),
+        (None, None),
+    ],
+)
+def test_workday_time_type_mapping(time_type: str | None, expected: EmploymentType | None) -> None:
+    assert WorkdayProvider._time_type(time_type) == expected
+
+
+def test_workday_fetch_detail_remote_only_returns_detailfetch_without_locations() -> None:
+    # remoteType present but NO location/country -> still a DetailFetch (not the bare-str path),
+    # with locations=[] (falsy but present).
+    from ergon.models import DetailFetch
+
+    payload = {"jobPostingInfo": {"jobDescription": "<p>JD.</p>", "remoteType": "Remote"}}
+    ref = DetailRef(
+        id="1",
+        source="workday",
+        token=None,
+        apply_url="https://x.wd1.myworkdayjobs.com/s/job/L/R_1",
+        listing_url=None,
+        content_sig="s",
+    )
+    res = anyio.run(lambda: WorkdayProvider().fetch_detail(ref, _FakeFetcher(payload)))
+    assert isinstance(res, DetailFetch)
+    assert res.remote is RemoteType.REMOTE
+    assert res.locations == []
 
 
 def test_workday_cxs_locations_helper() -> None:

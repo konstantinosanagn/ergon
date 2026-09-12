@@ -26,14 +26,25 @@ from __future__ import annotations
 
 import html as _html
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import httpx
 from selectolax.parser import HTMLParser, Node
 
 from ..exceptions import ProviderError
-from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..extract.degree import degree_from_ats_vocab
+from ..models import (
+    DetailFetch,
+    EmploymentType,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+    Salary,
+    SalaryInterval,
+    SearchQuery,
+)
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -48,6 +59,93 @@ _TITLE_SEL = ".jv-job-list-name, .jv-featured-job-title"
 _LOC_SEL = ".jv-job-list-location, .jv-featured-job-location"
 # A Jobvite job link: /{company}/job/{slug}  (slug is an 8-ish-char alnum id).
 _JOB_HREF_RE = re.compile(r"/job/([A-Za-z0-9_-]+)/?$")
+
+# schema.org JobPosting.employmentType values (the per-job detail page's JSON-LD), normalized
+# (lowercased/underscore-stripped) since a tenant may emit either the humanized form or the enum
+# token.
+_JSONLD_EMPLOYMENT: dict[str, EmploymentType] = {
+    "full time": EmploymentType.FULL_TIME,
+    "part time": EmploymentType.PART_TIME,
+    "contractor": EmploymentType.CONTRACT,
+    "contract": EmploymentType.CONTRACT,
+    "temporary": EmploymentType.TEMPORARY,
+    "intern": EmploymentType.INTERNSHIP,
+    "internship": EmploymentType.INTERNSHIP,
+    "volunteer": EmploymentType.OTHER,
+    "per diem": EmploymentType.OTHER,
+    "other": EmploymentType.OTHER,
+}
+
+_JSONLD_INTERVAL: dict[str, SalaryInterval] = {
+    "year": SalaryInterval.YEAR,
+    "month": SalaryInterval.MONTH,
+    "week": SalaryInterval.WEEK,
+    "day": SalaryInterval.DAY,
+    "hour": SalaryInterval.HOUR,
+}
+
+
+def _employment_from_jsonld(value: Any) -> EmploymentType | None:
+    """schema.org ``employmentType`` (a string, or a list of them) -> EmploymentType, first hit
+    wins. Unrecognised/absent -> None (never guess, never raise)."""
+    values = value if isinstance(value, list) else [value]
+    for v in values:
+        if not isinstance(v, str) or not v.strip():
+            continue
+        norm = " ".join(v.replace("_", " ").replace("-", " ").lower().split())
+        mapped = _JSONLD_EMPLOYMENT.get(norm)
+        if mapped is not None:
+            return mapped
+    return None
+
+
+def _salary_from_jsonld(value: Any) -> Salary | None:
+    """schema.org ``baseSalary`` (a ``MonetaryAmount`` wrapping a ``QuantitativeValue``) ->
+    Salary. Handles both a single ``value`` and a ``minValue``/``maxValue`` range. None when the
+    block carries no usable amount."""
+    if not isinstance(value, dict):
+        return None
+    currency = (value.get("currency") or "").strip() or None
+    qv = value.get("value")
+    qv = qv if isinstance(qv, dict) else {}
+    min_amount = qv.get("minValue") if isinstance(qv.get("minValue"), (int, float)) else None
+    max_amount = qv.get("maxValue") if isinstance(qv.get("maxValue"), (int, float)) else None
+    if min_amount is None and max_amount is None:
+        single = qv.get("value") if isinstance(qv.get("value"), (int, float)) else None
+        min_amount = max_amount = single
+    if min_amount is None and max_amount is None:
+        return None
+    unit = str(qv.get("unitText") or "").strip().lower() or None
+    interval = _JSONLD_INTERVAL.get(unit) if unit else None
+    return Salary(
+        min_amount=float(min_amount) if min_amount is not None else None,
+        max_amount=float(max_amount) if max_amount is not None else None,
+        currency=currency,
+        interval=interval,
+    )
+
+
+def _education_text(value: Any) -> str | None:
+    """schema.org ``educationRequirements`` -- either a plain string, or (newer schema.org) an
+    ``EducationalOccupationalCredential`` object. Mapped to ``DetailFetch.degree_min`` when it is
+    one of the closed ATS education vocabulary values, and ALSO folded into the JD text so the
+    degree text-extractor can still mine the free-prose values the vocabulary deliberately
+    refuses to guess at ("Bachelor's degree in CS or equivalent")."""
+    if isinstance(value, str):
+        v = value.strip()
+        return v or None
+    if isinstance(value, dict):
+        for key in ("credentialCategory", "name", "description"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        return None
+    if isinstance(value, list):
+        for item in value:
+            t = _education_text(item)
+            if t:
+                return t
+    return None
 
 
 @register("jobvite")
@@ -157,8 +255,13 @@ class JobviteProvider(BaseProvider):
         is unreliable (a ``"N Locations"`` placeholder for multi-location jobs, or missing entirely
         for some company templates). The per-job page (== ``ref.apply_url``) has an
         ``application/ld+json`` ``JobPosting`` with the full ``description`` AND a structured
-        ``jobLocation`` (city/region/country). Return the body (so yoe/degree/level extract) plus the
-        structured locations so the merge can fill the index row's NULL city/country. RETURN/RAISE CONTRACT (see BaseProvider.fetch_detail): ``None`` ONLY on a real HTTP 404/410,
+        ``jobLocation`` (city/region/country), plus the standard sibling properties
+        ``employmentType``/``baseSalary``/``educationRequirements`` (schema.org, not universal --
+        absent on templates that don't populate them). Return the body (so yoe/degree/level
+        extract) plus the structured locations/employment_type/salary/degree_min so the merge can
+        fill the index row's NULL fields; ``educationRequirements`` is additionally folded into the
+        returned text, so free prose the closed degree vocabulary won't guess at still gets mined.
+        RETURN/RAISE CONTRACT (see BaseProvider.fetch_detail): ``None`` ONLY on a real HTTP 404/410,
         because a returned ``None`` EXPIRES A LIVE INDEX ROW. A missing URL, a timeout, a 5xx/429,
         an empty body, or absent/empty JSON-LD ``description`` all RAISE. jobvite is in
         DETERMINISTIC_SOURCES, so real departures are caught by board membership; this confirm
@@ -180,8 +283,21 @@ class JobviteProvider(BaseProvider):
                 locations = self.jsonld_locations(
                     job.get("jobLocation")
                 )  # shared BaseProvider helper
-                if locations:
-                    return DetailFetch(text=description, locations=locations)
+                employment_type = _employment_from_jsonld(job.get("employmentType"))
+                salary = _salary_from_jsonld(job.get("baseSalary"))
+                edu_text = _education_text(job.get("educationRequirements"))
+                degree_min = degree_from_ats_vocab(edu_text)
+                text = description
+                if edu_text:
+                    text = f"{description}\n\nEducation requirements: {edu_text}."
+                if locations or employment_type is not None or salary is not None or edu_text:
+                    return DetailFetch(
+                        text=text,
+                        locations=locations,
+                        employment_type=employment_type,
+                        salary=salary,
+                        degree_min=degree_min,
+                    )
                 return description
         raise RuntimeError(f"jobvite detail: no JobPosting JSON-LD description for {ref!s}")
 

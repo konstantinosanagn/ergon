@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import SearchQuery
+from ergon.models import EmploymentType, RawJob, SearchQuery
 from ergon.providers.paylocity import PaylocityProvider
 
 pytestmark = pytest.mark.anyio
@@ -76,6 +76,51 @@ async def test_flattened_location_and_remote() -> None:
     assert j.locations[0].raw == "Remote"
     assert j.remote.value == "remote"
     assert j.employment_type.value == "part_time"
+
+
+def _raw(payload: dict) -> RawJob:
+    return RawJob(source="paylocity", source_job_id="201", company="Acme Corp", payload=payload)
+
+
+def test_documented_feed_keys_for_type_department_and_pay() -> None:
+    """The feed's real keys: jobTypesArray/jobTypes, hiringDepartment, salaryDescription."""
+    job = PaylocityProvider().normalize(
+        _raw(
+            {
+                "jobId": "201",
+                "title": "Staff Engineer",
+                "jobTypesArray": ["Full-Time", "Temporary"],  # first entry wins
+                "hiringDepartment": "Engineering",
+                "salaryDescription": "$75,000 - $95,000 per year",
+            }
+        )
+    )
+    assert job.employment_type is EmploymentType.FULL_TIME
+    assert job.department == "Engineering"
+    assert job.salary is not None
+    assert (job.salary.min_amount, job.salary.max_amount) == (75000.0, 95000.0)
+    assert job.salary.currency == "USD"
+
+    comma = PaylocityProvider().normalize(
+        _raw({"jobId": "202", "title": "Intern", "jobTypes": "Internship,Part-Time"})
+    )
+    assert comma.employment_type is EmploymentType.INTERNSHIP
+
+
+def test_unmapped_type_and_unparseable_pay_stay_empty() -> None:
+    job = PaylocityProvider().normalize(
+        _raw(
+            {
+                "jobId": "203",
+                "title": "Contractor",
+                "jobTypesArray": [],
+                "salaryDescription": "Competitive",
+            }
+        )
+    )
+    assert job.employment_type is EmploymentType.UNKNOWN
+    assert job.salary is None  # free text with no parseable range is never guessed at
+    assert job.department is None
 
 
 async def test_limit_and_empty() -> None:

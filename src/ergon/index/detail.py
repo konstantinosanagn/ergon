@@ -18,9 +18,9 @@ import anyio
 from ..enrich import enrich_in_place
 from ..extract.base import html_to_text
 from ..http import _rate_key
-from ..models import DetailFetch, JobPosting, Location, Salary
+from ..models import DetailFetch, EmploymentType, JobLevel, JobPosting, Location, RemoteType, Salary
 
-DETAIL_SCHEMA_VERSION = 2  # v2: added city/country (structured location recovery)
+DETAIL_SCHEMA_VERSION = 3  # v3: added remote/employment_type/level/sector
 DETAIL_SCHEMA = """
 CREATE TABLE IF NOT EXISTS job_detail (
   id TEXT PRIMARY KEY,
@@ -32,13 +32,21 @@ CREATE TABLE IF NOT EXISTS job_detail (
   years_min INTEGER, years_max INTEGER,
   degree_min TEXT, degree_required INTEGER,
   sponsorship_offered INTEGER,
-  city TEXT, country TEXT
+  city TEXT, country TEXT,
+  remote TEXT, employment_type TEXT, level TEXT, sector TEXT
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 # Columns added after v1; ADDed to any pre-existing (carry-forward) sidecar so the merge can read
 # them. Additive only -- old rows get NULLs, which the merge simply skips.
-_DETAIL_ADDED_COLUMNS = {"city": "TEXT", "country": "TEXT"}
+_DETAIL_ADDED_COLUMNS = {
+    "city": "TEXT",
+    "country": "TEXT",
+    "remote": "TEXT",
+    "employment_type": "TEXT",
+    "level": "TEXT",
+    "sector": "TEXT",
+}
 
 
 def ensure_detail_schema(con: sqlite3.Connection) -> None:
@@ -385,6 +393,27 @@ def _detail_parts(
     return result, None, None
 
 
+def _detail_workplace_parts(
+    result: str | DetailFetch | None,
+) -> tuple[RemoteType | None, EmploymentType | None]:
+    """A ``DetailFetch``'s structured ``(remote, employment_type)``, else ``(None, None)`` -- kept
+    separate from ``_detail_parts`` so that function's return arity (unpacked directly by other
+    providers' tests) never changes."""
+    if isinstance(result, DetailFetch):
+        return result.remote, result.employment_type
+    return None, None
+
+
+def _detail_taxonomy_parts(
+    result: str | DetailFetch | None,
+) -> tuple[JobLevel | None, str | None]:
+    """A ``DetailFetch``'s structured ``(level, degree_min)``, else ``(None, None)`` -- same
+    reason for living beside ``_detail_parts`` rather than inside it."""
+    if isinstance(result, DetailFetch):
+        return result.level, result.degree_min
+    return None, None
+
+
 async def _run_pipeline(
     window: list[DetailRef],
     fetch_detail: Callable[[DetailRef], Awaitable[str | DetailFetch | None]],
@@ -523,12 +552,20 @@ def _record_success(
             country = loc.country
         if city and country:
             break
+    # Only persist a KNOWN value -- an UNKNOWN enum default carries no information for the merge
+    # to apply, and storing it would be indistinguishable from "never recovered".
+    remote = job.remote.value if job.remote != RemoteType.UNKNOWN else None
+    employment_type = (
+        job.employment_type.value if job.employment_type != EmploymentType.UNKNOWN else None
+    )
+    level = job.level.value if job.level != JobLevel.UNKNOWN else None
+    sector = job.sector
     det_con.execute(
         """
         INSERT INTO job_detail (id, sig, fetched_at, attempts, snippet, salary_min, salary_max,
             salary_currency, salary_interval, years_min, years_max, degree_min, degree_required,
-            sponsorship_offered, city, country)
-        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sponsorship_offered, city, country, remote, employment_type, level, sector)
+        VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             sig = excluded.sig, fetched_at = excluded.fetched_at, attempts = 0,
             snippet = excluded.snippet, salary_min = excluded.salary_min,
@@ -537,7 +574,9 @@ def _record_success(
             years_max = excluded.years_max, degree_min = excluded.degree_min,
             degree_required = excluded.degree_required,
             sponsorship_offered = excluded.sponsorship_offered,
-            city = excluded.city, country = excluded.country
+            city = excluded.city, country = excluded.country,
+            remote = excluded.remote, employment_type = excluded.employment_type,
+            level = excluded.level, sector = excluded.sector
         """,
         (
             ref.id,
@@ -555,6 +594,10 @@ def _record_success(
             sponsorship_offered,
             city,
             country,
+            remote,
+            employment_type,
+            level,
+            sector,
         ),
     )
 
@@ -575,8 +618,20 @@ _MERGE_COLUMNS: tuple[str, ...] = (
     "sponsorship_offered",
     "city",
     "country",
+    "remote",
+    "employment_type",
+    "level",
+    "sector",
 )
 _INT_COLUMNS = {"degree_required", "sponsorship_offered"}
+# `jobs.remote`/`employment_type`/`level` are NOT NULL (schema.sql), defaulting to the literal
+# string "unknown" rather than NULL -- so "not yet known" for these columns is that sentinel, not
+# NULL. `sector` is a plain nullable column and needs no sentinel (falls through to the NULL check).
+_UNKNOWN_SENTINELS: dict[str, str] = {
+    "remote": "unknown",
+    "employment_type": "unknown",
+    "level": "unknown",
+}
 
 
 def merge_detail_into_index(index_con: sqlite3.Connection, detail_path: str) -> int:
@@ -626,11 +681,18 @@ def merge_detail_into_index(index_con: sqlite3.Connection, detail_path: str) -> 
         sets: list[str] = []
         params: list[Any] = []
         for col in _MERGE_COLUMNS:
-            if row[f"jobs_{col}"] is not None:
-                continue  # list-crawl already provided this -- never clobber
+            current = row[f"jobs_{col}"]
+            sentinel = _UNKNOWN_SENTINELS.get(col)
+            if sentinel is None:
+                if current is not None:
+                    continue  # list-crawl already provided this -- never clobber
+            elif current is not None and current != sentinel:
+                continue  # already a known value -- never clobber
             value = row[f"det_{col}"]
             if value is None:
                 continue
+            if sentinel is not None and value == sentinel:
+                continue  # detail's own value is unknown too -- nothing to add
             if col in _INT_COLUMNS:
                 try:
                     value = int(value)
@@ -773,13 +835,29 @@ async def reconcile_detail_tier(
                 counts["failed"] += 1
                 reasons[(ref.source, type(result).__name__)] += 1
                 return
-            # A DetailFetch may carry a structured salary; seed it before enrich so it wins.
+            # A DetailFetch may carry structured fields; seed them before enrich so they win over
+            # (and are never overwritten by) the text-based extractors/heuristics.
             text, pre_salary, pre_locations = _detail_parts(result)
+            pre_remote, pre_employment_type = _detail_workplace_parts(result)
+            pre_level, pre_degree_min = _detail_taxonomy_parts(result)
             if not text:  # the provider's own verdict: nothing there, stop retrying
                 _record_gone(det_con, ref, now())
                 counts["gone"] += 1
                 return
             try:
+                seeded: dict[str, Any] = {}
+                if pre_remote is not None:
+                    seeded["remote"] = pre_remote
+                if pre_employment_type is not None:
+                    seeded["employment_type"] = pre_employment_type
+                if pre_level is not None:
+                    seeded["level"] = pre_level
+                if pre_degree_min is not None:
+                    # enrich's degree extractor is gated on degree_min AND degree_required both
+                    # being None, so seeding here skips text extraction entirely for this posting
+                    # -- degree_required stays None ("stated without scope"), which is what a bare
+                    # structured education value actually says.
+                    seeded["degree_min"] = pre_degree_min
                 job = JobPosting.create(
                     source=ref.source,
                     source_job_id=ref.id,
@@ -788,6 +866,7 @@ async def reconcile_detail_tier(
                     description_html=text,
                     salary=pre_salary,
                     locations=pre_locations or [],
+                    **seeded,
                 )
                 enrich_in_place(job)  # geo-normalizes the seeded locations -> resolves country
                 snippet = (html_to_text(text) or "")[:300]

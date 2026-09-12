@@ -147,11 +147,25 @@ class DetailFetch(BaseModel):
     response (e.g. jobvite's JSON-LD ``jobLocation``, Workday's CxS) has the full address. The
     reconcile seeds these onto the posting before enrich (which geo-normalizes them), and the merge
     fills the index row's still-NULL ``city``/``country``.
+
+    ``remote``/``employment_type`` carry a structured workplace/time field the same way (e.g.
+    Workday's CxS ``jobPostingInfo.remoteType``/``timeType``) so the reconcile seeds the recovered
+    posting before enrich, and the merge fills the index row when it's still ``unknown``.
+
+    ``level``/``degree_min`` carry a structured seniority/education field the same way (e.g.
+    join's per-job ``function`` career level, jobvite's JSON-LD ``educationRequirements``) — both
+    live only on the detail response, so without a slot here they would be discarded. Seeded
+    before enrich, they win over (and are never overwritten by) the title/text extractors.
     """
 
     text: str
     salary: Salary | None = None
     locations: list[Location] | None = None
+    remote: RemoteType | None = None
+    employment_type: EmploymentType | None = None
+    level: JobLevel | None = None
+    # A DEGREE_LEVELS value ("bachelor", ...) — mirrors JobPosting.degree_min's plain-str type.
+    degree_min: str | None = None
 
 
 class Company(BaseModel):

@@ -55,6 +55,15 @@
           "child_ids": [],
           "parent_id": 64286
         }
+      ],
+      "pay_input_ranges": [
+        {
+          "min_cents": 8000000,
+          "max_cents": 12000000,
+          "currency_type": "USD",
+          "title": "Berlin Salary Range",
+          "blurb": "In order to provide transparency, we share the base salary range for this role."
+        }
       ]
     },
     {
@@ -100,6 +109,12 @@
         {
           "id": 77,
           "name": "Software Engineering",
+          "child_ids": [],
+          "parent_id": 73703
+        },
+        {
+          "id": 78,
+          "name": "Community Support",
           "child_ids": [],
           "parent_id": 73703
         }

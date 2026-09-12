@@ -8,7 +8,7 @@ import respx
 
 from ergon.exceptions import ProviderError
 from ergon.http import AsyncFetcher
-from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.models import EmploymentType, RawJob, RemoteType, SearchQuery, make_job_id
 from ergon.providers.jobdiva import JobDivaProvider
 
 pytestmark = pytest.mark.anyio
@@ -19,18 +19,28 @@ SEARCH = "https://ws.jobdiva.com/candPortal/rest/job/searchjobsportal"
 PORTAL = f"https://www1.jobdiva.com/portal/?a={HASH}"
 
 
-def _job(jid: int, title: str, *, location: str = "Austin, TX", remote: str | None = None) -> dict:
+def _job(
+    jid: int,
+    title: str,
+    *,
+    location: str = "Austin, TX",
+    remote: str | None = None,
+    position_type: str = "Contract",
+    **extra: object,
+) -> dict:
     return {
         "id": jid,
         "title": title,
         "refNo": f"REF-{jid}",
         "company": "Confidential",
         "postDate": 1781809458000,
-        "positionType": "Contract",
+        "positionType": position_type,
         "workingRemote": remote,
         "location": location,
         "otherLocations": [],
         "jobDescription": f"<p>{title}</p>",
+        "jobSector": "Information Technology",
+        **extra,
     }
 
 
@@ -107,6 +117,54 @@ async def test_normalize_fields() -> None:
     remote = JobDivaProvider().normalize(raws[1])
     assert remote.remote is RemoteType.REMOTE  # from the workingRemote field, not the location
     assert remote.locations[0].raw == "New York, NY"
+
+
+def _normalize(payload: dict) -> object:
+    raw = RawJob(
+        source="jobdiva",
+        source_job_id=str(payload["id"]),
+        company="Acme Staffing",
+        token=f"{HASH}|167|Acme Staffing",
+        url="https://www1.jobdiva.com/portal/?a=x&compid=0&jobid=1",
+        payload=payload,
+    )
+    return JobDivaProvider().normalize(raw)
+
+
+def test_normalize_maps_position_type_sector_and_qualifications() -> None:
+    job = _normalize(
+        _job(201, "ETL Developer", position_type="Contract To Hire", qualifications="Master Degree")
+    )
+    assert job.employment_type is EmploymentType.CONTRACT  # longest-first: not "contract" alone
+    assert job.department == "Information Technology"  # jobSector
+    assert job.degree_min == "master"
+
+
+def test_normalize_position_type_variants() -> None:
+    cases = {
+        "Contract": EmploymentType.CONTRACT,
+        "Direct Placement": EmploymentType.FULL_TIME,
+        "Full Time": EmploymentType.FULL_TIME,
+        "Part Time": EmploymentType.PART_TIME,
+        "Temp to Perm": EmploymentType.TEMPORARY,
+        "Internship": EmploymentType.INTERNSHIP,
+        "Wormhole Engineer": EmploymentType.UNKNOWN,  # unknown value -> UNKNOWN, never raises
+        "": EmploymentType.UNKNOWN,
+    }
+    for value, expected in cases.items():
+        assert _normalize(_job(1, "T", position_type=value)).employment_type is expected
+
+
+def test_normalize_department_falls_back_to_profession() -> None:
+    payload = _job(202, "RN", profession="Nursing")
+    payload.pop("jobSector")
+    assert _normalize(payload).department == "Nursing"
+
+
+def test_normalize_ambiguous_qualification_is_none() -> None:
+    # degree_from_ats_vocab never guesses on ambiguous ATS vocabulary.
+    assert _normalize(_job(203, "T", qualifications="Vocational")).degree_min is None
+    assert _normalize(_job(204, "T")).degree_min is None  # key absent (the live sample shape)
 
 
 async def test_fetch_respects_limit() -> None:

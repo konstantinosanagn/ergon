@@ -21,7 +21,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit
 
 from ..exceptions import ProviderError
-from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType
+from ..extract.comp import parse_salary
+from ..models import DetailFetch, EmploymentType, JobPosting, Location, RawJob, RemoteType, Salary
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -59,6 +60,27 @@ _JD_NOISE_SELECTOR = (
 _LOCATION_LABEL_RE = re.compile(
     r"\b(location|campus|city|work\s+location|position\s+location)\b", re.I
 )
+# Summary-table row labels that carry employment type / salary (live probe: jobs.rutgers.edu).
+_EMPLOYMENT_LABEL_RE = re.compile(r"\b(position\s+status|terms\s+of\s+appointment)\b", re.I)
+_SALARY_LABEL_RE = re.compile(r"\bsalary\b", re.I)
+
+# Bare-word forms found in "Position Status"/"Terms of Appointment" values (e.g. "Part Time /
+# Temporary Staff Appointment - Hourly"); checked in most-specific-first order so a value naming
+# several qualifiers resolves to the more specific one.
+_EMPLOYMENT_TEXT_PATTERNS: tuple[tuple[re.Pattern[str], EmploymentType], ...] = (
+    (re.compile(r"\bintern(?:ship)?\b", re.I), EmploymentType.INTERNSHIP),
+    (re.compile(r"\bcontract(?:or)?\b", re.I), EmploymentType.CONTRACT),
+    (re.compile(r"\btemp(?:orary)?\b", re.I), EmploymentType.TEMPORARY),
+    (re.compile(r"\bpart[-\s]?time\b", re.I), EmploymentType.PART_TIME),
+    (re.compile(r"\bfull[-\s]?time\b", re.I), EmploymentType.FULL_TIME),
+)
+
+
+def _employment_from_text(text: str) -> EmploymentType | None:
+    for pattern, etype in _EMPLOYMENT_TEXT_PATTERNS:
+        if pattern.search(text):
+            return etype
+    return None
 
 
 @register("peopleadmin")
@@ -172,10 +194,17 @@ class PeopleAdminProvider(BaseProvider):
         if status != 200:
             raise RuntimeError(f"peopleadmin detail: unexpected status {status} for {ref!s}")
 
-        text, locations = self._extract(resp.text)
+        text, locations, employment_type, salary = self._extract(resp.text)
         if text:
-            if locations:
-                return DetailFetch(text=text, locations=locations)
+            if locations or employment_type is not None or salary is not None:
+                remote = RemoteType.REMOTE if locations and locations[0].is_remote else None
+                return DetailFetch(
+                    text=text,
+                    locations=locations,
+                    employment_type=employment_type,
+                    salary=salary,
+                    remote=remote,
+                )
             return text
         # 200 with no usable body. If the fetcher auto-FOLLOWED the gone-redirect we're now on the
         # search root -> GONE. Otherwise it's an indeterminate 200 body -> RAISE.
@@ -205,43 +234,67 @@ class PeopleAdminProvider(BaseProvider):
         return path in ("postings", "")
 
     @classmethod
-    def _extract(cls, html: str | None) -> tuple[str | None, list[Location]]:
-        """Extract ``(jd_text, locations)`` from a posting page: the requisition-body container
-        (chrome stripped, whitespace collapsed) plus any location read from the summary table's
-        ``<th>Location</th> -> <td>`` rows. Returns ``(None, [])`` when no body container is found."""
+    def _extract(
+        cls, html: str | None
+    ) -> tuple[str | None, list[Location], EmploymentType | None, Salary | None]:
+        """Extract ``(jd_text, locations, employment_type, salary)`` from a posting page: the
+        requisition-body container (chrome stripped, whitespace collapsed) plus location/
+        employment-type/salary read from the summary table's ``<th>label</th> -> <td>`` rows.
+        Returns ``(None, [], None, None)`` when no body container is found."""
         if not html:
-            return None, []
+            return None, [], None, None
         from selectolax.parser import HTMLParser
 
         tree = HTMLParser(html)
-        locations = cls._locations(tree)
+        locations, employment_type, salary = cls._summary_fields(tree)
         node = tree.css_first(_JD_SELECTOR)
         if node is None:
-            return None, locations
+            return None, locations, employment_type, salary
         for noise in node.css(_JD_NOISE_SELECTOR):
             noise.decompose()
         text = node.text(separator=" ", strip=True)
         if not text:
-            return None, locations
+            return None, locations, employment_type, salary
         text = re.sub(r"\s+", " ", text).strip()
-        return (text or None), locations
+        return (text or None), locations, employment_type, salary
 
     @staticmethod
-    def _locations(tree: Any) -> list[Location]:
-        """Location from the posting's summary table: the ``<td>`` value of the first ``<tr>`` whose
-        ``<th>`` label reads Location/Campus/City. Best-effort -- returns ``[]`` when absent."""
+    def _summary_fields(tree: Any) -> tuple[list[Location], EmploymentType | None, Salary | None]:
+        """Location/employment-type/salary from the posting's summary table (``<th>label</th> ->
+        <td>value</td>`` rows). Best-effort -- every field independently defaults to absent.
+
+        * Location: the first row whose label reads Location/Campus/City; checked for a "remote"
+          substring (this ATS has no dedicated remote flag -- matches the substring heuristic
+          every other adapter in the audit already applies).
+        * Employment type: "Position Status" and "Terms of Appointment" values are joined (a
+          posting can state either or both, e.g. "Part Time" / "Temporary Staff Appointment -
+          Hourly") and mapped via the shared bare-word patterns.
+        * Salary: "Salary Details" free text (e.g. "$22 per hour"), parsed with the same salary
+          parser the text-extraction pipeline uses elsewhere.
+        """
+        location: Location | None = None
+        employment_bits: list[str] = []
+        salary_text: str | None = None
         for row in tree.css("tr"):
             th = row.css_first("th")
             td = row.css_first("td")
             if th is None or td is None:
                 continue
             label = re.sub(r"\s+", " ", th.text(strip=True) or "")
-            if not _LOCATION_LABEL_RE.search(label):
-                continue
             value = re.sub(r"\s+", " ", td.text(separator=" ", strip=True) or "").strip()
-            if value:
-                return [Location(raw=value)]
-        return []
+            if not value:
+                continue
+            if location is None and _LOCATION_LABEL_RE.search(label):
+                location = Location(raw=value, is_remote="remote" in value.lower())
+            if _EMPLOYMENT_LABEL_RE.search(label):
+                employment_bits.append(value)
+            if salary_text is None and _SALARY_LABEL_RE.search(label):
+                salary_text = value
+        employment_type = (
+            _employment_from_text(" / ".join(employment_bits)) if employment_bits else None
+        )
+        salary = parse_salary(salary_text) if salary_text else None
+        return ([location] if location else []), employment_type, salary
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

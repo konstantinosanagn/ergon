@@ -48,7 +48,15 @@ from urllib.parse import urlsplit
 import anyio
 import httpx
 
-from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..models import (
+    DetailFetch,
+    EmploymentType,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+    SearchQuery,
+)
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -63,6 +71,20 @@ _HOST_RE = re.compile(r"^(?P<tenant>[^.]+)\.(?P<wd>wd\d+)\.myworkdayjobs\.com$",
 _LOCALE_RE = re.compile(r"^[a-z]{2}(-[a-z]{2})?$", re.IGNORECASE)
 # "Posted 3 Days Ago" / "Posted 30+ Days Ago"
 _DAYS_AGO_RE = re.compile(r"(\d+)\s*\+?\s*days?\s+ago", re.IGNORECASE)
+
+# jobPostingInfo.remoteType, as seen live (probe_A.json) -- "Flex" is Workday's own hybrid variant.
+_REMOTE_TYPE_MAP: dict[str, RemoteType] = {
+    "remote": RemoteType.REMOTE,
+    "hybrid": RemoteType.HYBRID,
+    "flex": RemoteType.HYBRID,
+    "onsite": RemoteType.ONSITE,
+}
+# jobPostingInfo.timeType, as seen live (probe_A.json).
+_TIME_TYPE_MAP: dict[str, EmploymentType] = {
+    "full time": EmploymentType.FULL_TIME,
+    "part time": EmploymentType.PART_TIME,
+    "fixed term": EmploymentType.TEMPORARY,
+}
 
 
 @register("workday")
@@ -430,9 +452,28 @@ class WorkdayProvider(BaseProvider):
         # is a "N Locations" placeholder for multi-location reqs). Return it so the merge fills the
         # index row's NULL country -- Workday is ~44k of the whole index's country gap.
         locations = self._cxs_locations(job_posting_info)
-        return (
-            DetailFetch(text=job_description, locations=locations) if locations else job_description
-        )
+        remote = self._remote_type(job_posting_info.get("remoteType"))
+        employment_type = self._time_type(job_posting_info.get("timeType"))
+        if locations or remote is not None or employment_type is not None:
+            return DetailFetch(
+                text=job_description,
+                locations=locations,
+                remote=remote,
+                employment_type=employment_type,
+            )
+        return job_description
+
+    @staticmethod
+    def _remote_type(value: Any) -> RemoteType | None:
+        if not isinstance(value, str):
+            return None
+        return _REMOTE_TYPE_MAP.get(value.strip().lower())
+
+    @staticmethod
+    def _time_type(value: Any) -> EmploymentType | None:
+        if not isinstance(value, str):
+            return None
+        return _TIME_TYPE_MAP.get(value.strip().lower())
 
     @staticmethod
     def _cxs_locations(jpi: dict[str, Any]) -> list[Location]:
@@ -468,6 +509,10 @@ class WorkdayProvider(BaseProvider):
 
     @staticmethod
     def _remote(locations_text: str, title: str) -> RemoteType:
+        """Title/location substring fallback -- the list response has no workplace field at all.
+        The authoritative signal is ``jobPostingInfo.remoteType`` from the detail fetch (see
+        ``fetch_detail``/``_remote_type``), which the build-time merge fills in over this UNKNOWN
+        default once a detail fetch has run; this heuristic only covers postings never detailed."""
         if "remote" in f"{locations_text} {title}".lower():
             return RemoteType.REMOTE
         return RemoteType.UNKNOWN

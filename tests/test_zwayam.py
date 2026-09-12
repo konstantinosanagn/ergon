@@ -10,7 +10,7 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import SearchQuery, make_job_id
+from ergon.models import EmploymentType, RawJob, SearchQuery, make_job_id
 from ergon.providers.zwayam import ZwayamProvider
 
 pytestmark = pytest.mark.anyio
@@ -108,6 +108,57 @@ async def test_bad_config_degrades_to_empty() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await ZwayamProvider().fetch("careers.acme.com|Acme", SearchQuery(), f)
     assert raws == []
+
+
+async def test_normalize_reads_the_es_source_metadata() -> None:
+    """The ES ``_source`` already carries these (live-probed on careers.tavant.com) -- map them."""
+    page = [
+        {
+            "_source": {
+                "id": 9,
+                "jobTitle": "SDET",
+                "location": "Bengaluru, India",
+                "departmentName": "Quality Engineering",
+                "jobUrl": "job-9",
+                "text3": "Full Time Employee",
+                "yrsOfExperience": "5 to 8 Years",
+                "eduqualification": "Bachelor of Engineering",
+                "role": "<ul><li>Be part of all phases of the SDLC.</li></ul>",
+            }
+        }
+    ]
+    with respx.mock as respx_mock:
+        _mock(respx_mock, total=1, pages=[page])
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await ZwayamProvider().fetch("careers.acme.com|Acme", SearchQuery(), f)
+
+    job = ZwayamProvider().normalize(raws[0])
+    assert job.employment_type is EmploymentType.FULL_TIME  # text3, the tenant-configured field
+    assert (job.years_experience_min, job.years_experience_max) == (5, 8)
+    assert job.degree_min == "bachelor"
+    assert job.description_html == "<ul><li>Be part of all phases of the SDLC.</li></ul>"
+    assert job.department == "Quality Engineering"
+
+
+def test_normalize_unreadable_metadata_stays_empty() -> None:
+    """Tenant free-text that matches no vocabulary is left empty rather than guessed."""
+    raw = RawJob(
+        source="zwayam",
+        source_job_id="9",
+        company="Acme",
+        payload={
+            "id": 9,
+            "jobTitle": "SDET",
+            "text3": "Retainer",
+            "yrsOfExperience": "Not specified",
+            "eduqualification": "Any professional computer degree",
+        },
+    )
+    job = ZwayamProvider().normalize(raw)
+    assert job.employment_type is EmploymentType.UNKNOWN
+    assert (job.years_experience_min, job.years_experience_max) == (None, None)
+    assert job.degree_min is None
+    assert job.description_html is None
 
 
 def test_company_id_is_base64() -> None:

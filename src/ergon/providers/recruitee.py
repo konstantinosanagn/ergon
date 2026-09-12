@@ -13,8 +13,11 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from ..extract.comp import coerce_amount
+from ..extract.degree import degree_from_ats_vocab
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     EmploymentType,
+    JobLevel,
     JobPosting,
     Location,
     RawJob,
@@ -105,6 +108,20 @@ def _employment(code: str | None) -> EmploymentType:
     return _EMPLOYMENT_BY_PREFIX.get(prefix, EmploymentType.UNKNOWN)
 
 
+def _level(code: str | None) -> JobLevel:
+    """Recruitee's ``experience_code`` (e.g. "mid_level") -> JobLevel via the shared ATS vocab."""
+    if not code:
+        return JobLevel.UNKNOWN
+    return level_from_ats_vocab(code.replace("_", " "))
+
+
+def _degree(code: str | None) -> str | None:
+    """Recruitee's ``education_code`` (e.g. "bachelor_degree") -> degree_min; unmapped -> None."""
+    if not code:
+        return None
+    return degree_from_ats_vocab(code.replace("_", " "))
+
+
 @register("recruitee")
 class RecruiteeProvider(BaseProvider):
     name = "recruitee"
@@ -170,6 +187,8 @@ class RecruiteeProvider(BaseProvider):
             locations=[location] if location else [],
             remote=remote,
             employment_type=_employment(p.get("employment_type_code")),
+            level=_level(p.get("experience_code")),
+            degree_min=_degree(p.get("education_code")),
             department=p.get("department") or None,
             salary=_salary(p),
             posted_at=_parse_dt(p.get("published_at") or p.get("created_at")),

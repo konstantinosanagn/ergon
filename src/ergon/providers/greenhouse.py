@@ -88,8 +88,10 @@ class GreenhouseProvider(BaseProvider):
 
     async def fetch(self, token: str, query: SearchQuery, fetcher: AsyncFetcher) -> list[RawJob]:
         # Greenhouse has no server-side filtering: pull the whole board in one request.
+        # pay_transparency=true additionally returns pay_input_ranges[] -- the purpose-built,
+        # cents-denominated pay field, preferred over the metadata-scraping fallback below.
         url = _API.format(token=token)
-        data = await fetcher.get_json(url, params={"content": "true"})
+        data = await fetcher.get_json(url, params={"content": "true", "pay_transparency": "true"})
         return self._raws_from_data(data, token)
 
     def raws_from_body(self, token: str, body: bytes) -> list[RawJob] | None:
@@ -150,7 +152,11 @@ class GreenhouseProvider(BaseProvider):
         remote = self._remote(p, locations)
 
         departments = p.get("departments") or []
-        department = departments[0].get("name") if departments else None
+        department = (
+            ", ".join(d.get("name") for d in departments if d.get("name")) or None
+            if departments
+            else None
+        )
 
         content = p.get("content")
         description_html = unescape(content) if content else None
@@ -167,7 +173,8 @@ class GreenhouseProvider(BaseProvider):
             remote=remote,
             employment_type=EmploymentType.UNKNOWN,  # not exposed by the board API
             department=department,
-            salary=self._salary_from_metadata(p.get("metadata")),
+            salary=self._salary_from_pay_input_ranges(p.get("pay_input_ranges"))
+            or self._salary_from_metadata(p.get("metadata")),
             posted_at=_parse_dt(p.get("first_published")),
             updated_at=_parse_dt(p.get("updated_at")),
             description_html=description_html,
@@ -206,6 +213,32 @@ class GreenhouseProvider(BaseProvider):
         "hour": SalaryInterval.HOUR,
         "per hour": SalaryInterval.HOUR,
     }
+
+    @staticmethod
+    def _salary_from_pay_input_ranges(ranges: Any) -> Salary | None:
+        """Documented ``pay_input_ranges[]`` (requires ``pay_transparency=true`` on the request):
+        ``{min_cents, max_cents, currency_type, title, blurb}`` -- purpose-built for pay
+        transparency, so this is tried BEFORE the metadata-scraping fallback. A board can post
+        multiple ranges (e.g. per level/location); the first entry with an amount wins."""
+        if not isinstance(ranges, list):
+            return None
+        for entry in ranges:
+            if not isinstance(entry, dict):
+                continue
+            min_cents, max_cents = entry.get("min_cents"), entry.get("max_cents")
+            if min_cents is None and max_cents is None:
+                continue
+            lo = min_cents / 100 if isinstance(min_cents, int | float) else None
+            hi = max_cents / 100 if isinstance(max_cents, int | float) else None
+            if lo is None and hi is None:
+                continue
+            return Salary(
+                min_amount=lo,
+                max_amount=hi,
+                currency=entry.get("currency_type"),
+                interval=SalaryInterval.YEAR,
+            )
+        return None
 
     @classmethod
     def _salary_from_metadata(cls, metadata: Any) -> Salary | None:

@@ -15,7 +15,14 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.models import (
+    EmploymentType,
+    RawJob,
+    RemoteType,
+    SalaryInterval,
+    SearchQuery,
+    make_job_id,
+)
 from ergon.providers.schemaorg import SchemaOrgProvider
 
 pytestmark = pytest.mark.anyio
@@ -221,6 +228,7 @@ async def test_normalize_fields() -> None:
     assert remote.salary.min_amount == 45000.0
     assert remote.salary.max_amount == 60000.0
     assert remote.salary.currency == "USD"
+    assert remote.salary.interval is SalaryInterval.YEAR  # QuantitativeValue.unitText
 
 
 # --- bounds ----------------------------------------------------------------
@@ -242,3 +250,123 @@ async def test_fetch_degrades_to_empty_on_missing_sitemap() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await SchemaOrgProvider().fetch(HOST, SearchQuery(), f)
     assert raws == []
+
+
+# --- shared JSON-LD field mapping (BaseProvider.jsonld_*) ------------------
+#
+# normalize() straight off a JSON-LD payload (what fetch stores), covering the schema.org fields
+# every JSON-LD adapter now reads through the shared BaseProvider helpers.
+
+
+def _raw(**ld: object) -> RawJob:
+    return RawJob(
+        source="schemaorg",
+        source_job_id="R1",
+        company="CVS Health",
+        url=f"https://{HOST}/us/en/job/R1/x",
+        payload={"@type": "JobPosting", "title": "Care Coordinator", **ld},
+    )
+
+
+def test_jsonld_telecommute_is_remote_even_with_a_job_location() -> None:
+    """schema.org pairs TELECOMMUTE with an anchor office address -- that is still REMOTE."""
+    job = SchemaOrgProvider().normalize(
+        _raw(
+            jobLocationType="TELECOMMUTE",
+            jobLocation={
+                "@type": "Place",
+                "address": {
+                    "@type": "PostalAddress",
+                    "addressLocality": "Lenexa",
+                    "addressRegion": "Kansas",
+                    "addressCountry": "United States",
+                },
+            },
+        )
+    )
+    assert job.remote is RemoteType.REMOTE
+    assert job.locations[0].city == "Lenexa"  # the anchor address is still kept
+
+
+def test_jsonld_unknown_location_type_falls_back_to_the_address_text() -> None:
+    job = SchemaOrgProvider().normalize(_raw(jobLocationType="SOMETHING_ELSE"))
+    assert job.remote is RemoteType.UNKNOWN
+    remote = SchemaOrgProvider().normalize(
+        _raw(jobLocation={"@type": "Place", "address": {"addressLocality": "Remote"}})
+    )
+    assert remote.remote is RemoteType.REMOTE
+
+
+def test_jsonld_salary_unit_text_maps_to_the_interval() -> None:
+    job = SchemaOrgProvider().normalize(
+        _raw(
+            baseSalary={
+                "@type": "MonetaryAmount",
+                "currency": "USD",
+                "value": {
+                    "@type": "QuantitativeValue",
+                    "minValue": 21.5,
+                    "maxValue": 34.0,
+                    "unitText": "HOUR",
+                },
+            }
+        )
+    )
+    assert job.salary is not None
+    assert (job.salary.min_amount, job.salary.max_amount) == (21.5, 34.0)
+    assert job.salary.interval is SalaryInterval.HOUR
+
+    single = SchemaOrgProvider().normalize(
+        _raw(baseSalary={"currency": "EUR", "value": {"value": "60,000", "unitText": "YEAR"}})
+    )
+    assert single.salary is not None
+    assert single.salary.min_amount == single.salary.max_amount == 60000.0
+    assert single.salary.currency == "EUR"
+    assert single.salary.interval is SalaryInterval.YEAR
+
+    junk = SchemaOrgProvider().normalize(
+        _raw(baseSalary={"currency": "USD", "value": {"minValue": 0, "unitText": "FORTNIGHT"}})
+    )
+    assert junk.salary is None  # no usable amount -> no Salary at all
+
+
+def test_jsonld_experience_requirements_months_and_prose() -> None:
+    months = SchemaOrgProvider().normalize(
+        _raw(
+            experienceRequirements={
+                "@type": "OccupationalExperienceRequirements",
+                "monthsOfExperience": 60,
+            }
+        )
+    )
+    assert (months.years_experience_min, months.years_experience_max) == (5, None)
+
+    prose = SchemaOrgProvider().normalize(
+        _raw(experienceRequirements="3 to 5 years of clinical experience required")
+    )
+    assert (prose.years_experience_min, prose.years_experience_max) == (3, 5)
+
+    empty = SchemaOrgProvider().normalize(_raw(experienceRequirements={"@type": "Whatever"}))
+    assert (empty.years_experience_min, empty.years_experience_max) == (None, None)
+
+
+def test_jsonld_education_requirements_category_and_prose() -> None:
+    vocab = SchemaOrgProvider().normalize(
+        _raw(
+            educationRequirements={
+                "@type": "EducationalOccupationalCredential",
+                "credentialCategory": "bachelor degree",
+            }
+        )
+    )
+    assert vocab.degree_min == "bachelor"
+
+    prose = SchemaOrgProvider().normalize(
+        _raw(educationRequirements="Master's degree in nursing required")
+    )
+    assert prose.degree_min == "master"
+
+    unknown = SchemaOrgProvider().normalize(
+        _raw(educationRequirements={"credentialCategory": "Professional"})
+    )
+    assert unknown.degree_min is None  # ambiguous vocab is never guessed

@@ -14,41 +14,35 @@ path -- this script never touches the core index itself.
 Usage:
   uv run python scripts/merge_detail_shards.py --shards-dir dist --out dist/index-detail.sqlite
 
-Reuses ``ergon.index.detail.open_detail`` for schema (no duplicated DDL) -- that's the
-only dependency on the ``ergon`` package; otherwise stdlib only (sqlite3, argparse, glob
-via ``Path.glob``).
+Reuses ``ergon.index.detail.open_detail`` for schema (no duplicated DDL) and DERIVES the column
+list from the table that call just ensured, so a column added to that module's ``DETAIL_SCHEMA``
+is carried by the combine automatically instead of being silently dropped here (the v3
+``remote``/``employment_type``/``level``/``sector`` columns were exactly that near-miss).
+``ergon.index.detail`` is the only dependency on the ``ergon`` package; otherwise stdlib only
+(sqlite3, argparse, glob via ``Path.glob``).
 """
 
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ergon.index.detail import open_detail  # noqa: E402
+from ergon.index.detail import _UNKNOWN_SENTINELS, open_detail  # noqa: E402
 
 _SHARD_GLOB = "index-detail-shard-*.sqlite"
 
-_JOB_DETAIL_COLUMNS: tuple[str, ...] = (
-    "id",
-    "sig",
-    "fetched_at",
-    "attempts",
-    "snippet",
-    "salary_min",
-    "salary_max",
-    "salary_currency",
-    "salary_interval",
-    "years_min",
-    "years_max",
-    "degree_min",
-    "degree_required",
-    "sponsorship_offered",
-    "city",
-    "country",
+# Recovered-metadata columns a fresher row must never BLANK OUT -- the same "a known value wins
+# over unknown" rule ``index/detail.py::merge_detail_into_index`` applies when the sidecar lands in
+# the core index. ``remote``/``employment_type``/``level`` spell unknown as the literal "unknown"
+# sentinel (that module's ``_UNKNOWN_SENTINELS``, imported above); ``sector`` is plain nullable, so
+# NULL is its unknown. Mirrors ``index/detail.py``'s v3 columns.
+_PRESERVE_KNOWN_COLUMNS: frozenset[str] = frozenset(
+    {"remote", "employment_type", "level", "sector"}
 )
 
 
@@ -56,6 +50,35 @@ def find_shard_dbs(shards_dir: Path) -> list[Path]:
     """Shard files in ``shards_dir``, sorted for a deterministic merge order (see the meta-cursor
     note on ``merge_shards`` below -- "last shard wins" needs a stable "last")."""
     return sorted(shards_dir.glob(_SHARD_GLOB))
+
+
+def job_detail_columns(con: sqlite3.Connection, schema: str = "main") -> tuple[str, ...]:
+    """``job_detail``'s columns, in declaration order, read from the live db -- the combine's single
+    source of truth for the column list (``main`` = the output db, whose schema ``open_detail`` has
+    just ensured from ``index/detail.py::DETAIL_SCHEMA``). Also used on the ATTACHed ``shard`` to
+    tolerate an OLDER shard artifact that predates a column."""
+    return tuple(r[1] for r in con.execute(f"PRAGMA {schema}.table_info(job_detail)"))
+
+
+def shard_select_list(columns: tuple[str, ...], shard_columns: set[str]) -> str:
+    """``SELECT`` list for one shard: its own column where it has one, ``NULL`` where it does not --
+    an older shard artifact predating a column reads as "unknown" for it instead of erroring."""
+    return ", ".join(c if c in shard_columns else f"NULL AS {c}" for c in columns)
+
+
+def _update_expr(col: str) -> str:
+    """One column's ``ON CONFLICT DO UPDATE SET`` expression. Most columns take the incoming value
+    outright; a ``_PRESERVE_KNOWN_COLUMNS`` one takes it only when it is KNOWN, so a re-fetch that
+    failed to re-recover the field keeps what an earlier drain already found."""
+    if col not in _PRESERVE_KNOWN_COLUMNS:
+        return f"{col} = excluded.{col}"
+    sentinel = _UNKNOWN_SENTINELS.get(col)
+    if sentinel is None:  # nullable, no sentinel -- NULL is its "unknown"
+        return f"{col} = COALESCE(excluded.{col}, job_detail.{col})"
+    return (
+        f"{col} = CASE WHEN excluded.{col} IS NOT NULL AND excluded.{col} <> '{sentinel}' "
+        f"THEN excluded.{col} ELSE job_detail.{col} END"
+    )
 
 
 def merge_shards(
@@ -90,6 +113,19 @@ def merge_shards(
     -fetched copy of the same id. Also safe to re-run the merge (e.g. after a retry) without
     double-counting or erroring on a re-processed shard.
 
+    Recovered-metadata columns (``_PRESERVE_KNOWN_COLUMNS``): for these the row-level upsert is
+    additionally column-level NON-CLOBBERING -- an incoming UNKNOWN (NULL, or the literal "unknown"
+    sentinel the enum-backed ones use) leaves the existing KNOWN value in place, while an incoming
+    known value fills an existing unknown. Without this, a row re-fetched by this drain whose
+    provider happened not to expose e.g. ``remote`` this time would blank out the value an earlier
+    drain recovered -- every drain, for as long as the field keeps not coming back. The freshness
+    gate still applies: a value only lands from a row that passes the ``fetched_at`` check below.
+
+    Older shard artifacts: the per-shard SELECT is built from the OUTPUT table's columns, with a
+    NULL stand-in for any the shard's own ``job_detail`` lacks, so a v2 shard (no ``remote``/
+    ``employment_type``/``level``/``sector``) merges as "unknown for those" instead of failing --
+    and, by the non-clobber rule above, cannot erase a v3 shard's or the base's known values.
+
     Meta-cursor handling: each shard sidecar carries its OWN rotating ``detail_cursor`` (see
     ``index/detail.py::_select_window``), scoped to that shard's own candidate subset -- these
     per-shard cursors are NOT individually meaningful once combined. The combined sidecar is
@@ -112,9 +148,10 @@ def merge_shards(
     con = open_detail(str(out_path))
     stats: dict[str, int] = {}
     total = 0
-    cols = ", ".join(_JOB_DETAIL_COLUMNS)
-    placeholders = ", ".join("?" for _ in _JOB_DETAIL_COLUMNS)
-    update_set = ", ".join(f"{c} = excluded.{c}" for c in _JOB_DETAIL_COLUMNS if c != "id")
+    columns = job_detail_columns(con)  # derived, not hardcoded -- see the module docstring
+    cols = ", ".join(columns)
+    placeholders = ", ".join("?" for _ in columns)
+    update_set = ", ".join(_update_expr(c) for c in columns if c != "id")
     # NOTE: SQLite's upsert-clause grammar does not accept an `INSERT ... SELECT ... ON CONFLICT`
     # form (the parser treats the `ON` as a join constraint on the FROM'd table and chokes on the
     # following `DO`) -- only the VALUES form is accepted. So each shard's rows are pulled into
@@ -133,7 +170,10 @@ def merge_shards(
             open_detail(str(shard_path)).close()
             con.execute("ATTACH DATABASE ? AS shard", (str(shard_path),))
             try:
-                rows = con.execute(f"SELECT {cols} FROM shard.job_detail").fetchall()
+                # A pre-v3 shard artifact lacks the newer columns -> select NULL ("unknown") for
+                # them rather than erroring on an unknown identifier.
+                select_list = shard_select_list(columns, set(job_detail_columns(con, "shard")))
+                rows = con.execute(f"SELECT {select_list} FROM shard.job_detail").fetchall()
                 before = con.total_changes
                 con.executemany(upsert_sql, rows)
                 n = con.total_changes - before

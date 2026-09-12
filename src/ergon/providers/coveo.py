@@ -29,7 +29,8 @@ from datetime import datetime, timezone
 from importlib.resources import files
 from typing import TYPE_CHECKING, Any
 
-from ..models import JobPosting, Location, RawJob, RemoteType
+from ..extract.level import level_from_ats_vocab
+from ..models import EmploymentType, JobLevel, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -48,6 +49,25 @@ _PER_PAGE = 50
 # A Coveo result is a JOB (not a site page) when its source/uri looks job-ish. Used to auto-detect
 # the jobs source when the token doesn't name one.
 _JOB_HINT = re.compile(r"job|ats|career|requis|vacanc", re.I)
+
+# Coveo has no job schema of its own: every job field below is a CUSTOM field defined in one
+# customer's own source configuration. ``jobexperiencelevel`` is the seniority field the proxy-mode
+# tenant (careers.slb.com) exposes -- multi-value, live-observed vocabulary "Early Careers" /
+# "Intern" / "Experienced Professional" (1046 postings, 3 distinct facet values). Values from any
+# other tenant fall through to the shared ATS vocabulary, then to UNKNOWN.
+_EXPERIENCE_LEVEL: dict[str, JobLevel] = {
+    "early careers": JobLevel.ENTRY,
+    "early career": JobLevel.ENTRY,
+    "experienced professional": JobLevel.MID,
+    "intern": JobLevel.INTERN,
+}
+
+# The one ``jobexperiencelevel`` value that also states an EMPLOYMENT type; the other rungs say
+# nothing about it, so they are deliberately absent (missing key -> UNKNOWN).
+_EXPERIENCE_EMPLOYMENT: dict[str, EmploymentType] = {
+    "intern": EmploymentType.INTERNSHIP,
+    "internship": EmploymentType.INTERNSHIP,
+}
 
 
 def _search_url(host: str) -> str:
@@ -259,10 +279,33 @@ class CoveoProvider(BaseProvider):
             # keys them "obu"/"data" instead — read proxy first, direct as fallback so both
             # modes populate department/description_html from this one shared normalize().
             department=self._clean(p.get("category") or p.get("obu")),
-            posted_at=self._date(p.get("date")),
+            level=self._level(p),
+            employment_type=self._employment_type(p),
+            # ``jobposteddate`` is the posting's own date; ``date``/``sysdate`` is when Coveo last
+            # INDEXED the page (live-observed ~9 months apart), so it is only the fallback.
+            posted_at=self._date(p.get("jobposteddate") or p.get("date")),
             description_html=self._clean(p.get("description") or p.get("data")),
             raw=raw.payload,
         )
+
+    @classmethod
+    def _level(cls, p: dict[str, Any]) -> JobLevel:
+        """Seniority from the tenant's ``jobexperiencelevel`` field (see ``_EXPERIENCE_LEVEL``).
+
+        NOTE: no Coveo tenant reachable from here exposes salary, years-of-experience or education
+        as a field -- those stay with the description-text extractors."""
+        value = cls._clean(p.get("jobexperiencelevel"))
+        if not value:
+            return JobLevel.UNKNOWN
+        hit = _EXPERIENCE_LEVEL.get(value.strip().lower())
+        return hit if hit is not None else level_from_ats_vocab(value)
+
+    @classmethod
+    def _employment_type(cls, p: dict[str, Any]) -> EmploymentType:
+        value = cls._clean(p.get("jobexperiencelevel"))
+        if not value:
+            return EmploymentType.UNKNOWN
+        return _EXPERIENCE_EMPLOYMENT.get(value.strip().lower(), EmploymentType.UNKNOWN)
 
     @staticmethod
     def _scalar(v: Any) -> str:

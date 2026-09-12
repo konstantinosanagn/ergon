@@ -105,3 +105,120 @@ def test_jsonld_locations_parses_single_and_list_and_skips_empty() -> None:
     assert P({"address": {"addressCountry": "United States"}})[0].country == "United States"
     # bare place with no usable address field is skipped
     assert P([{"@type": "Place"}, {"address": {}}]) == []
+
+
+def test_fetch_detail_reads_employment_type_salary_and_folds_education_text() -> None:
+    """The audit's quick-win: employmentType/baseSalary/educationRequirements are standard
+    sibling properties on the same JSON-LD JobPosting object already parsed for description."""
+    from ergon.models import DetailFetch, EmploymentType, SalaryInterval
+
+    page = (
+        "<html><head>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","description":"\\u003cp\\u003eRole.\\u003c/p\\u003e",'
+        '"employmentType":"FULL_TIME",'
+        '"baseSalary":{"@type":"MonetaryAmount","currency":"USD","value":{'
+        '"@type":"QuantitativeValue","minValue":90000,"maxValue":120000,"unitText":"YEAR"}},'
+        '"educationRequirements":"Bachelor\'s degree required"}'
+        "</script></head><body></body></html>"
+    )
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.employment_type is EmploymentType.FULL_TIME
+    assert res.salary is not None
+    assert res.salary.min_amount == 90000.0 and res.salary.max_amount == 120000.0
+    assert res.salary.interval is SalaryInterval.YEAR
+    assert "Education requirements: Bachelor's degree required." in res.text
+
+
+def test_fetch_detail_education_requirements_object_shape() -> None:
+    # Newer schema.org shape: educationRequirements as an EducationalOccupationalCredential.
+    page = (
+        "<html><head>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","description":"\\u003cp\\u003eRole.\\u003c/p\\u003e",'
+        '"educationRequirements":{"@type":"EducationalOccupationalCredential",'
+        '"credentialCategory":"bachelor degree"}}'
+        "</script></head><body></body></html>"
+    )
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    text = res.text if hasattr(res, "text") else res
+    assert "bachelor degree" in text
+
+
+def test_fetch_detail_education_text_recovers_degree_min_through_enrich() -> None:
+    page = (
+        "<html><head>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","description":"\\u003cp\\u003eRole summary.\\u003c/p\\u003e",'
+        '"educationRequirements":"Bachelor\'s degree required"}'
+        "</script></head><body></body></html>"
+    )
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    text = res.text if hasattr(res, "text") else res
+    job = JobPosting.create(
+        source="jobvite", source_job_id="1", company="", title="", description_html=text
+    )
+    enrich_in_place(job)
+    assert job.degree_min == "bachelor"
+
+
+def test_fetch_detail_no_standard_properties_yields_plain_str() -> None:
+    # No employmentType/baseSalary/educationRequirements/jobLocation on the page -> unchanged
+    # pre-existing behavior (a bare str, not a DetailFetch).
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(_PAGE)))
+    assert isinstance(res, str)
+
+
+def test_fetch_detail_maps_education_vocabulary_to_degree_min() -> None:
+    """A closed-vocabulary ``educationRequirements`` now rides back STRUCTURED on
+    ``DetailFetch.degree_min`` (the reconcile seeds it, so it beats text extraction); the text
+    fold stays in place alongside it."""
+    from ergon.models import DetailFetch
+
+    page = (
+        "<html><head>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","description":"\\u003cp\\u003eRole.\\u003c/p\\u003e",'
+        '"educationRequirements":{"@type":"EducationalOccupationalCredential",'
+        '"credentialCategory":"Master\'s Degree"}}'
+        "</script></head><body></body></html>"
+    )
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.degree_min == "master"
+    assert "Education requirements: Master's Degree." in res.text  # fold kept as the fallback
+
+
+def test_fetch_detail_unmappable_education_leaves_degree_min_none() -> None:
+    """Free prose (and the deliberately ambiguous ATS values) must NOT be guessed at here — the
+    text fold is what gives the description extractor its shot."""
+    from ergon.models import DetailFetch
+
+    for edu in ("Bachelor's degree in Computer Science or equivalent", "Professional"):
+        page = (
+            "<html><head>"
+            '<script type="application/ld+json">'
+            '{"@type":"JobPosting","description":"\\u003cp\\u003eRole.\\u003c/p\\u003e",'
+            '"educationRequirements":"' + edu + '"}'
+            "</script></head><body></body></html>"
+        )
+        res = anyio.run(lambda p=page: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(p)))
+        assert isinstance(res, DetailFetch)
+        assert res.degree_min is None
+        assert "Education requirements:" in res.text
+
+
+def test_fetch_detail_no_education_leaves_degree_min_none() -> None:
+    from ergon.models import DetailFetch
+
+    page = (
+        "<html><head>"
+        '<script type="application/ld+json">'
+        '{"@type":"JobPosting","description":"\\u003cp\\u003eRole.\\u003c/p\\u003e",'
+        '"employmentType":"FULL_TIME"}'
+        "</script></head><body></body></html>"
+    )
+    res = anyio.run(lambda: JobviteProvider().fetch_detail(_ref(), _FakeFetcher(page)))
+    assert isinstance(res, DetailFetch)
+    assert res.degree_min is None

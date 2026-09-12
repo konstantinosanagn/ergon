@@ -32,7 +32,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
+from ..models import DetailFetch, EmploymentType, JobPosting, Location, RawJob, RemoteType, Salary
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -44,6 +44,14 @@ if TYPE_CHECKING:
 # HTML). The list feed only carries a short `BriefDescription` teaser.
 _DETAIL_DESC_RE = re.compile(r'"Description"\s*:\s*("(?:[^"\\]|\\.)*")')
 
+# The same OpportunityDetail JSON also carries a structured pay-range field, almost always gated
+# off (PayRangeVisible=false) -- read directly when a tenant DOES expose it, instead of relying
+# solely on regex-mining the JD prose for pay-transparency-law text.
+_PAY_VISIBLE_RE = re.compile(r'"PayRangeVisible"\s*:\s*(true|false)')
+_PAY_MIN_RE = re.compile(r'"PayRangeMinimum"\s*:\s*(-?\d+(?:\.\d+)?|null)')
+_PAY_MAX_RE = re.compile(r'"PayRangeMaximum"\s*:\s*(-?\d+(?:\.\d+)?|null)')
+_PAY_CURRENCY_RE = re.compile(r'"PayRangeCurrencyCode"\s*:\s*("(?:[^"\\]|\\.)*"|null)')
+
 __all__ = ["UKGProvider"]
 
 _DEFAULT_HOST = "recruiting.ultipro.com"
@@ -52,6 +60,92 @@ _VIEW = "https://{host}/{code}/JobBoard/{guid}/OpportunityDetail?opportunityId={
 # Recognise a UKG Pro board URL: /{code}/JobBoard/{guid}
 _BOARD_RE = re.compile(r"/([A-Za-z0-9]{6,})/JobBoard/([0-9a-fA-F-]{36})")
 _PAGE = 50
+
+
+def _json_scalar(raw: str, pattern: re.Pattern[str]) -> Any:
+    """Decode one regex-captured JSON scalar (bool/number/string/null); None on no match."""
+    m = pattern.search(raw)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(1))
+    except (ValueError, TypeError):
+        return None
+
+
+def _json_array(raw: str, key: str) -> list[Any] | None:
+    """Extract the JSON array value of a top-level ``"key": [...]`` from an embedded JS/JSON blob,
+    via bracket-balance scanning (handles nesting; a plain regex can't). None when the key is
+    absent or its value fails to decode."""
+    m = re.search(rf'"{re.escape(key)}"\s*:\s*\[', raw)
+    if not m:
+        return None
+    start = m.end() - 1
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(raw)):
+        c = raw[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                try:
+                    value = json.loads(raw[start : i + 1])
+                except (ValueError, TypeError):
+                    return None
+                return value if isinstance(value, list) else None
+    return None
+
+
+def _flatten_criteria_text(items: list[Any]) -> str:
+    """Flatten a criteria array (shape not documented -- strings, or dicts of free-text/labelled
+    fields) into one readable sentence for the existing yoe/degree text extractors to parse."""
+    parts: list[str] = []
+
+    def _walk(value: Any) -> None:
+        if isinstance(value, str):
+            v = value.strip()
+            if v:
+                parts.append(v)
+        elif isinstance(value, (int, float)):
+            parts.append(str(value))
+        elif isinstance(value, dict):
+            for v in value.values():
+                _walk(v)
+        elif isinstance(value, list):
+            for v in value:
+                _walk(v)
+
+    _walk(items)
+    return "; ".join(parts)
+
+
+def _pay_range(raw: str) -> Salary | None:
+    """UKG's structured pay-range field, gated by PayRangeVisible -- read directly when a tenant
+    exposes it (``PayRangeVisible=true``); None when gated off/absent/no usable amount."""
+    if _json_scalar(raw, _PAY_VISIBLE_RE) is not True:
+        return None
+    min_amount = _json_scalar(raw, _PAY_MIN_RE)
+    max_amount = _json_scalar(raw, _PAY_MAX_RE)
+    min_amount = float(min_amount) if isinstance(min_amount, (int, float)) else None
+    max_amount = float(max_amount) if isinstance(max_amount, (int, float)) else None
+    if min_amount is None and max_amount is None:
+        return None
+    currency = _json_scalar(raw, _PAY_CURRENCY_RE)
+    currency = currency.strip() if isinstance(currency, str) and currency.strip() else None
+    return Salary(min_amount=min_amount, max_amount=max_amount, currency=currency)
 
 
 @register("ukg")
@@ -232,14 +326,20 @@ class UKGProvider(BaseProvider):
             except ValueError:
                 return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's FULL JD (Tier-3 recovery).
 
         UKG's list feed only carries a short ``BriefDescription`` teaser; the full JD lives on the
         ``OpportunityDetail`` page (which IS ``ref.apply_url``), embedded as a JSON ``"Description"``
         string. Recovering it matters because UKG's structured pay field is almost always gated off
         (``PayRangeVisible=false``), yet ~40% of postings state the salary in the JD BODY (pay-
-        transparency-law text) -- which the enrich extractor mines once we capture it.
+        transparency-law text) -- which the enrich extractor mines once we capture it. When a
+        tenant DOES expose the gated pay range, or the ``WorkExperienceCriteria``/
+        ``EducationCriteria`` arrays (present in the schema, empty on every sample seen so far),
+        this returns a :class:`DetailFetch` instead so the reconcile seeds the structured salary
+        directly and folds the criteria text into the JD body for the same yoe/degree text
+        extractors to mine (their shape is undocumented and unobserved non-empty, so we don't
+        invent a structured mapping for them).
 
         Returns ``None`` ONLY on a confirmed-gone signal: a real HTTP 404/410 re-fetching the
         ``OpportunityDetail`` page. A missing/unbuildable URL is NOT evidence of death, and every
@@ -267,9 +367,24 @@ class UKGProvider(BaseProvider):
             desc = json.loads(m.group(1))  # decodes \uXXXX / \" / \\ correctly
         except (ValueError, TypeError) as e:
             raise RuntimeError(f"ukg detail: Description JSON decode failed for {ref!s}") from e
-        if isinstance(desc, str) and desc.strip():
+        if not (isinstance(desc, str) and desc.strip()):
+            raise RuntimeError(f"ukg detail: empty Description for {ref!s}")
+
+        salary = _pay_range(raw)
+        extra: list[str] = []
+        for key, label in (
+            ("WorkExperienceCriteria", "Experience required"),
+            ("EducationCriteria", "Education required"),
+        ):
+            items = _json_array(raw, key)
+            if items:
+                text = _flatten_criteria_text(items)
+                if text:
+                    extra.append(f"{label}: {text}.")
+        if not (salary or extra):
             return desc
-        raise RuntimeError(f"ukg detail: empty Description for {ref!s}")
+        body = desc + ("\n\n" + " ".join(extra) if extra else "")
+        return DetailFetch(text=body, salary=salary)
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload

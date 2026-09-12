@@ -9,7 +9,7 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.models import JobLevel, RawJob, RemoteType, SearchQuery, make_job_id
 from ergon.providers.ripplehire import RippleHireProvider
 
 pytestmark = pytest.mark.anyio
@@ -78,6 +78,33 @@ async def test_fetch_and_normalize() -> None:
 
     remote = RippleHireProvider().normalize(raws[1])
     assert remote.remote is RemoteType.REMOTE  # "Remote" in location
+
+
+async def test_normalize_reads_experience_and_client() -> None:
+    """jobReqExp ("3 - 6 Years") -> years + a coarse level; jobCode -> department."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await RippleHireProvider().fetch("mphasis|tok123|Mphasis", SearchQuery(), f)
+
+    j0 = RippleHireProvider().normalize(raws[0])
+    assert (j0.years_experience_min, j0.years_experience_max) == (3, 6)
+    assert j0.level is JobLevel.MID  # derived from the range, not a title word
+    assert j0.department == "C-1"  # jobCode = the requisition's end-client label
+
+
+def test_normalize_unreadable_experience_stays_unknown() -> None:
+    """A tenant string with no years in it is never guessed at."""
+    raw = RawJob(
+        source="ripplehire",
+        source_job_id="1",
+        company="Mphasis",
+        payload={"title": "Engineer", "location": "Pune", "experience": "Not specified"},
+    )
+    job = RippleHireProvider().normalize(raw)
+    assert (job.years_experience_min, job.years_experience_max) == (None, None)
+    assert job.level is JobLevel.UNKNOWN
+    assert job.department is None
 
 
 async def test_fetch_respects_limit() -> None:

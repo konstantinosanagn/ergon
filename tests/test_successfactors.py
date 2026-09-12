@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 import respx
@@ -275,14 +277,16 @@ async def test_fetch_detail_no_jd_node_raises() -> None:
 _RSS_URL = f"https://{HOST}/services/rss/job"
 
 
-def _rss(items: list[tuple[str, str, str, str]]) -> str:
+def _rss(items: list[tuple[str, str, str, str]], pub: str | None = None) -> str:
     """Build an SF RSS feed body from (job_id, title, link_href, jd_html) tuples.
 
     The JD is CDATA-wrapped (as the live feed serves it) and the link deliberately carries a
     different slug + query string than the search-row href to prove the join is on the numeric
-    job id, not raw-URL equality."""
+    job id, not raw-URL equality. ``pub`` adds the standard ``<pubDate>`` element to every item
+    (live shape: "Sat, 12 Sep 2026 7:00:00 GMT" — RFC-822 with an un-padded hour)."""
+    date = f"<pubDate>{pub}</pubDate>" if pub else ""
     entries = "".join(
-        f"<item><title>{title}</title><link>{link}</link>"
+        f"<item><title>{title}</title><link>{link}</link>{date}"
         f"<description><![CDATA[{jd}]]></description></item>"
         for _jid, title, link, jd in items
     )
@@ -332,6 +336,63 @@ async def test_rss_folds_jd_into_matching_postings() -> None:
     unmatched = SuccessFactorsProvider().normalize(raws[1])  # 1399453633 -- no feed item
     assert unmatched.description_html is None
     assert unmatched.description_text is None
+
+
+async def test_rss_folds_posted_at_from_pubdate() -> None:
+    """The same feed item's <pubDate> fills posted_at, which the HTML search row never carries."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)  # search -> jobs 1395167233 and 1399453633
+        respx_mock.get(url__startswith=_RSS_URL).mock(
+            return_value=httpx.Response(
+                200,
+                text=_rss(
+                    [
+                        (
+                            "1395167233",
+                            "Analyst",
+                            "https://careers.ey.com/ey/job/Slug/1395167233/",
+                            "<p>Own the audit engagement.</p>",
+                        )
+                    ],
+                    pub="Sat, 12 Sep 2026 7:00:00 GMT",
+                ),
+            )
+        )
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch("careers.ey.com|ey", SearchQuery(), f)
+
+    matched = SuccessFactorsProvider().normalize(raws[0])
+    assert matched.posted_at == datetime(2026, 9, 12, 7, 0, tzinfo=timezone.utc)
+    # A row with no feed item stays undated -- a date is never invented for it.
+    assert SuccessFactorsProvider().normalize(raws[1]).posted_at is None
+
+
+async def test_rss_unparseable_pubdate_is_ignored() -> None:
+    """A junk date leaves posted_at None (and still folds the JD)."""
+    with respx.mock as respx_mock:
+        _mock(respx_mock)
+        respx_mock.get(url__startswith=_RSS_URL).mock(
+            return_value=httpx.Response(
+                200,
+                text=_rss(
+                    [
+                        (
+                            "1395167233",
+                            "Analyst",
+                            "https://careers.ey.com/ey/job/Slug/1395167233/",
+                            "<p>JD.</p>",
+                        )
+                    ],
+                    pub="whenever",
+                ),
+            )
+        )
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await SuccessFactorsProvider().fetch("careers.ey.com|ey", SearchQuery(), f)
+
+    matched = SuccessFactorsProvider().normalize(raws[0])
+    assert matched.posted_at is None
+    assert matched.description_html == "<p>JD.</p>"
 
 
 async def test_rss_feed_4xx_is_non_fatal() -> None:
@@ -394,7 +455,8 @@ async def test_rmk_fallback_folds_jd_for_free() -> None:
                             f"https://{host}/job/RF-Engineer/1234567890/",
                             "<p>Design RF front-end modules.</p>",
                         )
-                    ]
+                    ],
+                    pub="Fri, 11 Sep 2026 07:00:00 GMT",
                 ),
             )
         )
@@ -406,3 +468,4 @@ async def test_rmk_fallback_folds_jd_for_free() -> None:
     job = SuccessFactorsProvider().normalize(raws[0])
     assert job.description_html == "<p>Design RF front-end modules.</p>"
     assert job.description_text == "Design RF front-end modules."
+    assert job.posted_at == datetime(2026, 9, 11, 7, 0, tzinfo=timezone.utc)

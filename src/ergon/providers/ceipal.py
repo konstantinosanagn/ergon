@@ -23,6 +23,7 @@ the firm's careers page) plus the firm label.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ..models import JobPosting, Location, RawJob, RemoteType
@@ -160,8 +161,28 @@ class CeipalProvider(BaseProvider):
             locations=locations,
             remote=remote,
             department=self._clean(j.get("job_code")),
+            posted_at=self._date(j.get("created")),
         )
 
     @staticmethod
     def _clean(v: Any) -> str | None:
         return v.strip() if isinstance(v, str) and v.strip() else None
+
+    @staticmethod
+    def _date(v: Any) -> datetime | None:
+        """``created`` -- format unconfirmed (no fixture; named only in the adapter's own
+        docstring), so this tries ISO-8601 first, then the common ``YYYY-MM-DD[ HH:MM:SS]`` shape
+        rather than assuming a single vendor format. Never raises."""
+        if not isinstance(v, str) or not v.strip():
+            return None
+        s = v.strip()
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+        return None

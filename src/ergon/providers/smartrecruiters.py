@@ -30,6 +30,8 @@ from ..models import (
     Location,
     RawJob,
     RemoteType,
+    Salary,
+    SalaryInterval,
     SearchQuery,
 )
 from .base import BaseProvider, register
@@ -75,6 +77,15 @@ _EMPLOYMENT_BY_TYPE = {
     "intern": EmploymentType.INTERNSHIP,
     "internship": EmploymentType.INTERNSHIP,
     "trainee": EmploymentType.INTERNSHIP,
+}
+
+# SmartRecruiters ``compensation.period`` -> canonical SalaryInterval (documented enum).
+_INTERVAL_BY_PERIOD = {
+    "hourly": SalaryInterval.HOUR,
+    "daily": SalaryInterval.DAY,
+    "weekly": SalaryInterval.WEEK,
+    "monthly": SalaryInterval.MONTH,
+    "yearly": SalaryInterval.YEAR,
 }
 
 
@@ -227,8 +238,9 @@ class SmartRecruitersProvider(BaseProvider):
             remote=remote,
             employment_type=employment_type,
             department=department,
+            sector=(p.get("industry") or {}).get("label"),
             level=level_from_ats_vocab((p.get("experienceLevel") or {}).get("label")),
-            salary=None,  # not exposed by the listing endpoint
+            salary=self._salary(p.get("compensation") or {}),
             posted_at=_parse_dt(p.get("releasedDate")),
             raw=raw.payload,
         )
@@ -299,6 +311,20 @@ class SmartRecruitersProvider(BaseProvider):
         if any(loc.get(k) for k in ("city", "region", "country", "fullLocation")):
             return RemoteType.ONSITE
         return RemoteType.UNKNOWN
+
+    @staticmethod
+    def _salary(comp: dict[str, Any]) -> Salary | None:
+        """Documented ``compensation`` object: {min, max, currency, period} -- often empty."""
+        min_amount = comp.get("min")
+        max_amount = comp.get("max")
+        if min_amount is None and max_amount is None:
+            return None
+        return Salary(
+            min_amount=min_amount,
+            max_amount=max_amount,
+            currency=comp.get("currency"),
+            interval=_INTERVAL_BY_PERIOD.get(str(comp.get("period") or "").strip().lower()),
+        )
 
     @staticmethod
     def _employment_type(type_obj: dict[str, Any]) -> EmploymentType:

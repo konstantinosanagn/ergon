@@ -16,7 +16,16 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast, runtime_checkable
 
-from ..models import DetailFetch, JobPosting, Location, RawJob, SearchQuery
+from ..models import (
+    DetailFetch,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+    Salary,
+    SalaryInterval,
+    SearchQuery,
+)
 
 if TYPE_CHECKING:
     from ..http import AsyncFetcher
@@ -92,6 +101,15 @@ _BUILTIN_MODULES = (
 )
 
 _ENTRYPOINT_GROUP = "ergon.providers"
+
+# schema.org QuantitativeValue.unitText (the Google-for-Jobs recommended values) -> SalaryInterval.
+_JSONLD_UNIT_TO_INTERVAL: dict[str, SalaryInterval] = {
+    "HOUR": SalaryInterval.HOUR,
+    "DAY": SalaryInterval.DAY,
+    "WEEK": SalaryInterval.WEEK,
+    "MONTH": SalaryInterval.MONTH,
+    "YEAR": SalaryInterval.YEAR,
+}
 
 
 @runtime_checkable
@@ -328,6 +346,110 @@ class BaseProvider:
             raw = ", ".join(p for p in (city, region, country) if p)
             out.append(Location(raw=raw, city=city, region=region, country=country))
         return out
+
+    @staticmethod
+    def jsonld_remote(job: dict[str, Any]) -> RemoteType:
+        """schema.org ``jobLocationType`` -> ``RemoteType``. ``"TELECOMMUTE"`` is REMOTE even
+        when the same posting also carries a ``jobLocation`` (schema.org pairs TELECOMMUTE with
+        an anchor office address by convention) -- a jobLocation must never downgrade this to
+        HYBRID. Shared by every adapter that parses a JobPosting JSON-LD block."""
+        loc_type = job.get("jobLocationType")
+        if isinstance(loc_type, list):
+            loc_type = loc_type[0] if loc_type else None
+        if isinstance(loc_type, str) and loc_type.strip().upper() == "TELECOMMUTE":
+            return RemoteType.REMOTE
+        return RemoteType.UNKNOWN
+
+    @staticmethod
+    def jsonld_salary(job: dict[str, Any]) -> Salary | None:
+        """schema.org ``baseSalary`` (MonetaryAmount wrapping a value or a QuantitativeValue)
+        -> ``Salary``, including ``unitText`` (HOUR/DAY/WEEK/MONTH/YEAR) -> ``SalaryInterval``.
+        Shared by every adapter that parses a JobPosting JSON-LD block."""
+        base = job.get("baseSalary")
+        if not isinstance(base, dict):
+            return None
+        currency = base.get("currency")
+        currency = currency.strip() if isinstance(currency, str) and currency.strip() else None
+        value = base.get("value")
+        lo: Any = None
+        hi: Any = None
+        unit: Any = None
+        if isinstance(value, dict):
+            lo = value.get("minValue")
+            hi = value.get("maxValue")
+            single = value.get("value")
+            if lo is None and hi is None and single is not None:
+                lo = hi = single
+            unit = value.get("unitText")
+        elif isinstance(value, (int, float, str)):
+            lo = hi = value
+
+        def _num(v: Any) -> float | None:
+            if isinstance(v, bool):
+                return None
+            if isinstance(v, (int, float)) and v > 0:
+                return float(v)
+            if isinstance(v, str):
+                try:
+                    f = float(v.replace(",", ""))
+                except ValueError:
+                    return None
+                return f if f > 0 else None
+            return None
+
+        lo_n, hi_n = _num(lo), _num(hi)
+        if lo_n is None and hi_n is None:
+            return None
+        interval = _JSONLD_UNIT_TO_INTERVAL.get(str(unit).strip().upper()) if unit else None
+        return Salary(min_amount=lo_n, max_amount=hi_n, currency=currency, interval=interval)
+
+    @staticmethod
+    def jsonld_years(job: dict[str, Any]) -> tuple[int | None, int | None]:
+        """schema.org ``experienceRequirements`` -> ``(years_min, years_max)``. A structured
+        ``monthsOfExperience`` wins (rounded down to whole years, open-ended minimum); free text
+        -- a plain string, or the requirement object's own ``name``/``description`` -- falls back
+        to the shared years-of-experience text extractor. Shared by every adapter that parses a
+        JobPosting JSON-LD block."""
+        req = job.get("experienceRequirements")
+        months = req.get("monthsOfExperience") if isinstance(req, dict) else None
+        if isinstance(months, bool):
+            months = None
+        if isinstance(months, (int, float)) and months > 0:
+            return (int(months) // 12, None)
+        text = req if isinstance(req, str) else None
+        if not text and isinstance(req, dict):
+            text = req.get("name") or req.get("description")
+        if not isinstance(text, str) or not text.strip():
+            return (None, None)
+        from ..extract.base import ExtractInput
+        from ..extract.yoe import YoeExtractor
+
+        return YoeExtractor().extract(ExtractInput(title="", description_text=text))
+
+    @staticmethod
+    def jsonld_degree_min(job: dict[str, Any]) -> str | None:
+        """schema.org ``educationRequirements`` -> ``degree_min``. ``credentialCategory`` (a
+        clean vocab term) wins; free text -- a plain string, or the requirement object's own
+        ``name``/``description`` -- falls back to the shared degree-mention text extractor.
+        Shared by every adapter that parses a JobPosting JSON-LD block."""
+        req = job.get("educationRequirements")
+        cat = req.get("credentialCategory") if isinstance(req, dict) else None
+        if isinstance(cat, list):
+            cat = cat[0] if cat else None
+        from ..extract.degree import degree_from_ats_vocab
+
+        mapped = degree_from_ats_vocab(cat) if isinstance(cat, str) else None
+        if mapped:
+            return mapped
+        text = req if isinstance(req, str) else None
+        if not text and isinstance(req, dict):
+            text = req.get("name") or req.get("description")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        from ..extract.base import ExtractInput
+        from ..extract.degree import DegreeExtractor
+
+        return DegreeExtractor().extract(ExtractInput(title="", description_text=text))[0]
 
 
 _REGISTRY: dict[str, Provider] = {}

@@ -35,7 +35,16 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from selectolax.parser import HTMLParser
 
-from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType
+from ..models import (
+    DetailFetch,
+    EmploymentType,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+    Salary,
+    SalaryInterval,
+)
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -68,6 +77,71 @@ _PARAMS: dict[str, Any] = {
     "SortDirection": 0,
     "SearchType": 5,
 }
+
+
+# schema.org JobPosting.employmentType values, normalized (lowercased/underscore-stripped) since
+# some Radancy tenants emit the humanized form ("Full time") rather than the enum token
+# ("FULL_TIME") -- both are matched by this table.
+_JSONLD_EMPLOYMENT: dict[str, EmploymentType] = {
+    "full time": EmploymentType.FULL_TIME,
+    "part time": EmploymentType.PART_TIME,
+    "contractor": EmploymentType.CONTRACT,
+    "contract": EmploymentType.CONTRACT,
+    "temporary": EmploymentType.TEMPORARY,
+    "intern": EmploymentType.INTERNSHIP,
+    "internship": EmploymentType.INTERNSHIP,
+    "volunteer": EmploymentType.OTHER,
+    "per diem": EmploymentType.OTHER,
+    "other": EmploymentType.OTHER,
+}
+
+_JSONLD_INTERVAL: dict[str, SalaryInterval] = {
+    "year": SalaryInterval.YEAR,
+    "month": SalaryInterval.MONTH,
+    "week": SalaryInterval.WEEK,
+    "day": SalaryInterval.DAY,
+    "hour": SalaryInterval.HOUR,
+}
+
+
+def _employment_from_jsonld(value: Any) -> EmploymentType | None:
+    """schema.org ``employmentType`` (a string, or a list of them) -> EmploymentType, first hit
+    wins. Unrecognised/absent -> None (never guess, never raise)."""
+    values = value if isinstance(value, list) else [value]
+    for v in values:
+        if not isinstance(v, str) or not v.strip():
+            continue
+        norm = " ".join(v.replace("_", " ").replace("-", " ").lower().split())
+        mapped = _JSONLD_EMPLOYMENT.get(norm)
+        if mapped is not None:
+            return mapped
+    return None
+
+
+def _salary_from_jsonld(value: Any) -> Salary | None:
+    """schema.org ``baseSalary`` (a ``MonetaryAmount`` wrapping a ``QuantitativeValue``) ->
+    Salary. Handles both a single ``value`` and a ``minValue``/``maxValue`` range. None when the
+    block carries no usable amount (e.g. present-but-empty keys, as seen on most sampled tenants)."""
+    if not isinstance(value, dict):
+        return None
+    currency = (value.get("currency") or "").strip() or None
+    qv = value.get("value")
+    qv = qv if isinstance(qv, dict) else {}
+    min_amount = qv.get("minValue") if isinstance(qv.get("minValue"), (int, float)) else None
+    max_amount = qv.get("maxValue") if isinstance(qv.get("maxValue"), (int, float)) else None
+    if min_amount is None and max_amount is None:
+        single = qv.get("value") if isinstance(qv.get("value"), (int, float)) else None
+        min_amount = max_amount = single
+    if min_amount is None and max_amount is None:
+        return None
+    unit = str(qv.get("unitText") or "").strip().lower() or None
+    interval = _JSONLD_INTERVAL.get(unit) if unit else None
+    return Salary(
+        min_amount=float(min_amount) if min_amount is not None else None,
+        max_amount=float(max_amount) if max_amount is not None else None,
+        currency=currency,
+        interval=interval,
+    )
 
 
 @register("radancy")
@@ -224,14 +298,27 @@ class RadancyProvider(BaseProvider):
         if text is None:
             raise RuntimeError(f"radancy detail: no extractable text for {ref!s}")
         # Most tenants embed a JSON-LD JobPosting whose `jobLocation` is a STRUCTURED address
-        # (city/region/country) -> return it so the merge fills the index row's NULL country. Not
-        # universal (some tenant templates carry no ld+json); those degrade to the bare-str body.
+        # (city/region/country) -> return it so the merge fills the index row's NULL country. The
+        # same block often ALSO carries `employmentType`/`baseSalary` (not universal -- some tenant
+        # templates carry no ld+json, or empty values on those keys); those degrade to the bare-str
+        # body/UNKNOWN/None exactly as before.
         locations: list[Location] = []
+        employment_type: EmploymentType | None = None
+        salary: Salary | None = None
         for job in self.extract_jsonld_jobs(html):
-            locations = self.jsonld_locations(job.get("jobLocation"))
-            if locations:
+            if not locations:
+                locations = self.jsonld_locations(job.get("jobLocation"))
+            if employment_type is None:
+                employment_type = _employment_from_jsonld(job.get("employmentType"))
+            if salary is None:
+                salary = _salary_from_jsonld(job.get("baseSalary"))
+            if locations and employment_type is not None and salary is not None:
                 break
-        return DetailFetch(text=text, locations=locations) if locations else text
+        if locations or employment_type is not None or salary is not None:
+            return DetailFetch(
+                text=text, salary=salary, locations=locations, employment_type=employment_type
+            )
+        return text
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
