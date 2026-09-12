@@ -34,6 +34,9 @@ on:
                            # host (the R1 disjoint-groups residual). Clear of embed (06:00)/drain (09:30).
   workflow_dispatch:
     inputs:
+      sr_confirm_rate:
+        description: "smartrecruiters per-posting CONFIRM req/s (--sr-confirm-rate), on a separate fetcher; the list relist stays at 3/s. Mirrors the drain's ERGON_SR_DETAIL_RATE (probed clean to 76/s)."
+        default: "40"
       deadline_minutes:
         description: "Per-shard wall-clock budget (--deadline-minutes). Under the 180-min job timeout so a slow shard still writes its sidecar; unswept boards stay undetermined."
         default: "150"
@@ -112,7 +115,8 @@ jobs:
             --out "dist/index-freshness-shard-${{ matrix.shard }}.sqlite" \
             --shard ${{ matrix.shard }} --num-shards ${{ env.NUM_SHARDS }} \
             --concurrency "${{ github.event.inputs.concurrency || '32' }}" \
-            --deadline-minutes "${{ github.event.inputs.deadline_minutes || '150' }}"
+            --deadline-minutes "${{ github.event.inputs.deadline_minutes || '150' }}" \
+            --sr-confirm-rate "${{ github.event.inputs.sr_confirm_rate || '40' }}"
 
       - name: Upload shard sidecar artifact
         # !cancelled() so a shard that FAILS mid-sweep still uploads whatever it wrote (the CLI

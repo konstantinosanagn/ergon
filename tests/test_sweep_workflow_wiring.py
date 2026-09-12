@@ -15,5 +15,5 @@ def test_sweep_step_has_a_deadline_under_the_job_timeout() -> None:
     inp = on["workflow_dispatch"]["inputs"]["deadline_minutes"]
     job = d["jobs"]["sweep"]
     step = next(s for s in job["steps"] if "scripts.freshness_sweep" in (s.get("run") or ""))
-    assert "--deadline-minutes" in step["run"]
+    assert "--deadline-minutes" in step["run"] and "--sr-confirm-rate" in step["run"]
     assert float(inp["default"]) < job["timeout-minutes"]

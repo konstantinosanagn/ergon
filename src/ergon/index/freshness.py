@@ -441,6 +441,12 @@ def _past(deadline: float | None) -> bool:
     return deadline is not None and time.monotonic() >= deadline
 
 
+def _daily_rotation(now_iso: str) -> Callable[[str], str]:
+    """A stable per-day ordering key: the same items in a different order each day."""
+    day = now_iso[:10]
+    return lambda key: hashlib.sha1(f"{day}|{key}".encode()).hexdigest()
+
+
 class _Progress:
     """Periodic progress line so a shard that stalls says where; totals summed over sources."""
 
@@ -719,6 +725,7 @@ async def sweep_search_index_boards(
     now: Callable[[], str],
     deadline: float | None = None,
     progress: _Progress | None = None,
+    confirm_fetcher: AsyncFetcher | None = None,
 ) -> dict[str, dict[str, int]]:
     """The Phase-1 sweep: for each ``(source, token)`` in ``boards`` whose ``source`` is in
     ``search_index_sources``, find CANDIDATE departures and confirm each one via the provider's
@@ -779,9 +786,12 @@ async def sweep_search_index_boards(
     limiter = anyio.CapacityLimiter(max(1, concurrency))
     now_s = now()
 
+    confirmer = confirm_fetcher or fetcher  # the detail endpoint may carry its own rate cap
+    rot = _daily_rotation(now_s)
+
     async def confirm_and_record(source: str, ref: DetailRef, job_id: str) -> None:
         async with limiter:
-            verdict = None if _past(deadline) else await confirm_departed(ref, fetcher)
+            verdict = None if _past(deadline) else await confirm_departed(ref, confirmer)
         async with write_lock:
             if verdict is None:
                 counts[source]["unconfirmed"] += 1
@@ -823,7 +833,8 @@ async def sweep_search_index_boards(
         async with write_lock:
             counts[source]["candidates"] += len(candidates)
         async with anyio.create_task_group() as tg:
-            for sid in candidates:
+            # A deadline cutoff must not starve the same ids every day: rotate the order.
+            for sid in sorted(candidates, key=rot):
                 row = by_sid[sid]
                 tg.start_soon(confirm_and_record, source, DetailRef.from_row(row), str(row["id"]))
 
@@ -849,7 +860,7 @@ async def sweep_search_index_boards(
                 tg.start_soon(confirm_and_record, source, DetailRef.from_row(row), str(row["id"]))
 
     async with anyio.create_task_group() as tg:
-        for source, token in target_boards:
+        for source, token in sorted(target_boards, key=lambda b: rot(f"{b[0]}|{b[1]}")):
             if source in bulk_relist_confirm_sources:
                 tg.start_soon(process_bulk_relist, source, token)
             elif source in per_posting_confirm_sources:
@@ -873,6 +884,7 @@ async def sweep_all_boards(
     board_deltas: dict[tuple[str, str], BoardDelta] | None = None,
     now: Callable[[], str],
     deadline: float | None = None,
+    confirm_fetcher: AsyncFetcher | None = None,
 ) -> dict[str, dict[str, int]]:
     """Compose a full sweep run: Phase-0 ``sweep_boards`` (deterministic, single-miss expiry) AND
     Phase-1 ``sweep_search_index_boards`` (candidate + per-posting confirm) over the SAME board
@@ -914,6 +926,7 @@ async def sweep_all_boards(
         now=now,
         deadline=deadline,
         progress=progress,
+        confirm_fetcher=confirm_fetcher,
     )
     return {**det_stats, **search_stats}
 
