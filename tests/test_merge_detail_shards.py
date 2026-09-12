@@ -5,6 +5,8 @@ for the drain workflow's `merge` job. Reuses `open_detail` for schema, no duplic
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from ergon.index.detail import open_detail
@@ -12,37 +14,44 @@ from ergon.index.detail import open_detail
 mds = pytest.importorskip("scripts.merge_detail_shards", reason="run from repo root")
 
 
+# The pre-v3 sidecar DDL (no remote/employment_type/level/sector), for the old-shard-artifact
+# tolerance test below. Frozen on purpose: it is what a shard uploaded by an older drain contains.
+_V2_SCHEMA = """
+CREATE TABLE IF NOT EXISTS job_detail (
+  id TEXT PRIMARY KEY,
+  sig TEXT,
+  fetched_at TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  snippet TEXT,
+  salary_min REAL, salary_max REAL, salary_currency TEXT, salary_interval TEXT,
+  years_min INTEGER, years_max INTEGER,
+  degree_min TEXT, degree_required INTEGER,
+  sponsorship_offered INTEGER,
+  city TEXT, country TEXT
+);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+"""
+
+
+def _insert_rows(con, rows):
+    """Insert `rows` (dicts keyed by column name) into whatever job_detail columns this db has."""
+    cols = [r[1] for r in con.execute("PRAGMA table_info(job_detail)")]
+    for row in rows:
+        unknown = set(row) - set(cols)
+        assert not unknown, f"test row sets non-existent column(s): {sorted(unknown)}"
+        values = dict.fromkeys(cols)
+        values["fetched_at"] = "2026-07-01T00:00:00Z"
+        values["attempts"] = 0
+        values.update(row)
+        placeholders = ", ".join(f":{c}" for c in cols)
+        con.execute(f"INSERT INTO job_detail ({', '.join(cols)}) VALUES ({placeholders})", values)
+
+
 def _mk_shard(tmp_path, name, rows, cursor=None):
     """rows: list of dicts with at least id, sig; other job_detail columns default to None."""
     p = tmp_path / name
     con = open_detail(str(p))
-    for row in rows:
-        defaults = {
-            "id": None,
-            "sig": None,
-            "fetched_at": "2026-07-01T00:00:00Z",
-            "attempts": 0,
-            "snippet": None,
-            "salary_min": None,
-            "salary_max": None,
-            "salary_currency": None,
-            "salary_interval": None,
-            "years_min": None,
-            "years_max": None,
-            "degree_min": None,
-            "degree_required": None,
-            "sponsorship_offered": None,
-        }
-        defaults.update(row)
-        con.execute(
-            "INSERT INTO job_detail (id, sig, fetched_at, attempts, snippet, salary_min, "
-            "salary_max, salary_currency, salary_interval, years_min, years_max, degree_min, "
-            "degree_required, sponsorship_offered) "
-            "VALUES (:id, :sig, :fetched_at, :attempts, :snippet, :salary_min, :salary_max, "
-            ":salary_currency, :salary_interval, :years_min, :years_max, :degree_min, "
-            ":degree_required, :sponsorship_offered)",
-            defaults,
-        )
+    _insert_rows(con, rows)
     if cursor is not None:
         con.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES('detail_cursor', ?)", (str(cursor),)
@@ -219,3 +228,157 @@ def test_partial_shard_set_with_base_preserves_missing_shard_rows(tmp_path):
         "A": "JD-A-new",
         "B": "JD-B",
     }  # A refreshed from the shard, B PRESERVED from base
+
+
+# --- v3 recovered metadata (remote/employment_type/level/sector) ----------------------------
+
+
+def _mk_v2_shard(tmp_path, name, rows):
+    """A shard artifact written by a PRE-v3 drain: job_detail has no remote/employment_type/
+    level/sector columns at all (and meta says schema_version 2)."""
+    p = tmp_path / name
+    con = sqlite3.connect(str(p))
+    con.executescript(_V2_SCHEMA)
+    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', '2')")
+    _insert_rows(con, rows)
+    con.commit()
+    con.close()
+    return p
+
+
+def test_shard_select_list_nulls_out_columns_an_old_shard_lacks():
+    columns = ("id", "snippet", "remote", "sector")
+    assert (
+        mds.shard_select_list(columns, {"id", "snippet"})
+        == "id, snippet, NULL AS remote, NULL AS sector"
+    )
+
+
+def test_merge_carries_v3_columns_and_tolerates_a_v2_shard(tmp_path):
+    """The four v3 columns must survive the combine (they were dropped by the old hardcoded
+    column list), and a shard artifact from a pre-v3 drain must still merge -- its missing
+    columns read as unknown rather than blowing up the SELECT."""
+    v3 = _mk_shard(
+        tmp_path,
+        "index-detail-shard-0.sqlite",
+        [
+            {
+                "id": "A",
+                "sig": "sA",
+                "snippet": "JD-A",
+                "remote": "hybrid",
+                "employment_type": "full_time",
+                "level": "senior",
+                "sector": "fintech",
+            }
+        ],
+    )
+    v2 = _mk_v2_shard(
+        tmp_path, "index-detail-shard-1.sqlite", [{"id": "B", "sig": "sB", "snippet": "JD-B"}]
+    )
+    out = tmp_path / "combined.sqlite"
+    stats = mds.merge_shards([v3, v2], out)
+    assert stats["_total"] == 2
+
+    con = open_detail(str(out))
+    got = {
+        r[0]: tuple(r[1:])
+        for r in con.execute(
+            "SELECT id, snippet, remote, employment_type, level, sector FROM job_detail"
+        )
+    }
+    con.close()
+    assert got["A"] == ("JD-A", "hybrid", "full_time", "senior", "fintech")
+    assert got["B"] == ("JD-B", None, None, None, None)  # v2 shard: unknown, not an error
+
+
+def test_known_metadata_is_not_clobbered_by_a_later_unknown(tmp_path):
+    """A re-fetch whose provider did not expose these fields this time must not blank out what an
+    earlier drain already recovered -- neither via NULL nor via the literal "unknown" sentinel."""
+    base = _mk_shard(
+        tmp_path,
+        "prior-full.sqlite",
+        [
+            {
+                "id": "X",
+                "sig": "sX",
+                "snippet": "JD-old",
+                "fetched_at": "2026-07-20T00:00:00Z",
+                "remote": "hybrid",
+                "employment_type": "contract",
+                "level": "senior",
+                "sector": "fintech",
+            }
+        ],
+    )
+    s0 = _mk_shard(
+        tmp_path,
+        "index-detail-shard-0.sqlite",
+        [
+            {
+                "id": "X",
+                "sig": "sX",
+                "snippet": "JD-new",
+                "fetched_at": "2026-07-26T00:00:00Z",
+                "remote": None,  # not recovered this time
+                "employment_type": "unknown",  # recovered as the UNKNOWN enum member
+                "level": None,
+                "sector": None,
+            }
+        ],
+    )
+    out = tmp_path / "combined.sqlite"
+    mds.merge_shards([s0], out, base_path=base)
+
+    con = open_detail(str(out))
+    row = con.execute(
+        "SELECT snippet, remote, employment_type, level, sector FROM job_detail WHERE id='X'"
+    ).fetchone()
+    con.close()
+    # snippet still refreshes (prefer-freshest row upsert); the metadata is preserved.
+    assert row == ("JD-new", "hybrid", "contract", "senior", "fintech")
+
+
+def test_unknown_metadata_is_filled_by_a_known_value(tmp_path):
+    """The other direction: a row carrying unknown/NULL metadata takes the freshly recovered value."""
+    base = _mk_shard(
+        tmp_path,
+        "prior-full.sqlite",
+        [
+            {
+                "id": "X",
+                "sig": "sX",
+                "snippet": "JD-old",
+                "fetched_at": "2026-07-20T00:00:00Z",
+                "remote": "unknown",
+                "employment_type": None,
+                "level": "unknown",
+                "sector": None,
+            }
+        ],
+    )
+    s0 = _mk_shard(
+        tmp_path,
+        "index-detail-shard-0.sqlite",
+        [
+            {
+                "id": "X",
+                "sig": "sX",
+                "snippet": "JD-new",
+                "fetched_at": "2026-07-26T00:00:00Z",
+                "remote": "remote",
+                "employment_type": "part_time",
+                "level": "mid",
+                "sector": "healthcare",
+            }
+        ],
+    )
+    out = tmp_path / "combined.sqlite"
+    mds.merge_shards([s0], out, base_path=base)
+
+    con = open_detail(str(out))
+    row = con.execute(
+        "SELECT remote, employment_type, level, sector FROM job_detail WHERE id='X'"
+    ).fetchone()
+    con.close()
+    assert row == ("remote", "part_time", "mid", "healthcare")

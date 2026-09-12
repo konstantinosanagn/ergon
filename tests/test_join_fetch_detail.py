@@ -20,6 +20,7 @@ import pytest
 
 from ergon.http import AsyncFetcher
 from ergon.index.detail import DetailRef
+from ergon.models import DetailFetch, JobLevel
 from ergon.providers.base import BaseProvider
 from ergon.providers.join import JoinProvider
 
@@ -274,3 +275,55 @@ def test_base_fetch_detail_is_none() -> None:
     ref = _make_ref(None, None)
     desc = anyio.run(lambda: BaseProvider().fetch_detail(ref, _FakeFetcher(None)))
     assert desc is None
+
+
+# --- career level on the DetailFetch return ----------------------------------------------------
+#
+# join's `function` (a seniority rung, not a job function) rides ONLY on the per-job detail blob —
+# the careers-page list projection omits it — so fetch_detail is the only place it can be read.
+
+
+def test_join_fetch_detail_returns_level_on_detailfetch() -> None:
+    html = _next_data_html(
+        '{"schemaDescription":"<p>JD...</p>",'
+        '"function":{"id":3,"name":"Berufserfahren","slug":"experienced"}}'
+    )
+    res = anyio.run(lambda: JoinProvider().fetch_detail(_make_ref(_APPLY_URL), _FakeFetcher(html)))
+    assert isinstance(res, DetailFetch)
+    assert res.text == "<p>JD...</p>"
+    assert res.level is JobLevel.MID
+
+
+def test_join_fetch_detail_level_rides_with_description_fallback() -> None:
+    # The schemaDescription-empty path keeps the same structured return.
+    html = _next_data_html(
+        '{"schemaDescription":"","description":"Plain markdown JD text",'
+        '"function":{"name":"Berufseinsteiger"}}'
+    )
+    res = anyio.run(lambda: JoinProvider().fetch_detail(_make_ref(_APPLY_URL), _FakeFetcher(html)))
+    assert isinstance(res, DetailFetch)
+    assert res.text == "Plain markdown JD text"
+    assert res.level is JobLevel.ENTRY
+
+
+def test_join_fetch_detail_unmapped_function_yields_plain_str() -> None:
+    # Unknown/absent `function` -> unchanged pre-existing behavior (a bare str, not a DetailFetch).
+    for job_json in (
+        '{"schemaDescription":"<p>JD...</p>","function":{"name":"Zeitreisender"}}',
+        '{"schemaDescription":"<p>JD...</p>","function":null}',
+        '{"schemaDescription":"<p>JD...</p>"}',
+    ):
+        res = anyio.run(
+            lambda j=job_json: JoinProvider().fetch_detail(
+                _make_ref(_APPLY_URL), _FakeFetcher(_next_data_html(j))
+            )
+        )
+        assert res == "<p>JD...</p>"
+
+
+def test_join_fetch_detail_no_jd_text_still_raises_even_with_function() -> None:
+    # A recovered level must never substitute for a missing JD body — the 200-with-no-text case
+    # stays indeterminate (returning it would let an empty detail row expire a live posting).
+    html = _next_data_html('{"schemaDescription":"","function":{"slug":"experienced"}}')
+    with pytest.raises(_INDETERMINATE):
+        anyio.run(lambda: JoinProvider().fetch_detail(_make_ref(_APPLY_URL), _FakeFetcher(html)))

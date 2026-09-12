@@ -11,6 +11,7 @@ from ergon.index.detail import (
     open_detail,
     reconcile_detail_tier,
 )
+from ergon.models import EmploymentType, JobPosting, RemoteType
 
 
 def test_schema_and_sig():
@@ -32,6 +33,12 @@ def test_schema_and_sig():
         "degree_min",
         "degree_required",
         "sponsorship_offered",
+        "city",
+        "country",
+        "remote",
+        "employment_type",
+        "level",
+        "sector",
     } <= cols
     # sig is stable + independent of the (to-be-fetched) description
     s1 = detail_sig({"content_hash": "abc", "title": "Eng", "level": "senior"})
@@ -233,15 +240,19 @@ def _mk_detail_sidecar(tmp_path, rows):
             "degree_min": None,
             "degree_required": None,
             "sponsorship_offered": None,
+            "remote": None,
+            "employment_type": None,
+            "level": None,
+            "sector": None,
         }
         defaults.update(row)
         con.execute(
             "INSERT INTO job_detail (id, sig, fetched_at, attempts, snippet, salary_min, "
             "salary_max, salary_currency, salary_interval, years_min, years_max, degree_min, "
-            "degree_required, sponsorship_offered) "
+            "degree_required, sponsorship_offered, remote, employment_type, level, sector) "
             "VALUES (:id, :sig, :fetched_at, :attempts, :snippet, :salary_min, :salary_max, "
             ":salary_currency, :salary_interval, :years_min, :years_max, :degree_min, "
-            ":degree_required, :sponsorship_offered)",
+            ":degree_required, :sponsorship_offered, :remote, :employment_type, :level, :sector)",
             defaults,
         )
     con.commit()
@@ -418,6 +429,213 @@ def test_merge_is_per_row_atomic_check_violation_does_not_discard_good_merges(tm
     assert persisted == (60000.0, 80000.0)
 
 
+# --- remote/employment_type/level/sector merge (unknown-sentinel columns) -----------------------
+
+
+def test_merge_fills_unknown_remote_employment_level_sector_from_sidecar(tmp_path):
+    good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "mid"})
+    idx = _mk_real_index(
+        tmp_path,
+        [
+            # remote/employment_type explicitly UNKNOWN; level a real known value (left as-is);
+            # sector NULL (its own "not yet known" state).
+            {
+                "id": "1",
+                "content_hash": "h1",
+                "title": "Engineer",
+                "remote": "unknown",
+                "employment_type": "unknown",
+            },
+        ],
+    )
+    det = _mk_detail_sidecar(
+        tmp_path,
+        [
+            {
+                "id": "1",
+                "sig": good_sig,
+                "remote": "hybrid",
+                "employment_type": "contract",
+                "level": "senior",
+                "sector": "fintech",
+            },
+        ],
+    )
+    n = merge_detail_into_index(idx, det)
+    assert n == 1
+    row = idx.execute(
+        "SELECT remote, employment_type, level, sector FROM jobs WHERE id='1'"
+    ).fetchone()
+    assert row[0] == "hybrid"  # unknown -> filled
+    assert row[1] == "contract"  # unknown -> filled
+    assert row[2] == "mid"  # already a KNOWN level -- never clobbered by the sidecar's "senior"
+    assert row[3] == "fintech"  # NULL -> filled
+
+
+def test_merge_never_overwrites_known_remote_or_employment_type(tmp_path):
+    good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "mid"})
+    idx = _mk_real_index(
+        tmp_path,
+        [
+            {
+                "id": "1",
+                "content_hash": "h1",
+                "title": "Engineer",
+                "remote": "onsite",
+                "employment_type": "unknown",
+            },
+        ],
+    )
+    det = _mk_detail_sidecar(
+        tmp_path,
+        [{"id": "1", "sig": good_sig, "remote": "remote", "employment_type": "full_time"}],
+    )
+    n = merge_detail_into_index(idx, det)
+    assert n == 1  # employment_type still filled (was 'unknown')
+    row = idx.execute("SELECT remote, employment_type FROM jobs WHERE id='1'").fetchone()
+    assert row[0] == "onsite"  # KNOWN value preserved, not clobbered by the sidecar's 'remote'
+    assert row[1] == "full_time"  # unknown -> filled
+
+
+def test_merge_skips_sidecar_unknown_remote_value(tmp_path):
+    # A sidecar row that itself never recovered remote (NULL, e.g. _record_success's own
+    # "unknown -> None" guard) must leave the index's own 'unknown' sentinel untouched -- and not
+    # count as a change on its own.
+    good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "mid"})
+    idx = _mk_real_index(
+        tmp_path,
+        [{"id": "1", "content_hash": "h1", "title": "Engineer"}],
+    )
+    det = _mk_detail_sidecar(tmp_path, [{"id": "1", "sig": good_sig, "salary_min": 1.0}])
+    n = merge_detail_into_index(idx, det)
+    assert n == 1  # salary_min was filled
+    row = idx.execute("SELECT remote FROM jobs WHERE id='1'").fetchone()
+    assert row[0] == "unknown"  # nothing to add -- left at the crawl default
+
+
+def test_record_success_only_persists_known_enum_values(tmp_path):
+    from ergon.index.detail import _record_success
+
+    con = open_detail(str(tmp_path / "d.sqlite"))
+    job = JobPosting.create(
+        source="oracle",
+        source_job_id="1",
+        company="",
+        title="",
+        description_html="<p>JD</p>",
+    )
+    _record_success(con, _ref("1", "sig"), job, "snippet", "2026-07-01T00:00:00Z")
+    con.commit()
+    row = con.execute(
+        "SELECT remote, employment_type, level, sector FROM job_detail WHERE id='1'"
+    ).fetchone()
+    assert row == (None, None, None, None)  # all UNKNOWN/None -> nothing persisted
+    con.close()
+
+
+def test_reconcile_seeds_remote_and_employment_type_from_detailfetch(tmp_path):
+    # A provider's DetailFetch(remote=..., employment_type=...) must reach the sidecar (seeded onto
+    # the synthetic JobPosting before enrich, which then never overwrites it) and, via the merge,
+    # the index row.
+    from ergon.models import DetailFetch
+
+    idx = _mk_index(tmp_path, [("1", "workday", "http://x/1", "h1", None)])
+    det = str(tmp_path / "detail.sqlite")
+
+    async def fake(ref):
+        return DetailFetch(
+            text="<p>Great role.</p>",
+            remote=RemoteType.HYBRID,
+            employment_type=EmploymentType.PART_TIME,
+        )
+
+    anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
+    con = open_detail(det)
+    row = con.execute("SELECT remote, employment_type FROM job_detail WHERE id='1'").fetchone()
+    assert row == ("hybrid", "part_time")
+    con.close()
+
+
+def test_reconcile_seeds_level_and_degree_min_from_detailfetch(tmp_path):
+    # join's career level and jobvite's schema.org education value live ONLY on the detail blob;
+    # DetailFetch(level=, degree_min=) is their only route to the sidecar. Seeded before enrich,
+    # so the title/text extractors never overwrite them.
+    from ergon.models import DetailFetch, JobLevel
+
+    idx = _mk_index(tmp_path, [("1", "join", "http://x/1", "h1", None)])
+    det = str(tmp_path / "detail.sqlite")
+
+    async def fake(ref):
+        # The body alone would extract entry/associate -- the STRUCTURED values must still win.
+        return DetailFetch(
+            text="<p>An entry-level role for new grads. Requires an Associate degree.</p>",
+            level=JobLevel.MANAGER,
+            degree_min="master",
+        )
+
+    anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
+    con = open_detail(det)
+    row = con.execute("SELECT level, degree_min FROM job_detail WHERE id='1'").fetchone()
+    assert row == ("manager", "master")
+    con.close()
+
+
+def test_reconcile_falls_back_to_text_extraction_without_structured_level_or_degree(tmp_path):
+    # The bare-str contract is unchanged: no DetailFetch -> the text extractors still fill both.
+    idx = _mk_index(tmp_path, [("1", "join", "http://x/1", "h1", None)])
+    det = str(tmp_path / "detail.sqlite")
+
+    async def fake(ref):
+        # The reconcile's synthetic posting has no title, so level comes from the JD's own
+        # early-career phrase (level_from_description) -- the only prose signal it trusts.
+        return "<p>An entry-level role for new grads. Requires a Master's degree.</p>"
+
+    anyio.run(lambda: reconcile_detail_tier(det, idx, fetch_detail=fake, now=lambda: "t"))
+    con = open_detail(det)
+    row = con.execute("SELECT level, degree_min FROM job_detail WHERE id='1'").fetchone()
+    assert row == ("entry", "master")
+    con.close()
+
+
+def test_merge_fills_unknown_level_and_null_degree_min_from_detailfetch_values(tmp_path):
+    # The sidecar columns these land in are already merged: `level` via the 'unknown' sentinel,
+    # `degree_min` via the plain NULL check.
+    good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "unknown"})
+    idx = _mk_real_index(
+        tmp_path,
+        [{"id": "1", "content_hash": "h1", "title": "Engineer", "level": "unknown"}],
+    )
+    det = _mk_detail_sidecar(
+        tmp_path, [{"id": "1", "sig": good_sig, "level": "manager", "degree_min": "master"}]
+    )
+    assert merge_detail_into_index(idx, det) == 1
+    row = idx.execute("SELECT level, degree_min FROM jobs WHERE id='1'").fetchone()
+    assert row == ("manager", "master")
+
+
+def test_merge_never_clobbers_known_level_or_degree_min(tmp_path):
+    # A list-crawl value on either column is authoritative -- the detail tier only ever FILLS.
+    good_sig = detail_sig({"content_hash": "h1", "title": "Engineer", "level": "senior"})
+    idx = _mk_real_index(
+        tmp_path,
+        [
+            {
+                "id": "1",
+                "content_hash": "h1",
+                "title": "Engineer",
+                "level": "senior",
+                "degree_min": "bachelor",
+            }
+        ],
+    )
+    det = _mk_detail_sidecar(
+        tmp_path, [{"id": "1", "sig": good_sig, "level": "intern", "degree_min": "phd_md"}]
+    )
+    merge_detail_into_index(idx, det)
+    row = idx.execute("SELECT level, degree_min FROM jobs WHERE id='1'").fetchone()
+    assert row == ("senior", "bachelor")
+
+
 def test_reconcile_prefers_structured_detailfetch_salary_over_body(tmp_path):
     # A provider that returns DetailFetch(text, salary) must have its STRUCTURED salary persisted,
     # even when the text body carries a DIFFERENT parseable figure -- the structured range wins
@@ -479,7 +697,9 @@ def test_reconcile_recovers_structured_location_and_merges_country(tmp_path):
         "listing_url TEXT, content_hash TEXT, title TEXT, level TEXT, snippet TEXT, "
         "salary_min REAL, salary_max REAL, salary_currency TEXT, salary_interval TEXT, "
         "years_min INTEGER, years_max INTEGER, degree_min TEXT, degree_required INTEGER, "
-        "sponsorship_offered INTEGER, city TEXT, country TEXT, location TEXT, status TEXT DEFAULT 'active')"
+        "sponsorship_offered INTEGER, city TEXT, country TEXT, location TEXT, "
+        "remote TEXT DEFAULT 'unknown', employment_type TEXT DEFAULT 'unknown', sector TEXT, "
+        "status TEXT DEFAULT 'active')"
     )
     c.execute(
         "INSERT INTO jobs (id,source,apply_url,content_hash,title,level,snippet,location) "
@@ -533,6 +753,29 @@ def test_ensure_detail_schema_migrates_v1_sidecar_adds_city_country(tmp_path):
     cols = {r[1] for r in c.execute("PRAGMA table_info(job_detail)")}
     assert "city" in cols and "country" in cols
     assert c.execute("SELECT snippet FROM job_detail WHERE id='a'").fetchone()[0] == "kept"
+    c.close()
+
+
+def test_ensure_detail_schema_migrates_v2_sidecar_adds_remote_columns(tmp_path):
+    # A pre-existing v2 sidecar (has city/country, but not remote/employment_type/level/sector)
+    # must gain the new columns without data loss.
+    import sqlite3
+
+    from ergon.index.detail import ensure_detail_schema
+
+    p = tmp_path / "old_v2.sqlite"
+    c = sqlite3.connect(p)
+    c.execute(
+        "CREATE TABLE job_detail (id TEXT PRIMARY KEY, sig TEXT, fetched_at TEXT, "
+        "attempts INTEGER, snippet TEXT, salary_min REAL, city TEXT, country TEXT)"
+    )
+    c.execute("INSERT INTO job_detail (id, snippet, city) VALUES ('a', 'kept', 'Boston')")
+    c.commit()
+    ensure_detail_schema(c)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(job_detail)")}
+    assert {"remote", "employment_type", "level", "sector"} <= cols
+    row = c.execute("SELECT snippet, city FROM job_detail WHERE id='a'").fetchone()
+    assert row == ("kept", "Boston")
     c.close()
 
 

@@ -14,7 +14,7 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.models import EmploymentType, JobLevel, RemoteType, SearchQuery, make_job_id
 from ergon.providers.recruitee import RecruiteeProvider
 
 pytestmark = pytest.mark.anyio
@@ -87,6 +87,10 @@ async def test_normalize_maps_every_field() -> None:
     assert job.salary is not None
     assert job.salary.min_amount == 5253.0 and job.salary.max_amount == 6152.0
     assert job.salary.currency == "EUR"
+    # experience_code "mid_level" -> JobLevel.MID via level_from_ats_vocab
+    assert job.level is JobLevel.MID
+    # education_code "vocational" has no reliable degree_min mapping -> None
+    assert job.degree_min is None
 
     assert job.posted_at is not None and job.posted_at.tzinfo is not None
     assert (job.posted_at.year, job.posted_at.month, job.posted_at.day) == (2026, 6, 8)
@@ -108,6 +112,9 @@ async def test_normalize_second_offer_employment_permanent() -> None:
     # "fulltime_permanent" -> FULL_TIME
     assert job.employment_type is EmploymentType.FULL_TIME
     assert job.locations[0].city == "Utrecht"
+    # experience_code "senior_level" -> SENIOR; education_code "bachelor_degree" -> "bachelor"
+    assert job.level is JobLevel.SENIOR
+    assert job.degree_min == "bachelor"
 
 
 async def test_fetch_empty_or_missing_offers() -> None:
@@ -138,3 +145,6 @@ def test_normalize_apply_url_falls_back_to_careers_url() -> None:
     assert job.remote is RemoteType.REMOTE
     assert job.locations and job.locations[0].is_remote is True
     assert job.employment_type is EmploymentType.UNKNOWN
+    # no experience_code/education_code in payload -> UNKNOWN/None, never raise
+    assert job.level is JobLevel.UNKNOWN
+    assert job.degree_min is None

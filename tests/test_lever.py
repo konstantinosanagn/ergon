@@ -12,6 +12,7 @@ import respx
 from ergon.http import AsyncFetcher
 from ergon.models import (
     EmploymentType,
+    JobLevel,
     RemoteType,
     SalaryInterval,
     SearchQuery,
@@ -101,13 +102,30 @@ async def test_normalize_maps_every_field() -> None:
     assert job.raw == raws[0].payload
 
 
-async def test_normalize_without_salary() -> None:
+async def test_normalize_falls_back_to_salary_description_text() -> None:
+    # job 2 has no salaryRange, but does carry salaryDescriptionPlain -- the repo's text salary
+    # parser recovers it rather than leaving salary empty (was: job.salary is None).
     with respx.mock:
         respx.get(POSTINGS_URL).mock(return_value=httpx.Response(200, json=_fixture()))
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await LeverProvider().fetch("spotify", SearchQuery(), f)
 
     job = LeverProvider().normalize(raws[1])
-    assert job.salary is None
+    assert job.salary is not None
+    assert job.salary.min_amount == 70_000
+    assert job.salary.max_amount == 90_000
+    assert job.salary.currency == "GBP"
+    assert job.salary.interval is SalaryInterval.YEAR
     assert job.remote is RemoteType.HYBRID
     assert job.department == "Advertising"
+    assert job.level is JobLevel.SENIOR  # categories.level == "Senior"
+
+
+async def test_normalize_level_unknown_when_categories_level_absent() -> None:
+    with respx.mock:
+        respx.get(POSTINGS_URL).mock(return_value=httpx.Response(200, json=_fixture()))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await LeverProvider().fetch("spotify", SearchQuery(), f)
+
+    job = LeverProvider().normalize(raws[0])  # no categories.level in this fixture entry
+    assert job.level is JobLevel.UNKNOWN

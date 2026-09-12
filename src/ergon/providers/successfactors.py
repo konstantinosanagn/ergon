@@ -28,8 +28,9 @@ segment on every search/job URL. A bare ``"{host}"`` token is also accepted: we 
 discover ``siteid`` from the site's landing page.
 
 The search row exposes only title + location (no posting date, department, salary, or
-description), so those normalize to ``None`` here — never invented. Posting dates live
-on the per-job detail page, which we don't fetch in bulk.
+description), so those normalize to ``None`` here — never invented. The posting date is
+recoverable from the RSS feed's ``<pubDate>`` (see below) and, for the rest, from the per-job
+detail page's ``<meta itemprop="datePosted">``, which we don't fetch in bulk.
 
 JD augmenter (RSS)
 ------------------
@@ -46,13 +47,19 @@ join is unreliable while the 9-10 digit SF id is the module's decisive, exact si
 Every non-top-20 posting is left JD-empty for the drain to backfill; a missing/4xx/timed-out feed
 is non-fatal (falls back to today's no-JD behaviour). SuccessFactors therefore STAYS in the
 Tier-3 drain for the backlog — this only front-loads the newest slice at crawl time.
+
+The same ``<item>`` also carries a standard RSS ``<pubDate>`` (verified live on
+aramarkcareers.com: ``Sat, 12 Sep 2026 7:00:00 GMT``), so the augmenter folds the posting date in
+alongside the JD — the only date reachable without a per-job detail fetch.
 """
 
 from __future__ import annotations
 
 import html as _html
 import re
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -85,6 +92,9 @@ _RSS_LINK = re.compile(r"<link>(?:<!\[CDATA\[)?\s*(.*?)\s*(?:\]\]>)?</link>", re
 _RSS_DESC = re.compile(
     r"<description>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</description>", re.S | re.I
 )
+# Standard RSS <pubDate> — SuccessFactors emits the posting date here (verified live on
+# aramarkcareers.com: "Sat, 12 Sep 2026 7:00:00 GMT"; note the un-padded hour).
+_RSS_PUBDATE = re.compile(r"<pubDate>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</pubDate>", re.S | re.I)
 _RSS_JOBID = re.compile(r"/job/[^/]*?/(\d{6,})/?", re.I)
 _RSS_LOC = re.compile(r"\(([^()]+)\)\s*$")  # trailing "(City, ST, Country)" in the RSS title
 # A SuccessFactors job URL: /{siteid}/job/{slug}/{numericId}/ — the LONG numeric id (SF ids are
@@ -204,41 +214,57 @@ class SuccessFactorsProvider(BaseProvider):
                 break  # deep-pagination soft-cap returning dupes -> stop
 
         if raws and not root:
-            # AUGMENTER: fold the newest ~20 postings' full JD in from the RSS feed (one extra call
-            # per board). Non-fatal — a missing/failed feed just leaves JD empty for the drain.
-            jd_map = await self._rss_jd_map(host, siteid, fetcher)
+            # AUGMENTER: fold the newest ~20 postings' full JD + posting date in from the RSS feed
+            # (one extra call per board). Non-fatal — a missing/failed feed just leaves JD empty
+            # for the drain.
+            rss_map = await self._rss_map(host, siteid, fetcher)
             for raw in raws:
-                jd = jd_map.get(raw.source_job_id)
-                if jd:
-                    raw.payload["description_html"] = jd
+                raw.payload.update(rss_map.get(raw.source_job_id) or {})
 
         if not raws and not root:
             # Classic RMK site (no path-based CSB search) -> try the RSS job feed.
             raws = await self._fetch_rss(host, siteid, limit, fetcher)
         return raws
 
-    async def _rss_jd_map(self, host: str, siteid: str, fetcher: AsyncFetcher) -> dict[str, str]:
-        """One RSS feed call -> ``{numeric_job_id: full JD HTML}`` for the newest ~20 postings.
+    async def _rss_map(
+        self, host: str, siteid: str, fetcher: AsyncFetcher
+    ) -> dict[str, dict[str, str]]:
+        """One RSS feed call -> ``{numeric_job_id: {description_html, posted_at}}`` for the newest
+        ~20 postings.
 
         Keyed on the SF numeric job id (``_RSS_JOBID`` off the feed ``<link>``), which equals a
         row's ``source_job_id`` — the reliable join (see module docstring on why raw-URL equality
-        is not). Non-fatal on any feed failure (4xx/timeout/empty) -> returns ``{}`` so the board
-        falls back to today's no-JD behaviour and the drain backfills the JD."""
+        is not). The same ``<item>`` carries the standard RSS ``<pubDate>``, which is the ONLY
+        posting date reachable without a per-job detail fetch. Non-fatal on any feed failure
+        (4xx/timeout/empty) -> returns ``{}`` so the board falls back to today's behaviour."""
         try:
             text = await fetcher.get_text(_RSS.format(host=host, siteid=siteid))
         except Exception:
             return {}
-        out: dict[str, str] = {}
+        out: dict[str, dict[str, str]] = {}
         for block in _RSS_ITEM.findall(text):
             link_m = _RSS_LINK.search(block)
             href = _unescape_url(link_m.group(1).strip() if link_m else "")
             id_m = _RSS_JOBID.search(href)
             if not id_m:
                 continue
-            jd = self._rss_description(block)
-            if jd:
-                out.setdefault(id_m.group(1), jd)
+            fields = self._rss_fields(block)
+            if fields:
+                out.setdefault(id_m.group(1), fields)
         return out
+
+    @classmethod
+    def _rss_fields(cls, block: str) -> dict[str, str]:
+        """The payload keys one ``<item>`` can fill: the inline JD and the ``<pubDate>``."""
+        fields: dict[str, str] = {}
+        jd = cls._rss_description(block)
+        if jd:
+            fields["description_html"] = jd
+        pub_m = _RSS_PUBDATE.search(block)
+        pub = (pub_m.group(1).strip() if pub_m else "") or ""
+        if pub:
+            fields["posted_at"] = pub
+        return fields
 
     @staticmethod
     def _rss_description(block: str) -> str | None:
@@ -289,10 +315,8 @@ class SuccessFactorsProvider(BaseProvider):
                 "url": href,
                 "id": jid,
             }
-            # Same feed carries the full JD inline — fold it in here for free (no extra call).
-            jd = self._rss_description(block)
-            if jd:
-                payload["description_html"] = jd
+            # Same feed carries the full JD inline and the posting date — both free (no extra call).
+            payload.update(self._rss_fields(block))
             out.append(
                 RawJob(
                     source=self.name,
@@ -441,6 +465,23 @@ class SuccessFactorsProvider(BaseProvider):
         return [Location(raw=street)] if street else []
 
     @staticmethod
+    def _date(raw: Any) -> datetime | None:
+        """RSS ``<pubDate>`` -> datetime. RFC-822 ("Sat, 12 Sep 2026 7:00:00 GMT") is the shape SF
+        emits; ISO-8601 is accepted too. Anything unparseable -> None, never a guess."""
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        text = raw.strip()
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+        try:
+            return parsedate_to_datetime(text)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
     def _to_text(html: str | None) -> str | None:
         """Flatten JD HTML to plain text (mirrors greenhouse/workable ``_to_text``)."""
         if not html:
@@ -475,7 +516,10 @@ class SuccessFactorsProvider(BaseProvider):
             remote=remote,
             department=None,
             salary=None,  # not exposed on the search row
-            posted_at=None,  # lives on the per-job detail page, not fetched in bulk
+            # HTML search rows carry no date; the RSS augmenter supplies one for the newest ~20
+            # (and for every row on a classic-RMK board). The rest stay undated -- the per-job
+            # detail page's <meta itemprop="datePosted"> is not fetched in bulk.
+            posted_at=self._date(p.get("posted_at")),
             updated_at=None,
             description_html=description_html,
             description_text=description_text,

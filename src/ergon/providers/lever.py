@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from ..extract.comp import parse_salary
+from ..extract.level import level_from_ats_vocab
 from ..models import (
     DetailFetch,
     EmploymentType,
@@ -271,7 +273,9 @@ class LeverProvider(BaseProvider):
             remote=remote,
             employment_type=employment_type,
             department=department,
-            salary=self._salary(p.get("salaryRange")),
+            level=level_from_ats_vocab(categories.get("level")),
+            salary=self._salary(p.get("salaryRange"))
+            or parse_salary(p.get("salaryDescriptionPlain") or p.get("salaryDescription")),
             posted_at=self._posted_at(p.get("createdAt")),
             description_html=p.get("description"),
             description_text=p.get("descriptionPlain"),

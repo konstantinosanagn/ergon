@@ -18,7 +18,12 @@ URL = f"https://careerapi.ceipal.com/{AK}/CareerPortalJobPostings/"
 
 
 def _job(
-    jid: int, title: str, state: str, country: str = "United States", remote: str = "2"
+    jid: int,
+    title: str,
+    state: str,
+    country: str = "United States",
+    remote: str = "2",
+    created: str = "2026-06-08 09:42:35",
 ) -> dict:
     return {
         "job_id": jid,
@@ -31,6 +36,7 @@ def _job(
         "job_code": f"JPC-{jid}",
         "client": "Acme Staffing",
         "remote_opportunities": remote,
+        "created": created,
     }
 
 
@@ -85,8 +91,37 @@ async def test_fetch_paginates_and_normalizes() -> None:
     assert j0.title == "Security Engineer"
     assert j0.locations[0].raw == "District of Columbia, United States"
     assert "/job/1" in j0.apply_url
+    assert j0.posted_at is not None
+    assert (j0.posted_at.year, j0.posted_at.month, j0.posted_at.day) == (2026, 6, 8)
     jr = CeipalProvider().normalize(raws[2])
     assert jr.remote.value == "remote"  # remote_opportunities == "1"
+
+
+def test_normalize_posted_at_handles_iso_and_date_only_and_missing() -> None:
+    iso = CeipalProvider().normalize(_raw(_job(1, "Role", "Texas", created="2026-06-08T09:42:35Z")))
+    assert iso.posted_at is not None and iso.posted_at.year == 2026
+
+    date_only = CeipalProvider().normalize(_raw(_job(2, "Role", "Texas", created="2026-06-08")))
+    assert date_only.posted_at is not None and date_only.posted_at.day == 8
+
+    missing = CeipalProvider().normalize(_raw(_job(3, "Role", "Texas", created="")))
+    assert missing.posted_at is None
+
+    garbage = CeipalProvider().normalize(_raw(_job(4, "Role", "Texas", created="not-a-date")))
+    assert garbage.posted_at is None
+
+
+def _raw(payload: dict):
+    from ergon.models import RawJob
+
+    return RawJob(
+        source="ceipal",
+        source_job_id=str(payload["job_id"]),
+        company=str(payload.get("client") or ""),
+        token=f"{AK}|{CP}",
+        url=f"https://talenthire.ceipal.com/job/{payload['job_id']}",
+        payload=payload,
+    )
 
 
 async def test_fetch_respects_limit() -> None:

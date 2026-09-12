@@ -7,21 +7,30 @@ auto-detect), dedup + limit, and normalize's multi-value collapse / epoch-millis
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import httpx
 import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import RawJob, RemoteType, SearchQuery, make_job_id
+from ergon.models import (
+    EmploymentType,
+    JobLevel,
+    RawJob,
+    RemoteType,
+    SearchQuery,
+    make_job_id,
+)
 from ergon.providers.coveo import CoveoProvider
 
 pytestmark = pytest.mark.anyio
 
 SEARCH_URL = "https://careers.slb.com/coveo/rest/search/v2"
 
-# Two job results. #0 exercises multi-value (list) city/country + epoch-millis date; #1 exercises
-# scalar fields, a "Remote" label, and an ISO date string. 2026-01-01T00:00:00Z == 1767225600 s.
+# Three job results, keyed like the live careers.slb.com index. #0 exercises multi-value (list)
+# city/country + epoch-millis dates; #1 exercises scalar fields, a "Remote" label and an ISO date
+# string; #2 exercises the tenant's jobexperiencelevel facet. 2026-01-01T00:00:00Z == 1767225600 s.
 RESULTS = [
     {
         "title": "Reservoir Engineer",
@@ -34,6 +43,8 @@ RESULTS = [
             "category": "Engineering",
             "description": "<p>Drill wells.</p>",
             "date": 1767225600000,
+            "jobposteddate": 1764731100000,  # 2025-12-03: the POSTING date, not the index date
+            "jobexperiencelevel": ["Experienced Professional"],
         },
     },
     {
@@ -45,6 +56,20 @@ RESULTS = [
             "city": "Remote",
             "country": "United States",
             "date": "2026-05-30T00:00:00Z",
+        },
+    },
+    {
+        # An intern row, with the tenant's own multi-value jobexperiencelevel facet.
+        "title": "Field Engineer Intern",
+        "clickUri": "https://careers.slb.com/job/3",
+        "uniqueId": "u3",
+        "raw": {
+            "permanentid": "p3",
+            "city": ["Multi-Location"],
+            "country": ["Indonesia"],
+            "category": ["Operations (Engineers, Geoscience, Specialists, Operators)"],
+            "date": 1789228435000,
+            "jobexperiencelevel": ["Intern"],
         },
     },
 ]
@@ -74,7 +99,7 @@ async def test_fetch_builds_rawjobs_and_filters_by_source() -> None:
 
     body = json.loads(route.calls[0].request.content)
     assert body["aq"] == '@source=="ATS_Jobs"'  # named source used, no auto-detect probe
-    assert [r.source_job_id for r in raws] == ["p1", "p2"]
+    assert [r.source_job_id for r in raws] == ["p1", "p2", "p3"]
     assert raws[0].source == "coveo" and raws[0].company == "slb"  # host label -> company
     assert raws[0].url == "https://careers.slb.com/job/1"
     assert raws[0].payload["_title"] == "Reservoir Engineer"
@@ -122,7 +147,8 @@ def test_normalize_collapses_multivalue_and_epoch_date() -> None:
     assert job.department == "Engineering"
     assert job.description_html == "<p>Drill wells.</p>"
     assert job.remote == RemoteType.UNKNOWN
-    assert job.posted_at is not None and job.posted_at.year == 2026  # epoch millis -> datetime
+    # epoch millis -> datetime; jobposteddate (the posting's own date) now wins over "date".
+    assert job.posted_at is not None and job.posted_at.year == 2025
 
 
 def test_normalize_detects_remote_and_iso_date() -> None:
@@ -130,6 +156,33 @@ def test_normalize_detects_remote_and_iso_date() -> None:
     assert job.locations[0].raw == "Remote, United States"
     assert job.remote == RemoteType.REMOTE  # "remote" in the label
     assert job.posted_at is not None and job.posted_at.year == 2026  # ISO string parsed
+
+
+def test_normalize_maps_experience_level_and_posted_date() -> None:
+    job = _normalize(RESULTS[0])
+    assert job.level is JobLevel.MID  # "Experienced Professional"
+    assert job.employment_type is EmploymentType.UNKNOWN  # that rung states no employment type
+    # jobposteddate wins over "date", which is when Coveo last INDEXED the page.
+    assert job.posted_at == datetime(2025, 12, 3, 3, 5)
+
+
+def test_normalize_intern_level_also_gives_employment_type() -> None:
+    job = _normalize(RESULTS[2])
+    assert job.level is JobLevel.INTERN
+    assert job.employment_type is EmploymentType.INTERNSHIP
+    assert job.department == "Operations (Engineers, Geoscience, Specialists, Operators)"
+
+
+def test_normalize_unknown_or_missing_experience_level() -> None:
+    assert _normalize(RESULTS[1]).level is JobLevel.UNKNOWN  # field absent (other tenants)
+    unknown = {
+        "clickUri": "https://careers.slb.com/job/9",
+        "title": "Chief Vibes Officer",
+        "raw": {"permanentid": "p9", "jobexperiencelevel": ["Vibes Track"]},
+    }
+    job = _normalize(unknown)
+    assert job.level is JobLevel.UNKNOWN  # unrecognised value -> UNKNOWN, never raises
+    assert job.employment_type is EmploymentType.UNKNOWN
 
 
 def test_scalar_and_date_helpers() -> None:

@@ -23,6 +23,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..extract.comp import parse_salary
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -50,6 +51,17 @@ _EMPLOYMENT = {
     "intern": EmploymentType.INTERNSHIP,
     "internship": EmploymentType.INTERNSHIP,
 }
+
+
+def _employment(p: dict[str, Any]) -> EmploymentType:
+    # Real v1/v2 keys are jobTypesArray (array)/jobTypes (comma string); employmentType/jobType/
+    # type never appear in the documented feed but are tolerated in case a tenant sends them.
+    raw = _ci(p, "jobTypesArray", "jobTypes", "employmentType", "jobType", "type")
+    if isinstance(raw, list):
+        raw = raw[0] if raw else None
+    if isinstance(raw, str) and "," in raw:
+        raw = raw.split(",", 1)[0]
+    return _EMPLOYMENT.get(str(raw or "").strip().lower(), EmploymentType.UNKNOWN)
 
 
 def _ci(d: dict[str, Any], *names: str) -> Any:
@@ -163,8 +175,7 @@ class PaylocityProvider(BaseProvider):
         loc = self._location(p)
         locations = [loc] if loc else []
         remote = RemoteType.REMOTE if (loc and loc.is_remote) else RemoteType.UNKNOWN
-        emp_raw = str(_ci(p, "employmentType", "jobType", "type") or "").strip().lower()
-        employment = _EMPLOYMENT.get(emp_raw, EmploymentType.UNKNOWN)
+        employment = _employment(p)
         desc_html = _ci(p, "description", "jobDescription")
         return JobPosting.create(
             source=self.name,
@@ -176,8 +187,8 @@ class PaylocityProvider(BaseProvider):
             locations=locations,
             remote=remote,
             employment_type=employment,
-            department=_ci(p, "department", "category"),
-            salary=None,
+            department=_ci(p, "hiringDepartment", "department", "category"),
+            salary=parse_salary(str(_ci(p, "salaryDescription") or "") or None),
             posted_at=self._date(_ci(p, "publishedDate", "datePosted", "postedDate")),
             updated_at=None,
             description_html=desc_html,

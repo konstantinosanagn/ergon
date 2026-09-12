@@ -188,6 +188,73 @@ def test_peopleadmin_bare_subdomain_token_reconstructs_host() -> None:
     assert fetcher.request_calls == [("GET", "https://unmc.peopleadmin.com/postings/42")]
 
 
+_FULL_SUMMARY_HTML = (
+    "<html><body>"
+    '<div id="form_view">'
+    "<h2>Requisition Details</h2>"
+    "<table>"
+    "<tr><th>Working Title</th><td>Custodial Worker</td></tr>"
+    "<tr><th>Location</th><td>Remote - New Brunswick</td></tr>"
+    "<tr><th>Position Status</th><td>Part Time</td></tr>"
+    "<tr><th>Terms of Appointment</th><td>Temporary Staff Appointment - Hourly</td></tr>"
+    "<tr><th>Salary Details</th><td>$22 per hour</td></tr>"
+    "</table>"
+    "<p>Position Summary: Clean and maintain campus facilities.</p>"
+    "</div>"
+    "</body></html>"
+)
+
+
+def test_peopleadmin_extracts_remote_employment_and_salary_from_summary_table() -> None:
+    fetcher = _FakeFetcher(_FakeResponse(200, text=_FULL_SUMMARY_HTML, url=_APPLY_URL))
+    res = anyio.run(lambda: PeopleAdminProvider().fetch_detail(_ref(), fetcher))
+    assert isinstance(res, DetailFetch)
+    assert res.locations is not None
+    assert res.locations[0].raw == "Remote - New Brunswick"
+    assert res.locations[0].is_remote is True
+    from ergon.models import EmploymentType, RemoteType
+
+    assert res.remote is RemoteType.REMOTE
+    # "Part Time" / "Temporary ..." -> TEMPORARY wins (checked before PART_TIME)
+    assert res.employment_type is EmploymentType.TEMPORARY
+    assert res.salary is not None
+    assert res.salary.min_amount == 22.0
+    assert res.salary.interval.value == "hour"
+
+
+def test_peopleadmin_position_status_full_time_maps() -> None:
+    html = (
+        '<html><body><div id="form_view"><table>'
+        "<tr><th>Position Status</th><td>Full Time</td></tr>"
+        "</table><p>Position Summary: A role with enough body text to pass extraction.</p>"
+        "</div></body></html>"
+    )
+    fetcher = _FakeFetcher(_FakeResponse(200, text=html, url=_APPLY_URL))
+    res = anyio.run(lambda: PeopleAdminProvider().fetch_detail(_ref(), fetcher))
+    from ergon.models import EmploymentType
+
+    assert isinstance(res, DetailFetch)
+    assert res.employment_type is EmploymentType.FULL_TIME
+    assert res.remote is None  # no "remote" substring in the location -> never guessed
+
+
+def test_peopleadmin_no_summary_labels_yields_bare_str() -> None:
+    # No Position Status/Terms of Appointment/Salary Details/Location rows at all -> unchanged
+    # pre-existing behavior (a bare str, not a DetailFetch).
+    html = (
+        '<html><body><div id="form_view"><table>'
+        "<tr><th>Posting Number</th><td>REQ1234</td></tr>"
+        "</table><p>Position Summary: A role with enough body text to pass extraction.</p>"
+        "</div></body></html>"
+    )
+    res = anyio.run(
+        lambda: PeopleAdminProvider().fetch_detail(
+            _ref(), _FakeFetcher(_FakeResponse(200, text=html))
+        )
+    )
+    assert isinstance(res, str)
+
+
 def test_peopleadmin_unbuildable_ref_raises() -> None:
     ref = _ref(apply_url=None, listing_url=None, token=None)
     with pytest.raises(RuntimeError):

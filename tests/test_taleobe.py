@@ -9,7 +9,7 @@ import respx
 from ergon.exceptions import TransientHTTPError
 from ergon.http import AsyncFetcher
 from ergon.index.detail import DetailRef
-from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.models import DetailFetch, RemoteType, SalaryInterval, SearchQuery, make_job_id
 from ergon.providers.taleobe import TaleoBEProvider
 
 pytestmark = pytest.mark.anyio
@@ -215,3 +215,39 @@ async def test_fetch_detail_rebuilds_url_from_token_when_apply_url_missing() -> 
     res = await TaleoBEProvider().fetch_detail(_detail_ref(apply_url=None), fetcher)
     assert fetcher.calls == [DETAIL_URL]
     assert isinstance(res, str) and "Full JD text" in res
+
+
+def _jsonld_html_with_salary(base_salary: str) -> str:
+    return (
+        '<html><head><script type="application/ld+json">'
+        '{"@type": "JobPosting", "title": "Administrative Assistant", '
+        '"description": "<p>Full JD text for the role.</p>", '
+        f'"baseSalary": {base_salary}'
+        "}</script></head><body></body></html>"
+    )
+
+
+async def test_fetch_detail_returns_structured_salary_from_the_same_jsonld() -> None:
+    """baseSalary rides on the JSON-LD object already parsed for the JD -- no extra request."""
+    fetcher = _FakeFetcher(
+        html=_jsonld_html_with_salary(
+            '{"@type": "MonetaryAmount", "currency": "USD", "value": '
+            '{"@type": "QuantitativeValue", "minValue": 68000, "maxValue": 92000, '
+            '"unitText": "YEAR"}}'
+        )
+    )
+    res = await TaleoBEProvider().fetch_detail(_detail_ref(), fetcher)
+    assert isinstance(res, DetailFetch)
+    assert "Full JD text" in res.text
+    assert res.salary is not None
+    assert (res.salary.min_amount, res.salary.max_amount) == (68000.0, 92000.0)
+    assert res.salary.currency == "USD"
+    assert res.salary.interval is SalaryInterval.YEAR
+
+
+async def test_fetch_detail_without_usable_salary_still_returns_plain_text() -> None:
+    """No baseSalary (or an unusable one) keeps the historic bare-str return."""
+    for base in ("null", '{"@type": "MonetaryAmount", "currency": "USD", "value": {}}'):
+        fetcher = _FakeFetcher(html=_jsonld_html_with_salary(base))
+        res = await TaleoBEProvider().fetch_detail(_detail_ref(), fetcher)
+        assert isinstance(res, str) and "Full JD text" in res

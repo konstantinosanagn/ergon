@@ -25,10 +25,14 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 from ..exceptions import ProviderError
-from ..models import JobPosting, Location, RawJob, RemoteType
+from ..extract.base import ExtractInput
+from ..extract.degree import DegreeExtractor, degree_from_ats_vocab
+from ..extract.yoe import YoeExtractor
+from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -44,6 +48,36 @@ _UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
+_YOE = YoeExtractor()
+_DEGREE = DegreeExtractor()
+# text3 is the tenant-configured employment-type field (live-probed: "Full Time Employee"); the
+# dedicated employeeType field is always null in-sample, per the audit. Substring match, not a
+# whole-value dict, since tenants free-form this string ("Full Time Employee", "Contract Basis", ...).
+_EMPLOYMENT_PATTERNS: tuple[tuple[re.Pattern[str], EmploymentType], ...] = (
+    (re.compile(r"\bfull[\s-]?time\b", re.I), EmploymentType.FULL_TIME),
+    (re.compile(r"\bpart[\s-]?time\b", re.I), EmploymentType.PART_TIME),
+    (re.compile(r"\bcontract(or)?\b", re.I), EmploymentType.CONTRACT),
+    (re.compile(r"\btemp(orary)?\b", re.I), EmploymentType.TEMPORARY),
+    (re.compile(r"\bintern(ship)?\b", re.I), EmploymentType.INTERNSHIP),
+)
+
+
+def _employment(text: str | None) -> EmploymentType:
+    if not text:
+        return EmploymentType.UNKNOWN
+    for pattern, value in _EMPLOYMENT_PATTERNS:
+        if pattern.search(text):
+            return value
+    return EmploymentType.UNKNOWN
+
+
+def _degree_min(text: str | None) -> str | None:
+    if not text:
+        return None
+    return (
+        degree_from_ats_vocab(text)
+        or _DEGREE.extract(ExtractInput(title="", description_text=text))[0]
+    )
 
 
 @register("zwayam")
@@ -159,6 +193,9 @@ class ZwayamProvider(BaseProvider):
             locations.append(Location(raw=loc, is_remote=is_remote))
             if is_remote:
                 remote = RemoteType.REMOTE
+        years_min, years_max = _YOE.extract(
+            ExtractInput(title="", description_text=self._clean(s.get("yrsOfExperience")))
+        )
         return JobPosting.create(
             source=self.name,
             source_job_id=raw.source_job_id,
@@ -168,7 +205,12 @@ class ZwayamProvider(BaseProvider):
             apply_url=raw.url,
             locations=locations,
             remote=remote,
+            employment_type=_employment(self._clean(s.get("text3"))),
             department=self._clean(s.get("departmentName")) or self._clean(s.get("jobFunction")),
+            years_experience_min=years_min,
+            years_experience_max=years_max,
+            degree_min=_degree_min(self._clean(s.get("eduqualification"))),
+            description_html=self._clean(s.get("role")),
         )
 
     @staticmethod

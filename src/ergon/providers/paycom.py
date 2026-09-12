@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -173,6 +174,22 @@ class PaycomProvider(BaseProvider):
         )
 
     @staticmethod
+    def _posted_at(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        text = value.strip()
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
     def _location(rec: dict[str, Any]) -> Location | None:
         raw = str(rec.get("locations") or "").strip()
         if not raw:
@@ -219,5 +236,6 @@ class PaycomProvider(BaseProvider):
             locations=[loc] if loc else [],
             remote=remote,
             employment_type=employment,
+            posted_at=self._posted_at(p.get("postedOn")),
             description_html=desc if isinstance(desc, str) and desc.strip() else None,
         )

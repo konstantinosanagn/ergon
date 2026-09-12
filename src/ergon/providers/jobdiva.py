@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from ..exceptions import ProviderError
+from ..extract.degree import degree_from_ats_vocab
 from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
@@ -48,6 +49,62 @@ _TEAMID = re.compile(r"teamid['\"=:\s]+(\d+)", re.I)
 # whose span ``to-from+1`` exceeds ~200. So a single call with a small window anchored at the top
 # (``from = to-199, to = total``) returns the whole list in one shot.
 _WINDOW = 200
+
+
+# ``positionType`` (the per-job counterpart of the search body's ``jobTypes`` filter) -> our enum.
+# Staffing-desk vocabulary, so the values are free-form compounds ("Contract To Hire", "Right to
+# Hire", "Direct Placement / Perm"); matched as substrings LONGEST-FIRST so "contract to hire"
+# wins over "contract" and "full time" over "time". Unrecognised/empty -> UNKNOWN.
+_POSITION_TYPE: dict[str, EmploymentType] = {
+    "contract to hire": EmploymentType.CONTRACT,
+    "contract-to-hire": EmploymentType.CONTRACT,
+    "right to hire": EmploymentType.CONTRACT,
+    "temp to perm": EmploymentType.TEMPORARY,
+    "temp to hire": EmploymentType.TEMPORARY,
+    "direct placement": EmploymentType.FULL_TIME,
+    "direct hire": EmploymentType.FULL_TIME,
+    "permanent": EmploymentType.FULL_TIME,
+    "perm": EmploymentType.FULL_TIME,
+    "full time": EmploymentType.FULL_TIME,
+    "fulltime": EmploymentType.FULL_TIME,
+    "part time": EmploymentType.PART_TIME,
+    "parttime": EmploymentType.PART_TIME,
+    "internship": EmploymentType.INTERNSHIP,
+    "intern": EmploymentType.INTERNSHIP,
+    "temporary": EmploymentType.TEMPORARY,
+    "seasonal": EmploymentType.TEMPORARY,
+    "contract": EmploymentType.CONTRACT,
+    "contractor": EmploymentType.CONTRACT,
+    "corp to corp": EmploymentType.CONTRACT,
+    "c2c": EmploymentType.CONTRACT,
+    "1099": EmploymentType.CONTRACT,
+    "w2": EmploymentType.CONTRACT,
+}
+_POSITION_KEYS = sorted(_POSITION_TYPE, key=len, reverse=True)
+
+
+def _employment(value: object) -> EmploymentType:
+    if not isinstance(value, str) or not value.strip():
+        return EmploymentType.UNKNOWN
+    norm = " ".join(value.replace("-", " ").replace("/", " ").lower().split())
+    for key in _POSITION_KEYS:
+        if key in norm:
+            return _POSITION_TYPE[key]
+    return EmploymentType.UNKNOWN
+
+
+def _degree(value: object) -> str | None:
+    """``qualifications`` -> a ``DEGREE_LEVELS`` rung, via the shared ATS education vocabulary
+    (ambiguous values map to ``None``, never a guess). The key name comes from the search body's
+    own ``qualifications`` filter; the live sample rows carried no such key, so this is a
+    forward-compatible read that costs nothing when the field is absent. Accepts a bare string or
+    the multi-value list shape JobDiva uses elsewhere (``otherLocations``)."""
+    values = value if isinstance(value, (list, tuple)) else [value]
+    for item in values:
+        degree = degree_from_ats_vocab(item) if isinstance(item, str) else None
+        if degree:
+            return degree
+    return None
 
 
 def _body(teamid: str, frm: int, to: int) -> str:
@@ -178,7 +235,11 @@ class JobDivaProvider(BaseProvider):
             remote=self._remote(p),
             posted_at=self._date(p.get("postDate")),
             description_html=self._clean(p.get("jobDescription")),
-            employment_type=EmploymentType.UNKNOWN,
+            employment_type=_employment(p.get("positionType")),
+            # jobSector is the per-job counterpart of the jobCategories/jobDivisions search
+            # filters; profession is the narrower staffing-desk label some firms use instead.
+            department=self._clean(p.get("jobSector")) or self._clean(p.get("profession")),
+            degree_min=_degree(p.get("qualifications")),
         )
 
     @staticmethod

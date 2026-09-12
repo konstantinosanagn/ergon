@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from ergon import EmploymentType, RemoteType
-from ergon.models import SearchQuery
+from ergon.models import RawJob, SearchQuery
 from ergon.providers.workable_network import WorkableNetworkProvider
 
 pytestmark = pytest.mark.anyio
@@ -26,6 +26,7 @@ def _job(jid: str, **over) -> dict:
         "created": "2026-06-19T16:39:52.663Z",
         "url": f"https://jobs.workable.com/view/{jid}/x",
         "description": "<p>Build things.</p>",
+        "department": "Municipal",  # live-probed top-level field
     }
     base.update(over)
     return base
@@ -105,3 +106,15 @@ async def test_normalize_maps_fields() -> None:
     assert job.locations[0].country == "Germany"
     assert job.locations[0].city == "Berlin"
     assert job.apply_url == "https://jobs.workable.com/view/42/x"
+    assert job.department == "Municipal"
+
+
+def test_normalize_department_absent_or_odd_shape() -> None:
+    """No department key (or a non-string one) leaves the field empty instead of raising."""
+    prov = WorkableNetworkProvider()
+    for value in ({}, {"department": ""}, {"department": None}, {"department": ["Municipal"]}):
+        payload = {**_job("7"), **value}
+        if value == {}:
+            payload.pop("department")
+        raw = RawJob(source="workable_network", source_job_id="7", company="Acme", payload=payload)
+        assert prov.normalize(raw).department is None

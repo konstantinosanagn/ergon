@@ -8,6 +8,11 @@ mutating only the page field, and extract jobs generically. Specs live in
 resolves an explicit ``apicapture:`` scheme) so it never auto-claims a host.
 
 Token: a spec key (e.g. ``"goldmansachs"``). Fields absent from the capture normalize to ``None``.
+
+The ``fields`` map's slots are ``id``/``title``/``url``/``location``/``department``/``posted_at``/
+``description``/``employment_type`` plus the opt-in metadata slots ``level``, ``years_min``,
+``years_max``, ``degree_min`` and ``experience`` (free-text years, e.g. "4 to 6 Years"); a spec
+that omits a slot simply leaves that field empty.
 """
 
 from __future__ import annotations
@@ -25,7 +30,11 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from ..exceptions import CircuitOpenError
+from ..extract.base import ExtractInput
 from ..extract.comp import coerce_amount
+from ..extract.degree import degree_from_ats_vocab
+from ..extract.level import level_from_ats_vocab
+from ..extract.yoe import YoeExtractor
 from ..models import (
     DetailFetch,
     EmploymentType,
@@ -56,6 +65,7 @@ _EMPLOYMENT = {
     "internship": EmploymentType.INTERNSHIP,
     "temporary": EmploymentType.TEMPORARY,
 }
+_YOE = YoeExtractor()
 
 
 def _load_specs() -> dict[str, dict[str, Any]]:
@@ -1203,6 +1213,24 @@ class ApiCaptureProvider(BaseProvider):
         )
         employment = _EMPLOYMENT.get(emp_raw, EmploymentType.UNKNOWN)
 
+        # Opt-in schema slots: absent from every existing spec today (fmap.get(...) -> "" ->
+        # _fget short-circuits to None), so specs that don't map these keys are byte-for-byte
+        # unchanged. A captured API that already returns a level/years/degree field can be wired
+        # up by adding the matching key to its registry/data/apicapture.json spec.
+        level = level_from_ats_vocab(self._clean(self._fget(p, fmap.get("level", ""))))
+        years_min = self._to_int(self._fget(p, fmap.get("years_min", "")))
+        years_max = self._to_int(self._fget(p, fmap.get("years_max", "")))
+        degree_min = degree_from_ats_vocab(self._clean(self._fget(p, fmap.get("degree_min", ""))))
+        if years_min is None and years_max is None:
+            # `experience` is the free-text form of the numeric slots (TCS: "4 to 6 Years"), and
+            # is already mapped by a captured spec -- numeric first, prose only as the fallback.
+            years_min, years_max = _YOE.extract(
+                ExtractInput(
+                    title="",
+                    description_text=self._clean(self._fget(p, fmap.get("experience", ""))),
+                )
+            )
+
         return JobPosting.create(
             source=self.name,
             source_job_id=raw.source_job_id,
@@ -1213,14 +1241,23 @@ class ApiCaptureProvider(BaseProvider):
             locations=[loc] if loc else [],
             remote=remote,
             employment_type=employment,
+            level=level,
             department=department,
             salary=None,
+            years_experience_min=years_min,
+            years_experience_max=years_max,
+            degree_min=degree_min,
             posted_at=self._date(self._fget(p, fmap.get("posted_at", ""))),
             updated_at=None,
             description_html=self._clean(self._fget(p, fmap.get("description", ""))),
             description_text=None,
             raw=raw.payload,
         )
+
+    @staticmethod
+    def _to_int(v: Any) -> int | None:
+        amount = coerce_amount(v)
+        return int(amount) if amount is not None else None
 
     @staticmethod
     def _clean(v: Any) -> str | None:

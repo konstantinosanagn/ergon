@@ -29,8 +29,11 @@ import anyio
 import httpx
 
 from ..extract.comp import coerce_amount
+from ..extract.level import level_from_ats_vocab
 from ..models import (
+    DetailFetch,
     EmploymentType,
+    JobLevel,
     JobPosting,
     Location,
     RawJob,
@@ -87,6 +90,41 @@ _WORKPLACE = {
     "remote": RemoteType.REMOTE,
     "hybrid": RemoteType.HYBRID,
 }
+
+# join.com's CAREER-LEVEL taxonomy: ``functionLevelId`` -> ``function.{name,slug}``. Despite the
+# "function" name these are seniority rungs, not job functions (the job FUNCTION is ``category``,
+# already mapped to department) -- live sample: name "Berufserfahren", slug "experienced".
+# ``slug`` is the stable English key and goes through the shared ATS vocabulary; ``name`` is
+# localized, so the German labels join's own form offers are mapped here. Anything else -> UNKNOWN.
+_FUNCTION_LEVEL: dict[str, JobLevel] = {
+    "praktikant": JobLevel.INTERN,
+    "praktikum": JobLevel.INTERN,
+    "werkstudent": JobLevel.INTERN,
+    "berufseinsteiger": JobLevel.ENTRY,
+    "berufserfahren": JobLevel.MID,
+    "führungskraft": JobLevel.MANAGER,
+    "fuehrungskraft": JobLevel.MANAGER,
+    "geschäftsführung": JobLevel.EXECUTIVE,
+    "geschaeftsfuehrung": JobLevel.EXECUTIVE,
+}
+
+
+def _level(job: dict[str, Any]) -> JobLevel:
+    """Career level from the job blob's ``function`` object. NOTE: only the per-job DETAIL blob
+    carries ``function`` today -- the careers-page LIST projection does not -- so this resolves to
+    UNKNOWN for a list row and costs one dict lookup."""
+    function = job.get("function")
+    if not isinstance(function, dict):
+        return JobLevel.UNKNOWN
+    slug = function.get("slug")
+    level = level_from_ats_vocab(slug if isinstance(slug, str) else None)
+    if level is not JobLevel.UNKNOWN:
+        return level
+    name = function.get("name")
+    if isinstance(name, str) and name.strip():
+        return _FUNCTION_LEVEL.get(name.strip().lower(), JobLevel.UNKNOWN)
+    return JobLevel.UNKNOWN
+
 
 # join.com ``salaryFrequency`` vocabulary -> our enum.
 _FREQ = {
@@ -280,7 +318,7 @@ class JoinProvider(BaseProvider):
             payload=job,
         )
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one posting's full JD via the per-job detail page (Tier-3 JD recovery).
 
         ``ref.apply_url`` (falling back to ``ref.listing_url``) is already the
@@ -290,7 +328,11 @@ class JoinProvider(BaseProvider):
         (see :func:`_parse_initial_state`), at ``initialState.job.schemaDescription`` (genuine
         HTML) with a fallback to ``initialState.job.description`` (Markdown-flavored plain
         text) when ``schemaDescription`` is empty. ``initialState.job.unifiedDescription`` is a
-        bool flag, not content — never read for JD text. Fetched via plain ``fetcher.get_text``:
+        bool flag, not content — never read for JD text. The same blob carries ``function``, join's
+        career-level taxonomy (see :func:`_level`), which the careers-page LIST projection omits —
+        so when it maps, the JD rides back on a ``DetailFetch`` with ``level`` set and the
+        reconcile seeds it before enrich; otherwise the bare ``str`` is returned as before.
+        Fetched via plain ``fetcher.get_text``:
         the shared client's ``max_redirects=30`` (see http.py) is comfortably above join's
         22-23-hop evergreen-repost redirect chains, so the whole chain resolves inside that one
         rate-limited call. RETURN/RAISE CONTRACT (see BaseProvider.fetch_detail): ``None`` is returned ONLY on a real
@@ -318,12 +360,18 @@ class JoinProvider(BaseProvider):
         if not isinstance(job, dict):
             raise RuntimeError(f"join detail: unparseable __NEXT_DATA__ job blob for {ref!s}")
         schema_description = job.get("schemaDescription")
-        if isinstance(schema_description, str) and schema_description.strip():
-            return schema_description
         description = job.get("description")
-        if isinstance(description, str) and description.strip():
-            return description
-        raise RuntimeError(f"join detail: 200 with no JD text for {ref!s}")
+        text: str | None = None
+        if isinstance(schema_description, str) and schema_description.strip():
+            text = schema_description
+        elif isinstance(description, str) and description.strip():
+            text = description
+        if text is None:
+            raise RuntimeError(f"join detail: 200 with no JD text for {ref!s}")
+        level = _level(job)
+        if level is not JobLevel.UNKNOWN:
+            return DetailFetch(text=text, level=level)
+        return text
 
     def normalize(self, raw: RawJob) -> JobPosting:
         p = raw.payload
@@ -347,6 +395,7 @@ class JoinProvider(BaseProvider):
             locations=[location] if location else [],
             remote=remote,
             employment_type=_employment(p),
+            level=_level(p),
             department=department,
             salary=_salary(p),
             posted_at=_parse_dt(p.get("createdAt")),

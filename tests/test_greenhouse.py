@@ -10,7 +10,7 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery, make_job_id
 from ergon.providers.greenhouse import GreenhouseProvider
 
 pytestmark = pytest.mark.anyio
@@ -41,6 +41,7 @@ async def test_fetch_builds_rawjobs_and_hits_content_endpoint() -> None:
 
         request = route.calls.last.request
         assert request.url.params["content"] == "true"
+        assert request.url.params["pay_transparency"] == "true"
         assert str(request.url).startswith(BOARD_URL)
 
     assert len(raws) == 2
@@ -112,7 +113,11 @@ async def test_normalize_maps_every_field() -> None:
     assert job.remote is RemoteType.HYBRID  # from metadata "Workplace Type"
     assert job.employment_type is EmploymentType.UNKNOWN
     assert job.department == "Sales"
-    assert job.salary is None
+    assert job.salary is not None  # from pay_input_ranges[]
+    assert job.salary.min_amount == 80000
+    assert job.salary.max_amount == 120000
+    assert job.salary.currency == "USD"
+    assert job.salary.interval is SalaryInterval.YEAR
     assert job.apply_url == "https://careers.airbnb.com/positions/7995153?gh_jid=7995153"
     assert job.posted_at is not None and job.posted_at.tzinfo is not None
     assert job.posted_at.year == 2026
@@ -134,15 +139,14 @@ async def test_normalize_remote_from_metadata_and_location() -> None:
     # offices[] yields the structured "Beijing, China"; remote is driven by metadata.
     assert job.remote is RemoteType.REMOTE
     assert job.locations[0].raw == "Beijing, China"
-    assert job.department == "Software Engineering"
+    # departments[] has two entries -- both are kept, not just departments[0].
+    assert job.department == "Software Engineering, Community Support"
 
 
 # --- structured pay-transparency metadata (the SoFi-class capture fix) --------------------------
 # Greenhouse exposes pay via `metadata` custom fields, NOT the JD body. On pay-transparency-law
 # boards, ~100% of jobs carry it while ~0% inline it in `content`, so reading metadata is what
 # actually recovers salary. Shapes verified live against boards-api.greenhouse.io/.../sofi.
-
-from ergon.models import SalaryInterval  # noqa: E402
 
 
 def _sal(md: object):
@@ -201,3 +205,67 @@ def test_salary_none_when_no_pay_metadata() -> None:
     assert (
         _sal([{"name": "Workplace Type", "value_type": "single_select", "value": "Remote"}]) is None
     )
+
+
+# --- pay_input_ranges[] (requires pay_transparency=true on the request; tried BEFORE metadata) --
+
+
+def _pir(ranges: object):
+    return GreenhouseProvider._salary_from_pay_input_ranges(ranges)
+
+
+def test_salary_from_pay_input_ranges() -> None:
+    ranges = [
+        {
+            "min_cents": 8_000_000,
+            "max_cents": 12_000_000,
+            "currency_type": "USD",
+            "title": "Berlin Salary Range",
+            "blurb": "transparency blurb",
+        }
+    ]
+    s = _pir(ranges)
+    assert s is not None
+    assert (s.min_amount, s.max_amount) == (80_000, 120_000)
+    assert s.currency == "USD"
+    assert s.interval is SalaryInterval.YEAR
+
+
+def test_salary_pay_input_ranges_takes_first_usable_entry() -> None:
+    ranges = [
+        {"min_cents": None, "max_cents": None, "currency_type": "USD"},  # unusable -- skipped
+        {"min_cents": 5_000_000, "max_cents": 7_000_000, "currency_type": "EUR"},
+    ]
+    s = _pir(ranges)
+    assert s is not None and (s.min_amount, s.max_amount) == (50_000, 70_000)
+    assert s.currency == "EUR"
+
+
+def test_salary_pay_input_ranges_none_when_absent_or_empty() -> None:
+    assert _pir(None) is None
+    assert _pir([]) is None
+
+
+def test_salary_pay_input_ranges_beats_metadata_fallback() -> None:
+    # normalize() must try pay_input_ranges[] first and only fall back to metadata when it's
+    # absent/empty -- a board with both must not have the structured range shadowed.
+    payload = {
+        "id": 1,
+        "title": "Engineer",
+        "company_name": "Acme",
+        "departments": [],
+        "offices": [],
+        "pay_input_ranges": [
+            {"min_cents": 10_000_000, "max_cents": 15_000_000, "currency_type": "USD"}
+        ],
+        "metadata": [
+            {"name": "Pay Range", "value_type": "long_text", "value": "$1 - $2"},
+        ],
+    }
+    from ergon.models import RawJob
+
+    job = GreenhouseProvider().normalize(
+        RawJob(source="greenhouse", source_job_id="1", company="Acme", payload=payload)
+    )
+    assert job.salary is not None
+    assert (job.salary.min_amount, job.salary.max_amount) == (100_000, 150_000)

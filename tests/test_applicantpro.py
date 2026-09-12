@@ -6,12 +6,14 @@ discoverable from the careers HTML when the registry token omits it."""
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import httpx
 import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import EmploymentType, SearchQuery
+from ergon.models import EmploymentType, RawJob, RemoteType, SearchQuery
 from ergon.providers.applicantpro import ApplicantProProvider
 
 pytestmark = pytest.mark.anyio
@@ -35,6 +37,8 @@ _RESPONSE = {
                 "maxSalary": 92500,
                 "payType": "Salary",
                 "payTypeFrame": "per year",
+                "workplaceType": "Onsite",
+                "startDateRef": "Aug 14, 2026",
             },
             {
                 "id": 4080525,
@@ -42,6 +46,19 @@ _RESPONSE = {
                 "city": "Holliston",
                 "classification": "Part-Time",
                 "orgTitle": "Engineering",
+                "workplaceType": "Remote",
+            },
+            {
+                # classification carries a tenant label this table can't map; employmentType is
+                # the one that holds the real value (live-observed shape).
+                "id": 4080526,
+                "title": "Shift Supervisor",
+                "city": "Boise",
+                "classification": "Exempt",
+                "employmentType": "Full Time",
+                "orgTitle": "Operations",
+                "workplaceType": "Hybrid",
+                "startDateRef": "September 2, 2026",
             },
             {"id": 0, "title": "", "city": ""},  # junk row -> must be dropped (no id/title)
         ]
@@ -67,7 +84,7 @@ async def test_fetch_with_domain_id_in_token_skips_discovery() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await ApplicantProProvider().fetch("acme|11099", SearchQuery(), f)
         assert api.called and not careers.called  # token carried the id -> no discovery GET
-    assert [r.source_job_id for r in raws] == ["4080524", "4080525"]  # junk row dropped
+    assert [r.source_job_id for r in raws] == ["4080524", "4080525", "4080526"]  # junk dropped
     assert raws[0].company == "acme" and raws[0].token == "acme|11099"
     assert raws[0].url == "https://acme.applicantpro.com/jobs/4080524"
 
@@ -80,7 +97,7 @@ async def test_fetch_discovers_domain_id_from_careers_html() -> None:
         async with AsyncFetcher(per_host_rate=100) as f:
             raws = await ApplicantProProvider().fetch("acme", SearchQuery(), f)
         assert careers.called  # had to discover
-    assert len(raws) == 2
+    assert len(raws) == 3
     assert raws[0].token == "acme|11099"  # canonicalized so the next crawl skips discovery
 
 
@@ -104,6 +121,42 @@ async def test_normalize_maps_fields() -> None:
     j1 = ApplicantProProvider().normalize(raws[1])
     assert j1.employment_type == EmploymentType.PART_TIME
     assert j1.salary is None  # no pay fields -> None (enrich can body-extract)
+
+
+async def test_normalize_maps_workplace_type_and_start_date() -> None:
+    with respx.mock:
+        respx.get(url__regex=_API).mock(return_value=httpx.Response(200, json=_RESPONSE))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await ApplicantProProvider().fetch("acme|11099", SearchQuery(), f)
+    jobs = [ApplicantProProvider().normalize(r) for r in raws]
+    assert [j.remote for j in jobs] == [RemoteType.ONSITE, RemoteType.REMOTE, RemoteType.HYBRID]
+    assert jobs[0].posted_at == datetime(2026, 8, 14)
+    assert jobs[1].posted_at is None  # no startDateRef on that row
+    assert jobs[2].posted_at == datetime(2026, 9, 2)
+    assert jobs[0].locations[0].region == "MN"  # live key is "abbreviation", not "state"
+
+
+def test_unknown_workplace_type_is_unknown_not_a_crash() -> None:
+    provider = ApplicantProProvider()
+    raw = RawJob(
+        source="applicantpro",
+        source_job_id="1",
+        company="acme",
+        token="acme|11099",
+        payload={"id": 1, "title": "T", "workplaceType": "Flexible-ish", "startDateRef": "soon"},
+    )
+    job = provider.normalize(raw)
+    assert job.remote is RemoteType.UNKNOWN
+    assert job.posted_at is None  # unparseable date -> None, never raises
+
+
+async def test_employment_type_falls_through_unmappable_classification() -> None:
+    with respx.mock:
+        respx.get(url__regex=_API).mock(return_value=httpx.Response(200, json=_RESPONSE))
+        async with AsyncFetcher(per_host_rate=100) as f:
+            raws = await ApplicantProProvider().fetch("acme|11099", SearchQuery(), f)
+    # classification="Exempt" is unmappable -> employmentType="Full Time" must still win.
+    assert ApplicantProProvider().normalize(raws[2]).employment_type == EmploymentType.FULL_TIME
 
 
 async def test_empty_and_malformed_return_no_jobs() -> None:

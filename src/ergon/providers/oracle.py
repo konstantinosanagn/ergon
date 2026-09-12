@@ -36,7 +36,17 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ..models import DetailFetch, JobPosting, Location, RawJob, RemoteType, SearchQuery
+from ..extract.degree import degree_from_ats_vocab
+from ..extract.level import level_from_ats_vocab
+from ..models import (
+    DetailFetch,
+    EmploymentType,
+    JobPosting,
+    Location,
+    RawJob,
+    RemoteType,
+    SearchQuery,
+)
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -63,6 +73,18 @@ _WORKPLACE = {
     "ORA_ON_SITE": RemoteType.ONSITE,
     "ORA_REMOTE": RemoteType.REMOTE,
     "ORA_HYBRID": RemoteType.HYBRID,
+}
+
+# JobType (documented string field) -> our enum. "Standard"/"Experienced" are ordinary
+# permanent hiring; "Graduate Job" is a full-time new-grad program, not a temp/intern slot.
+_EMPLOYMENT_BY_JOBTYPE = {
+    "standard": EmploymentType.FULL_TIME,
+    "experienced": EmploymentType.FULL_TIME,
+    "graduate job": EmploymentType.FULL_TIME,
+    "internship": EmploymentType.INTERNSHIP,
+    "cooperative": EmploymentType.INTERNSHIP,
+    "summer job": EmploymentType.INTERNSHIP,
+    "temporary work": EmploymentType.TEMPORARY,
 }
 
 
@@ -186,7 +208,15 @@ class OracleProvider(BaseProvider):
             apply_url=raw.url,
             locations=locations,
             remote=remote,
+            employment_type=_EMPLOYMENT_BY_JOBTYPE.get(
+                str(p.get("JobType") or "").strip().lower(), EmploymentType.UNKNOWN
+            ),
             department=department,
+            level=level_from_ats_vocab(p.get("ManagerLevel")),
+            years_experience_min=self._years_min(
+                p.get("WorkDurationYears"), p.get("WorkDurationMonths")
+            ),
+            degree_min=degree_from_ats_vocab(self._study_level_text(p.get("StudyLevel"))),
             salary=None,
             posted_at=_parse_date(p.get("PostedDate")),
             updated_at=None,
@@ -194,6 +224,25 @@ class OracleProvider(BaseProvider):
             description_text=None,  # full text only on the detail endpoint (not fetched in bulk)
             raw=raw.payload,
         )
+
+    @staticmethod
+    def _years_min(years: Any, months: Any) -> int | None:
+        """WorkDurationYears/WorkDurationMonths (documented int fields) -> a floor years-of-
+        experience minimum. Either alone is still a real signal (months-only floors to 0)."""
+        if not isinstance(years, int) and not isinstance(months, int):
+            return None
+        return (years if isinstance(years, int) else 0) + (
+            months if isinstance(months, int) else 0
+        ) // 12
+
+    @staticmethod
+    def _study_level_text(value: Any) -> str | None:
+        """StudyLevel can carry a slash-joined alias (e.g. "High School Diploma/GED"); the shared
+        vocab matches on the whole normalized string, so take the first alias before delegating."""
+        text = str(value or "").strip()
+        if not text:
+            return None
+        return text.split("/")[0].strip() or None
 
     # --- detail (Tier-3 JD recovery) -----------------------------------------
 

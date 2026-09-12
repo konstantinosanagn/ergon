@@ -7,7 +7,14 @@ import pytest
 import respx
 
 from ergon.http import AsyncFetcher
-from ergon.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery
+from ergon.models import (
+    EmploymentType,
+    JobLevel,
+    RawJob,
+    RemoteType,
+    SalaryInterval,
+    SearchQuery,
+)
 from ergon.providers.usajobs import USAJobsProvider, _parse_dt
 
 pytestmark = pytest.mark.anyio
@@ -128,3 +135,73 @@ async def test_normalize_full_field_mapping(monkeypatch) -> None:
     assert job.salary.interval is SalaryInterval.YEAR
     assert job.apply_url == "https://www.usajobs.gov/job/987654"
     assert job.posted_at is not None
+
+
+def _descriptor(**over: object) -> RawJob:
+    payload = {
+        "PositionID": "DOE-ABC-123",
+        "PositionTitle": "Data Scientist",
+        "OrganizationName": "Department of Energy",
+        **over,
+    }
+    return RawJob(
+        source="usajobs", source_job_id="987654", company="Department of Energy", payload=payload
+    )
+
+
+def _graded(plan: str, low: str | None = None, high: str | None = None) -> RawJob:
+    """A descriptor shaped like the live response: pay plan in JobGrade[].Code, numeric grade in
+    UserArea.Details.LowGrade/HighGrade."""
+    details: dict[str, object] = {"JobSummary": "Analyze data."}
+    if low is not None:
+        details["LowGrade"] = low
+    if high is not None:
+        details["HighGrade"] = high
+    return _descriptor(JobGrade=[{"Code": plan}], UserArea={"Details": details})
+
+
+def test_gs_grade_maps_to_level() -> None:
+    """Pay plan GS + the LOW grade (what a ladder posting actually hires at) -> coarse level."""
+    cases = {
+        "07": JobLevel.ENTRY,
+        "11": JobLevel.MID,
+        "13": JobLevel.SENIOR,
+        "15": JobLevel.PRINCIPAL,
+    }
+    for grade, expected in cases.items():
+        assert _provider().normalize(_graded("GS", grade)).level is expected, grade
+    # "GS-13/14" ladder: the low grade wins.
+    assert _provider().normalize(_graded("GS", "13", "14")).level is JobLevel.SENIOR
+    # HighGrade alone still works when only it is present.
+    assert _provider().normalize(_graded("GS", None, "14")).level is JobLevel.STAFF
+    # Some feeds put the whole grade in the code instead.
+    assert _provider().normalize(_descriptor(JobGrade=[{"Code": "GS-14"}])).level is JobLevel.STAFF
+
+
+def test_non_gs_pay_plans_and_missing_grades_are_never_guessed() -> None:
+    """SES/Senior-Level/wage-grade plans have no GS equivalent -> UNKNOWN, never a guess."""
+    for plan in ("ES", "SL", "ST", "AD", "WG"):
+        assert _provider().normalize(_graded(plan, "13")).level is JobLevel.UNKNOWN, plan
+    assert _provider().normalize(_graded("GS")).level is JobLevel.UNKNOWN  # no grade number
+    assert _provider().normalize(_graded("GS", "n/a")).level is JobLevel.UNKNOWN
+    assert _provider().normalize(_graded("GS", "3")).level is JobLevel.UNKNOWN  # outside the table
+    assert _provider().normalize(_descriptor()).level is JobLevel.UNKNOWN  # no JobGrade at all
+
+
+def test_qualification_summary_yields_years_and_degree() -> None:
+    """No structured years/education field is documented -- the prose runs through the shared
+    text extractors."""
+    job = _provider().normalize(
+        _descriptor(
+            QualificationSummary=(
+                "Applicants must have a Bachelor's degree in statistics and at least "
+                "3 years of specialized experience equivalent to the GS-12 level."
+            )
+        )
+    )
+    assert job.years_experience_min == 3
+    assert job.degree_min == "bachelor"
+
+    bare = _provider().normalize(_descriptor(QualificationSummary="See the announcement."))
+    assert (bare.years_experience_min, bare.years_experience_max) == (None, None)
+    assert bare.degree_min is None

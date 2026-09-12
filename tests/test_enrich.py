@@ -128,6 +128,63 @@ def test_enrich_in_place_leaves_employment_type_unknown_without_signal() -> None
     assert job.employment_type is EmploymentType.UNKNOWN
 
 
+@pytest.mark.parametrize(
+    "title,expected",
+    [
+        ("Remote-first (DE & US)", RemoteType.REMOTE),
+        ("Senior Engineer (Work From Home)", RemoteType.REMOTE),
+        ("Support Rep - WFH", RemoteType.REMOTE),
+        ("Hybrid / Remote", RemoteType.HYBRID),
+        ("Hybrid Software Engineer", RemoteType.HYBRID),
+        ("On-site Warehouse Associate", RemoteType.ONSITE),
+        ("In-Office Receptionist", RemoteType.ONSITE),
+        ("Software Engineer", RemoteType.UNKNOWN),
+    ],
+)
+def test_enrich_in_place_infers_remote_from_title(title: str, expected: RemoteType) -> None:
+    job = JobPosting.create(source="s", source_job_id="1", company="Acme", title=title)
+    enrich_in_place(job)
+    assert job.remote is expected
+
+
+def test_enrich_in_place_infers_remote_from_description_when_title_silent() -> None:
+    job = JobPosting.create(
+        source="s",
+        source_job_id="1",
+        company="Acme",
+        title="Software Engineer",
+        description_text="Join our hybrid team, splitting time between home and the office.",
+    )
+    enrich_in_place(job)
+    assert job.remote is RemoteType.HYBRID
+
+
+def test_enrich_in_place_only_scans_first_400_chars_of_description() -> None:
+    padding = "Great benefits and a fun team culture await you here. " * 10
+    job = JobPosting.create(
+        source="s",
+        source_job_id="1",
+        company="Acme",
+        title="Software Engineer",
+        description_text=padding[:400] + " This is a fully remote role.",
+    )
+    enrich_in_place(job)
+    assert job.remote is RemoteType.UNKNOWN  # the "remote" mention lands past the 400-char window
+
+
+def test_enrich_in_place_never_overwrites_provider_remote() -> None:
+    # A provider-declared ONSITE value must survive even though the title says "Remote".
+    job = JobPosting.create(
+        source="s",
+        source_job_id="1",
+        company="Acme",
+        title="Remote Software Engineer",
+        remote=RemoteType.ONSITE,
+    )
+    enrich_in_place(job)
+    assert job.remote is RemoteType.ONSITE
+
+
 def test_enrich_in_place_sets_level_and_geo() -> None:
     job = JobPosting.create(
         source="s",

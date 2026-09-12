@@ -14,7 +14,7 @@ from ergon import RemoteType
 from ergon.exceptions import TransientHTTPError
 from ergon.http import AsyncFetcher
 from ergon.index.detail import DetailRef
-from ergon.models import EmploymentType, SearchQuery
+from ergon.models import DetailFetch, EmploymentType, SearchQuery
 from ergon.providers.themuse import TheMuseProvider
 
 pytestmark = pytest.mark.anyio
@@ -179,6 +179,19 @@ def test_normalize_maps_employment_type() -> None:
     assert _provider().normalize(raw).employment_type is EmploymentType.INTERNSHIP
 
 
+def test_normalize_employment_type_falls_back_to_internship_level() -> None:
+    """``type`` is a posting-SOURCE flag ("external"), so the documented ``levels`` vocabulary is
+    what states an employment type for internships."""
+    raw = _provider()._to_raw(_job(0, levels=[{"name": "Internship", "short_name": "internship"}]))
+    assert _provider().normalize(raw).employment_type is EmploymentType.INTERNSHIP
+
+
+def test_normalize_other_levels_do_not_imply_an_employment_type() -> None:
+    for name in ("Entry Level", "Mid Level", "Senior Level", "Management"):
+        raw = _provider()._to_raw(_job(0, levels=[{"name": name}]))
+        assert _provider().normalize(raw).employment_type is EmploymentType.UNKNOWN
+
+
 def test_normalize_missing_fields_are_safe() -> None:
     raw = _provider()._to_raw({"id": 7})
     job = _provider().normalize(raw)
@@ -268,6 +281,40 @@ async def test_fetch_detail_alive_returns_text() -> None:
     assert fetcher.calls == [DETAIL_URL]
     assert isinstance(res, str)
     assert "Handle assignments" in res
+
+
+def _labelled_html(value: str) -> str:
+    """The landing page's own rendered label block, as seen live ("Employment Type: OTHER")."""
+    return (
+        "<html><body><main><h1>Machine Operator</h1><p>"
+        + ("Handle assignments in a repetitive and sequential order. " * 20)
+        + f"</p><div>Employment Type: {value}</div><div>Job ID: 21897374</div>"
+        + "<div>Posted: 2026-06-11</div></main></body></html>"
+    )
+
+
+async def test_fetch_detail_recovers_labelled_employment_type() -> None:
+    res = await TheMuseProvider().fetch_detail(
+        _detail_ref(), _FakeFetcher(html=_labelled_html("OTHER"))
+    )
+    assert isinstance(res, DetailFetch)
+    assert res.employment_type is EmploymentType.OTHER  # live-observed value
+    assert "Handle assignments" in res.text
+
+
+async def test_fetch_detail_labelled_employment_type_two_words() -> None:
+    res = await TheMuseProvider().fetch_detail(
+        _detail_ref(), _FakeFetcher(html=_labelled_html("Full Time"))
+    )
+    assert isinstance(res, DetailFetch)
+    assert res.employment_type is EmploymentType.FULL_TIME
+
+
+async def test_fetch_detail_unrecognised_label_returns_plain_text() -> None:
+    res = await TheMuseProvider().fetch_detail(
+        _detail_ref(), _FakeFetcher(html=_labelled_html("Sabbatical"))
+    )
+    assert isinstance(res, str)  # nothing recoverable -> the old bare-string contract
 
 
 async def test_fetch_detail_404_raises_not_none() -> None:

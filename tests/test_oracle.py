@@ -11,7 +11,7 @@ import respx
 from ergon.exceptions import TransientHTTPError
 from ergon.http import AsyncFetcher
 from ergon.index.detail import DetailRef
-from ergon.models import RemoteType, SearchQuery, make_job_id
+from ergon.models import EmploymentType, JobLevel, RawJob, RemoteType, SearchQuery, make_job_id
 from ergon.providers.oracle import OracleProvider
 
 pytestmark = pytest.mark.anyio
@@ -31,6 +31,11 @@ def _req(jid: str, title: str, loc: str, code: str = "ORA_ON_SITE") -> dict:
         "WorkplaceTypeCode": code,
         "ShortDescriptionStr": "<p>Build things.</p>",
         "Department": "Engineering",
+        "JobType": "Standard",
+        "ManagerLevel": "Manager",
+        "WorkDurationYears": 3,
+        "WorkDurationMonths": 6,
+        "StudyLevel": "Bachelor's Degree",
     }
 
 
@@ -108,11 +113,88 @@ async def test_normalize_fields_and_remote() -> None:
     assert onsite.description_html == "<p>Build things.</p>"
     assert onsite.description_text is None
     assert onsite.salary is None
+    assert onsite.employment_type is EmploymentType.FULL_TIME  # JobType "Standard"
+    assert onsite.level is JobLevel.MANAGER  # ManagerLevel "Manager"
+    assert onsite.years_experience_min == 3  # WorkDurationYears=3, WorkDurationMonths=6 -> floor
+    assert onsite.degree_min == "bachelor"  # StudyLevel "Bachelor's Degree"
     posted = onsite.posted_at.astimezone(timezone.utc)
     assert (posted.year, posted.month, posted.day) == (2026, 6, 16)
 
     remote = OracleProvider().normalize(raws[1])
     assert remote.remote is RemoteType.REMOTE
+
+
+def test_normalize_jobtype_employment_mapping() -> None:
+    base = _req("1", "T", "Remote")
+    for jobtype, expected in (
+        ("Standard", EmploymentType.FULL_TIME),
+        ("Experienced", EmploymentType.FULL_TIME),
+        ("Graduate Job", EmploymentType.FULL_TIME),
+        ("Internship", EmploymentType.INTERNSHIP),
+        ("Cooperative", EmploymentType.INTERNSHIP),
+        ("Summer Job", EmploymentType.INTERNSHIP),
+        ("Temporary Work", EmploymentType.TEMPORARY),
+        ("Something Unheard Of", EmploymentType.UNKNOWN),
+        (None, EmploymentType.UNKNOWN),
+    ):
+        req = dict(base)
+        req["JobType"] = jobtype
+        job = OracleProvider().normalize(
+            RawJob(source="oracle", source_job_id="1", company="x", payload=req)
+        )
+        assert job.employment_type is expected, jobtype
+
+
+def test_normalize_work_duration_years_only() -> None:
+    req = dict(_req("1", "T", "Remote"))
+    req["WorkDurationYears"] = 5
+    req["WorkDurationMonths"] = None
+    job = OracleProvider().normalize(
+        RawJob(source="oracle", source_job_id="1", company="x", payload=req)
+    )
+    assert job.years_experience_min == 5
+
+
+def test_normalize_work_duration_months_only_floors_to_zero_years() -> None:
+    req = dict(_req("1", "T", "Remote"))
+    req["WorkDurationYears"] = None
+    req["WorkDurationMonths"] = 6
+    job = OracleProvider().normalize(
+        RawJob(source="oracle", source_job_id="1", company="x", payload=req)
+    )
+    assert job.years_experience_min == 0
+
+
+def test_normalize_work_duration_absent_is_none() -> None:
+    req = dict(_req("1", "T", "Remote"))
+    req["WorkDurationYears"] = None
+    req["WorkDurationMonths"] = None
+    job = OracleProvider().normalize(
+        RawJob(source="oracle", source_job_id="1", company="x", payload=req)
+    )
+    assert job.years_experience_min is None
+
+
+def test_normalize_study_level_slash_alias() -> None:
+    # StudyLevel can carry a slash-joined alias ("High School Diploma/GED"); the first alias
+    # is taken before delegating to the shared degree vocab.
+    req = dict(_req("1", "T", "Remote"))
+    req["StudyLevel"] = "High School Diploma/GED"
+    job = OracleProvider().normalize(
+        RawJob(source="oracle", source_job_id="1", company="x", payload=req)
+    )
+    assert job.degree_min == "highschool"
+
+
+def test_normalize_study_level_unmapped_value_is_none_not_crash() -> None:
+    # "Doctorate Degree" isn't an exact key in the shared vocab table (only "doctorate" and
+    # "doctoral degree" are) -- known gap, documented in the report; must not raise.
+    req = dict(_req("1", "T", "Remote"))
+    req["StudyLevel"] = "Doctorate Degree"
+    job = OracleProvider().normalize(
+        RawJob(source="oracle", source_job_id="1", company="x", payload=req)
+    )
+    assert job.degree_min is None
 
 
 async def test_fetch_respects_limit() -> None:

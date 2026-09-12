@@ -12,7 +12,7 @@ import respx
 from ergon.exceptions import TransientHTTPError
 from ergon.http import AsyncFetcher
 from ergon.index.detail import DetailRef
-from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.models import EmploymentType, RemoteType, SalaryInterval, SearchQuery, make_job_id
 from ergon.providers.smartrecruiters import SmartRecruitersProvider
 
 pytestmark = pytest.mark.anyio
@@ -154,7 +154,12 @@ async def test_normalize_maps_every_field() -> None:
     assert job.remote is RemoteType.ONSITE  # remote=False, hybrid=False, has location
     assert job.employment_type is EmploymentType.FULL_TIME  # "permanent"
     assert job.department == "Cyber Security"
-    assert job.salary is None
+    assert job.sector == "Information Technology And Services"
+    assert job.salary is not None
+    assert job.salary.min_amount == 120000
+    assert job.salary.max_amount == 150000
+    assert job.salary.currency == "USD"
+    assert job.salary.interval is SalaryInterval.YEAR
     assert job.apply_url == "https://jobs.smartrecruiters.com/Visa/744000129971988"
     assert job.posted_at is not None and job.posted_at.tzinfo is not None
     assert job.posted_at.year == 2026
@@ -170,6 +175,7 @@ async def test_normalize_detects_hybrid() -> None:
     job = SmartRecruitersProvider().normalize(raws[1])
     assert job.remote is RemoteType.HYBRID
     assert job.locations[0].city == "Austin"
+    assert job.salary is None  # empty compensation object -> no salary, not a crash
 
 
 def test_normalize_remote_flag() -> None:

@@ -15,7 +15,7 @@ import respx
 
 from ergon.exceptions import TransientHTTPError
 from ergon.http import AsyncFetcher
-from ergon.models import EmploymentType, RemoteType, SearchQuery, make_job_id
+from ergon.models import EmploymentType, JobLevel, RawJob, RemoteType, SearchQuery, make_job_id
 from ergon.providers.base import BaseProvider
 from ergon.providers.join import JoinProvider
 
@@ -88,6 +88,39 @@ async def test_normalize_second_job_intern_remote() -> None:
     assert job.employment_type is EmploymentType.INTERNSHIP  # "Intern"
     assert job.remote is RemoteType.REMOTE
     assert job.locations[0].city == "Berlin"
+
+
+def _normalize(payload: dict) -> object:
+    raw = RawJob(
+        source="join",
+        source_job_id=str(payload.get("id", "1")),
+        company="OneTwoSocial",
+        token="onetwosocial",
+        url="https://join.com/companies/onetwosocial/jobs/1",
+        payload=payload,
+    )
+    return JoinProvider().normalize(raw)
+
+
+def test_normalize_maps_function_career_level() -> None:
+    """``functionLevelId``/``function`` is join's SENIORITY taxonomy (the job function is
+    ``category``). Shape + values are the live per-job detail blob's."""
+    # slug is the stable English key -> shared ATS vocabulary
+    assert (
+        _normalize(
+            {"id": 1, "function": {"id": 3, "name": "Berufserfahren", "slug": "experienced"}}
+        ).level
+        is JobLevel.MID
+    )
+    # localized name only -> join's own German career-level labels
+    assert _normalize({"id": 2, "function": {"name": "Berufseinsteiger"}}).level is JobLevel.ENTRY
+    assert _normalize({"id": 3, "function": {"name": "Führungskraft"}}).level is JobLevel.MANAGER
+
+
+def test_normalize_unknown_function_level_is_unknown() -> None:
+    assert _normalize({"id": 4, "function": {"name": "Zeitreisender"}}).level is JobLevel.UNKNOWN
+    assert _normalize({"id": 5, "function": None}).level is JobLevel.UNKNOWN
+    assert _normalize({"id": 6}).level is JobLevel.UNKNOWN  # the LIST projection's shape
 
 
 async def test_fetch_no_next_data_returns_empty() -> None:

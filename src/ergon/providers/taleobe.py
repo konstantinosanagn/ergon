@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ..models import EmploymentType, JobPosting, Location, RawJob, RemoteType
+from ..models import DetailFetch, EmploymentType, JobPosting, Location, RawJob, RemoteType
 from .base import BaseProvider, register
 
 if TYPE_CHECKING:
@@ -275,13 +275,15 @@ class TaleoBEProvider(BaseProvider):
             return f"{_DETAIL_BASE.format(hostpath=hostpath)}?org={org}&cws={cws}&rid={ref.id}"
         return None
 
-    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | None:
+    async def fetch_detail(self, ref: DetailRef, fetcher: AsyncFetcher) -> str | DetailFetch | None:
         """Fetch one requisition's full JD via its own ``viewRequisition`` detail page (Tier-3
         recovery / freshness-sweep confirm).
 
         Live-verified (NVR Inc / ``phg.tbe.taleo.net``): the detail page carries a
         ``application/ld+json`` ``JobPosting`` block (reusing
-        :meth:`BaseProvider.extract_jsonld_jobs`) whose ``description`` is the full JD HTML. A
+        :meth:`BaseProvider.extract_jsonld_jobs`) whose ``description`` is the full JD HTML. The
+        same JSON-LD object's ``baseSalary`` (when present) is returned alongside it as a
+        ``DetailFetch`` so the reconcile seeds a structured range instead of re-parsing prose. A
         removed/nonexistent ``rid`` does **NOT** 404 -- it's a soft-shell HTTP 200 page with NO
         JSON-LD block and a fixed "no longer available" / "Job Not Available" marker instead
         (:data:`_GONE_RE`). The confirmed-gone path is therefore the VERIFIED-soft-404 branch the
@@ -303,7 +305,10 @@ class TaleoBEProvider(BaseProvider):
         for job in self.extract_jsonld_jobs(html_text):
             description = job.get("description")
             if isinstance(description, str) and description.strip():
-                return description
+                # baseSalary lives on the SAME JobPosting JSON-LD object already parsed for the
+                # description -- no extra request needed to recover it.
+                salary = self.jsonld_salary(job)
+                return DetailFetch(text=description, salary=salary) if salary else description
         if _GONE_RE.search(html_text):
             return None
         raise RuntimeError(f"taleobe detail: no JobPosting JSON-LD and no gone-signal for {ref!s}")

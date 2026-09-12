@@ -25,8 +25,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ..config import get_env
+from ..extract.base import ExtractInput
+from ..extract.degree import DegreeExtractor
+from ..extract.yoe import YoeExtractor
 from ..models import (
     EmploymentType,
+    JobLevel,
     JobPosting,
     Location,
     RawJob,
@@ -96,6 +100,50 @@ def _parse_dt(value: str | None) -> datetime | None:
             return datetime.fromisoformat(re.sub(r"(\.\d{6})\d+", r"\1", v))
         except ValueError:
             return None
+
+
+_YOE = YoeExtractor()
+_DEGREE = DegreeExtractor()
+
+# Federal General Schedule grade number -> coarse seniority level, per OPM's GS classification
+# conventions: GS-5..7 = entry-level professional/technical; GS-9..11 = full-performance/mid-level;
+# GS-12..13 = senior technical / first-line supervisory; GS-14 = senior expert; GS-15 = top
+# individual-contributor / senior-manager-equivalent. Grades outside this table (GS-1..4, GS-8) are
+# left UNKNOWN rather than guessed.
+_GS_LEVEL: dict[int, JobLevel] = {
+    5: JobLevel.ENTRY,
+    6: JobLevel.ENTRY,
+    7: JobLevel.ENTRY,
+    9: JobLevel.MID,
+    10: JobLevel.MID,
+    11: JobLevel.MID,
+    12: JobLevel.SENIOR,
+    13: JobLevel.SENIOR,
+    14: JobLevel.STAFF,
+    15: JobLevel.PRINCIPAL,
+}
+
+
+def _level_from_grade(p: dict[str, Any], details: dict[str, Any]) -> JobLevel:
+    """GS pay plan + grade number -> coarse level.
+
+    ``JobGrade[].Code`` is the PAY PLAN, not the grade: it is a two-letter code from the API's
+    own ``codelist/payplans`` ("GS" General Schedule, "ES" SES, "SL"/"ST" senior/scientific, "WG"
+    wage grade, ...), and the number lives in ``UserArea.Details.LowGrade``/``HighGrade``. On a
+    ladder posting ("GS-13/14") the LOW grade is the one actually hired at, so it wins. A code
+    that already embeds the grade ("GS-13") is accepted too. Any non-GS pay plan, or a missing/
+    unparseable grade, stays UNKNOWN -- those ladders have no GS equivalent to map.
+    """
+    grades = p.get("JobGrade") or []
+    code = ""
+    if grades and isinstance(grades[0], dict):
+        code = str(grades[0].get("Code") or "").strip().lower().replace(" ", "").replace("_", "-")
+    number = code[2:].lstrip("-") if code.startswith("gs") else ""
+    if not number:
+        if code not in ("", "gs"):
+            return JobLevel.UNKNOWN  # a non-GS pay plan -- never mapped onto the GS ladder
+        number = str(details.get("LowGrade") or details.get("HighGrade") or "").strip()
+    return _GS_LEVEL.get(int(number), JobLevel.UNKNOWN) if number.isdigit() else JobLevel.UNKNOWN
 
 
 def _to_float(value: Any) -> float | None:
@@ -175,6 +223,11 @@ class USAJobsProvider(BaseProvider):
             p.get("UserArea", {}).get("Details", {}) if isinstance(p.get("UserArea"), dict) else {}
         )
         remote = RemoteType.REMOTE if details.get("RemoteIndicator") else RemoteType.UNKNOWN
+        # QualificationSummary is prose (no structured years-of-experience/education field is
+        # documented), so both run through the shared text extractors rather than a vocab lookup.
+        qualification = p.get("QualificationSummary") or None
+        years_min, years_max = _YOE.extract(ExtractInput(title="", description_text=qualification))
+        degree_min = _DEGREE.extract(ExtractInput(title="", description_text=qualification))[0]
         return JobPosting.create(
             source=raw.source,
             source_job_id=raw.source_job_id,
@@ -184,8 +237,12 @@ class USAJobsProvider(BaseProvider):
             locations=self._locations(p),
             remote=remote,
             employment_type=self._employment(p),
+            level=_level_from_grade(p, details),
             department=p.get("DepartmentName") or None,
             salary=self._salary(p),
+            years_experience_min=years_min,
+            years_experience_max=years_max,
+            degree_min=degree_min,
             apply_url=p.get("PositionURI"),
             posted_at=_parse_dt(p.get("PublicationStartDate")),
             fetched_at=raw.fetched_at,

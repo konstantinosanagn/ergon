@@ -8,6 +8,8 @@ plus backward-compatible re-exports.
 
 from __future__ import annotations
 
+import re
+
 from .extract.base import get_extractor, input_from_job
 
 # Importing the extractor modules registers them. Also re-exported for backward compatibility.
@@ -26,9 +28,27 @@ from .extract.sector import SectorExtractor, SectorIndex, load_sector_index  # n
 from .extract.sponsorship import detect_sponsorship  # noqa: F401
 from .extract.visa import h1b_last_filed, is_h1b_sponsor, load_sponsor_index  # noqa: F401
 from .extract.yoe import YoeExtractor  # noqa: F401
-from .models import EmploymentType, JobLevel, JobPosting
+from .models import EmploymentType, JobLevel, JobPosting, RemoteType
 
 __all__ = ["enrich_in_place", "infer_level", "normalize_geo", "load_sector_index", "SectorIndex"]
+
+# Title/description workplace fallback (used only when a provider left `remote` UNKNOWN). Checked
+# in this order so an explicit "hybrid" always wins over an incidental "remote" mention in the
+# same text (e.g. "Hybrid / Remote").
+_HYBRID_RE = re.compile(r"\bhybrid\b", re.I)
+_ONSITE_RE = re.compile(r"\bon[- ]site\b|\bin[- ]office\b", re.I)
+_REMOTE_RE = re.compile(r"\bremote\b|\bwork\s+from\s+home\b|\bwfh\b", re.I)
+
+
+def _remote_from_text(text: str) -> RemoteType | None:
+    """Whole-word workplace inference from a title or description snippet, else ``None``."""
+    if _HYBRID_RE.search(text):
+        return RemoteType.HYBRID
+    if _ONSITE_RE.search(text):
+        return RemoteType.ONSITE
+    if _REMOTE_RE.search(text):
+        return RemoteType.REMOTE
+    return None
 
 
 def enrich_in_place(
@@ -77,6 +97,16 @@ def enrich_in_place(
     etype = get_extractor("employment_type")
     if etype is not None and job.employment_type is EmploymentType.UNKNOWN:
         job.employment_type = etype.extract(inp)
+
+    # Workplace (remote/hybrid/onsite) fallback: title first, else the first 400 chars of the
+    # description (where postings usually state it up front). Only fills a still-UNKNOWN value —
+    # a provider-declared remote field (e.g. Workday's structured remoteType) is never touched.
+    if job.remote is RemoteType.UNKNOWN:
+        inferred = _remote_from_text(inp.title) if inp.title else None
+        if inferred is None and inp.description_text:
+            inferred = _remote_from_text(inp.description_text[:400])
+        if inferred is not None:
+            job.remote = inferred
 
     comp = get_extractor("comp")
     if comp is not None and job.salary is None:
