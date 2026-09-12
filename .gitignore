@@ -83,6 +83,7 @@ docs/*
 !docs/superpowers/
 docs/superpowers/*
 !docs/superpowers/specs/
+!docs/superpowers/plans/
 
 # Agent/session scratch that has leaked into repos before.
 .superpowers/
