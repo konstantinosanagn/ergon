@@ -19,7 +19,7 @@ classifiers = [
 # Upper bounds are deliberate: bare floors let four deps cross a major unnoticed.
 # Raise a cap when you migrate, not before.
 dependencies = [
-  "httpx[http2]>=0.27,<1",
+  "httpx[http2]>=0.28.1,<1",
   "anyio>=4.15.1,<5",
   "aiolimiter>=1.1,<2",
   "stamina>=24.2",          # CalVer — a numeric cap would block next year's release
